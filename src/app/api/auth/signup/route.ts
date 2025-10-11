@@ -75,10 +75,10 @@ export async function POST(request: NextRequest) {
       { error: "Failed to create user" },
       { status: 500 }
     );
-  } catch (error: any) {
+      } catch (error: unknown) {
     console.error("Signup error:", error);
     return NextResponse.json(
-      { error: error.message || "An error occurred during signup" },
+      { error: error instanceof Error ? error.message : "An error occurred during signup" },
       { status: 500 }
     );
   }

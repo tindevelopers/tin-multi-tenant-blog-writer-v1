@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+// import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -44,8 +44,8 @@ export default function SignupPage() {
         router.push("/admin");
         router.refresh();
       }
-    } catch (err: any) {
-      setError(err.message || "An error occurred during signup");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "An error occurred during signup");
     } finally {
       setLoading(false);
     }

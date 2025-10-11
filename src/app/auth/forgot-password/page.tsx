@@ -23,8 +23,8 @@ export default function ForgotPasswordPage() {
 
       if (error) throw error;
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || "An error occurred");
+      } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -39,7 +39,7 @@ export default function ForgotPasswordPage() {
               Check your email
             </h2>
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              We've sent you a password reset link. Please check your email.
+              We&apos;ve sent you a password reset link. Please check your email.
             </p>
             <div className="mt-6">
               <Link
@@ -63,7 +63,7 @@ export default function ForgotPasswordPage() {
             Reset your password
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-            Enter your email address and we'll send you a reset link.
+            Enter your email address and we&apos;ll send you a reset link.
           </p>
         </div>
 

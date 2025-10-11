@@ -36,7 +36,7 @@ export default async function BlogWriterDashboardPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-xl md:text-2xl font-bold mb-2 break-words">✍️ Blog Writer Dashboard</h1>
             <p className="text-indigo-100 text-sm md:text-base break-words">
-              Welcome back, {userProfile?.full_name || user.email}! Overview of {orgName}'s content performance
+                  Welcome back, {userProfile?.full_name || user.email}! Overview of {orgName}&apos;s content performance
             </p>
           </div>
           <div className="hidden md:block flex-shrink-0">
