@@ -415,7 +415,7 @@ CREATE POLICY "Writers can create blog posts"
             AND u.org_id = blog_posts.org_id
             AND r.level >= 20 -- Writer level and above
         )
-        AND author_id = auth.uid()
+        AND created_by = auth.uid()
     );
 
 -- Update blog posts: Own posts for writers, all posts for managers+
@@ -429,7 +429,7 @@ CREATE POLICY "Users can update blog posts based on role"
             AND u.org_id = blog_posts.org_id
             AND (
                 (r.level >= 60 AND blog_posts.org_id = u.org_id) -- Managers can edit all
-                OR (blog_posts.author_id = auth.uid()) -- Writers can edit own
+                OR (blog_posts.created_by = auth.uid()) -- Writers can edit own
             )
         )
     );
@@ -445,7 +445,7 @@ CREATE POLICY "Users can delete blog posts based on role"
             AND u.org_id = blog_posts.org_id
             AND (
                 (r.level >= 60 AND blog_posts.org_id = u.org_id) -- Managers can delete all
-                OR (blog_posts.author_id = auth.uid()) -- Writers can delete own
+                OR (blog_posts.created_by = auth.uid()) -- Writers can delete own
             )
         )
     );
