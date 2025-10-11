@@ -2,6 +2,12 @@
 
 A modern, multi-tenant blog writing platform built with Next.js 15, Supabase, and TypeScript. Features secure authentication, organization-based data isolation, and a beautiful admin dashboard.
 
+## 🌐 Live Demo
+
+**🔗 Production URL:** https://tin-multi-tenant-blog-writer-v1.vercel.app
+
+Try the live application with full authentication and multi-tenant functionality!
+
 ## ✨ Features
 
 - 🔐 **Secure Authentication** - Email/password signup and login with Supabase
