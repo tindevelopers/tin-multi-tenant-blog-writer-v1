@@ -52,12 +52,13 @@ export async function POST(request: NextRequest) {
 
     if (authData.user) {
       // Create user profile (using service role to bypass RLS)
+      // First user in organization becomes admin
       const { error: userError } = await supabaseAdmin.from("users").insert({
         user_id: authData.user.id,
-        org_id: org.org_id,
+        organization_id: org.id,
         email,
         full_name: fullName,
-        role: "owner",
+        role: "admin", // Organization owner/creator gets admin role
       });
 
       if (userError) {
