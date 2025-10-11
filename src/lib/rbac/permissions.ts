@@ -253,7 +253,7 @@ export async function canManageUser(
     // Get both users' roles
     const { data: users } = await supabase
       .from('users')
-      .select('user_id, role, organization_id')
+      .select('user_id, role, org_id')
       .in('user_id', [managerId, targetUserId]);
     
     if (!users || users.length !== 2) {
@@ -268,7 +268,7 @@ export async function canManageUser(
     }
     
     // Must be in same organization
-    if (manager.organization_id !== target.organization_id) {
+    if (manager.org_id !== target.org_id) {
       return false;
     }
     

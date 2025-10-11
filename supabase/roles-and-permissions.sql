@@ -240,7 +240,7 @@ END $$;
 
 -- Create index for performance
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-CREATE INDEX IF NOT EXISTS idx_users_org_role ON users(organization_id, role);
+CREATE INDEX IF NOT EXISTS idx_users_org_role ON users(org_id, role);
 
 -- =====================================================
 -- HELPER FUNCTIONS
@@ -315,7 +315,7 @@ CREATE TABLE IF NOT EXISTS role_audit_log (
     changed_by UUID REFERENCES users(user_id),
     old_role user_role,
     new_role user_role,
-    organization_id UUID REFERENCES organizations(id),
+    org_id UUID REFERENCES organizations(org_id),
     reason TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -328,8 +328,8 @@ SECURITY DEFINER
 AS $$
 BEGIN
     IF OLD.role IS DISTINCT FROM NEW.role THEN
-        INSERT INTO role_audit_log (user_id, old_role, new_role, organization_id)
-        VALUES (NEW.user_id, OLD.role, NEW.role, NEW.organization_id);
+        INSERT INTO role_audit_log (user_id, old_role, new_role, org_id)
+        VALUES (NEW.user_id, OLD.role, NEW.role, NEW.org_id);
     END IF;
     RETURN NEW;
 END;
@@ -400,7 +400,7 @@ CREATE POLICY "Users can view org blog posts"
         EXISTS (
             SELECT 1 FROM users
             WHERE users.user_id = auth.uid()
-            AND users.organization_id = blog_posts.organization_id
+            AND users.org_id = blog_posts.org_id
         )
     );
 
@@ -412,7 +412,7 @@ CREATE POLICY "Writers can create blog posts"
             SELECT 1 FROM users u
             JOIN roles r ON r.name = u.role
             WHERE u.user_id = auth.uid()
-            AND u.organization_id = blog_posts.organization_id
+            AND u.org_id = blog_posts.org_id
             AND r.level >= 20 -- Writer level and above
         )
         AND author_id = auth.uid()
@@ -426,9 +426,9 @@ CREATE POLICY "Users can update blog posts based on role"
             SELECT 1 FROM users u
             JOIN roles r ON r.name = u.role
             WHERE u.user_id = auth.uid()
-            AND u.organization_id = blog_posts.organization_id
+            AND u.org_id = blog_posts.org_id
             AND (
-                (r.level >= 60 AND blog_posts.organization_id = u.organization_id) -- Managers can edit all
+                (r.level >= 60 AND blog_posts.org_id = u.org_id) -- Managers can edit all
                 OR (blog_posts.author_id = auth.uid()) -- Writers can edit own
             )
         )
@@ -442,9 +442,9 @@ CREATE POLICY "Users can delete blog posts based on role"
             SELECT 1 FROM users u
             JOIN roles r ON r.name = u.role
             WHERE u.user_id = auth.uid()
-            AND u.organization_id = blog_posts.organization_id
+            AND u.org_id = blog_posts.org_id
             AND (
-                (r.level >= 60 AND blog_posts.organization_id = u.organization_id) -- Managers can delete all
+                (r.level >= 60 AND blog_posts.org_id = u.org_id) -- Managers can delete all
                 OR (blog_posts.author_id = auth.uid()) -- Writers can delete own
             )
         )
@@ -460,8 +460,8 @@ DROP POLICY IF EXISTS "Managers can update user roles" ON users;
 CREATE POLICY "Users can view org members"
     ON users FOR SELECT
     USING (
-        organization_id IN (
-            SELECT organization_id FROM users WHERE user_id = auth.uid()
+        org_id IN (
+            SELECT org_id FROM users WHERE user_id = auth.uid()
         )
     );
 
@@ -473,7 +473,7 @@ CREATE POLICY "Managers can update users"
             SELECT 1 FROM users u
             JOIN roles r ON r.name = u.role
             WHERE u.user_id = auth.uid()
-            AND u.organization_id = users.organization_id
+            AND u.org_id = users.org_id
             AND r.level >= 60 -- Manager level and above
         )
     )
@@ -482,7 +482,7 @@ CREATE POLICY "Managers can update users"
             SELECT 1 FROM users u
             JOIN roles r ON r.name = u.role
             WHERE u.user_id = auth.uid()
-            AND u.organization_id = users.organization_id
+            AND u.org_id = users.org_id
             AND r.level >= 60
         )
     );
@@ -510,7 +510,7 @@ CREATE POLICY "Admins can view org logs"
             SELECT 1 FROM users u
             JOIN roles r ON r.name = u.role
             WHERE u.user_id = auth.uid()
-            AND u.organization_id = api_usage_logs.organization_id
+            AND u.org_id = api_usage_logs.org_id
             AND r.level >= 80 -- Admin level and above
         )
     );
@@ -534,8 +534,8 @@ CREATE POLICY "Super admins can manage all organizations"
 CREATE POLICY "Admins can view and update own organization"
     ON organizations FOR SELECT
     USING (
-        id IN (
-            SELECT organization_id FROM users WHERE user_id = auth.uid()
+        org_id IN (
+            SELECT org_id FROM users WHERE user_id = auth.uid()
         )
     );
 
@@ -546,7 +546,7 @@ CREATE POLICY "Admins can update own organization details"
             SELECT 1 FROM users u
             JOIN roles r ON r.name = u.role
             WHERE u.user_id = auth.uid()
-            AND u.organization_id = organizations.id
+            AND u.org_id = organizations.org_id
             AND r.level >= 80 -- Admin level
         )
     );

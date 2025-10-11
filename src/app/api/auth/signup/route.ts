@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       // First user in organization becomes admin
       const { error: userError } = await supabaseAdmin.from("users").insert({
         user_id: authData.user.id,
-        organization_id: org.id,
+        org_id: org.org_id,
         email,
         full_name: fullName,
         role: "admin", // Organization owner/creator gets admin role
