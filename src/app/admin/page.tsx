@@ -1,13 +1,33 @@
 import type { Metadata } from "next";
 import React from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Blog Writer Dashboard | TailAdmin Template",
   description: "Blog writer dashboard with metrics, quick actions, and overview",
 };
 
-export default function BlogWriterDashboardPage() {
+export default async function BlogWriterDashboardPage() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/auth/login");
+  }
+
+  // Fetch user profile and organization
+  const { data: userProfile } = await supabase
+    .from("users")
+    .select("*, organizations(*)")
+    .eq("user_id", user.id)
+    .single();
+  
+  const orgName = userProfile?.organizations?.name || "Your Organization";
   return (
     <div className="space-y-6">
       {/* Template Header */}
@@ -16,7 +36,7 @@ export default function BlogWriterDashboardPage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-xl md:text-2xl font-bold mb-2 break-words">✍️ Blog Writer Dashboard</h1>
             <p className="text-indigo-100 text-sm md:text-base break-words">
-              Overview of your content marketing performance and quick actions
+              Welcome back, {userProfile?.full_name || user.email}! Overview of {orgName}'s content performance
             </p>
           </div>
           <div className="hidden md:block flex-shrink-0">
