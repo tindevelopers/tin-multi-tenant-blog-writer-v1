@@ -10,6 +10,35 @@
 -- - Writer: Basic content creation
 -- =====================================================
 
+-- =====================================================
+-- CLEANUP: Drop all dependent policies first
+-- =====================================================
+-- This prevents "other objects depend on it" errors
+
+-- Drop policies on organizations table
+DROP POLICY IF EXISTS "Users can update own organization" ON organizations;
+DROP POLICY IF EXISTS "Admins can update own organization details" ON organizations;
+DROP POLICY IF EXISTS "Super admins can manage all organizations" ON organizations;
+DROP POLICY IF EXISTS "Admins can view and update own organization" ON organizations;
+
+-- Drop policies on users table
+DROP POLICY IF EXISTS "Users can view org members" ON users;
+DROP POLICY IF EXISTS "Managers can update user roles" ON users;
+DROP POLICY IF EXISTS "Managers can update users" ON users;
+
+-- Drop policies on blog_posts table
+DROP POLICY IF EXISTS "Users can view org blog posts" ON blog_posts;
+DROP POLICY IF EXISTS "Users can create blog posts" ON blog_posts;
+DROP POLICY IF EXISTS "Writers can create blog posts" ON blog_posts;
+DROP POLICY IF EXISTS "Users can update own blog posts" ON blog_posts;
+DROP POLICY IF EXISTS "Users can update blog posts based on role" ON blog_posts;
+DROP POLICY IF EXISTS "Users can delete own blog posts" ON blog_posts;
+DROP POLICY IF EXISTS "Users can delete blog posts based on role" ON blog_posts;
+
+-- Drop policies on api_usage_logs table
+DROP POLICY IF EXISTS "System admins can view all logs" ON api_usage_logs;
+DROP POLICY IF EXISTS "Admins can view org logs" ON api_usage_logs;
+
 -- Drop existing enum if it exists and recreate with all roles
 DO $$ BEGIN
     DROP TYPE IF EXISTS user_role CASCADE;
@@ -189,8 +218,25 @@ ON CONFLICT DO NOTHING;
 -- UPDATE USERS TABLE
 -- Add role column and update existing users
 -- =====================================================
-ALTER TABLE users DROP COLUMN IF EXISTS role;
-ALTER TABLE users ADD COLUMN role user_role DEFAULT 'writer';
+
+-- First, drop any policies that depend on the role column
+DROP POLICY IF EXISTS "Users can update own organization" ON organizations;
+DROP POLICY IF EXISTS "Admins can update own organization details" ON organizations;
+
+-- Now safely drop and recreate the role column
+DO $$ 
+BEGIN
+    -- Drop the column if it exists (with CASCADE to handle dependencies)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = 'role'
+    ) THEN
+        ALTER TABLE users DROP COLUMN role CASCADE;
+    END IF;
+    
+    -- Add the role column with the new enum type
+    ALTER TABLE users ADD COLUMN role user_role DEFAULT 'writer';
+END $$;
 
 -- Create index for performance
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
