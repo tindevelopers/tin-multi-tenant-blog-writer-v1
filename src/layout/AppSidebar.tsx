@@ -89,13 +89,56 @@ const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
 
-  // State management for menus - allow multiple open menus
+  // State management for menus - allow multiple open menus with persistence
   const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [subMenuHeights, setSubMenuHeights] = useState<Record<string, number>>({});
   const [nestedSubMenuHeights, setNestedSubMenuHeights] = useState<Record<string, number>>({});
   const [userRole, setUserRole] = useState<string>("");
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+  // Load persisted accordion state from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedSubmenus = localStorage.getItem('sidebar-open-submenus');
+        const savedNestedSubmenus = localStorage.getItem('sidebar-open-nested-submenus');
+        
+        if (savedSubmenus) {
+          const parsedSubmenus = JSON.parse(savedSubmenus);
+          setOpenSubmenus(new Set(parsedSubmenus));
+        }
+        
+        if (savedNestedSubmenus) {
+          const parsedNestedSubmenus = JSON.parse(savedNestedSubmenus);
+          setOpenNestedSubmenus(new Set(parsedNestedSubmenus));
+        }
+      } catch (error) {
+        console.warn('Failed to load sidebar state from localStorage:', error);
+      }
+    }
+  }, []);
+
+  // Persist accordion state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('sidebar-open-submenus', JSON.stringify([...openSubmenus]));
+      } catch (error) {
+        console.warn('Failed to save submenu state to localStorage:', error);
+      }
+    }
+  }, [openSubmenus]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('sidebar-open-nested-submenus', JSON.stringify([...openNestedSubmenus]));
+      } catch (error) {
+        console.warn('Failed to save nested submenu state to localStorage:', error);
+      }
+    }
+  }, [openNestedSubmenus]);
   
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const nestedSubMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -187,7 +230,7 @@ const AppSidebar: React.FC = () => {
     });
   }, []);
 
-  // Auto-open menus based on current path
+  // Auto-open menus based on current path with improved logic
   useEffect(() => {
     const newOpenSubmenus = new Set<string>();
     const newOpenNestedSubmenus = new Set<string>();
@@ -195,10 +238,14 @@ const AppSidebar: React.FC = () => {
     // Check Blog Writer template navigation items
     blogWriterItems.forEach((nav, index) => {
       if (nav.subItems) {
+        // Always keep the main Blog Writer menu open if any submenu is active
+        let shouldKeepMainOpen = false;
+        
         nav.subItems.forEach((subItem, subIndex) => {
           // Check direct path matches
           if (subItem.path && isActive(subItem.path)) {
             newOpenSubmenus.add(`templates-${index}`);
+            shouldKeepMainOpen = true;
           }
           // Check nested subItems for accordion headers
           if (subItem.subItems && subItem.isAccordionHeader) {
@@ -206,10 +253,16 @@ const AppSidebar: React.FC = () => {
               if (isActive(nestedItem.path)) {
                 newOpenSubmenus.add(`templates-${index}`);
                 newOpenNestedSubmenus.add(`templates-${index}-${subIndex}`);
+                shouldKeepMainOpen = true;
               }
             });
           }
         });
+        
+        // If any submenu is active, ensure main menu stays open
+        if (shouldKeepMainOpen) {
+          newOpenSubmenus.add(`templates-${index}`);
+        }
       }
     });
 
@@ -226,29 +279,64 @@ const AppSidebar: React.FC = () => {
       });
     }
 
-    setOpenSubmenus(newOpenSubmenus);
-    setOpenNestedSubmenus(newOpenNestedSubmenus);
+    // Preserve existing open states while adding new ones
+    setOpenSubmenus((prev) => {
+      const combined = new Set([...prev, ...newOpenSubmenus]);
+      return combined;
+    });
+    setOpenNestedSubmenus((prev) => {
+      const combined = new Set([...prev, ...newOpenNestedSubmenus]);
+      return combined;
+    });
   }, [pathname, isActive, showAdminPanel]);
 
-  // Update heights when menus open/close
+  // Update heights when menus open/close with improved calculation
   useEffect(() => {
     const newHeights: Record<string, number> = {};
-    openSubmenus.forEach((key) => {
-      if (subMenuRefs.current[key]) {
-        newHeights[key] = subMenuRefs.current[key]?.scrollHeight || 0;
-      }
-    });
-    setSubMenuHeights(newHeights);
+    
+    // Use a small delay to ensure DOM is fully updated
+    const timeoutId = setTimeout(() => {
+      openSubmenus.forEach((key) => {
+        if (subMenuRefs.current[key]) {
+          const element = subMenuRefs.current[key];
+          if (element) {
+            // Temporarily set max-height to auto to get true height
+            const originalMaxHeight = element.style.maxHeight;
+            element.style.maxHeight = 'none';
+            const height = element.scrollHeight;
+            element.style.maxHeight = originalMaxHeight;
+            newHeights[key] = height;
+          }
+        }
+      });
+      setSubMenuHeights(newHeights);
+    }, 50);
+
+    return () => clearTimeout(timeoutId);
   }, [openSubmenus]);
 
   useEffect(() => {
     const newHeights: Record<string, number> = {};
-    openNestedSubmenus.forEach((key) => {
-      if (nestedSubMenuRefs.current[key]) {
-        newHeights[key] = nestedSubMenuRefs.current[key]?.scrollHeight || 0;
-      }
-    });
-    setNestedSubMenuHeights(newHeights);
+    
+    // Use a small delay to ensure DOM is fully updated
+    const timeoutId = setTimeout(() => {
+      openNestedSubmenus.forEach((key) => {
+        if (nestedSubMenuRefs.current[key]) {
+          const element = nestedSubMenuRefs.current[key];
+          if (element) {
+            // Temporarily set max-height to auto to get true height
+            const originalMaxHeight = element.style.maxHeight;
+            element.style.maxHeight = 'none';
+            const height = element.scrollHeight;
+            element.style.maxHeight = originalMaxHeight;
+            newHeights[key] = height;
+          }
+        }
+      });
+      setNestedSubMenuHeights(newHeights);
+    }, 50);
+
+    return () => clearTimeout(timeoutId);
   }, [openNestedSubmenus]);
 
   const handleSubmenuToggle = (
@@ -381,10 +469,11 @@ const AppSidebar: React.FC = () => {
                   subMenuRefs.current[submenuKey] = el;
                 }}
                 className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  isSubmenuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+                  isSubmenuOpen ? "opacity-100" : "opacity-0"
                 }`}
                 style={{
                   maxHeight: isSubmenuOpen ? `${subMenuHeights[submenuKey] || 200}px` : "0px",
+                  transition: "max-height 0.3s ease-in-out, opacity 0.2s ease-in-out",
                 }}
               >
                 <ul className="ml-4 mt-1 space-y-1">
@@ -428,10 +517,11 @@ const AppSidebar: React.FC = () => {
                                   nestedSubMenuRefs.current[nestedSubmenuKey] = el;
                                 }}
                                 className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                                  isNestedSubmenuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+                                  isNestedSubmenuOpen ? "opacity-100" : "opacity-0"
                                 }`}
                                 style={{
                                   maxHeight: isNestedSubmenuOpen ? `${nestedSubMenuHeights[nestedSubmenuKey] || 150}px` : "0px",
+                                  transition: "max-height 0.3s ease-in-out, opacity 0.2s ease-in-out",
                                 }}
                               >
                                 <ul className="ml-4 mt-1 space-y-1">
