@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { createClient } from "@/lib/supabase/client";
 import {
   ChevronDownIcon,
   GridIcon,
@@ -67,6 +68,23 @@ const blogWriterItems: NavItem[] = [
   },
 ];
 
+// Admin Panel navigation items (only for system_admin, super_admin, admin, manager roles)
+const adminPanelItems: NavItem[] = [
+  {
+    name: "Admin Panel",
+    icon: <span className="w-5 h-5 flex items-center justify-center text-xs font-bold bg-purple-600 text-white rounded">A</span>,
+    new: true,
+    subItems: [
+      { name: "Admin Dashboard", path: "/admin/panel" },
+      { name: "User Management", path: "/admin/panel/users" },
+      { name: "Organizations", path: "/admin/panel/organizations" },
+      { name: "Integrations", path: "/admin/panel/integrations" },
+      { name: "Usage Logs", path: "/admin/panel/usage-logs" },
+      { name: "System Settings", path: "/admin/panel/system-settings" },
+    ],
+  },
+];
+
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
@@ -76,11 +94,98 @@ const AppSidebar: React.FC = () => {
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [subMenuHeights, setSubMenuHeights] = useState<Record<string, number>>({});
   const [nestedSubMenuHeights, setNestedSubMenuHeights] = useState<Record<string, number>>({});
+  const [userRole, setUserRole] = useState<string>("");
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const nestedSubMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const isActive = useCallback((path: string) => path === pathname, [pathname]);
+
+  // Check user role to determine if admin panel should be shown
+  useEffect(() => {
+    const supabase = createClient();
+    
+    supabase.auth.getUser().then(({ data: { user }, error: authError }) => {
+      console.log("🔍 AppSidebar: Auth check - User:", user?.email, "Auth Error:", authError);
+      
+      if (user) {
+        console.log("🔍 AppSidebar: User ID:", user.id);
+        console.log("🔍 AppSidebar: User email:", user.email);
+        
+        // Try to fetch user profile with more detailed debugging
+        // First, try with the service role client to bypass RLS
+        const serviceSupabase = createClient();
+        
+        // Try regular client first
+        console.log("🔍 AppSidebar: Attempting to fetch user with ID:", user.id);
+        supabase
+          .from("users")
+          .select("*") // Get all fields for debugging
+          .eq("user_id", user.id)
+          .single()
+          .then(({ data, error }) => {
+            console.log("🔍 AppSidebar: Raw response - Data:", data);
+            console.log("🔍 AppSidebar: Raw response - Error:", error);
+            console.log("🔍 AppSidebar: Error details:", JSON.stringify(error, null, 2));
+            
+            // Additional debugging for common issues
+            if (error) {
+              if (error.code === 'PGRST116') {
+                console.log("❌ AppSidebar: No rows returned - user not found in users table");
+              } else if (error.code === '42501') {
+                console.log("❌ AppSidebar: Permission denied - RLS policy issue");
+              } else {
+                console.log("❌ AppSidebar: Other error:", error.message);
+              }
+            }
+            
+            if (error) {
+              console.error("❌ AppSidebar: Error fetching user role:", error);
+              console.error("❌ AppSidebar: Error code:", error.code);
+              console.error("❌ AppSidebar: Error message:", error.message);
+              console.error("❌ AppSidebar: Error details:", error.details);
+              console.error("❌ AppSidebar: Error hint:", error.hint);
+            } else if (data) {
+              console.log("✅ AppSidebar: User role fetched:", data.role);
+              console.log("✅ AppSidebar: Full user data:", data);
+              setUserRole(data.role);
+              // Show admin panel for these roles
+              const adminRoles = ["system_admin", "super_admin", "admin", "manager"];
+              const shouldShow = adminRoles.includes(data.role);
+              console.log("🎯 AppSidebar: Should show admin panel:", shouldShow);
+              setShowAdminPanel(shouldShow);
+            } else {
+              console.log("⚠️ AppSidebar: No user data found - trying fallback by email");
+              
+              // Fallback: try to fetch by email instead of user_id
+              supabase
+                .from("users")
+                .select("*")
+                .eq("email", user.email)
+                .single()
+                .then(({ data: emailData, error: emailError }) => {
+                  console.log("🔍 AppSidebar: Email fallback - Data:", emailData);
+                  console.log("🔍 AppSidebar: Email fallback - Error:", emailError);
+                  
+                  if (emailData) {
+                    console.log("✅ AppSidebar: User found by email:", emailData.role);
+                    setUserRole(emailData.role);
+                    const adminRoles = ["system_admin", "super_admin", "admin", "manager"];
+                    const shouldShow = adminRoles.includes(emailData.role);
+                    console.log("🎯 AppSidebar: Should show admin panel:", shouldShow);
+                    setShowAdminPanel(shouldShow);
+                  } else {
+                    console.log("❌ AppSidebar: User not found by email either");
+                  }
+                });
+            }
+          });
+      } else {
+        console.log("❌ AppSidebar: No user found - not authenticated");
+      }
+    });
+  }, []);
 
   // Auto-open menus based on current path
   useEffect(() => {
@@ -108,9 +213,22 @@ const AppSidebar: React.FC = () => {
       }
     });
 
+    // Check Admin Panel navigation items
+    if (showAdminPanel) {
+      adminPanelItems.forEach((nav, index) => {
+        if (nav.subItems) {
+          nav.subItems.forEach((subItem) => {
+            if (subItem.path && isActive(subItem.path)) {
+              newOpenSubmenus.add(`admin-${index}`);
+            }
+          });
+        }
+      });
+    }
+
     setOpenSubmenus(newOpenSubmenus);
     setOpenNestedSubmenus(newOpenNestedSubmenus);
-  }, [pathname, isActive]);
+  }, [pathname, isActive, showAdminPanel]);
 
   // Update heights when menus open/close
   useEffect(() => {
@@ -453,6 +571,26 @@ const AppSidebar: React.FC = () => {
               </h2>
               {renderMenuItems(blogWriterItems, "templates")}
             </div>
+
+            {/* Admin Panel Section - Only visible to admins */}
+            {showAdminPanel && (
+              <div className="mt-6">
+                <h2
+                  className={`mb-4 text-xs uppercase flex leading-5 text-purple-400 ${
+                    !isExpanded && !isHovered
+                      ? "xl:justify-center"
+                      : "justify-start"
+                  }`}
+                >
+                  {isExpanded || isHovered || isMobileOpen ? (
+                    "Administration"
+                  ) : (
+                    <HorizontaLDots />
+                  )}
+                </h2>
+                {renderMenuItems(adminPanelItems, "admin")}
+              </div>
+            )}
           </div>
         </nav>
       </div>
