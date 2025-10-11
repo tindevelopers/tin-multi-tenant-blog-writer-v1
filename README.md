@@ -1,148 +1,203 @@
-# Blog Writer Template
+# 🚀 TIN Multi-Tenant Blog Writer v1
 
-A comprehensive blog management and content creation platform built with Next.js, TypeScript, and Tailwind CSS.
+A modern, multi-tenant blog writing platform built with Next.js 15, Supabase, and TypeScript. Features secure authentication, organization-based data isolation, and a beautiful admin dashboard.
 
-## 🚀 Features
+## ✨ Features
 
-### 📝 Content Management
-- **Draft Management** - Create, edit, and organize blog post drafts
-- **Content Calendar** - Plan and schedule your content strategy
-- **Media Library** - Upload and manage images, videos, and documents
-- **Content Templates** - Reusable templates for consistent formatting
-
-### 📊 Analytics & SEO
-- **Post Analytics** - Track performance metrics and engagement
-- **SEO Tools** - Optimize content for search engines
-- **Performance Insights** - Monitor traffic and user behavior
-
-### 👥 Team Collaboration
-- **Team Management** - Manage authors, editors, and contributors
-- **Workflow Management** - Define approval processes and content workflows
-- **Role-based Permissions** - Control access to different features
-
-### 🔗 Integrations
-- **CMS Integration** - WordPress, Webflow, and other content management systems
-- **Social Media** - Twitter, LinkedIn, and other social platforms
-- **E-commerce** - Shopify and other e-commerce platforms
-- **Email Marketing** - Mailchimp and other email services
-- **Analytics** - Google Analytics and other tracking tools
+- 🔐 **Secure Authentication** - Email/password signup and login with Supabase
+- 🏢 **Multi-Tenant Architecture** - Organization-based data isolation with Row Level Security
+- 📝 **Blog Writing Dashboard** - Beautiful admin interface for content management
+- 🎨 **Modern UI** - Built with Tailwind CSS and responsive design
+- 🔒 **Row Level Security** - Supabase RLS ensures data privacy between organizations
+- 🚀 **Production Ready** - Complete CI/CD pipeline with GitHub Actions and Vercel deployment
 
 ## 🛠️ Tech Stack
 
-- **Framework**: Next.js 15.5.4
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Icons**: Heroicons
-- **Charts**: Recharts
-- **State Management**: React Hooks
+- **Frontend:** Next.js 15.5.4, TypeScript, Tailwind CSS
+- **Backend:** Supabase (PostgreSQL, Auth, RLS)
+- **Deployment:** Vercel with GitHub Actions CI/CD
+- **Authentication:** Supabase Auth with email/password
+- **Database:** PostgreSQL with Row Level Security policies
 
-## 📦 Installation
+## 🚀 Quick Start
 
-1. **Clone or download** this template
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
+- Supabase account
+- GitHub account (for deployment)
 
-3. **Start development server**:
-   ```bash
-   npm run dev
-   ```
+### 1. Clone and Install
+```bash
+git clone git@github.com:tindevelopers/tin-multi-tenant-blog-writer-v1.git
+cd tin-multi-tenant-blog-writer-v1
+npm install
+```
 
-4. **Open your browser** and navigate to `http://localhost:3000`
+### 2. Environment Setup
+```bash
+cp .env.local.example .env.local
+```
+
+Update `.env.local` with your Supabase credentials:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### 3. Database Setup
+1. Go to your Supabase dashboard
+2. Navigate to SQL Editor
+3. Copy and run the schema from `supabase/schema.sql`
+4. Run the RLS policies from `supabase/reset-all-policies.sql`
+
+### 4. Run Development Server
+```bash
+npm run dev
+```
+
+Visit `http://localhost:3000` and test the signup flow!
+
+## 📚 Documentation
+
+- **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** - Complete Supabase configuration guide
+- **[VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)** - Production deployment instructions
+- **[QUICK_START.md](./QUICK_START.md)** - Quick setup guide
 
 ## 🏗️ Project Structure
 
 ```
-src/
-├── app/
-│   ├── templates/blog-writer/     # Blog writer pages
-│   │   ├── analytics/             # Analytics dashboard
-│   │   ├── calendar/              # Content calendar
-│   │   ├── drafts/                # Draft management
-│   │   ├── integrations/          # Third-party integrations
-│   │   ├── media/                 # Media library
-│   │   ├── publishing/            # Publishing management
-│   │   ├── seo/                   # SEO tools
-│   │   ├── team/                  # Team collaboration
-│   │   ├── templates/             # Content templates
-│   │   └── workflows/             # Workflow management
-│   └── layout.tsx                 # Root layout
-├── components/
-│   └── blog-writer/               # Blog writer components
-├── layout/                        # Layout components
-└── hooks/                         # Custom React hooks
+├── src/
+│   ├── app/                    # Next.js 15 app router
+│   │   ├── auth/              # Authentication pages
+│   │   ├── admin/             # Protected admin dashboard
+│   │   └── api/               # API routes
+│   ├── components/            # React components
+│   ├── lib/                   # Utilities and configurations
+│   │   └── supabase/          # Supabase client setup
+│   └── types/                 # TypeScript type definitions
+├── supabase/                  # Database schema and migrations
+├── .github/                   # GitHub Actions workflows
+└── docs/                      # Documentation
 ```
+
+## 🔐 Multi-Tenancy Architecture
+
+### Database Schema
+- **Organizations** - Top-level tenant containers
+- **Users** - Organization members with roles (owner, admin, editor, writer)
+- **Blog Posts** - Content isolated by organization
+- **Content Templates** - Reusable templates per organization
+- **API Usage Logs** - Usage tracking per organization
+- **Media Assets** - File storage per organization
+
+### Row Level Security (RLS)
+All tables have RLS policies ensuring:
+- Users can only access their organization's data
+- Data isolation between different organizations
+- Proper role-based access control
+- Secure admin operations via service role
 
 ## 🚀 Deployment
 
-### Vercel (Recommended)
-```bash
-npm run build
-npx vercel --prod
+### Automatic Deployment (Recommended)
+1. **Connect to Vercel:**
+   - Push to main branch triggers automatic deployment
+   - Preview deployments for pull requests
+
+2. **Set Environment Variables in Vercel:**
+   ```
+   NEXT_PUBLIC_SUPABASE_URL
+   NEXT_PUBLIC_SUPABASE_ANON_KEY
+   SUPABASE_SERVICE_ROLE_KEY
+   NEXT_PUBLIC_APP_URL
+   ```
+
+3. **Update Supabase Auth URLs:**
+   - Add your Vercel domain to allowed redirect URLs
+   - Configure site URL in Supabase dashboard
+
+### Manual Deployment
+See [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md) for detailed instructions.
+
+## 🔄 CI/CD Pipeline
+
+### GitHub Actions Workflows
+- **CI Pipeline** (`ci.yml`):
+  - Runs on push to main/develop and pull requests
+  - Tests on Node.js 18.x and 20.x
+  - Type checking, linting, and build verification
+
+- **Deploy Preview** (`deploy-preview.yml`):
+  - Creates preview deployments for pull requests
+  - Automatically comments PR with preview URL
+  - Tests signup flow on preview environment
+
+### Required Secrets
+Set these in your GitHub repository settings:
+```
+VERCEL_TOKEN
+VERCEL_ORG_ID
+VERCEL_PROJECT_ID
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
 ```
 
-### Netlify
+## 🧪 Testing
+
+### Local Testing
+1. Start development server: `npm run dev`
+2. Visit `http://localhost:3000/auth/signup`
+3. Create test accounts with different organizations
+4. Verify data isolation in Supabase dashboard
+
+### Production Testing
+1. Deploy to Vercel
+2. Test signup flow on production URL
+3. Verify multi-tenancy works correctly
+4. Check RLS policies are enforced
+
+## 🔧 Development Scripts
+
 ```bash
-npm run build
-npm run export
-# Upload the 'out' directory to Netlify
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint
+npm run type-check   # Run TypeScript compiler
 ```
-
-### Docker
-```bash
-# Build the image
-docker build -t blog-writer-app .
-
-# Run the container
-docker run -p 3000:3000 blog-writer-app
-```
-
-## 🔧 Customization
-
-### Adding New Pages
-1. Create a new directory in `src/app/templates/blog-writer/`
-2. Add a `page.tsx` file with your component
-3. Update the sidebar navigation in `src/layout/AppSidebar.tsx`
-
-### Styling
-- Modify `src/app/globals.css` for global styles
-- Use Tailwind CSS classes for component styling
-- Customize the theme in `tailwind.config.ts`
-
-### Adding Integrations
-1. Create integration components in `src/components/blog-writer/`
-2. Add API endpoints and configuration
-3. Update the integrations page
-
-## 📚 API Integration
-
-The template includes comprehensive API integration support:
-
-- **Content Management APIs** - CRUD operations for posts, drafts, media
-- **Analytics APIs** - Performance tracking and reporting
-- **User Management APIs** - Team collaboration and permissions
-- **Workflow APIs** - Content approval and publishing processes
-- **Integration APIs** - Third-party service connections
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+### Pull Request Process
+- All PRs trigger CI/CD pipeline
+- Preview deployments are created automatically
+- Use provided PR template for consistency
+- Ensure all tests pass before merging
 
 ## 📄 License
 
-This template is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
-- 📧 Email: support@tinadmin.com
-- 📚 Documentation: [docs.tinadmin.com](https://docs.tinadmin.com)
-- 🐛 Issues: [GitHub Issues](https://github.com/tinadmin/tinadmin/issues)
+- **Documentation:** Check the docs/ folder for detailed guides
+- **Issues:** Use GitHub issues for bug reports and feature requests
+- **Supabase Setup:** Use the dedicated Supabase setup issue template
+
+## 🏷️ Version
+
+**Current Version:** v1.0.0
 
 ---
 
-**Ready to build your blog platform? Start with this template! 🚀**
+Built with ❤️ by the TIN Developers team

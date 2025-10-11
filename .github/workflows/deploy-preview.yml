@@ -1,0 +1,89 @@
+name: Deploy Preview
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  deploy-preview:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build application
+      run: npm run build
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        NEXT_PUBLIC_APP_URL: https://tin-multi-tenant-blog-writer-v1-git-${{ github.head_ref }}-tindevelopers.vercel.app
+        
+    - name: Deploy to Vercel Preview
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        vercel-args: '--scope tindevelopers'
+        working-directory: ./
+        
+    - name: Comment PR with preview URL
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('Preview deployment')
+          );
+          
+          const previewUrl = `https://tin-multi-tenant-blog-writer-v1-git-${context.head_ref}-tindevelopers.vercel.app`;
+          
+          const body = `## 🚀 Preview Deployment
+          
+          **Preview URL:** ${previewUrl}
+          
+          This preview deployment includes:
+          - ✅ Latest changes from \`${context.head_ref}\` branch
+          - ✅ Supabase integration with test database
+          - ✅ Multi-tenant authentication system
+          
+          **Test the signup flow:**
+          1. Visit: ${previewUrl}/auth/signup
+          2. Create a test account
+          3. Verify multi-tenancy works
+          
+          *This preview will be automatically deleted when the PR is closed.*`;
+          
+          if (botComment) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }
