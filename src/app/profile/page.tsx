@@ -22,36 +22,41 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const supabase = createClient();
     
-    // Get current user
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUser(user);
+    const fetchUserData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
         
-        // Get user profile
-        supabase
-          .from("users")
-          .select("*, organizations(*)")
-          .eq("user_id", user.id)
-          .single()
-          .then(({ data }) => {
-            if (data) {
-              setUserProfile(data);
-            }
-            setLoading(false);
-          })
-          .catch((error) => {
+        if (user) {
+          setUser(user);
+          
+          // Get user profile
+          const { data, error } = await supabase
+            .from("users")
+            .select("*, organizations(*)")
+            .eq("user_id", user.id)
+            .single();
+            
+          if (error) {
             console.error("Error fetching user profile:", error);
-            setLoading(false);
-          });
+          } else if (data) {
+            setUserProfile(data);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      } finally {
+        setLoading(false);
       }
-    });
+    };
+
+    fetchUserData();
   }, []);
 
   if (loading) {

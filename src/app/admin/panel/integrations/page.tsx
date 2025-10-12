@@ -7,11 +7,12 @@ interface Integration {
   id: string;
   name: string;
   type: string;
-  status: 'active' | 'inactive' | 'error';
+  status: 'active' | 'inactive' | 'error' | string;
   description: string;
   config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+  icon?: string;
 }
 
 export default function IntegrationsManagementPage() {

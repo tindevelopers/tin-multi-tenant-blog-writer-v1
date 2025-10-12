@@ -192,7 +192,7 @@ const AppSidebar: React.FC = () => {
             } else if (data) {
               console.log("✅ AppSidebar: User role fetched:", data.role);
               console.log("✅ AppSidebar: Full user data:", data);
-              setUserRole(data.role);
+              // setUserRole(data.role); // Commented out unused variable
               // Show admin panel for these roles
               const adminRoles = ["system_admin", "super_admin", "admin", "manager"];
               const shouldShow = adminRoles.includes(data.role);
@@ -213,7 +213,7 @@ const AppSidebar: React.FC = () => {
                   
                   if (emailData) {
                     console.log("✅ AppSidebar: User found by email:", emailData.role);
-                    setUserRole(emailData.role);
+                    // setUserRole(emailData.role); // Commented out unused variable
                     const adminRoles = ["system_admin", "super_admin", "admin", "manager"];
                     const shouldShow = adminRoles.includes(emailData.role);
                     console.log("🎯 AppSidebar: Should show admin panel:", shouldShow);
@@ -678,7 +678,7 @@ const AppSidebar: React.FC = () => {
                     <HorizontaLDots />
                   )}
                 </h2>
-                {renderMenuItems(adminPanelItems, "admin")}
+                {renderMenuItems(adminPanelItems, "main")}
               </div>
             )}
           </div>

@@ -149,7 +149,12 @@ const menuItems: MenuItem[] = [
 export default function AdminSidebar({ userRole }: AdminSidebarProps) {
   const pathname = usePathname();
   const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
-  const [userProfile, setUserProfile] = useState<{ role: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ 
+    role: string; 
+    full_name?: string; 
+    avatar_url?: string; 
+    organizations?: { name: string }[] 
+  } | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -202,7 +207,7 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
               Admin Panel
             </h1>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              {userProfile?.organizations?.name}
+              {userProfile?.organizations?.[0]?.name}
             </p>
           </div>
         </div>

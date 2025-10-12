@@ -21,7 +21,7 @@ interface UserProfile {
 
 export default function EditProfilePage() {
   const router = useRouter();
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,36 +38,42 @@ export default function EditProfilePage() {
   useEffect(() => {
     const supabase = createClient();
     
-    // Get current user
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUser(user);
+    const fetchUserData = async () => {
+      try {
+        // Get current user
+        const { data: { user } } = await supabase.auth.getUser();
         
-        // Get user profile
-        supabase
-          .from("users")
-          .select("*, organizations(*)")
-          .eq("user_id", user.id)
-          .single()
-          .then(({ data }) => {
-            if (data) {
-              setUserProfile(data);
-              setFormData({
-                full_name: data.full_name || "",
-                phone: data.phone || "",
-                bio: data.bio || "",
-              });
-            }
-            setLoading(false);
-          })
-          .catch((error) => {
+        if (user) {
+          setUser(user);
+          
+          // Get user profile
+          const { data, error } = await supabase
+            .from("users")
+            .select("*, organizations(*)")
+            .eq("user_id", user.id)
+            .single();
+            
+          if (error) {
             console.error("Error fetching user profile:", error);
-            setLoading(false);
-          });
-      } else {
-        router.push("/auth/login");
+          } else if (data) {
+            setUserProfile(data);
+            setFormData({
+              full_name: data.full_name || "",
+              phone: data.phone || "",
+              bio: data.bio || "",
+            });
+          }
+        } else {
+          router.push("/auth/login");
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+      } finally {
+        setLoading(false);
       }
-    });
+    };
+
+    fetchUserData();
   }, [router]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -95,7 +101,7 @@ export default function EditProfilePage() {
           bio: formData.bio,
           updated_at: new Date().toISOString(),
         })
-        .eq("user_id", user.id);
+        .eq("user_id", user?.id);
 
       if (error) throw error;
 
@@ -106,7 +112,7 @@ export default function EditProfilePage() {
       const { data } = await supabase
         .from("users")
         .select("*, organizations(*)")
-        .eq("user_id", user.id)
+        .eq("user_id", user?.id)
         .single();
       
       if (data) {

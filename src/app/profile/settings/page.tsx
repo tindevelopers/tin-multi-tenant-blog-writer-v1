@@ -25,7 +25,7 @@ interface UserPermissions {
 
 export default function AccountSettingsPage() {
   const router = useRouter();
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [permissions, setPermissions] = useState<UserPermissions[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,56 +34,59 @@ export default function AccountSettingsPage() {
   useEffect(() => {
     const supabase = createClient();
     
-    // Get current user
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setUser(user);
+    const fetchUserData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
         
-        // Get user profile
-        supabase
-          .from("users")
-          .select("*, organizations(*)")
-          .eq("user_id", user.id)
-          .single()
-          .then(({ data }) => {
-            if (data) {
-              setUserProfile(data);
-              
-              // Get user permissions
-              supabase
-                .from("role_permissions")
-                .select("*, permissions(*)")
-                .eq("role", data.role)
-                .then(({ data: permissionData, error: permError }) => {
-                  if (permError) {
-                    console.error("Error fetching permissions:", permError);
-                  } else if (permissionData) {
-                    const formattedPermissions = permissionData.map((rp: { permissions: { resource: string; action: string; name: string } }) => ({
-                      resource: rp.permissions.resource,
-                      action: rp.permissions.action,
-                      name: rp.permissions.name,
-                    }));
-                    setPermissions(formattedPermissions);
-                  }
-                  setLoading(false);
-                })
-                .catch((error) => {
-                  console.error("Error fetching permissions:", error);
-                  setLoading(false);
-                });
-            } else {
-              setLoading(false);
-            }
-          })
-          .catch((error) => {
-            console.error("Error fetching user data:", error);
+        if (user) {
+          setUser(user);
+          
+          // Get user profile
+          const { data, error } = await supabase
+            .from("users")
+            .select("*, organizations(*)")
+            .eq("user_id", user.id)
+            .single();
+            
+          if (error) {
+            console.error("Error fetching user profile:", error);
             setError("Failed to load account information");
             setLoading(false);
-          });
-      } else {
-        router.push("/auth/login");
+            return;
+          }
+          
+          if (data) {
+            setUserProfile(data);
+            
+            // Get user permissions
+            const { data: permissionData, error: permError } = await supabase
+              .from("role_permissions")
+              .select("*, permissions(*)")
+              .eq("role", data.role);
+              
+            if (permError) {
+              console.error("Error fetching permissions:", permError);
+            } else if (permissionData) {
+              const formattedPermissions = permissionData.map((rp: { permissions: { resource: string; action: string; name: string } }) => ({
+                resource: rp.permissions.resource,
+                action: rp.permissions.action,
+                name: rp.permissions.name,
+              }));
+              setPermissions(formattedPermissions);
+            }
+          }
+        } else {
+          router.push("/auth/login");
+        }
+      } catch (error) {
+        console.error("Error fetching user data:", error);
+        setError("Failed to load account information");
+      } finally {
+        setLoading(false);
       }
-    });
+    };
+
+    fetchUserData();
   }, [router]);
 
   const getRoleDescription = (role: string) => {
