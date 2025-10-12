@@ -202,7 +202,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🏷️ Version
 
-**Current Version:** v1.0.0
+**Current Version:** v1.0.1
+
+### Latest Updates
+- ✅ Improved sidebar accordion behavior with smooth animations
+- ✅ Enhanced admin panel with system admin role support
+- ✅ Persistent menu state across navigation and page refreshes
+- ✅ Optimized height calculations for better performance
 
 ---
 
