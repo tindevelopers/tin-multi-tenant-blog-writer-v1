@@ -291,6 +291,7 @@ const AppSidebar: React.FC = () => {
   }, [pathname, isActive, showAdminPanel]);
 
   // Update heights when menus open/close with improved calculation
+  // This needs to recalculate when BOTH openSubmenus AND openNestedSubmenus change
   useEffect(() => {
     const newHeights: Record<string, number> = {};
     
@@ -313,7 +314,7 @@ const AppSidebar: React.FC = () => {
     }, 50);
 
     return () => clearTimeout(timeoutId);
-  }, [openSubmenus]);
+  }, [openSubmenus, openNestedSubmenus]); // Added openNestedSubmenus dependency
 
   useEffect(() => {
     const newHeights: Record<string, number> = {};
@@ -341,7 +342,7 @@ const AppSidebar: React.FC = () => {
 
   const handleSubmenuToggle = (
     index: number,
-    menuType: "main" | "support" | "others" | "templates"
+    menuType: "main" | "support" | "others" | "templates" | "admin"
   ) => {
     const key = `${menuType}-${index}`;
     setOpenSubmenus((prev) => {
@@ -357,7 +358,7 @@ const AppSidebar: React.FC = () => {
 
   const handleNestedSubmenuToggle = (
     subIndex: number,
-    menuType: "main" | "support" | "others" | "templates",
+    menuType: "main" | "support" | "others" | "templates" | "admin",
     parentIndex: number
   ) => {
     const key = `${menuType}-${parentIndex}-${subIndex}`;
@@ -374,7 +375,7 @@ const AppSidebar: React.FC = () => {
 
   const renderMenuItems = (
     navItems: NavItem[],
-    menuType: "main" | "support" | "others" | "templates"
+    menuType: "main" | "support" | "others" | "templates" | "admin"
   ) => (
     <ul className="flex flex-col gap-1">
       {navItems.map((nav, index) => {
@@ -472,7 +473,7 @@ const AppSidebar: React.FC = () => {
                   isSubmenuOpen ? "opacity-100" : "opacity-0"
                 }`}
                 style={{
-                  maxHeight: isSubmenuOpen ? `${subMenuHeights[submenuKey] || 200}px` : "0px",
+                  maxHeight: isSubmenuOpen ? `${subMenuHeights[submenuKey] || 500}px` : "0px",
                   transition: "max-height 0.3s ease-in-out, opacity 0.2s ease-in-out",
                 }}
               >
@@ -520,7 +521,7 @@ const AppSidebar: React.FC = () => {
                                   isNestedSubmenuOpen ? "opacity-100" : "opacity-0"
                                 }`}
                                 style={{
-                                  maxHeight: isNestedSubmenuOpen ? `${nestedSubMenuHeights[nestedSubmenuKey] || 150}px` : "0px",
+                                  maxHeight: isNestedSubmenuOpen ? `${nestedSubMenuHeights[nestedSubmenuKey] || 300}px` : "0px",
                                   transition: "max-height 0.3s ease-in-out, opacity 0.2s ease-in-out",
                                 }}
                               >
@@ -678,7 +679,7 @@ const AppSidebar: React.FC = () => {
                     <HorizontaLDots />
                   )}
                 </h2>
-                {renderMenuItems(adminPanelItems, "main")}
+                {renderMenuItems(adminPanelItems, "admin")}
               </div>
             )}
           </div>
