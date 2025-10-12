@@ -196,7 +196,7 @@ export default function UsageLogsPage() {
           </svg>
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">Access Denied</h3>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            You don't have permission to view usage logs.
+            You don&apos;t have permission to view usage logs.
           </p>
         </div>
       </div>

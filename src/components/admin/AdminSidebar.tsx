@@ -149,7 +149,7 @@ const menuItems: MenuItem[] = [
 export default function AdminSidebar({ userRole }: AdminSidebarProps) {
   const pathname = usePathname();
   const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<{ role: string } | null>(null);
 
   useEffect(() => {
     const supabase = createClient();

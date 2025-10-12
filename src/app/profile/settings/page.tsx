@@ -25,7 +25,7 @@ interface UserPermissions {
 
 export default function AccountSettingsPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [permissions, setPermissions] = useState<UserPermissions[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +58,7 @@ export default function AccountSettingsPage() {
                   if (permError) {
                     console.error("Error fetching permissions:", permError);
                   } else if (permissionData) {
-                    const formattedPermissions = permissionData.map((rp: any) => ({
+                    const formattedPermissions = permissionData.map((rp: { permissions: { resource: string; action: string; name: string } }) => ({
                       resource: rp.permissions.resource,
                       action: rp.permissions.action,
                       name: rp.permissions.name,

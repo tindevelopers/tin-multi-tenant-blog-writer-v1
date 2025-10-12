@@ -7,7 +7,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { createClient } from "@/lib/supabase/client";
 import {
   ChevronDownIcon,
-  GridIcon,
+  // GridIcon, // Unused import
   HorizontaLDots,
 } from "../icons";
 
@@ -94,7 +94,7 @@ const AppSidebar: React.FC = () => {
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [subMenuHeights, setSubMenuHeights] = useState<Record<string, number>>({});
   const [nestedSubMenuHeights, setNestedSubMenuHeights] = useState<Record<string, number>>({});
-  const [userRole, setUserRole] = useState<string>("");
+  // const [userRole, setUserRole] = useState<string>(""); // Unused variable
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   // Load persisted accordion state from localStorage
@@ -158,7 +158,7 @@ const AppSidebar: React.FC = () => {
         
         // Try to fetch user profile with more detailed debugging
         // First, try with the service role client to bypass RLS
-        const serviceSupabase = createClient();
+        // const serviceSupabase = createClient(); // Unused variable
         
         // Try regular client first
         console.log("🔍 AppSidebar: Attempting to fetch user with ID:", user.id);

@@ -9,8 +9,8 @@ import RoleBadge from "../ui/RoleBadge";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ role: string; full_name: string } | null>(null);
 
   useEffect(() => {
     const supabase = createClient();

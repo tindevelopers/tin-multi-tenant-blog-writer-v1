@@ -9,7 +9,7 @@ interface Integration {
   type: string;
   status: 'active' | 'inactive' | 'error';
   description: string;
-  config: any;
+  config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

@@ -9,7 +9,7 @@ interface Organization {
   slug: string;
   created_at: string;
   updated_at: string;
-  settings: any;
+  settings: Record<string, unknown>;
   _count?: {
     users: number;
   };
