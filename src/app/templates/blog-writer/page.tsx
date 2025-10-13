@@ -1,14 +1,10 @@
-import type { Metadata } from "next";
+"use client";
+
 import React from "react";
 import BlogWriterDashboard from "@/components/blog-writer/BlogWriterDashboard";
 import BlogWriterMetrics from "@/components/blog-writer/BlogWriterMetrics";
 import UpcomingSchedule from "@/components/blog-writer/UpcomingSchedule";
 import AnalyticsPreview from "@/components/blog-writer/AnalyticsPreview";
-
-export const metadata: Metadata = {
-  title: "Blog Writer Dashboard | TailAdmin Template",
-  description: "Blog writer dashboard with metrics, quick actions, and overview",
-};
 
 export default function BlogWriterDashboardPage() {
   return (

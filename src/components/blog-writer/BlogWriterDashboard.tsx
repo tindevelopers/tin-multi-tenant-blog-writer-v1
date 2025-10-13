@@ -1,40 +1,49 @@
 import React from "react";
+import { useRecentActivities, useAPIConnection } from "@/hooks/useBlogWriterAPI";
 
 const BlogWriterDashboard = () => {
-  const recentActivities = [
+  // Fetch real data from API
+  const { data: recentActivities = [], loading: activitiesLoading, error: activitiesError } = useRecentActivities();
+  const { status: apiStatus, message: apiMessage } = useAPIConnection();
+
+  // Fallback data in case API is unavailable
+  const fallbackActivities = [
     {
-      id: 1,
-      type: "publish",
+      id: "1",
+      type: "publish" as const,
       title: "How to Build a Successful Content Marketing Strategy",
       author: "Sarah Johnson",
       time: "2 hours ago",
       status: "published",
     },
     {
-      id: 2,
-      type: "draft",
+      id: "2", 
+      type: "draft" as const,
       title: "10 SEO Tips for Small Business Owners",
       author: "Mike Chen",
       time: "4 hours ago",
       status: "draft",
     },
     {
-      id: 3,
-      type: "schedule",
+      id: "3",
+      type: "schedule" as const,
       title: "The Future of AI in Content Creation",
       author: "Emily Davis",
       time: "6 hours ago",
       status: "scheduled",
     },
     {
-      id: 4,
-      type: "review",
+      id: "4",
+      type: "review" as const,
       title: "Social Media Marketing Best Practices",
       author: "David Wilson",
       time: "1 day ago",
       status: "in_review",
     },
   ];
+
+  // Use API data if available, otherwise fallback
+  const activities = (recentActivities && recentActivities.length > 0) ? recentActivities : fallbackActivities;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -85,16 +94,35 @@ const BlogWriterDashboard = () => {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-          Recent Blog Activity
-        </h2>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Recent Blog Activity
+          </h2>
+          {/* API Connection Status */}
+          <div className="flex items-center mt-1 space-x-2">
+            <div className={`w-2 h-2 rounded-full ${
+              apiStatus === 'connected' ? 'bg-green-500' : 
+              apiStatus === 'disconnected' ? 'bg-red-500' : 
+              apiStatus === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-gray-500'
+            }`} />
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {apiMessage}
+            </span>
+            {activitiesLoading && (
+              <span className="text-xs text-gray-400">Loading...</span>
+            )}
+            {activitiesError && (
+              <span className="text-xs text-red-500">Using fallback data</span>
+            )}
+          </div>
+        </div>
         <button className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
           View All
         </button>
       </div>
 
       <div className="space-y-4">
-        {recentActivities.map((activity) => (
+        {activities.map((activity) => (
           <div
             key={activity.id}
             className="flex items-start sm:items-center space-x-3 sm:space-x-4 p-3 sm:p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"

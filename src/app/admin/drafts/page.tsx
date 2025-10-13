@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { 
   PlusIcon, 
   MagnifyingGlassIcon, 
@@ -17,6 +18,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 export default function DraftsPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [selectedDrafts, setSelectedDrafts] = useState<string[]>([]);
@@ -126,7 +128,10 @@ export default function DraftsPage() {
               Manage your content drafts, collaborate with your team, and track your writing progress
             </p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
+          <button 
+            onClick={() => router.push('/admin/drafts/new')}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+          >
             <PlusIcon className="w-5 h-5" />
             New Draft
           </button>
@@ -362,7 +367,10 @@ export default function DraftsPage() {
           </p>
           {(!searchTerm && selectedFilter === "all") && (
             <div className="mt-6">
-              <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 mx-auto transition-colors">
+              <button 
+                onClick={() => router.push('/admin/drafts/new')}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 mx-auto transition-colors"
+              >
                 <PlusIcon className="w-5 h-5" />
                 Create Draft
               </button>
