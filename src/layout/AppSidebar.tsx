@@ -104,13 +104,20 @@ const AppSidebar: React.FC = () => {
         const savedSubmenus = localStorage.getItem('sidebar-open-submenus');
         const savedNestedSubmenus = localStorage.getItem('sidebar-open-nested-submenus');
         
+        console.log('🔍 Loading sidebar state from localStorage:', {
+          savedSubmenus,
+          savedNestedSubmenus
+        });
+        
         if (savedSubmenus) {
           const parsedSubmenus = JSON.parse(savedSubmenus);
+          console.log('🔍 Setting open submenus:', parsedSubmenus);
           setOpenSubmenus(new Set(parsedSubmenus));
         }
         
         if (savedNestedSubmenus) {
           const parsedNestedSubmenus = JSON.parse(savedNestedSubmenus);
+          console.log('🔍 Setting open nested submenus:', parsedNestedSubmenus);
           setOpenNestedSubmenus(new Set(parsedNestedSubmenus));
         }
       } catch (error) {
@@ -235,23 +242,36 @@ const AppSidebar: React.FC = () => {
     const newOpenSubmenus = new Set<string>();
     const newOpenNestedSubmenus = new Set<string>();
     
+    console.log('🔍 Auto-opening logic - Current pathname:', pathname);
+    console.log('🔍 Auto-opening logic - showAdminPanel:', showAdminPanel);
+    
     // Check Blog Writer template navigation items
     blogWriterItems.forEach((nav, index) => {
       if (nav.subItems) {
+        console.log('🔍 Checking Blog Writer item:', nav.name, 'index:', index);
         // Always keep the main Blog Writer menu open if any submenu is active
         let shouldKeepMainOpen = false;
         
         nav.subItems.forEach((subItem, subIndex) => {
-          // Check direct path matches
+          console.log('🔍 Checking subItem:', subItem.name, 'subIndex:', subIndex);
+          
+          // Check direct path matches (like Dashboard)
           if (subItem.path && isActive(subItem.path)) {
+            console.log('🔍 Direct path match found:', subItem.path, 'isActive:', isActive(subItem.path));
             newOpenSubmenus.add(`templates-${index}`);
             shouldKeepMainOpen = true;
           }
+          
           // Check nested subItems for accordion headers
           if (subItem.subItems && subItem.isAccordionHeader) {
+            console.log('🔍 Found accordion header:', subItem.name);
             subItem.subItems.forEach((nestedItem) => {
-              if (isActive(nestedItem.path)) {
+              console.log('🔍 Checking nested item:', nestedItem.name, 'path:', nestedItem.path, 'isActive:', isActive(nestedItem.path));
+              if (nestedItem.path && isActive(nestedItem.path)) {
+                console.log('🔍 Nested path match found! Opening menus...');
+                // Open the main Blog Writer menu
                 newOpenSubmenus.add(`templates-${index}`);
+                // Open the specific accordion (Analytics & SEO, Content Management, etc.)
                 newOpenNestedSubmenus.add(`templates-${index}-${subIndex}`);
                 shouldKeepMainOpen = true;
               }
@@ -279,13 +299,20 @@ const AppSidebar: React.FC = () => {
       });
     }
 
-    // Preserve existing open states while adding new ones
+    console.log('🔍 Auto-opening results:', {
+      newOpenSubmenus: Array.from(newOpenSubmenus),
+      newOpenNestedSubmenus: Array.from(newOpenNestedSubmenus)
+    });
+
+    // Always update the state (don't check if empty)
     setOpenSubmenus((prev) => {
       const combined = new Set([...prev, ...newOpenSubmenus]);
+      console.log('🔍 Setting open submenus:', Array.from(combined));
       return combined;
     });
     setOpenNestedSubmenus((prev) => {
       const combined = new Set([...prev, ...newOpenNestedSubmenus]);
+      console.log('🔍 Setting open nested submenus:', Array.from(combined));
       return combined;
     });
   }, [pathname, isActive, showAdminPanel]);
@@ -345,13 +372,23 @@ const AppSidebar: React.FC = () => {
     menuType: "main" | "support" | "others" | "templates" | "admin"
   ) => {
     const key = `${menuType}-${index}`;
+    console.log('🔍 Toggling main submenu:', {
+      index,
+      menuType,
+      key,
+      currentState: openSubmenus.has(key)
+    });
+    
     setOpenSubmenus((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
         newSet.delete(key);
+        console.log('🔍 Closing main submenu:', key);
       } else {
         newSet.add(key);
+        console.log('🔍 Opening main submenu:', key);
       }
+      console.log('🔍 New main submenu state:', Array.from(newSet));
       return newSet;
     });
   };
@@ -362,13 +399,24 @@ const AppSidebar: React.FC = () => {
     parentIndex: number
   ) => {
     const key = `${menuType}-${parentIndex}-${subIndex}`;
+    console.log('🔍 Toggling nested submenu:', {
+      subIndex,
+      menuType,
+      parentIndex,
+      key,
+      currentState: openNestedSubmenus.has(key)
+    });
+    
     setOpenNestedSubmenus((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
         newSet.delete(key);
+        console.log('🔍 Closing nested submenu:', key);
       } else {
         newSet.add(key);
+        console.log('🔍 Opening nested submenu:', key);
       }
+      console.log('🔍 New nested submenu state:', Array.from(newSet));
       return newSet;
     });
   };
@@ -376,7 +424,14 @@ const AppSidebar: React.FC = () => {
   const renderMenuItems = (
     navItems: NavItem[],
     menuType: "main" | "support" | "others" | "templates" | "admin"
-  ) => (
+  ) => {
+    console.log('🔍 Rendering menu items:', {
+      menuType,
+      openSubmenus: Array.from(openSubmenus),
+      openNestedSubmenus: Array.from(openNestedSubmenus)
+    });
+    
+    return (
     <ul className="flex flex-col gap-1">
       {navItems.map((nav, index) => {
         const submenuKey = `${menuType}-${index}`;
@@ -598,7 +653,8 @@ const AppSidebar: React.FC = () => {
         );
       })}
     </ul>
-  );
+    );
+  };
 
   return (
     <aside
@@ -680,6 +736,15 @@ const AppSidebar: React.FC = () => {
                   )}
                 </h2>
                 {renderMenuItems(adminPanelItems, "admin")}
+              </div>
+            )}
+            
+            {/* Debug info - remove in production */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mt-4 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs">
+                <div>Admin Panel: {showAdminPanel ? 'YES' : 'NO'}</div>
+                <div>Open Submenus: {Array.from(openSubmenus).join(', ')}</div>
+                <div>Open Nested: {Array.from(openNestedSubmenus).join(', ')}</div>
               </div>
             )}
           </div>
