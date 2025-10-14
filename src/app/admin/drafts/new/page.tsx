@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
   ArrowLeftIcon,
@@ -11,11 +11,23 @@ import {
 import { usePostMutation } from "@/hooks/useBlogWriterAPI";
 import { blogWriterAPI } from "@/lib/blog-writer-api";
 import BlogResearchPanel from "@/components/blog-writer/BlogResearchPanel";
+import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
 
 export default function NewDraftPage() {
   const router = useRouter();
   const { createPost, loading: creatingPost } = usePostMutation();
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+  
+  // Get current user ID
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setUserId(user.id);
+      }
+    });
+  }, []);
   
   const [formData, setFormData] = useState({
     title: "",
@@ -206,7 +218,7 @@ export default function NewDraftPage() {
               <BlogResearchPanel
                 onResearchComplete={handleResearchComplete}
                 onTitleSelect={handleTitleSelect}
-                userId="current-user-id" // TODO: Get from auth context
+                userId={userId}
               />
             </div>
           )}
