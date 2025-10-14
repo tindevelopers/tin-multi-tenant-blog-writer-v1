@@ -11,6 +11,8 @@ import {
   type KeywordAnalysisResponse,
   type KeywordSuggestionResponse,
 } from '@/lib/keyword-research-enhanced';
+import { KeywordStorageService } from '@/lib/keyword-storage';
+import { createClient } from '@/lib/supabase/client';
 
 export interface UseKeywordResearchResult {
   // State
@@ -35,6 +37,7 @@ export interface UseKeywordResearchResult {
   createClusters: () => Promise<void>;
   filterEasyWins: (threshold?: number) => KeywordData[];
   filterHighValue: (threshold?: number) => KeywordData[];
+  loadFromHistory: (historyId: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -74,6 +77,48 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       // Automatically create clusters
       const newClusters = await keywordResearchService.createClusters(result.variations);
       setClusters(newClusters);
+
+      // Save to database
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user) {
+          const keywordStorage = new KeywordStorageService();
+          
+          // Transform keyword data to storage format
+          const storageKeywords = result.variations.map(k => ({
+            keyword: k.keyword,
+            search_volume: k.search_volume,
+            difficulty: k.keyword_difficulty <= 30 ? 'easy' : k.keyword_difficulty <= 60 ? 'medium' : 'hard',
+            competition: k.competition_level === 'LOW' ? 0.2 : k.competition_level === 'MEDIUM' ? 0.5 : 0.8,
+            cpc: k.cpc,
+            trend_score: k.high_value_score,
+            recommended: k.easy_win_score >= 60 || k.high_value_score >= 60,
+            reason: k.easy_win_score >= 60 ? 'Easy win opportunity' : 'High value keyword',
+            related_keywords: k.related_keywords,
+            long_tail_keywords: k.related_keywords.slice(0, 3) // Use first 3 as long-tail
+          }));
+
+          await keywordStorage.saveKeywords(
+            user.id,
+            primaryKeyword,
+            storageKeywords,
+            {
+              location,
+              language,
+              clusters: newClusters,
+              primaryAnalysis: result.primary
+            }
+          );
+          
+          console.log('💾 Keywords saved to database');
+        }
+      } catch (saveError) {
+        console.error('⚠️ Failed to save keywords to database:', saveError);
+        // Don't fail the entire research if saving fails
+      }
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Keyword research failed';
       setError(errorMessage);
@@ -177,6 +222,66 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
   }, [keywords]);
 
   /**
+   * Load research from history
+   */
+  const loadFromHistory = useCallback(async (historyId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setError('User not authenticated');
+        return;
+      }
+
+      const keywordStorage = new KeywordStorageService();
+      const history = await keywordStorage.getKeywordHistory(user.id);
+      const selectedHistory = history.find(h => h.id === historyId);
+      
+      if (!selectedHistory) {
+        setError('Research history not found');
+        return;
+      }
+
+      // Transform stored keywords back to KeywordData format
+      const keywordData: KeywordData[] = selectedHistory.keywords.map(k => ({
+        keyword: k.keyword,
+        search_volume: k.search_volume || 0,
+        keyword_difficulty: k.difficulty === 'easy' ? 20 : k.difficulty === 'medium' ? 50 : 80,
+        competition_level: k.competition < 0.3 ? 'LOW' : k.competition < 0.7 ? 'MEDIUM' : 'HIGH',
+        cpc: k.cpc || 0,
+        related_keywords: k.related_keywords,
+        easy_win_score: k.difficulty === 'easy' ? 70 : k.difficulty === 'medium' ? 40 : 20,
+        high_value_score: (k.search_volume || 0) > 1000 ? 70 : (k.search_volume || 0) > 500 ? 50 : 30,
+      }));
+
+      setKeywords(keywordData);
+      setPrimaryAnalysis({
+        keyword: selectedHistory.topic,
+        search_volume: keywordData[0]?.search_volume || 0,
+        keyword_difficulty: 'medium',
+        competition_level: 'MEDIUM',
+        cpc: keywordData[0]?.cpc || 0,
+        related_keywords: keywordData.flatMap(k => k.related_keywords),
+      } as KeywordAnalysisResponse);
+
+      // Create clusters from loaded keywords
+      const keywordClusters = keywordResearchService.createKeywordClusters(keywordData);
+      setClusters(keywordClusters);
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load research history';
+      setError(errorMessage);
+      console.error('Load history error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Reset all state
    */
   const reset = useCallback(() => {
@@ -200,6 +305,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     createClusters,
     filterEasyWins,
     filterHighValue,
+    loadFromHistory,
     reset,
   };
 }

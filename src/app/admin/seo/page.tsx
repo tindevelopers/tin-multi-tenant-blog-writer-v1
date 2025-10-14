@@ -57,7 +57,7 @@ export default function SEOToolsPage() {
           <div className="flex items-center gap-4">
             <Link
               href="/admin/seo/keywords"
-              className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg text-white font-medium transition-colors"
+              className="px-4 py-2 bg-white bg-opacity-25 hover:bg-opacity-35 rounded-lg text-white font-medium transition-colors border border-white border-opacity-30"
             >
               📊 Research History
             </Link>
