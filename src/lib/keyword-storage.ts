@@ -1,11 +1,6 @@
 "use client";
 
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { createClient } from '@/lib/supabase/client';
 
 export interface StoredKeyword {
   id: string;
@@ -56,6 +51,9 @@ class KeywordStorageService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       console.log('💾 Saving keywords to database for user:', userId);
+      
+      // Create a fresh Supabase client with auth context
+      const supabase = createClient();
       
       // First, save the research session
       const { data: sessionData, error: sessionError } = await supabase
@@ -115,6 +113,7 @@ class KeywordStorageService {
    */
   async getUserKeywords(userId: string, limit: number = 50): Promise<StoredKeyword[]> {
     try {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('user_keywords')
         .select('*')
@@ -139,6 +138,7 @@ class KeywordStorageService {
    */
   async getUserResearchSessions(userId: string, limit: number = 20): Promise<KeywordHistory[]> {
     try {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('keyword_research_sessions')
         .select(`
@@ -173,6 +173,7 @@ class KeywordStorageService {
    */
   async getKeywordsByTopic(userId: string, topic: string): Promise<StoredKeyword[]> {
     try {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('user_keywords')
         .select(`
@@ -200,6 +201,7 @@ class KeywordStorageService {
    */
   async updateKeyword(keywordId: string, updates: Partial<StoredKeyword>): Promise<{ success: boolean; error?: string }> {
     try {
+      const supabase = createClient();
       const { error } = await supabase
         .from('user_keywords')
         .update({
@@ -226,6 +228,7 @@ class KeywordStorageService {
    */
   async deleteKeyword(keywordId: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const supabase = createClient();
       const { error } = await supabase
         .from('user_keywords')
         .delete()
@@ -249,6 +252,7 @@ class KeywordStorageService {
    */
   async searchKeywords(userId: string, query: string): Promise<StoredKeyword[]> {
     try {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('user_keywords')
         .select('*')

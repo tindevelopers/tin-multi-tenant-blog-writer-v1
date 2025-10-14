@@ -10,9 +10,9 @@ interface CloudRunHealthStatus {
 
 class CloudRunHealthManager {
   private baseURL: string;
-  private maxWakeupAttempts: number = 5;
-  private wakeupDelay: number = 2000; // 2 seconds between attempts
-  private healthCheckDelay: number = 30000; // 30 seconds after wakeup
+  private maxWakeupAttempts: number = 2;
+  private wakeupDelay: number = 1000; // 1 second between attempts
+  private healthCheckDelay: number = 2000; // 2 seconds after wakeup
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;

@@ -202,13 +202,17 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🏷️ Version
 
-**Current Version:** v1.0.1
+**Current Version:** v1.0.2
 
-### Latest Updates
-- ✅ Improved sidebar accordion behavior with smooth animations
-- ✅ Enhanced admin panel with system admin role support
-- ✅ Persistent menu state across navigation and page refreshes
-- ✅ Optimized height calculations for better performance
+### Latest Updates (October 14, 2025)
+- ✅ Added comprehensive keyword research system with Cloud Run API integration
+- ✅ Implemented keyword storage and history tracking in Supabase
+- ✅ Enhanced SEO tools with keyword analysis and suggestions
+- ✅ Added fallback mechanisms for robust keyword extraction
+- ✅ Fixed RLS policies for keyword research sessions
+- ✅ Improved Supabase client authentication context
+- ✅ Enhanced sidebar accordion behavior with smooth animations
+- ✅ Added system admin role support
 
 ---
 

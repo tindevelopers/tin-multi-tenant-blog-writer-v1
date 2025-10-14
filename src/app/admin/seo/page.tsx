@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import React from "react";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "SEO Tools | Blog Writer | TailAdmin Template",
@@ -18,10 +19,18 @@ export default function SEOToolsPage() {
                 Optimize your content for search engines and improve your blog&apos;s visibility
               </p>
           </div>
-          <div className="hidden md:block">
-            <div className="bg-white bg-opacity-20 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold">87</div>
-              <div className="text-sm text-teal-100">SEO Score</div>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/admin/seo/keywords"
+              className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg text-white font-medium transition-colors"
+            >
+              📊 Keyword Research History
+            </Link>
+            <div className="hidden md:block">
+              <div className="bg-white bg-opacity-20 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold">87</div>
+                <div className="text-sm text-teal-100">SEO Score</div>
+              </div>
             </div>
           </div>
         </div>
