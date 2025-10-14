@@ -6,7 +6,7 @@ import { PrimaryKeywordInput } from "@/components/keyword-research/PrimaryKeywor
 import { MasterKeywordTable } from "@/components/keyword-research/MasterKeywordTable";
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
 import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnhancedKeywordResearch";
-import { TrendingUp, Target, Layers, Search } from "lucide-react";
+import { TrendingUp, Target, Layers, Search, History, Eye } from "lucide-react";
 import Alert from "@/components/ui/alert/Alert";
 
 export default function SEOToolsPage() {
@@ -63,16 +63,22 @@ export default function SEOToolsPage() {
             </Link>
             {keywords.length > 0 ? (
               <div className="hidden md:block">
-                <div className="bg-white bg-opacity-20 rounded-lg p-4 text-center">
-                  <div className="text-2xl font-bold">{keywords.length}</div>
-                  <div className="text-sm text-teal-100">Keywords Found</div>
+                <div className="bg-white bg-opacity-25 rounded-lg p-4 text-center border border-white border-opacity-30">
+                  <div className="text-2xl font-bold text-white">{keywords.length}</div>
+                  <div className="text-sm font-medium text-white">Keywords Found</div>
+                  <button 
+                    onClick={() => setActiveTab('keywords')}
+                    className="mt-2 text-xs text-white hover:text-teal-200 underline"
+                  >
+                    View Results →
+                  </button>
                 </div>
               </div>
             ) : (
               <div className="hidden md:block">
-                <div className="bg-white bg-opacity-10 rounded-lg p-4 text-center border border-white border-opacity-20">
-                  <div className="text-lg text-teal-100">🔍 Ready to Research</div>
-                  <div className="text-sm text-teal-200">Enter a keyword below to get started</div>
+                <div className="bg-white bg-opacity-15 rounded-lg p-4 text-center border border-white border-opacity-25">
+                  <div className="text-lg font-medium text-white">🔍 Ready to Research</div>
+                  <div className="text-sm text-white">Enter a keyword below to get started</div>
                 </div>
               </div>
             )}
@@ -80,14 +86,87 @@ export default function SEOToolsPage() {
         </div>
       </div>
 
+      {/* Recent Research Section */}
+      {keywords.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <History className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Research</h3>
+            </div>
+            <button 
+              onClick={() => setActiveTab('keywords')}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+            >
+              <Eye className="h-4 w-4" />
+              View All Results
+            </button>
+          </div>
+          
+          {primaryAnalysis && (
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-brand-50 to-blue-50 dark:from-brand-500/10 dark:to-blue-500/10 rounded-lg p-4 border border-brand-200 dark:border-brand-500/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      Primary Keyword: <span className="font-semibold text-brand-600 dark:text-brand-400">"{primaryAnalysis.keyword}"</span>
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      Found {keywords.length} variations • {easyWins.length} easy wins • {highValue.length} high value
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs font-medium">
+                      {keywords.length} Keywords
+                    </span>
+                    <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium">
+                      {clusters.length} Clusters
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top Keywords Preview */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Top Keywords Found:</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {keywords.slice(0, 6).map((keyword, index) => (
+                    <div key={keyword.keyword} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">#{index + 1}</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{keyword.keyword}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{keyword.search_volume.toLocaleString()}</span>
+                        {keyword.easy_win_score >= 60 && (
+                          <span className="w-2 h-2 bg-green-500 rounded-full" title="Easy Win"></span>
+                        )}
+                        {keyword.high_value_score >= 60 && (
+                          <span className="w-2 h-2 bg-blue-500 rounded-full" title="High Value"></span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {keywords.length > 6 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                    +{keywords.length - 6} more keywords available in the full results
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Quick Stats */}
       {keywords.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Keywords</p>
-                <p className="text-2xl font-bold">{keywords.length}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Keywords</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{keywords.length}</p>
               </div>
               <TrendingUp className="h-8 w-8 text-blue-500" />
             </div>
@@ -96,8 +175,8 @@ export default function SEOToolsPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Easy Wins</p>
-                <p className="text-2xl font-bold">{easyWins.length}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Easy Wins</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{easyWins.length}</p>
               </div>
               <Target className="h-8 w-8 text-green-500" />
             </div>
@@ -106,8 +185,8 @@ export default function SEOToolsPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">High Value</p>
-                <p className="text-2xl font-bold">{highValue.length}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">High Value</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{highValue.length}</p>
               </div>
               <TrendingUp className="h-8 w-8 text-purple-500" />
             </div>
@@ -116,8 +195,8 @@ export default function SEOToolsPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Clusters</p>
-                <p className="text-2xl font-bold">{clusters.length}</p>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Clusters</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{clusters.length}</p>
               </div>
               <Layers className="h-8 w-8 text-orange-500" />
             </div>
