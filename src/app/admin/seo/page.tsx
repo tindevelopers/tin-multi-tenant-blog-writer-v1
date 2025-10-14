@@ -57,18 +57,18 @@ export default function SEOToolsPage() {
           <div className="flex items-center gap-4">
             <Link
               href="/admin/seo/keywords"
-              className="px-4 py-2 bg-white bg-opacity-25 hover:bg-opacity-35 rounded-lg text-white font-medium transition-colors border border-white border-opacity-30"
+              className="px-4 py-2 bg-white rounded-lg text-green-800 font-medium transition-colors border-2 border-green-600 hover:bg-green-50"
             >
               📊 Research History
             </Link>
             {keywords.length > 0 ? (
               <div className="hidden md:block">
-                <div className="bg-white bg-opacity-25 rounded-lg p-4 text-center border border-white border-opacity-30">
-                  <div className="text-2xl font-bold text-white">{keywords.length}</div>
-                  <div className="text-sm font-medium text-white">Keywords Found</div>
+                <div className="bg-white rounded-lg p-4 text-center border-2 border-green-600">
+                  <div className="text-2xl font-bold text-green-800">{keywords.length}</div>
+                  <div className="text-sm font-medium text-green-700">Keywords Found</div>
                   <button 
                     onClick={() => setActiveTab('keywords')}
-                    className="mt-2 text-xs text-white hover:text-teal-200 underline"
+                    className="mt-2 text-xs text-green-600 hover:text-green-800 underline font-medium"
                   >
                     View Results →
                   </button>
@@ -76,9 +76,9 @@ export default function SEOToolsPage() {
               </div>
             ) : (
               <div className="hidden md:block">
-                <div className="bg-white bg-opacity-15 rounded-lg p-4 text-center border border-white border-opacity-25">
-                  <div className="text-lg font-medium text-white">🔍 Ready to Research</div>
-                  <div className="text-sm text-white">Enter a keyword below to get started</div>
+                <div className="bg-white rounded-lg p-4 text-center border-2 border-green-300">
+                  <div className="text-lg font-medium text-green-800">🔍 Ready to Research</div>
+                  <div className="text-sm text-green-700">Enter a keyword below to get started</div>
                 </div>
               </div>
             )}

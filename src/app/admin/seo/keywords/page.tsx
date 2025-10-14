@@ -11,24 +11,50 @@ export default function KeywordHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<KeywordHistory | null>(null);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    loadKeywordHistory();
+    initializeAuth();
   }, []);
 
-  const loadKeywordHistory = async () => {
+  const initializeAuth = async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.error('Auth error:', error);
+        setError('Authentication error: ' + error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!user) {
+        setError('Please log in to view your research history');
+        setLoading(false);
+        return;
+      }
+
+      setUser(user);
+      await loadKeywordHistory(user);
+    } catch (err) {
+      console.error('Initialization error:', err);
+      setError('Failed to initialize authentication');
+      setLoading(false);
+    }
+  };
+
+  const loadKeywordHistory = async (userData: any) => {
     try {
       setLoading(true);
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user) {
+      if (!userData) {
         setError('User not authenticated');
         return;
       }
 
       const keywordStorage = new KeywordStorageService();
-      const history = await keywordStorage.getKeywordHistory(user.id);
+      const history = await keywordStorage.getKeywordHistory(userData.id);
       setKeywordHistory(history);
     } catch (err) {
       console.error('Error loading keyword history:', err);
@@ -68,20 +94,20 @@ export default function KeywordHistoryPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl p-6 text-white">
+      <div className="bg-white border-2 border-green-600 rounded-xl p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold mb-2 flex items-center gap-2">
+            <h1 className="text-2xl font-bold mb-2 flex items-center gap-2 text-green-800">
               <History className="h-6 w-6" />
               Research History
             </h1>
-            <p className="text-blue-100">
+            <p className="text-green-700">
               View and manage your past keyword research sessions
             </p>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold">{keywordHistory.length}</div>
-            <div className="text-sm text-blue-100">Research Sessions</div>
+            <div className="text-2xl font-bold text-green-800">{keywordHistory.length}</div>
+            <div className="text-sm text-green-700">Research Sessions</div>
           </div>
         </div>
       </div>
@@ -110,7 +136,7 @@ export default function KeywordHistoryPage() {
             </p>
             <a
               href="/admin/seo"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
             >
               <Search className="h-4 w-4" />
               Start Research
@@ -142,7 +168,7 @@ export default function KeywordHistoryPage() {
                 </div>
                 <button
                   onClick={() => setSelectedHistory(history)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-green-600 hover:text-green-700 border border-green-300 rounded-lg hover:bg-green-50"
                 >
                   <Eye className="h-4 w-4" />
                   View Details
