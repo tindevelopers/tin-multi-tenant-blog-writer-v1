@@ -306,18 +306,18 @@ export function MasterKeywordTable({
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell className="px-6 py-8 text-center" colSpan={8}>
+                <td className="px-6 py-8 text-center" colSpan={8}>
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
                     <span className="ml-3 text-gray-500 dark:text-gray-400">Loading keywords...</span>
                   </div>
-                </TableCell>
+                </td>
               </TableRow>
             ) : filteredAndSortedKeywords.length === 0 ? (
               <TableRow>
-                <TableCell className="px-6 py-8 text-center text-gray-500 dark:text-gray-400" colSpan={8}>
+                <td className="px-6 py-8 text-center text-gray-500 dark:text-gray-400" colSpan={8}>
                   No keywords found. Try adjusting your filters.
-                </TableCell>
+                </td>
               </TableRow>
             ) : (
               filteredAndSortedKeywords.map((keyword) => (

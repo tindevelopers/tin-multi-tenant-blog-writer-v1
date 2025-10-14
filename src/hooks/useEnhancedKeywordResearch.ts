@@ -101,16 +101,32 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
         language
       );
 
-      const keywordData = results.map((result) => ({
-        keyword: result.keyword,
-        search_volume: result.search_volume || 0,
-        keyword_difficulty: result.difficulty,
-        competition_level: result.competition,
-        cpc: result.cpc,
-        related_keywords: result.related_keywords,
-        easy_win_score: 0, // Will be calculated by service
-        high_value_score: 0,
-      }));
+      // Transform results using the service's transform method
+      const keywordData = results.map((result) => {
+        // Convert string difficulty to number
+        const difficultyMap: Record<string, number> = {
+          'easy': 20,
+          'medium': 50,
+          'hard': 80,
+        };
+        const difficultyScore = difficultyMap[result.difficulty.toLowerCase()] || 50;
+        
+        // Convert decimal competition to level
+        const competitionLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 
+          result.competition < 0.3 ? 'LOW' :
+          result.competition < 0.7 ? 'MEDIUM' : 'HIGH';
+
+        return {
+          keyword: result.keyword,
+          search_volume: result.search_volume || 0,
+          keyword_difficulty: difficultyScore,
+          competition_level: competitionLevel,
+          cpc: result.cpc || 0,
+          related_keywords: result.related_keywords,
+          easy_win_score: 0, // Will be calculated
+          high_value_score: 0,
+        };
+      });
 
       setKeywords(keywordData);
     } catch (err) {
