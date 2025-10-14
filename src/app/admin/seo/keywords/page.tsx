@@ -15,16 +15,50 @@ export default function KeywordHistoryPage() {
 
   useEffect(() => {
     initializeAuth();
+    
+    // Listen for auth state changes
+    const supabase = createClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user?.id);
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user);
+        loadKeywordHistory(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setKeywordHistory([]);
+        setError('Please log in to view your research history');
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const initializeAuth = async () => {
     try {
       const supabase = createClient();
-      const { data: { user }, error } = await supabase.auth.getUser();
       
-      if (error) {
-        console.error('Auth error:', error);
-        setError('Authentication error: ' + error.message);
+      // First, check if there's a session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        setError('Authentication error: ' + sessionError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!session) {
+        setError('Please log in to view your research history');
+        setLoading(false);
+        return;
+      }
+
+      // Get user from session
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.error('User error:', userError);
+        setError('Authentication error: ' + userError.message);
         setLoading(false);
         return;
       }
@@ -35,6 +69,7 @@ export default function KeywordHistoryPage() {
         return;
       }
 
+      console.log('✅ User authenticated:', user.id);
       setUser(user);
       await loadKeywordHistory(user);
     } catch (err) {

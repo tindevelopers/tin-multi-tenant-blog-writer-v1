@@ -89,13 +89,11 @@ const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
 
-  // State management for menus - allow multiple open menus with persistence
+  // State management for menus - simplified approach
   const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
-  const [userInteracted, setUserInteracted] = useState<Set<string>>(new Set());
   const [subMenuHeights, setSubMenuHeights] = useState<Record<string, number>>({});
   const [nestedSubMenuHeights, setNestedSubMenuHeights] = useState<Record<string, number>>({});
-  // const [userRole, setUserRole] = useState<string>(""); // Unused variable
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   // Load persisted accordion state from localStorage
@@ -238,16 +236,9 @@ const AppSidebar: React.FC = () => {
     });
   }, []);
 
-  // Reset user interactions when pathname changes (new page navigation)
-  useEffect(() => {
-    setUserInteracted(new Set());
-  }, [pathname]);
-
-  // Auto-open menus based on current path with improved logic
+  // Auto-open menus based on current path - simplified logic
   useEffect(() => {
     console.log('🔍 Auto-opening logic - Current pathname:', pathname);
-    console.log('🔍 User interactions:', Array.from(userInteracted));
-    console.log('🔍 Auto-opening logic - showAdminPanel:', showAdminPanel);
     
     const newOpenSubmenus = new Set<string>();
     const newOpenNestedSubmenus = new Set<string>();
@@ -255,41 +246,28 @@ const AppSidebar: React.FC = () => {
     // Check Blog Writer template navigation items
     blogWriterItems.forEach((nav, index) => {
       if (nav.subItems) {
-        console.log('🔍 Checking Blog Writer item:', nav.name, 'index:', index);
-        // Always keep the main Blog Writer menu open if any submenu is active
         let shouldKeepMainOpen = false;
         
         nav.subItems.forEach((subItem, subIndex) => {
-          console.log('🔍 Checking subItem:', subItem.name, 'subIndex:', subIndex);
-          
           // Check direct path matches (like Dashboard)
           if (subItem.path && isActive(subItem.path)) {
-            console.log('🔍 Direct path match found:', subItem.path, 'isActive:', isActive(subItem.path));
             newOpenSubmenus.add(`templates-${index}`);
             shouldKeepMainOpen = true;
           }
           
           // Check nested subItems for accordion headers
           if (subItem.subItems && subItem.isAccordionHeader) {
-            console.log('🔍 Found accordion header:', subItem.name);
             const accordionKey = `templates-${index}-${subIndex}`;
             
-            // Don't auto-open if user has manually interacted with this accordion
-            if (userInteracted.has(accordionKey)) {
-              console.log('🔍 Skipping auto-open for accordion - user has interacted:', accordionKey);
-            } else {
-              subItem.subItems.forEach((nestedItem) => {
-                console.log('🔍 Checking nested item:', nestedItem.name, 'path:', nestedItem.path, 'isActive:', isActive(nestedItem.path));
-                if (nestedItem.path && isActive(nestedItem.path)) {
-                  console.log('🔍 Nested path match found! Opening menus...');
-                  // Open the main Blog Writer menu
-                  newOpenSubmenus.add(`templates-${index}`);
-                  // Open the specific accordion (Analytics & SEO, Content Management, etc.)
-                  newOpenNestedSubmenus.add(accordionKey);
-                  shouldKeepMainOpen = true;
-                }
-              });
-            }
+            subItem.subItems.forEach((nestedItem) => {
+              if (nestedItem.path && isActive(nestedItem.path)) {
+                // Open the main Blog Writer menu
+                newOpenSubmenus.add(`templates-${index}`);
+                // Open the specific accordion (Analytics & SEO, Content Management, etc.)
+                newOpenNestedSubmenus.add(accordionKey);
+                shouldKeepMainOpen = true;
+              }
+            });
           }
         });
         
@@ -318,18 +296,10 @@ const AppSidebar: React.FC = () => {
       newOpenNestedSubmenus: Array.from(newOpenNestedSubmenus)
     });
 
-    // Always update the state (don't check if empty)
-    setOpenSubmenus((prev) => {
-      const combined = new Set([...prev, ...newOpenSubmenus]);
-      console.log('🔍 Setting open submenus:', Array.from(combined));
-      return combined;
-    });
-    setOpenNestedSubmenus((prev) => {
-      const combined = new Set([...prev, ...newOpenNestedSubmenus]);
-      console.log('🔍 Setting open nested submenus:', Array.from(combined));
-      return combined;
-    });
-  }, [pathname, isActive, showAdminPanel, userInteracted]);
+    // Update the state
+    setOpenSubmenus(newOpenSubmenus);
+    setOpenNestedSubmenus(newOpenNestedSubmenus);
+  }, [pathname, showAdminPanel]);
 
   // Update heights when menus open/close with improved calculation
   // This needs to recalculate when BOTH openSubmenus AND openNestedSubmenus change
@@ -393,9 +363,6 @@ const AppSidebar: React.FC = () => {
       currentState: openSubmenus.has(key)
     });
     
-    // Mark that user has interacted with this accordion
-    setUserInteracted((prev) => new Set([...prev, key]));
-    
     setOpenSubmenus((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
@@ -422,13 +389,6 @@ const AppSidebar: React.FC = () => {
       parentIndex,
       key,
       currentState: openNestedSubmenus.has(key)
-    });
-    
-    // Mark that user has interacted with this accordion (always add, never remove)
-    setUserInteracted((prev) => {
-      const newSet = new Set([...prev, key]);
-      console.log('🔍 User interacted with nested accordion:', key, 'New userInteracted:', Array.from(newSet));
-      return newSet;
     });
     
     setOpenNestedSubmenus((prev) => {
@@ -763,15 +723,6 @@ const AppSidebar: React.FC = () => {
               </div>
             )}
             
-            {/* Debug info - remove in production */}
-            {process.env.NODE_ENV === 'development' && (
-              <div className="mt-4 p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs">
-                <div>Admin Panel: {showAdminPanel ? 'YES' : 'NO'}</div>
-                <div>Open Submenus: {Array.from(openSubmenus).join(', ')}</div>
-                <div>Open Nested: {Array.from(openNestedSubmenus).join(', ')}</div>
-                <div>User Interactions: {Array.from(userInteracted).join(', ')}</div>
-              </div>
-            )}
           </div>
         </nav>
       </div>
