@@ -6,7 +6,7 @@ import { PrimaryKeywordInput } from "@/components/keyword-research/PrimaryKeywor
 import { MasterKeywordTable } from "@/components/keyword-research/MasterKeywordTable";
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
 import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnhancedKeywordResearch";
-import { TrendingUp, Target, Layers } from "lucide-react";
+import { TrendingUp, Target, Layers, Search } from "lucide-react";
 import Alert from "@/components/ui/alert/Alert";
 
 export default function SEOToolsPage() {
@@ -61,11 +61,18 @@ export default function SEOToolsPage() {
             >
               📊 Research History
             </Link>
-            {keywords.length > 0 && (
+            {keywords.length > 0 ? (
               <div className="hidden md:block">
                 <div className="bg-white bg-opacity-20 rounded-lg p-4 text-center">
                   <div className="text-2xl font-bold">{keywords.length}</div>
                   <div className="text-sm text-teal-100">Keywords Found</div>
+                </div>
+              </div>
+            ) : (
+              <div className="hidden md:block">
+                <div className="bg-white bg-opacity-10 rounded-lg p-4 text-center border border-white border-opacity-20">
+                  <div className="text-lg text-teal-100">🔍 Ready to Research</div>
+                  <div className="text-sm text-teal-200">Enter a keyword below to get started</div>
                 </div>
               </div>
             )}
@@ -180,34 +187,87 @@ export default function SEOToolsPage() {
                   message={`Found ${keywords.length} keyword variations for "${primaryAnalysis.keyword}". Check the Keywords tab to explore the results.`}
                 />
               )}
+
+              {keywords.length === 0 && !loading && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-blue-200 dark:border-gray-600 p-8 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Search className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      Start Your Keyword Research
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-300 mb-4">
+                      Enter a primary keyword above to discover variations, search volumes, and content opportunities. 
+                      Our system will analyze competition, identify easy wins, and suggest high-value content clusters.
+                    </p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-sm">
+                        🔍 Keyword Discovery
+                      </span>
+                      <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-sm">
+                        📊 Search Volume Analysis
+                      </span>
+                      <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full text-sm">
+                        🎯 Content Clustering
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'keywords' && (
             <div className="space-y-4">
-              <MasterKeywordTable
-                keywords={keywords}
-                selectedKeywords={selectedKeywords}
-                onToggleKeyword={toggleKeyword}
-                onSelectAll={handleSelectAll}
-                onClearSelection={clearSelection}
-                loading={loading}
-              />
+              {keywords.length > 0 ? (
+                <>
+                  <MasterKeywordTable
+                    keywords={keywords}
+                    selectedKeywords={selectedKeywords}
+                    onToggleKeyword={toggleKeyword}
+                    onSelectAll={handleSelectAll}
+                    onClearSelection={clearSelection}
+                    loading={loading}
+                  />
 
-              {selectedCount > 0 && (
-                <div className="flex items-center justify-between p-4 bg-brand-50 dark:bg-brand-500/10 rounded-lg border border-brand-200 dark:border-brand-500/30">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {selectedCount} keyword{selectedCount > 1 ? 's' : ''} selected
-                  </p>
-                  <div className="flex gap-2">
+                  {selectedCount > 0 && (
+                    <div className="flex items-center justify-between p-4 bg-brand-50 dark:bg-brand-500/10 rounded-lg border border-brand-200 dark:border-brand-500/30">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {selectedCount} keyword{selectedCount > 1 ? 's' : ''} selected
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={clearSelection}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                        >
+                          Clear Selection
+                        </button>
+                        <button className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors">
+                          Create Content ({selectedCount})
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-gray-200 dark:border-gray-600 p-8 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <TrendingUp className="h-8 w-8 text-gray-600 dark:text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      No Keywords Yet
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-300 mb-4">
+                      Research a primary keyword first to see keyword variations, search volumes, and competition data.
+                    </p>
                     <button
-                      onClick={clearSelection}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                      onClick={() => setActiveTab('research')}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors"
                     >
-                      Clear Selection
-                    </button>
-                    <button className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors">
-                      Create Content ({selectedCount})
+                      <Search className="h-4 w-4" />
+                      Start Research
                     </button>
                   </div>
                 </div>
@@ -216,7 +276,32 @@ export default function SEOToolsPage() {
           )}
 
           {activeTab === 'clusters' && (
-            <KeywordClusterView clusters={clusters} />
+            <>
+              {clusters.length > 0 ? (
+                <KeywordClusterView clusters={clusters} />
+              ) : (
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-gray-800 dark:to-gray-700 rounded-xl border border-purple-200 dark:border-gray-600 p-8 text-center">
+                  <div className="max-w-md mx-auto">
+                    <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Layers className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      No Clusters Yet
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-300 mb-4">
+                      Keyword clusters will appear here after researching keywords. Clusters help organize related keywords for content planning.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab('research')}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-500 rounded-lg hover:bg-purple-600 transition-colors"
+                    >
+                      <Search className="h-4 w-4" />
+                      Research Keywords
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

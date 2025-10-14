@@ -203,7 +203,7 @@ export function MasterKeywordTable({
                 placeholder="Search keywords..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-11 w-full rounded-lg border border-gray-300 bg-transparent pl-10 pr-4 py-2.5 text-sm shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30 dark:focus:border-brand-800"
+                className="h-11 w-full rounded-lg border-2 border-gray-300 bg-white pl-10 pr-4 py-2.5 text-sm shadow-sm placeholder:text-gray-500 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-400 dark:focus:border-brand-500"
               />
             </div>
           </div>
@@ -236,8 +236,8 @@ export function MasterKeywordTable({
       {/* Table */}
       <div className="overflow-x-auto">
         <Table className="w-full">
-          <TableHeader className="bg-gray-50 dark:bg-gray-700/50">
-            <TableRow className="border-b border-gray-200 dark:border-gray-700">
+          <TableHeader className="bg-gray-100 dark:bg-gray-700">
+            <TableRow className="border-b border-gray-300 dark:border-gray-600">
               <TableCell isHeader className="px-6 py-4 w-[50px]">
                 <Checkbox
                   checked={allSelected}
@@ -323,7 +323,7 @@ export function MasterKeywordTable({
               filteredAndSortedKeywords.map((keyword) => (
                 <TableRow 
                   key={keyword.keyword} 
-                  className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                  className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors bg-white dark:bg-gray-800"
                 >
                   <TableCell className="px-6 py-4">
                     <Checkbox
