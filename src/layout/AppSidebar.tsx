@@ -92,6 +92,7 @@ const AppSidebar: React.FC = () => {
   // State management for menus - allow multiple open menus with persistence
   const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
+  const [userInteracted, setUserInteracted] = useState<Set<string>>(new Set());
   const [subMenuHeights, setSubMenuHeights] = useState<Record<string, number>>({});
   const [nestedSubMenuHeights, setNestedSubMenuHeights] = useState<Record<string, number>>({});
   // const [userRole, setUserRole] = useState<string>(""); // Unused variable
@@ -237,13 +238,19 @@ const AppSidebar: React.FC = () => {
     });
   }, []);
 
+  // Reset user interactions when pathname changes (new page navigation)
+  useEffect(() => {
+    setUserInteracted(new Set());
+  }, [pathname]);
+
   // Auto-open menus based on current path with improved logic
   useEffect(() => {
+    console.log('🔍 Auto-opening logic - Current pathname:', pathname);
+    console.log('🔍 User interactions:', Array.from(userInteracted));
+    console.log('🔍 Auto-opening logic - showAdminPanel:', showAdminPanel);
+    
     const newOpenSubmenus = new Set<string>();
     const newOpenNestedSubmenus = new Set<string>();
-    
-    console.log('🔍 Auto-opening logic - Current pathname:', pathname);
-    console.log('🔍 Auto-opening logic - showAdminPanel:', showAdminPanel);
     
     // Check Blog Writer template navigation items
     blogWriterItems.forEach((nav, index) => {
@@ -315,7 +322,7 @@ const AppSidebar: React.FC = () => {
       console.log('🔍 Setting open nested submenus:', Array.from(combined));
       return combined;
     });
-  }, [pathname, isActive, showAdminPanel]);
+  }, [pathname, isActive, showAdminPanel, userInteracted]);
 
   // Update heights when menus open/close with improved calculation
   // This needs to recalculate when BOTH openSubmenus AND openNestedSubmenus change
@@ -379,6 +386,9 @@ const AppSidebar: React.FC = () => {
       currentState: openSubmenus.has(key)
     });
     
+    // Mark that user has interacted with this accordion
+    setUserInteracted((prev) => new Set([...prev, key]));
+    
     setOpenSubmenus((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
@@ -406,6 +416,9 @@ const AppSidebar: React.FC = () => {
       key,
       currentState: openNestedSubmenus.has(key)
     });
+    
+    // Mark that user has interacted with this accordion
+    setUserInteracted((prev) => new Set([...prev, key]));
     
     setOpenNestedSubmenus((prev) => {
       const newSet = new Set(prev);
@@ -745,6 +758,7 @@ const AppSidebar: React.FC = () => {
                 <div>Admin Panel: {showAdminPanel ? 'YES' : 'NO'}</div>
                 <div>Open Submenus: {Array.from(openSubmenus).join(', ')}</div>
                 <div>Open Nested: {Array.from(openNestedSubmenus).join(', ')}</div>
+                <div>User Interactions: {Array.from(userInteracted).join(', ')}</div>
               </div>
             )}
           </div>
