@@ -272,17 +272,24 @@ const AppSidebar: React.FC = () => {
           // Check nested subItems for accordion headers
           if (subItem.subItems && subItem.isAccordionHeader) {
             console.log('🔍 Found accordion header:', subItem.name);
-            subItem.subItems.forEach((nestedItem) => {
-              console.log('🔍 Checking nested item:', nestedItem.name, 'path:', nestedItem.path, 'isActive:', isActive(nestedItem.path));
-              if (nestedItem.path && isActive(nestedItem.path)) {
-                console.log('🔍 Nested path match found! Opening menus...');
-                // Open the main Blog Writer menu
-                newOpenSubmenus.add(`templates-${index}`);
-                // Open the specific accordion (Analytics & SEO, Content Management, etc.)
-                newOpenNestedSubmenus.add(`templates-${index}-${subIndex}`);
-                shouldKeepMainOpen = true;
-              }
-            });
+            const accordionKey = `templates-${index}-${subIndex}`;
+            
+            // Don't auto-open if user has manually interacted with this accordion
+            if (userInteracted.has(accordionKey)) {
+              console.log('🔍 Skipping auto-open for accordion - user has interacted:', accordionKey);
+            } else {
+              subItem.subItems.forEach((nestedItem) => {
+                console.log('🔍 Checking nested item:', nestedItem.name, 'path:', nestedItem.path, 'isActive:', isActive(nestedItem.path));
+                if (nestedItem.path && isActive(nestedItem.path)) {
+                  console.log('🔍 Nested path match found! Opening menus...');
+                  // Open the main Blog Writer menu
+                  newOpenSubmenus.add(`templates-${index}`);
+                  // Open the specific accordion (Analytics & SEO, Content Management, etc.)
+                  newOpenNestedSubmenus.add(accordionKey);
+                  shouldKeepMainOpen = true;
+                }
+              });
+            }
           }
         });
         
@@ -417,8 +424,12 @@ const AppSidebar: React.FC = () => {
       currentState: openNestedSubmenus.has(key)
     });
     
-    // Mark that user has interacted with this accordion
-    setUserInteracted((prev) => new Set([...prev, key]));
+    // Mark that user has interacted with this accordion (always add, never remove)
+    setUserInteracted((prev) => {
+      const newSet = new Set([...prev, key]);
+      console.log('🔍 User interacted with nested accordion:', key, 'New userInteracted:', Array.from(newSet));
+      return newSet;
+    });
     
     setOpenNestedSubmenus((prev) => {
       const newSet = new Set(prev);
