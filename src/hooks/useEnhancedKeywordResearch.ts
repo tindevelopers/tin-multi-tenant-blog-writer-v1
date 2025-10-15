@@ -80,39 +80,64 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
 
       // Save to database
       try {
+        console.log('🔍 Attempting to save keywords to database...');
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
         
-        if (user) {
-          const keywordStorage = new KeywordStorageService();
-          
-          // Transform keyword data to storage format
-          const storageKeywords = result.variations.map(k => ({
-            keyword: k.keyword,
-            search_volume: k.search_volume,
-            difficulty: k.keyword_difficulty <= 30 ? 'easy' : k.keyword_difficulty <= 60 ? 'medium' : 'hard',
-            competition: k.competition_level === 'LOW' ? 0.2 : k.competition_level === 'MEDIUM' ? 0.5 : 0.8,
-            cpc: k.cpc,
-            trend_score: k.high_value_score,
-            recommended: k.easy_win_score >= 60 || k.high_value_score >= 60,
-            reason: k.easy_win_score >= 60 ? 'Easy win opportunity' : 'High value keyword',
-            related_keywords: k.related_keywords,
-            long_tail_keywords: k.related_keywords.slice(0, 3) // Use first 3 as long-tail
-          }));
+        console.log('🔍 User auth result:', { user: user?.id, error: userError?.message });
+        
+        if (userError) {
+          console.error('❌ Auth error when saving keywords:', userError);
+          throw userError;
+        }
+        
+        if (!user) {
+          console.error('❌ No user authenticated when saving keywords');
+          throw new Error('User not authenticated');
+        }
 
-          await keywordStorage.saveKeywords(
-            user.id,
-            primaryKeyword,
-            storageKeywords,
-            {
-              location,
-              language,
-              clusters: newClusters,
-              primaryAnalysis: result.primary
-            }
-          );
-          
-          console.log('💾 Keywords saved to database');
+        console.log('✅ User authenticated:', user.id);
+        
+        const keywordStorage = new KeywordStorageService();
+        
+        // Transform keyword data to storage format
+        const storageKeywords = result.variations.map(k => ({
+          keyword: k.keyword,
+          search_volume: k.search_volume,
+          difficulty: k.keyword_difficulty <= 30 ? 'easy' : k.keyword_difficulty <= 60 ? 'medium' : 'hard',
+          competition: k.competition_level === 'LOW' ? 0.2 : k.competition_level === 'MEDIUM' ? 0.5 : 0.8,
+          cpc: k.cpc,
+          trend_score: k.high_value_score,
+          recommended: k.easy_win_score >= 60 || k.high_value_score >= 60,
+          reason: k.easy_win_score >= 60 ? 'Easy win opportunity' : 'High value keyword',
+          related_keywords: k.related_keywords,
+          long_tail_keywords: k.related_keywords.slice(0, 3) // Use first 3 as long-tail
+        }));
+
+        console.log('🔍 Saving keywords:', { 
+          userId: user.id, 
+          primaryKeyword, 
+          keywordCount: storageKeywords.length 
+        });
+
+        const saveResult = await keywordStorage.saveKeywords(
+          user.id,
+          primaryKeyword,
+          storageKeywords,
+          {
+            location,
+            language,
+            clusters: newClusters,
+            primaryAnalysis: result.primary
+          }
+        );
+        
+        console.log('💾 Save result:', saveResult);
+        
+        if (saveResult.success) {
+          console.log('✅ Keywords saved to database successfully');
+        } else {
+          console.error('❌ Failed to save keywords:', saveResult.error);
         }
       } catch (saveError) {
         console.error('⚠️ Failed to save keywords to database:', saveError);

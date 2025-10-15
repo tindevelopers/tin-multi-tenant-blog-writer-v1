@@ -51,33 +51,58 @@ class KeywordStorageService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       console.log('💾 Saving keywords to database for user:', userId);
+      console.log('💾 Topic:', topic);
+      console.log('💾 Keywords count:', keywords.length);
+      console.log('💾 First few keywords:', keywords.slice(0, 3));
       
       // Create a fresh Supabase client with auth context
       const supabase = createClient();
       
+      // Test auth first
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      console.log('💾 Auth check:', { userId: user?.id, error: authError?.message });
+      
+      if (authError) {
+        console.error('💾 Auth error:', authError);
+        return { success: false, error: authError.message };
+      }
+      
+      if (!user) {
+        console.error('💾 No user found');
+        return { success: false, error: 'User not authenticated' };
+      }
+      
       // First, save the research session
-      const { data: sessionData, error: sessionError } = await supabase
+      console.log('💾 Inserting research session...');
+      const sessionData = {
+        user_id: userId,
+        org_id: userId, // Using userId as org_id for now since we don't have org structure yet
+        primary_keyword: topic,
+        location_targeting: 'United States',
+        language_code: 'en',
+        total_keywords: keywords.length,
+        created_at: new Date().toISOString(),
+      };
+      console.log('💾 Session data:', sessionData);
+      
+      const { data: sessionResult, error: sessionError } = await supabase
         .from('keyword_research_sessions')
-        .insert({
-          user_id: userId,
-          org_id: userId, // Using userId as org_id for now since we don't have org structure yet
-          primary_keyword: topic,
-          location_targeting: 'United States',
-          language_code: 'en',
-          total_keywords: keywords.length,
-          created_at: new Date().toISOString(),
-        })
+        .insert(sessionData)
         .select()
         .single();
 
+      console.log('💾 Session insert result:', { data: sessionResult, error: sessionError });
+
       if (sessionError) {
-        console.error('Failed to save research session:', sessionError);
+        console.error('❌ Failed to save research session:', sessionError);
         return { success: false, error: sessionError.message };
       }
+      
+      console.log('✅ Research session saved:', sessionResult.id);
 
       // Then save individual keywords
       const keywordInserts = keywords.map(keyword => ({
-        session_id: sessionData.id,
+        session_id: sessionResult.id,
         org_id: userId, // Using userId as org_id for now
         keyword: keyword.keyword,
         search_volume: keyword.search_volume,
@@ -94,16 +119,25 @@ class KeywordStorageService {
         updated_at: new Date().toISOString(),
       }));
 
-      const { error: keywordsError } = await supabase
+      console.log('💾 Inserting keywords...');
+      console.log('💾 First keyword insert:', keywordInserts[0]);
+      
+      const { data: keywordResult, error: keywordsError } = await supabase
         .from('research_keywords')
-        .insert(keywordInserts);
+        .insert(keywordInserts)
+        .select();
+
+      console.log('💾 Keywords insert result:', { 
+        count: keywordResult?.length, 
+        error: keywordsError?.message 
+      });
 
       if (keywordsError) {
-        console.error('Failed to save keywords:', keywordsError);
+        console.error('❌ Failed to save keywords:', keywordsError);
         return { success: false, error: keywordsError.message };
       }
 
-      console.log('✅ Successfully saved keywords to database');
+      console.log('✅ Successfully saved keywords to database:', keywordResult?.length, 'keywords');
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
