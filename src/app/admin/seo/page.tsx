@@ -2,14 +2,18 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PrimaryKeywordInput } from "@/components/keyword-research/PrimaryKeywordInput";
 import { MasterKeywordTable } from "@/components/keyword-research/MasterKeywordTable";
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
 import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnhancedKeywordResearch";
-import { TrendingUp, Target, Layers, Search, History, Eye } from "lucide-react";
+import { useContentIdeas } from "@/hooks/useContentIdeas";
+import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight } from "lucide-react";
 import Alert from "@/components/ui/alert/Alert";
 
 export default function SEOToolsPage() {
+  const router = useRouter();
+  
   const {
     loading,
     error,
@@ -29,7 +33,16 @@ export default function SEOToolsPage() {
     selectedCount,
   } = useKeywordSelection();
 
+  const {
+    generateContentIdeas,
+    saveContentCluster,
+    loading: contentIdeasLoading,
+    error: contentIdeasError,
+    currentCluster,
+  } = useContentIdeas();
+
   const [activeTab, setActiveTab] = useState('research');
+  const [showContentIdeasModal, setShowContentIdeasModal] = useState(false);
 
   const handleResearch = async (keyword: string, location: string, language: string) => {
     await researchKeyword(keyword, location, language);
@@ -38,6 +51,36 @@ export default function SEOToolsPage() {
 
   const handleSelectAll = () => {
     selectAll(keywords);
+  };
+
+  const handleGenerateContentIdeas = async () => {
+    const selectedKeywordsList = keywords.filter(k => selectedKeywords.has(k.keyword));
+    
+    if (selectedKeywordsList.length === 0) {
+      alert('Please select at least one keyword');
+      return;
+    }
+
+    try {
+      await generateContentIdeas({
+        keywords: selectedKeywordsList.map(k => k.keyword),
+        pillar_keyword: primaryAnalysis?.keyword,
+        cluster_name: primaryAnalysis?.keyword ? `${primaryAnalysis.keyword} Content Hub` : undefined,
+      });
+
+      // Save to database
+      const result = await saveContentCluster();
+      
+      if (result.success) {
+        // Navigate to content clusters page
+        router.push('/admin/content-clusters');
+      } else {
+        alert('Failed to save content cluster: ' + result.error);
+      }
+    } catch (err) {
+      console.error('Failed to generate content ideas:', err);
+      alert('Failed to generate content ideas');
+    }
   };
 
   const easyWins = keywords.filter((k) => k.easy_win_score >= 60);
@@ -322,8 +365,13 @@ export default function SEOToolsPage() {
                         >
                           Clear Selection
                         </button>
-                        <button className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors">
-                          Create Content ({selectedCount})
+                        <button 
+                          onClick={handleGenerateContentIdeas}
+                          disabled={contentIdeasLoading}
+                          className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          {contentIdeasLoading ? 'Generating...' : `Generate Content Ideas (${selectedCount})`}
                         </button>
                       </div>
                     </div>

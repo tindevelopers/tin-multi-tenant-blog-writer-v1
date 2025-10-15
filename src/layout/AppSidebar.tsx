@@ -81,6 +81,7 @@ const blogWriterItems: NavItem[] = [
         subItems: [
           { name: "Analytics", path: "/admin/analytics", icon: <TrendingUp className="w-4 h-4" />, pro: true },
           { name: "SEO", path: "/admin/seo", icon: <Target className="w-4 h-4" />, pro: true },
+          { name: "Content Clusters", path: "/admin/content-clusters", icon: <LayoutDashboard className="w-4 h-4" />, new: true },
         ]
       },
     ],
