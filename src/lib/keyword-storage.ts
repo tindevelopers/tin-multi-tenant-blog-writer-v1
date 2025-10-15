@@ -74,6 +74,8 @@ class KeywordStorageService {
       
       // First, save the research session
       console.log('💾 Inserting research session...');
+      
+      // Let's try a simpler approach first - test with minimal data
       const sessionData = {
         user_id: userId,
         org_id: userId, // Using userId as org_id for now since we don't have org structure yet
@@ -81,21 +83,41 @@ class KeywordStorageService {
         location_targeting: 'United States',
         language_code: 'en',
         total_keywords: keywords.length,
-        created_at: new Date().toISOString(),
       };
       console.log('💾 Session data:', sessionData);
       
+      // Test the insert step by step
+      console.log('💾 Testing table access...');
+      const { data: tableTest, error: tableError } = await supabase
+        .from('keyword_research_sessions')
+        .select('count(*)')
+        .limit(1);
+      
+      console.log('💾 Table access test:', { data: tableTest, error: tableError });
+      
+      if (tableError) {
+        console.error('❌ Cannot access keyword_research_sessions table:', tableError);
+        return { success: false, error: `Table access error: ${tableError.message}` };
+      }
+      
+      console.log('💾 Attempting insert...');
       const { data: sessionResult, error: sessionError } = await supabase
         .from('keyword_research_sessions')
         .insert(sessionData)
         .select()
         .single();
 
-      console.log('💾 Session insert result:', { data: sessionResult, error: sessionError });
+      console.log('💾 Session insert result:', { 
+        data: sessionResult, 
+        error: sessionError,
+        errorCode: sessionError?.code,
+        errorDetails: sessionError?.details,
+        errorHint: sessionError?.hint
+      });
 
       if (sessionError) {
         console.error('❌ Failed to save research session:', sessionError);
-        return { success: false, error: sessionError.message };
+        return { success: false, error: sessionError.message || JSON.stringify(sessionError) };
       }
       
       console.log('✅ Research session saved:', sessionResult.id);
