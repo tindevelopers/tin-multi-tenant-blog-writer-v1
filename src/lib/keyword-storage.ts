@@ -90,7 +90,7 @@ class KeywordStorageService {
       console.log('💾 Testing table access...');
       const { data: tableTest, error: tableError } = await supabase
         .from('keyword_research_sessions')
-        .select('count(*)')
+        .select('id')
         .limit(1);
       
       console.log('💾 Table access test:', { data: tableTest, error: tableError });
@@ -99,6 +99,8 @@ class KeywordStorageService {
         console.error('❌ Cannot access keyword_research_sessions table:', tableError);
         return { success: false, error: `Table access error: ${tableError.message}` };
       }
+      
+      console.log('✅ Table access successful');
       
       console.log('💾 Attempting insert...');
       const { data: sessionResult, error: sessionError } = await supabase
