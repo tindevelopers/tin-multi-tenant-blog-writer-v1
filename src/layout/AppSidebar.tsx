@@ -9,6 +9,18 @@ import {
   ChevronDownIcon,
   HorizontaLDots,
 } from "../icons";
+import { 
+  LayoutDashboard, 
+  FileText, 
+  Users, 
+  BarChart, 
+  FolderOpen, 
+  Globe, 
+  CalendarDays, 
+  Image as ImageIcon, 
+  TrendingUp, 
+  Target 
+} from "lucide-react";
 
 type NavItem = {
   name: string;
@@ -21,7 +33,8 @@ type NavItem = {
     pro?: boolean; 
     new?: boolean;
     isAccordionHeader?: boolean;
-    subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
+    icon?: React.ReactNode;
+    subItems?: { name: string; path: string; pro?: boolean; new?: boolean; icon?: React.ReactNode }[];
   }[];
 };
 
@@ -32,35 +45,42 @@ const blogWriterItems: NavItem[] = [
     icon: <span className="w-5 h-5 flex items-center justify-center text-xs font-bold bg-blue-500 text-white rounded">B</span>,
     new: true,
     subItems: [
-      { name: "Dashboard", path: "/admin" },
+      { 
+        name: "Dashboard", 
+        path: "/admin",
+        icon: <LayoutDashboard className="w-4 h-4" />
+      },
       { 
         name: "Content Management", 
+        icon: <FileText className="w-4 h-4" />,
         isAccordionHeader: true,
         new: true,
         subItems: [
-          { name: "Drafts", path: "/admin/drafts", new: true },
-          { name: "Templates", path: "/admin/templates", new: true },
-          { name: "Publishing", path: "/admin/publishing", new: true },
-          { name: "Workflows", path: "/admin/workflows", new: true },
+          { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
+          { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
+          { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
+          { name: "Workflows", path: "/admin/workflows", icon: <CalendarDays className="w-4 h-4" />, new: true },
         ]
       },
       { 
         name: "Team & Collaboration", 
+        icon: <Users className="w-4 h-4" />,
         isAccordionHeader: true,
         new: true,
         subItems: [
-          { name: "Team", path: "/admin/team", new: true },
-          { name: "Media", path: "/admin/media", new: true },
-          { name: "Integrations", path: "/admin/integrations", new: true },
+          { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, new: true },
+          { name: "Media", path: "/admin/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
+          { name: "Integrations", path: "/admin/integrations", icon: <Globe className="w-4 h-4" />, new: true },
         ]
       },
       { 
         name: "Analytics & SEO", 
+        icon: <BarChart className="w-4 h-4" />,
         isAccordionHeader: true,
         pro: true,
         subItems: [
-          { name: "Analytics", path: "/admin/analytics", pro: true },
-          { name: "SEO", path: "/admin/seo", pro: true },
+          { name: "Analytics", path: "/admin/analytics", icon: <TrendingUp className="w-4 h-4" />, pro: true },
+          { name: "SEO", path: "/admin/seo", icon: <Target className="w-4 h-4" />, pro: true },
         ]
       },
     ],
@@ -88,10 +108,41 @@ const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const pathname = usePathname();
 
-  // Simple state management - just track what's open
+  // Smart state management with auto-expand and persistence
   const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+  // Load persisted state from localStorage
+  useEffect(() => {
+    const savedOpenSubmenus = localStorage.getItem('sidebar-open-submenus');
+    const savedOpenNestedSubmenus = localStorage.getItem('sidebar-open-nested-submenus');
+    
+    if (savedOpenSubmenus) {
+      try {
+        setOpenSubmenus(new Set(JSON.parse(savedOpenSubmenus)));
+      } catch (e) {
+        console.warn('Failed to parse saved open submenus:', e);
+      }
+    }
+    
+    if (savedOpenNestedSubmenus) {
+      try {
+        setOpenNestedSubmenus(new Set(JSON.parse(savedOpenNestedSubmenus)));
+      } catch (e) {
+        console.warn('Failed to parse saved open nested submenus:', e);
+      }
+    }
+  }, []);
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('sidebar-open-submenus', JSON.stringify(Array.from(openSubmenus)));
+  }, [openSubmenus]);
+
+  useEffect(() => {
+    localStorage.setItem('sidebar-open-nested-submenus', JSON.stringify(Array.from(openNestedSubmenus)));
+  }, [openNestedSubmenus]);
 
   // Check if user is admin on mount
   useEffect(() => {
@@ -126,7 +177,82 @@ const AppSidebar: React.FC = () => {
     });
   }, []);
 
-  // Simple toggle functions - no complex logic
+  // Smart auto-expand logic - automatically open accordions for active routes
+  useEffect(() => {
+    const newOpenSubmenus = new Set(openSubmenus);
+    const newOpenNestedSubmenus = new Set(openNestedSubmenus);
+    let hasChanges = false;
+
+    // Check Blog Writer items for active routes
+    blogWriterItems.forEach((nav, index) => {
+      if (nav.subItems) {
+        let shouldOpenMain = false;
+        
+        nav.subItems.forEach((subItem, subIndex) => {
+          // Check direct path matches
+          if (subItem.path && isActive(subItem.path)) {
+            newOpenSubmenus.add(`templates-${index}`);
+            shouldOpenMain = true;
+          }
+          
+          // Check nested accordion headers
+          if (subItem.isAccordionHeader && subItem.subItems) {
+            const accordionKey = `templates-${index}-${subIndex}`;
+            
+            subItem.subItems.forEach((nestedItem) => {
+              if (nestedItem.path && isActive(nestedItem.path)) {
+                // Open the main Blog Writer menu
+                newOpenSubmenus.add(`templates-${index}`);
+                // Open the specific accordion (Analytics & SEO, Content Management, etc.)
+                newOpenNestedSubmenus.add(accordionKey);
+                shouldOpenMain = true;
+              }
+            });
+          }
+        });
+        
+        // If any submenu is active, ensure main menu stays open
+        if (shouldOpenMain) {
+          newOpenSubmenus.add(`templates-${index}`);
+        }
+      }
+    });
+
+    // Check Admin Panel items for active routes
+    if (showAdminPanel) {
+      adminPanelItems.forEach((nav, index) => {
+        if (nav.subItems) {
+          nav.subItems.forEach((subItem) => {
+            if (subItem.path && isActive(subItem.path)) {
+              newOpenSubmenus.add(`admin-${index}`);
+            }
+          });
+        }
+      });
+    }
+
+    // Update state only if there are changes
+    if (newOpenSubmenus.size !== openSubmenus.size || 
+        !Array.from(newOpenSubmenus).every(item => openSubmenus.has(item))) {
+      setOpenSubmenus(newOpenSubmenus);
+      hasChanges = true;
+    }
+
+    if (newOpenNestedSubmenus.size !== openNestedSubmenus.size || 
+        !Array.from(newOpenNestedSubmenus).every(item => openNestedSubmenus.has(item))) {
+      setOpenNestedSubmenus(newOpenNestedSubmenus);
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      console.log('🎯 Auto-expanded menus for pathname:', pathname, {
+        openSubmenus: Array.from(newOpenSubmenus),
+        openNestedSubmenus: Array.from(newOpenNestedSubmenus)
+      });
+    }
+  }, [pathname, showAdminPanel]);
+
+  // Smart toggle functions that work with auto-expand
   const handleSubmenuToggle = (
     index: number,
     menuType: "main" | "support" | "others" | "templates" | "admin"
@@ -284,6 +410,11 @@ const AppSidebar: React.FC = () => {
                                 }`}
                               >
                                 <span className="flex items-center gap-2">
+                                  {subItem.icon && (
+                                    <span className={`${isNestedSubmenuOpen ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}>
+                                      {subItem.icon}
+                                    </span>
+                                  )}
                                   {subItem.name}
                                   {subItem.new && (
                                     <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
@@ -319,6 +450,11 @@ const AppSidebar: React.FC = () => {
                                           }`}
                                         >
                                           <span className="flex items-center gap-2">
+                                            {nestedItem.icon && (
+                                              <span className={`${isActive(nestedItem.path || "") ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}>
+                                                {nestedItem.icon}
+                                              </span>
+                                            )}
                                             {nestedItem.name}
                                             {nestedItem.new && (
                                               <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
