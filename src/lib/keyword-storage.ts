@@ -60,8 +60,11 @@ class KeywordStorageService {
         .from('keyword_research_sessions')
         .insert({
           user_id: userId,
-          topic: topic,
-          research_results: researchResults || {},
+          org_id: userId, // Using userId as org_id for now since we don't have org structure yet
+          primary_keyword: topic,
+          location_targeting: 'United States',
+          language_code: 'en',
+          total_keywords: keywords.length,
           created_at: new Date().toISOString(),
         })
         .select()
@@ -74,24 +77,25 @@ class KeywordStorageService {
 
       // Then save individual keywords
       const keywordInserts = keywords.map(keyword => ({
-        user_id: userId,
-        research_session_id: sessionData.id,
+        session_id: sessionData.id,
+        org_id: userId, // Using userId as org_id for now
         keyword: keyword.keyword,
         search_volume: keyword.search_volume,
-        difficulty: keyword.difficulty,
-        competition: keyword.competition,
+        keyword_difficulty: keyword.difficulty === 'easy' ? 20 : keyword.difficulty === 'medium' ? 50 : 80,
+        competition_level: keyword.competition < 0.3 ? 'LOW' : keyword.competition < 0.7 ? 'MEDIUM' : 'HIGH',
         cpc: keyword.cpc,
         trend_score: keyword.trend_score,
-        recommended: keyword.recommended,
-        reason: keyword.reason,
+        easy_win_score: keyword.recommended ? 70 : 30,
+        high_value_score: keyword.trend_score || 50,
+        pillar_potential: keyword.recommended && (keyword.search_volume || 0) > 1000,
+        supporting_potential: keyword.recommended && (keyword.search_volume || 0) > 100,
         related_keywords: keyword.related_keywords,
-        long_tail_keywords: keyword.long_tail_keywords,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
 
       const { error: keywordsError } = await supabase
-        .from('user_keywords')
+        .from('research_keywords')
         .insert(keywordInserts);
 
       if (keywordsError) {
@@ -115,9 +119,12 @@ class KeywordStorageService {
     try {
       const supabase = createClient();
       const { data, error } = await supabase
-        .from('user_keywords')
-        .select('*')
-        .eq('user_id', userId)
+        .from('research_keywords')
+        .select(`
+          *,
+          keyword_research_sessions!inner(user_id)
+        `)
+        .eq('keyword_research_sessions.user_id', userId)
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -143,7 +150,7 @@ class KeywordStorageService {
         .from('keyword_research_sessions')
         .select(`
           *,
-          user_keywords (*)
+          research_keywords (*)
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -157,9 +164,9 @@ class KeywordStorageService {
       return data?.map(session => ({
         id: session.id,
         user_id: session.user_id,
-        topic: session.topic,
-        keywords: session.user_keywords || [],
-        research_results: session.research_results || {},
+        topic: session.primary_keyword,
+        keywords: session.research_keywords || [],
+        research_results: {},
         created_at: session.created_at,
       })) || [];
     } catch (error: unknown) {

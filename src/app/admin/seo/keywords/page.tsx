@@ -89,7 +89,7 @@ export default function KeywordHistoryPage() {
       }
 
       const keywordStorage = new KeywordStorageService();
-      const history = await keywordStorage.getKeywordHistory(userData.id);
+      const history = await keywordStorage.getUserResearchSessions(userData.id);
       setKeywordHistory(history);
     } catch (err) {
       console.error('Error loading keyword history:', err);
