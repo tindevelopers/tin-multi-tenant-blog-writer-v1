@@ -884,7 +884,7 @@ export class EnhancedContentClustersService {
       subtitle: this.generateSubtitle(keyword, 'tutorial'),
       meta_description: this.generateMetaDescription(keyword, 'tutorial', targetAudience),
       url_slug: this.generateUrlSlug(keyword),
-      word_count_target: 2000,
+      estimated_word_count: 2000,
       tone: 'educational',
       status: 'idea',
       priority: 3,
@@ -893,15 +893,24 @@ export class EnhancedContentClustersService {
       difficulty_score: this.calculateDifficultyScore(analysis?.difficulty || 'medium'),
       target_audience: targetAudience || 'general',
       content_outline: this.generateTutorialOutline(keyword),
-      internal_links: this.generateInternalLinks(keyword, cluster),
+      internal_linking_opportunities: this.generateInternalLinks(keyword, cluster),
       external_resources: await this.findExternalResources(keyword),
       content_gaps: await this.analyzeContentGaps(keyword),
-      seo_opportunities: this.identifySEOOpportunities(keyword, analysis),
-      cluster_relationship: {
-        pillar_keyword: cluster.pillar_keyword,
-        supporting_keywords: cluster.keyword_clusters[0]?.keywords?.slice(0, 5) || [],
-        internal_link_targets: cluster.keyword_clusters[0]?.keywords?.slice(0, 3) || []
-      }
+      seo_insights: {
+        primary_keyword: keyword,
+        secondary_keywords: analysis?.related_keywords?.slice(0, 5) || [],
+        semantic_keywords: analysis?.related_keywords?.slice(5, 10) || [],
+        keyword_difficulty: 50,
+        search_volume: analysis?.search_volume || 0,
+        competition_level: 'medium' as 'low' | 'medium' | 'high',
+        title_optimization_score: 85,
+        meta_description_score: 80,
+        readability_score: 75,
+        featured_snippet_opportunity: true,
+        related_searches: analysis?.related_keywords?.slice(0, 3) || [],
+        people_also_ask: analysis?.related_keywords?.slice(3, 6) || []
+      },
+      freshness_score: 85
     };
   }
 
@@ -923,54 +932,40 @@ export class EnhancedContentClustersService {
       },
       sections: [
         {
-          title: 'Getting Started',
-          content: [
-            {
-              heading: 'What You Need to Know',
-              content: `Understanding ${keyword} is essential for success.`,
-              estimated_word_count: 400
-            },
-            {
-              heading: 'Setting Up Your Environment',
-              content: `Let's prepare everything you need to begin.`,
-              estimated_word_count: 300
-            }
-          ]
+          heading: 'Getting Started',
+          level: 'h2',
+          description: `Understanding ${keyword} is essential for success.`,
+          key_points: [
+            'Learn the fundamentals',
+            'Set up your environment',
+            'Understand prerequisites'
+          ],
+          keywords: [keyword, 'basics', 'fundamentals'],
+          estimated_word_count: 700
         },
         {
-          title: 'Step-by-Step Process',
-          content: [
-            {
-              heading: 'Step 1: Foundation',
-              content: `Start with the basics of ${keyword}.`,
-              estimated_word_count: 500
-            },
-            {
-              heading: 'Step 2: Implementation',
-              content: `Put your knowledge into practice.`,
-              estimated_word_count: 600
-            },
-            {
-              heading: 'Step 3: Optimization',
-              content: `Refine and improve your approach.`,
-              estimated_word_count: 400
-            }
-          ]
+          heading: 'Step-by-Step Process',
+          level: 'h2',
+          description: `Follow this comprehensive process to master ${keyword}.`,
+          key_points: [
+            'Foundation building',
+            'Implementation phase',
+            'Optimization techniques'
+          ],
+          keywords: [keyword, 'process', 'implementation'],
+          estimated_word_count: 1500
         },
         {
-          title: 'Advanced Techniques',
-          content: [
-            {
-              heading: 'Pro Tips and Tricks',
-              content: `Take your ${keyword} skills to the next level.`,
-              estimated_word_count: 400
-            },
-            {
-              heading: 'Common Pitfalls to Avoid',
-              content: `Learn from others' mistakes.`,
-              estimated_word_count: 300
-            }
-          ]
+          heading: 'Advanced Techniques',
+          level: 'h2',
+          description: `Master advanced concepts and avoid common pitfalls.`,
+          key_points: [
+            'Pro tips and tricks',
+            'Common mistakes to avoid',
+            'Expert-level techniques'
+          ],
+          keywords: [keyword, 'advanced', 'techniques'],
+          estimated_word_count: 700
         }
       ],
       conclusion: {
@@ -1123,10 +1118,7 @@ export class EnhancedContentClustersService {
       }
 
       const supabase = createClient();
-      console.log('🔧 Supabase client created:', {
-        url: supabase.supabaseUrl,
-        keyExists: !!supabase.supabaseKey
-      });
+      console.log('🔧 Supabase client created successfully');
       
       // Check user authentication
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -1165,7 +1157,7 @@ export class EnhancedContentClustersService {
         
         if (testError) {
           console.error('❌ Table access test failed:', testError);
-          return { success: false, error: `Table access failed: ${testError.message}` };
+          return { success: false, error: `Table access failed: ${testError instanceof Error ? testError.message : 'Unknown error'}` };
         }
         
         // Also test the articles table
@@ -1184,18 +1176,18 @@ export class EnhancedContentClustersService {
         
         if (ideasTestError) {
           console.error('❌ Ideas table access test failed:', ideasTestError);
-          return { success: false, error: `Ideas table access failed: ${ideasTestError.message}` };
+          return { success: false, error: `Ideas table access failed: ${ideasTestError instanceof Error ? ideasTestError.message : 'Unknown error'}` };
         }
         
       } catch (testException) {
         console.error('❌ Exception during table access test:', {
           testException,
-          testExceptionMessage: testException?.message,
-          testExceptionStack: testException?.stack,
+          testExceptionMessage: testException instanceof Error ? testException.message : 'Unknown error',
+          testExceptionStack: testException instanceof Error ? testException.stack : 'No stack trace',
           testExceptionType: typeof testException,
           testExceptionConstructor: testException?.constructor?.name
         });
-        return { success: false, error: `Table access exception: ${testException?.message || 'Unknown error'}` };
+        return { success: false, error: `Table access exception: ${testException instanceof Error ? testException.message : 'Unknown error'}` };
       }
       
       const clusterIds: string[] = [];
@@ -1259,11 +1251,11 @@ export class EnhancedContentClustersService {
           console.error('❌ Exception during cluster insert:', {
             insertError,
             insertErrorType: typeof insertError,
-            insertErrorMessage: insertError?.message,
-            insertErrorStack: insertError?.stack,
-            insertErrorName: insertError?.name
+            insertErrorMessage: insertError instanceof Error ? insertError.message : 'Unknown error',
+            insertErrorStack: insertError instanceof Error ? insertError.stack : 'No stack trace',
+            insertErrorName: insertError instanceof Error ? insertError.name : 'Unknown error type'
           });
-          return { success: false, error: `Database insert exception: ${insertError?.message || 'Unknown error'}` };
+          return { success: false, error: `Database insert exception: ${insertError instanceof Error ? insertError.message : 'Unknown error'}` };
         }
 
         if (clusterError) {
@@ -1272,13 +1264,13 @@ export class EnhancedContentClustersService {
             error: clusterError,
             errorType: typeof clusterError,
             errorKeys: clusterError ? Object.keys(clusterError) : 'No keys',
-            message: clusterError?.message || 'No message',
+            message: clusterError instanceof Error ? clusterError.message : 'No message',
             details: clusterError?.details || 'No details',
             hint: clusterError?.hint || 'No hint',
             code: clusterError?.code || 'No code',
             errorStringified: JSON.stringify(clusterError),
             errorToString: clusterError?.toString?.() || 'No toString method',
-            errorConstructor: clusterError?.constructor?.name || 'No constructor name',
+            errorConstructor: clusterError instanceof Error ? clusterError.constructor.name : 'No constructor name',
             data: clusterInsertData
           };
           
@@ -1286,7 +1278,7 @@ export class EnhancedContentClustersService {
           
           // Try to get a meaningful error message
           let errorMessage = 'Unknown database error';
-          if (clusterError?.message) {
+          if (clusterError instanceof Error && clusterError.message) {
             errorMessage = clusterError.message;
           } else if (clusterError?.details) {
             errorMessage = clusterError.details;
@@ -1351,7 +1343,7 @@ export class EnhancedContentClustersService {
 
           if (articlesError) {
             console.error('Failed to save enhanced articles:', articlesError);
-            return { success: false, error: articlesError.message };
+            return { success: false, error: articlesError instanceof Error ? articlesError.message : 'Unknown error' };
           }
         }
       }
