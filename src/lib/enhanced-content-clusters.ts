@@ -1087,25 +1087,63 @@ export class EnhancedContentClustersService {
     try {
       console.log('🚀 Starting saveEnhancedClusters with:', {
         userId,
+        userIdType: typeof userId,
         clustersCount: clusters.length,
         articlesCount: articles.length,
         firstCluster: clusters[0] ? {
           cluster_name: clusters[0].cluster_name,
           pillar_keyword: clusters[0].pillar_keyword,
-          cluster_status: clusters[0].cluster_status
+          cluster_status: clusters[0].cluster_status,
+          user_id: clusters[0].user_id,
+          org_id: clusters[0].org_id
         } : 'No clusters',
         firstArticle: articles[0] ? {
           title: articles[0].title,
           content_type: articles[0].content_type,
-          target_keyword: articles[0].target_keyword
+          target_keyword: articles[0].target_keyword,
+          cluster_id: articles[0].cluster_id
         } : 'No articles'
       });
+      
+      // Validate input data
+      if (!userId || typeof userId !== 'string') {
+        console.error('❌ Invalid userId:', userId);
+        return { success: false, error: 'Invalid user ID' };
+      }
+      
+      if (!clusters || clusters.length === 0) {
+        console.error('❌ No clusters to save');
+        return { success: false, error: 'No clusters provided' };
+      }
+      
+      if (!articles || articles.length === 0) {
+        console.error('❌ No articles to save');
+        return { success: false, error: 'No articles provided' };
+      }
 
       const supabase = createClient();
       console.log('🔧 Supabase client created:', {
         url: supabase.supabaseUrl,
         keyExists: !!supabase.supabaseKey
       });
+      
+      // Check user authentication
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      console.log('🔐 Authentication check:', {
+        user: user ? { id: user.id, email: user.email } : null,
+        authError,
+        authErrorExists: !!authError
+      });
+      
+      if (authError || !user) {
+        console.error('❌ Authentication failed:', authError);
+        return { success: false, error: 'User not authenticated' };
+      }
+      
+      if (user.id !== userId) {
+        console.error('❌ User ID mismatch:', { providedUserId: userId, authenticatedUserId: user.id });
+        return { success: false, error: 'User ID mismatch' };
+      }
 
       // Test table access before attempting insert
       try {
@@ -1119,18 +1157,42 @@ export class EnhancedContentClustersService {
           testData,
           testError,
           testErrorExists: !!testError,
-          testErrorStringified: JSON.stringify(testError)
+          testErrorStringified: JSON.stringify(testError),
+          testErrorType: typeof testError,
+          testErrorKeys: testError ? Object.keys(testError) : 'No keys'
         });
         
         if (testError) {
           console.error('❌ Table access test failed:', testError);
           return { success: false, error: `Table access failed: ${testError.message}` };
         }
+        
+        // Also test the articles table
+        console.log('🔍 Testing cluster_content_ideas table access...');
+        const { data: ideasTestData, error: ideasTestError } = await supabase
+          .from('cluster_content_ideas')
+          .select('id')
+          .limit(1);
+        
+        console.log('🔍 Ideas table access test result:', {
+          ideasTestData,
+          ideasTestError,
+          ideasTestErrorExists: !!ideasTestError,
+          ideasTestErrorStringified: JSON.stringify(ideasTestError)
+        });
+        
+        if (ideasTestError) {
+          console.error('❌ Ideas table access test failed:', ideasTestError);
+          return { success: false, error: `Ideas table access failed: ${ideasTestError.message}` };
+        }
+        
       } catch (testException) {
         console.error('❌ Exception during table access test:', {
           testException,
           testExceptionMessage: testException?.message,
-          testExceptionStack: testException?.stack
+          testExceptionStack: testException?.stack,
+          testExceptionType: typeof testException,
+          testExceptionConstructor: testException?.constructor?.name
         });
         return { success: false, error: `Table access exception: ${testException?.message || 'Unknown error'}` };
       }

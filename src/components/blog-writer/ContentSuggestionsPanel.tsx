@@ -125,6 +125,7 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
         
         console.log('🔍 Extracted content length:', content.length);
         console.log('🔍 Extracted excerpt length:', excerpt.length);
+        console.log('🔍 Content preview (first 200 chars):', content.substring(0, 200));
         
         // Save the generated content as a draft
         const draftData = {

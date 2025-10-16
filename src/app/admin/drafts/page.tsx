@@ -78,6 +78,11 @@ export default function DraftsPage() {
 
   // Use real data if available, otherwise fallback to mock data
   const displayDrafts = drafts.length > 0 ? drafts : mockDrafts;
+  
+  // Type guard to check if draft is from Supabase
+  const isSupabaseDraft = (draft: any): draft is typeof drafts[0] => {
+    return 'post_id' in draft;
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -118,7 +123,7 @@ export default function DraftsPage() {
     setSelectedDrafts(
       selectedDrafts.length === filteredDrafts.length 
         ? [] 
-        : filteredDrafts.map(draft => draft.post_id || draft.id)
+        : filteredDrafts.map(draft => isSupabaseDraft(draft) ? draft.post_id : draft.id)
     );
   };
 
@@ -331,12 +336,12 @@ export default function DraftsPage() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {filteredDrafts.map((draft) => (
-                <tr key={draft.post_id || draft.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr key={isSupabaseDraft(draft) ? draft.post_id : draft.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-6 py-4">
                     <input
                       type="checkbox"
-                      checked={selectedDrafts.includes(draft.post_id || draft.id)}
-                      onChange={() => handleSelectDraft(draft.post_id || draft.id)}
+                      checked={selectedDrafts.includes(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
+                      onChange={() => handleSelectDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </td>
@@ -351,10 +356,11 @@ export default function DraftsPage() {
                       <div className="flex flex-wrap gap-1 mt-2">
                         {(() => {
                           // Extract tags from seo_data or use mock tags
-                          const tags = draft.tags || 
-                            (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
-                              ? (draft.seo_data as any).secondary_keywords || []
-                              : []);
+                          const tags = isSupabaseDraft(draft) 
+                            ? (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
+                                ? (draft.seo_data as any).secondary_keywords || []
+                                : [])
+                            : draft.tags || [];
                           
                           return tags.slice(0, 3).map((tag: string, index: number) => (
                             <span
@@ -367,10 +373,11 @@ export default function DraftsPage() {
                           ));
                         })()}
                         {(() => {
-                          const tags = draft.tags || 
-                            (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
-                              ? (draft.seo_data as any).secondary_keywords || []
-                              : []);
+                          const tags = isSupabaseDraft(draft) 
+                            ? (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
+                                ? (draft.seo_data as any).secondary_keywords || []
+                                : [])
+                            : draft.tags || [];
                           
                           return tags.length > 3 && (
                             <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -390,37 +397,37 @@ export default function DraftsPage() {
                     <div className="flex items-center">
                       <UserIcon className="w-4 h-4 mr-2 text-gray-400" />
                       <span className="text-sm text-gray-900 dark:text-white">
-                        {draft.author || draft.created_by || 'Unknown'}
+                        {isSupabaseDraft(draft) ? (draft.created_by || 'Unknown') : draft.author}
                       </span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                       <ClockIcon className="w-4 h-4 mr-2" />
-                      {formatDate(draft.lastModified || draft.updated_at || draft.created_at)}
+                      {formatDate(isSupabaseDraft(draft) ? (draft.updated_at || draft.created_at) : draft.lastModified)}
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-900 dark:text-white">
                       <div>{(() => {
                         // Calculate word count properly
-                        if (draft.wordCount) {
+                        if (!isSupabaseDraft(draft) && draft.wordCount) {
                           return draft.wordCount.toLocaleString();
                         }
-                        if (draft.content && typeof draft.content === 'string') {
+                        if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
                           // Count words by splitting on whitespace and filtering out empty strings
-                          const words = draft.content.trim().split(/\s+/).filter(word => word.length > 0);
+                          const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
                           return words.length.toLocaleString();
                         }
                         return '0';
                       })()} words</div>
                       <div className="text-gray-500 dark:text-gray-400">
                         {(() => {
-                          if (draft.readTime) {
+                          if (!isSupabaseDraft(draft) && draft.readTime) {
                             return draft.readTime;
                           }
-                          if (draft.content && typeof draft.content === 'string') {
-                            const words = draft.content.trim().split(/\s+/).filter(word => word.length > 0);
+                          if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
+                            const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
                             const readTime = Math.ceil(words.length / 200); // Average reading speed: 200 words per minute
                             return `${readTime} min read`;
                           }
@@ -432,28 +439,28 @@ export default function DraftsPage() {
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button 
-                        onClick={() => handleViewDraft(draft.post_id || draft.id)}
+                        onClick={() => handleViewDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
                         className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 transition-colors"
                         title="View draft"
                       >
                         <EyeIcon className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => handleEditDraft(draft.post_id || draft.id)}
+                        onClick={() => handleEditDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
                         className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 transition-colors"
                         title="Edit draft"
                       >
                         <PencilIcon className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => handleShareDraft(draft.post_id || draft.id)}
+                        onClick={() => handleShareDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
                         className="text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-1 transition-colors"
                         title="Share draft"
                       >
                         <ShareIcon className="w-4 h-4" />
                       </button>
                       <button 
-                        onClick={() => handleDeleteDraft(draft.post_id || draft.id)}
+                        onClick={() => handleDeleteDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
                         className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 transition-colors"
                         title="Delete draft"
                       >

@@ -64,8 +64,8 @@ class BlogPostsService {
         content: params.content,
         excerpt: params.excerpt || null,
         status: 'draft',
-        seo_data: params.seo_data || {},
-        metadata: params.metadata || {},
+        seo_data: params.seo_data as any || {},
+        metadata: params.metadata as any || {},
         scheduled_at: null,
         published_at: null,
       };
@@ -101,7 +101,12 @@ class BlogPostsService {
       console.log('📝 Updating blog post:', postId);
 
       const updateData: BlogPostUpdate = {
-        ...params,
+        title: params.title,
+        content: params.content,
+        excerpt: params.excerpt,
+        status: params.status,
+        seo_data: params.seo_data as any,
+        metadata: params.metadata as any,
         updated_at: new Date().toISOString(),
       };
 
@@ -233,7 +238,6 @@ class BlogPostsService {
   async publishPost(postId: string): Promise<BlogPost | null> {
     return this.updatePost(postId, {
       status: 'published',
-      published_at: new Date().toISOString(),
     });
   }
 
@@ -243,7 +247,6 @@ class BlogPostsService {
   async schedulePost(postId: string, scheduledAt: string): Promise<BlogPost | null> {
     return this.updatePost(postId, {
       status: 'scheduled',
-      scheduled_at: scheduledAt,
     });
   }
 }
