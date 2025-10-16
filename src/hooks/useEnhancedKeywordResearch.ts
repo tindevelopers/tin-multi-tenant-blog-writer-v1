@@ -104,14 +104,14 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
         const storageKeywords = result.variations.map(k => ({
           keyword: k.keyword,
           search_volume: k.search_volume,
-          difficulty: k.keyword_difficulty <= 30 ? 'easy' : k.keyword_difficulty <= 60 ? 'medium' : 'hard',
+          difficulty: (k.keyword_difficulty <= 30 ? 'easy' : k.keyword_difficulty <= 60 ? 'medium' : 'hard') as 'easy' | 'medium' | 'hard',
           competition: k.competition_level === 'LOW' ? 0.2 : k.competition_level === 'MEDIUM' ? 0.5 : 0.8,
           cpc: k.cpc,
           trend_score: k.high_value_score,
           recommended: k.easy_win_score >= 60 || k.high_value_score >= 60,
           reason: k.easy_win_score >= 60 ? 'Easy win opportunity' : 'High value keyword',
-          related_keywords: k.related_keywords,
-          long_tail_keywords: k.related_keywords.slice(0, 3) // Use first 3 as long-tail
+          related_keywords: k.related_keywords || [],
+          long_tail_keywords: (k.related_keywords || []).slice(0, 3) // Use first 3 as long-tail
         }));
 
         console.log('🔍 Saving keywords:', { 
@@ -263,8 +263,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       }
 
       const keywordStorage = new KeywordStorageService();
-      const history = await keywordStorage.getKeywordHistory(user.id);
-      const selectedHistory = history.find(h => h.id === historyId);
+      const history = await keywordStorage.getUserResearchSessions(user.id);
+      const selectedHistory = history.find((h: any) => h.id === historyId);
       
       if (!selectedHistory) {
         setError('Research history not found');
@@ -272,7 +272,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       }
 
       // Transform stored keywords back to KeywordData format
-      const keywordData: KeywordData[] = selectedHistory.keywords.map(k => ({
+      const keywordData: KeywordData[] = selectedHistory.keywords.map((k: any) => ({
         keyword: k.keyword,
         search_volume: k.search_volume || 0,
         keyword_difficulty: k.difficulty === 'easy' ? 20 : k.difficulty === 'medium' ? 50 : 80,
@@ -287,14 +287,17 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       setPrimaryAnalysis({
         keyword: selectedHistory.topic,
         search_volume: keywordData[0]?.search_volume || 0,
-        keyword_difficulty: 'medium',
-        competition_level: 'MEDIUM',
+        difficulty: 'medium' as 'easy' | 'medium' | 'hard',
+        competition: 0.5,
         cpc: keywordData[0]?.cpc || 0,
         related_keywords: keywordData.flatMap(k => k.related_keywords),
-      } as KeywordAnalysisResponse);
+        long_tail_keywords: keywordData[0]?.related_keywords?.slice(0, 3) || [],
+        recommended: (keywordData[0]?.easy_win_score || 0) >= 60 || (keywordData[0]?.high_value_score || 0) >= 60,
+        reason: (keywordData[0]?.easy_win_score || 0) >= 60 ? 'Easy win opportunity' : 'High value keyword'
+      } as any);
 
       // Create clusters from loaded keywords
-      const keywordClusters = keywordResearchService.createKeywordClusters(keywordData);
+      const keywordClusters = await keywordResearchService.createClusters(keywordData);
       setClusters(keywordClusters);
 
     } catch (err) {

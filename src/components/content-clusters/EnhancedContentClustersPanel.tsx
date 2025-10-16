@@ -124,7 +124,7 @@ export default function EnhancedContentClustersPanel({
       review: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
       comparison: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
     };
-    return colors[type] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+    return (colors as any)[type] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
   };
 
   const getPriorityColor = (priority: number) => {
@@ -140,7 +140,7 @@ export default function EnhancedContentClustersPanel({
       medium: 'text-yellow-600 dark:text-yellow-400',
       low: 'text-gray-600 dark:text-gray-400'
     };
-    return colors[potential] || 'text-gray-600 dark:text-gray-400';
+    return (colors as any)[potential] || 'text-gray-600 dark:text-gray-400';
   };
 
   if (loading && !clusters.length) {
@@ -485,12 +485,15 @@ export default function EnhancedContentClustersPanel({
 
           {/* Articles Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {console.log('🔍 Rendering articles grid:', {
-              totalArticles: articles.length,
-              filteredArticles: filteredArticles.length,
-              selectedClusterId,
-              articles: articles.map(a => ({ id: a.id, title: a.title, content_type: a.content_type }))
-            })}
+            {(() => {
+              console.log('🔍 Rendering articles grid:', {
+                totalArticles: articles.length,
+                filteredArticles: filteredArticles.length,
+                selectedClusterId,
+                articles: articles.map(a => ({ id: a.id, title: a.title, content_type: a.content_type }))
+              });
+              return null;
+            })()}
             {filteredArticles.map(article => (
               <div key={article.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-shadow">
                 <div className="flex items-start justify-between mb-4">

@@ -102,7 +102,7 @@ export function ContentClusterOverview({
             <span>Internal Links</span>
           </div>
           <div className="text-2xl font-bold text-gray-900 dark:text-white">
-            {cluster.internal_links_count}
+            {(cluster as any).internal_links_count || 0}
           </div>
         </div>
       </div>
