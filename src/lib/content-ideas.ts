@@ -202,7 +202,7 @@ export class ContentIdeasService {
   ): ContentIdea[] {
     const longTailKeywords = keywords.filter(k => 
       k.length > pillar_keyword.length && k.includes(' ')
-    ).slice(0, 15);
+    ).slice(0, 25);
 
     return longTailKeywords.map((keyword, index) => ({
       content_type: 'long_tail',

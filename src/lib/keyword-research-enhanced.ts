@@ -97,7 +97,7 @@ export class EnhancedKeywordResearchService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          keywords: keywords.slice(0, 50), // API limit
+          keywords: keywords.slice(0, 75), // Optimized API limit
           location,
           language,
         }),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useDrafts, useBlogPostMutations } from "@/hooks/useBlogPosts";
 import { 
   PlusIcon, 
   MagnifyingGlassIcon, 
@@ -23,8 +24,12 @@ export default function DraftsPage() {
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [selectedDrafts, setSelectedDrafts] = useState<string[]>([]);
 
-  // Mock draft data
-  const drafts = [
+  // Get real draft data from Supabase
+  const { posts: drafts, loading, error, refetch } = useDrafts();
+  const { deletePost } = useBlogPostMutations();
+
+  // Mock draft data (fallback)
+  const mockDrafts = [
     {
       id: "1",
       title: "The Future of AI in Content Creation",
@@ -71,6 +76,9 @@ export default function DraftsPage() {
     }
   ];
 
+  // Use real data if available, otherwise fallback to mock data
+  const displayDrafts = drafts.length > 0 ? drafts : mockDrafts;
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "draft": return "bg-yellow-100 text-yellow-800";
@@ -89,10 +97,9 @@ export default function DraftsPage() {
     });
   };
 
-  const filteredDrafts = drafts.filter(draft => {
+  const filteredDrafts = displayDrafts.filter(draft => {
     const matchesSearch = draft.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         draft.excerpt.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         draft.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+                         (draft.excerpt && draft.excerpt.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesFilter = selectedFilter === "all" || draft.status === selectedFilter;
     
@@ -111,8 +118,44 @@ export default function DraftsPage() {
     setSelectedDrafts(
       selectedDrafts.length === filteredDrafts.length 
         ? [] 
-        : filteredDrafts.map(draft => draft.id)
+        : filteredDrafts.map(draft => draft.post_id || draft.id)
     );
+  };
+
+  // Action handlers
+  const handleViewDraft = (draftId: string) => {
+    console.log('👁️ Viewing draft:', draftId);
+    router.push(`/admin/drafts/view/${draftId}`);
+  };
+
+  const handleEditDraft = (draftId: string) => {
+    console.log('✏️ Editing draft:', draftId);
+    router.push(`/admin/drafts/edit/${draftId}`);
+  };
+
+  const handleShareDraft = (draftId: string) => {
+    console.log('📤 Sharing draft:', draftId);
+    // TODO: Implement share functionality
+    alert('Share functionality coming soon!');
+  };
+
+  const handleDeleteDraft = async (draftId: string) => {
+    console.log('🗑️ Deleting draft:', draftId);
+    if (confirm('Are you sure you want to delete this draft? This action cannot be undone.')) {
+      try {
+        const success = await deletePost(draftId);
+        if (success) {
+          alert('Draft deleted successfully!');
+          // Refresh the drafts list
+          refetch();
+        } else {
+          alert('Failed to delete draft. Please try again.');
+        }
+      } catch (error) {
+        console.error('Error deleting draft:', error);
+        alert('Error deleting draft. Please try again.');
+      }
+    }
   };
 
   return (
@@ -181,6 +224,43 @@ export default function DraftsPage() {
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading drafts...</p>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                Error loading drafts
+              </h3>
+              <div className="mt-2 text-sm text-red-700 dark:text-red-300">
+                <p>{error}</p>
+              </div>
+              <div className="mt-4">
+                <button
+                  onClick={refetch}
+                  className="bg-red-100 dark:bg-red-900/30 px-3 py-2 rounded-md text-sm font-medium text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900/50"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Search and Filter Bar */}
       <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-6">
         <div className="flex flex-col sm:flex-row gap-4">
@@ -215,7 +295,8 @@ export default function DraftsPage() {
       </div>
 
       {/* Drafts Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+      {!loading && !error && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-gray-700">
@@ -250,12 +331,12 @@ export default function DraftsPage() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {filteredDrafts.map((draft) => (
-                <tr key={draft.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr key={draft.post_id || draft.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-6 py-4">
                     <input
                       type="checkbox"
-                      checked={selectedDrafts.includes(draft.id)}
-                      onChange={() => handleSelectDraft(draft.id)}
+                      checked={selectedDrafts.includes(draft.post_id || draft.id)}
+                      onChange={() => handleSelectDraft(draft.post_id || draft.id)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </td>
@@ -268,20 +349,35 @@ export default function DraftsPage() {
                         {draft.excerpt}
                       </p>
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {draft.tags.slice(0, 3).map((tag, index) => (
-                          <span
-                            key={index}
-                            className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                          >
-                            <TagIcon className="w-3 h-3 mr-1" />
-                            {tag}
-                          </span>
-                        ))}
-                        {draft.tags.length > 3 && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            +{draft.tags.length - 3} more
-                          </span>
-                        )}
+                        {(() => {
+                          // Extract tags from seo_data or use mock tags
+                          const tags = draft.tags || 
+                            (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
+                              ? (draft.seo_data as any).secondary_keywords || []
+                              : []);
+                          
+                          return tags.slice(0, 3).map((tag: string, index: number) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                            >
+                              <TagIcon className="w-3 h-3 mr-1" />
+                              {tag}
+                            </span>
+                          ));
+                        })()}
+                        {(() => {
+                          const tags = draft.tags || 
+                            (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
+                              ? (draft.seo_data as any).secondary_keywords || []
+                              : []);
+                          
+                          return tags.length > 3 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              +{tags.length - 3} more
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
                   </td>
@@ -294,34 +390,73 @@ export default function DraftsPage() {
                     <div className="flex items-center">
                       <UserIcon className="w-4 h-4 mr-2 text-gray-400" />
                       <span className="text-sm text-gray-900 dark:text-white">
-                        {draft.author}
+                        {draft.author || draft.created_by || 'Unknown'}
                       </span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                       <ClockIcon className="w-4 h-4 mr-2" />
-                      {formatDate(draft.lastModified)}
+                      {formatDate(draft.lastModified || draft.updated_at || draft.created_at)}
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="text-sm text-gray-900 dark:text-white">
-                      <div>{draft.wordCount.toLocaleString()} words</div>
-                      <div className="text-gray-500 dark:text-gray-400">{draft.readTime}</div>
+                      <div>{(() => {
+                        // Calculate word count properly
+                        if (draft.wordCount) {
+                          return draft.wordCount.toLocaleString();
+                        }
+                        if (draft.content && typeof draft.content === 'string') {
+                          // Count words by splitting on whitespace and filtering out empty strings
+                          const words = draft.content.trim().split(/\s+/).filter(word => word.length > 0);
+                          return words.length.toLocaleString();
+                        }
+                        return '0';
+                      })()} words</div>
+                      <div className="text-gray-500 dark:text-gray-400">
+                        {(() => {
+                          if (draft.readTime) {
+                            return draft.readTime;
+                          }
+                          if (draft.content && typeof draft.content === 'string') {
+                            const words = draft.content.trim().split(/\s+/).filter(word => word.length > 0);
+                            const readTime = Math.ceil(words.length / 200); // Average reading speed: 200 words per minute
+                            return `${readTime} min read`;
+                          }
+                          return '0 min read';
+                        })()}
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                      <button 
+                        onClick={() => handleViewDraft(draft.post_id || draft.id)}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 transition-colors"
+                        title="View draft"
+                      >
                         <EyeIcon className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                      <button 
+                        onClick={() => handleEditDraft(draft.post_id || draft.id)}
+                        className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 transition-colors"
+                        title="Edit draft"
+                      >
                         <PencilIcon className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                      <button 
+                        onClick={() => handleShareDraft(draft.post_id || draft.id)}
+                        className="text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-1 transition-colors"
+                        title="Share draft"
+                      >
                         <ShareIcon className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-400 hover:text-red-600 p-1">
+                      <button 
+                        onClick={() => handleDeleteDraft(draft.post_id || draft.id)}
+                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 transition-colors"
+                        title="Delete draft"
+                      >
                         <TrashIcon className="w-4 h-4" />
                       </button>
                     </div>
@@ -353,9 +488,10 @@ export default function DraftsPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Empty State */}
-      {filteredDrafts.length === 0 && (
+      {!loading && !error && filteredDrafts.length === 0 && (
         <div className="text-center py-12">
           <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400" />
           <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No drafts found</h3>
