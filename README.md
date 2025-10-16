@@ -213,6 +213,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ Improved Supabase client authentication context
 - ✅ Enhanced sidebar accordion behavior with smooth animations
 - ✅ Added system admin role support
+- ✅ Fixed Next.js Suspense boundary issue for useSearchParams() in admin drafts page
 
 ---
 
