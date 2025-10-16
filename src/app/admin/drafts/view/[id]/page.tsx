@@ -161,7 +161,7 @@ export default function ViewDraftPage() {
           <div>
             <span className="font-medium text-gray-700 dark:text-gray-300">Author:</span>
             <span className="ml-2 text-gray-900 dark:text-white">
-              {draft.author || draft.created_by || 'Unknown'}
+              {draft.created_by || 'Unknown'}
             </span>
           </div>
           <div>

@@ -366,7 +366,7 @@ export function useKeywordSelection() {
   }, [selectedKeywords]);
 
   return {
-    selectedKeywords: Array.from(selectedKeywords),
+    selectedKeywords,
     toggleKeyword,
     selectAll,
     clearSelection,

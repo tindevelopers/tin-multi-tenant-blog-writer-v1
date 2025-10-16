@@ -153,7 +153,7 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
           for (const field of nestedFields) {
             if (blogContent[field] && typeof blogContent[field] === 'object') {
               console.log(`🔍 Checking nested field: ${field}`, blogContent[field]);
-              const nested = blogContent[field];
+              const nested = blogContent[field] as any;
               if (typeof nested.content === 'string') {
                 content = nested.content;
                 console.log(`✅ Using nested.${field}.content`);

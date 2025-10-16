@@ -25,7 +25,7 @@ export default function EditDraftPage() {
     title: '',
     content: '',
     excerpt: '',
-    status: 'draft' as const
+    status: 'draft' as 'draft' | 'published' | 'scheduled' | 'archived'
   });
 
   useEffect(() => {

@@ -346,7 +346,7 @@ export default function SEOToolsPage() {
                 <>
                   <MasterKeywordTable
                     keywords={keywords}
-                    selectedKeywords={selectedKeywords}
+                    selectedKeywords={Array.from(selectedKeywords)}
                     onToggleKeyword={toggleKeyword}
                     onSelectAll={handleSelectAll}
                     onClearSelection={clearSelection}

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Test table existence and permissions
-    const tests = {
+    const tests: any = {
       // Test 1: Check if tables exist
       tableExists: {},
       
