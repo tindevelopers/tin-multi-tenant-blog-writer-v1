@@ -152,7 +152,7 @@ export default function SEOToolsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      Primary Keyword: <span className="font-semibold text-brand-600 dark:text-brand-400">"{primaryAnalysis.keyword}"</span>
+                      Primary Keyword: <span className="font-semibold text-brand-600 dark:text-brand-400">&ldquo;{primaryAnalysis.keyword}&rdquo;</span>
                     </p>
                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                       Found {keywords.length} variations • {easyWins.length} easy wins • {highValue.length} high value

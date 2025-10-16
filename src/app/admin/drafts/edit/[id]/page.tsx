@@ -6,9 +6,7 @@ import { useBlogPost } from "@/hooks/useBlogPosts";
 import { useBlogPostMutations } from "@/hooks/useBlogPosts";
 import { 
   ArrowLeftIcon,
-  DocumentTextIcon,
-  CheckIcon,
-  EyeIcon
+  CheckIcon
 } from "@heroicons/react/24/outline";
 
 export default function EditDraftPage() {
