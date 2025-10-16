@@ -90,26 +90,41 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
         console.log('📝 Blog content generated, saving as draft...');
         console.log('🔍 Blog content structure:', blogContent);
         console.log('🔍 Blog content keys:', Object.keys(blogContent));
+        console.log('🔍 Blog content type:', typeof blogContent);
+        console.log('🔍 Blog content stringified:', JSON.stringify(blogContent, null, 2));
         
         // Extract content properly from the API response
         let content = '';
         let excerpt = '';
         
         // Try different possible content fields
+        console.log('🔍 Checking content fields...');
+        console.log('🔍 blogContent.content:', typeof blogContent.content, blogContent.content);
+        console.log('🔍 blogContent.response:', typeof blogContent.response, blogContent.response);
+        console.log('🔍 blogContent.text:', typeof blogContent.text, blogContent.text);
+        console.log('🔍 blogContent.article:', typeof blogContent.article, blogContent.article);
+        console.log('🔍 blogContent.body:', typeof blogContent.body, blogContent.body);
+        
         if (typeof blogContent.content === 'string') {
           content = blogContent.content;
+          console.log('✅ Using blogContent.content');
         } else if (typeof blogContent.response === 'string') {
           content = blogContent.response;
+          console.log('✅ Using blogContent.response');
         } else if (typeof blogContent.text === 'string') {
           content = blogContent.text;
+          console.log('✅ Using blogContent.text');
         } else if (typeof blogContent.article === 'string') {
           content = blogContent.article;
+          console.log('✅ Using blogContent.article');
         } else if (typeof blogContent.body === 'string') {
           content = blogContent.body;
+          console.log('✅ Using blogContent.body');
         } else {
           // If no direct content field, try to extract from nested objects
           console.log('🔍 No direct content field found, checking nested structure...');
           content = JSON.stringify(blogContent, null, 2);
+          console.log('⚠️ Using JSON.stringify fallback');
         }
         
         // Extract excerpt
