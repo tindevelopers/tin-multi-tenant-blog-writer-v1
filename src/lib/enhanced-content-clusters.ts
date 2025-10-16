@@ -11,6 +11,7 @@
 
 import { createClient } from '@/lib/supabase/client';
 import type { BlogResearchResults, KeywordCluster, TitleSuggestion } from '@/lib/keyword-research';
+import type { ContentOutline } from '@/lib/content-ideas';
 
 // =====================================================
 // Enhanced Types and Interfaces
@@ -645,7 +646,7 @@ export class EnhancedContentClustersService {
       long_tail: `Quick answers and practical insights`,
       tutorial: `Step-by-step instructions and practical examples`
     };
-    return subtitles[type] || 'Expert insights and practical guidance';
+    return (subtitles as any)[type] || 'Expert insights and practical guidance';
   }
 
   private generateMetaDescription(keyword: string, type: string, targetAudience?: string): string {
@@ -657,7 +658,7 @@ export class EnhancedContentClustersService {
       tutorial: `Master ${keyword}${audiencePart} with this step-by-step tutorial. Learn from basics to advanced techniques with practical examples.`,
     };
     
-    const description = descriptions[type];
+    const description = (descriptions as any)[type];
     return description.length > 160 ? description.substring(0, 157) + '...' : description;
   }
 
@@ -690,7 +691,7 @@ export class EnhancedContentClustersService {
   // Additional helper methods...
   private convertDifficultyToScore(difficulty: string): number {
     const scores = { easy: 3, medium: 6, hard: 9 };
-    return scores[difficulty] || 6;
+    return (scores as any)[difficulty] || 6;
   }
 
   private selectPillarKeywords(cluster: KeywordCluster): string[] {
@@ -735,7 +736,7 @@ export class EnhancedContentClustersService {
 
   private calculateReadabilityScore(type: string): number {
     const scores = { pillar: 8, supporting: 7, long_tail: 9 };
-    return scores[type] || 7;
+    return (scores as any)[type] || 7;
   }
 
   private generateSupportingOutline(keyword: string, targetAudience?: string): ArticleOutline {
@@ -888,7 +889,7 @@ export class EnhancedContentClustersService {
       status: 'idea',
       priority: 3,
       estimated_reading_time: 8,
-      estimated_traffic: this.estimateTraffic(analysis?.search_volume || 0),
+      estimated_traffic: this.convertTrafficToNumber(this.estimateTraffic(analysis?.search_volume || 0)),
       difficulty_score: this.calculateDifficultyScore(analysis?.difficulty || 'medium'),
       target_audience: targetAudience || 'general',
       content_outline: this.generateTutorialOutline(keyword),
@@ -907,20 +908,20 @@ export class EnhancedContentClustersService {
   /**
    * Generate tutorial content outline
    */
-  private generateTutorialOutline(keyword: string): ContentOutline {
+  private generateTutorialOutline(keyword: string): ArticleOutline {
     return {
       introduction: {
         hook: `Ready to master ${keyword}? This comprehensive tutorial will guide you through every step.`,
-        overview: `In this tutorial, you'll learn the fundamentals and advanced techniques of ${keyword}.`,
-        prerequisites: ['Basic understanding', 'Required tools', 'Time commitment'],
-        learning_objectives: [
-          `Understand the basics of ${keyword}`,
-          `Apply practical techniques`,
-          `Avoid common mistakes`,
-          `Master advanced concepts`
+        problem_statement: `Many people struggle with ${keyword} because they lack proper guidance and step-by-step instructions.`,
+        value_proposition: `This tutorial will teach you everything you need to know about ${keyword} with practical examples and real-world applications.`,
+        preview: [
+          'Step-by-step instructions',
+          'Practical examples',
+          'Common pitfalls to avoid',
+          'Advanced techniques'
         ]
       },
-      main_sections: [
+      sections: [
         {
           title: 'Getting Started',
           content: [
@@ -1021,7 +1022,7 @@ export class EnhancedContentClustersService {
 
   private assessCompetitionLevelFromDifficulty(difficulty: string): 'low' | 'medium' | 'high' {
     const mapping = { easy: 'low', medium: 'medium', hard: 'high' };
-    return mapping[difficulty] || 'medium';
+    return (mapping as any)[difficulty] || 'medium';
   }
 
   private generateContentStrategy(cluster: KeywordCluster, targetAudience?: string): string {
@@ -1094,8 +1095,8 @@ export class EnhancedContentClustersService {
           cluster_name: clusters[0].cluster_name,
           pillar_keyword: clusters[0].pillar_keyword,
           cluster_status: clusters[0].cluster_status,
-          user_id: clusters[0].user_id,
-          org_id: clusters[0].org_id
+          user_id: (clusters[0] as any).user_id,
+          org_id: (clusters[0] as any).org_id
         } : 'No clusters',
         firstArticle: articles[0] ? {
           title: articles[0].title,
@@ -1428,6 +1429,15 @@ export class EnhancedContentClustersService {
     if (searchVolume >= 10000) return 'high';
     if (searchVolume >= 1000) return 'medium';
     return 'low';
+  }
+
+  private convertTrafficToNumber(traffic: 'low' | 'medium' | 'high'): number {
+    switch (traffic) {
+      case 'low': return 50;
+      case 'medium': return 200;
+      case 'high': return 500;
+      default: return 100;
+    }
   }
 
   /**

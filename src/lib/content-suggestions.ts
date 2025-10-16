@@ -373,7 +373,7 @@ class ContentSuggestionService {
       
       // Extract a keyword from the title
       const words = title.toLowerCase().split(' ');
-      const primaryKeyword = words.find(word => 
+      const primaryKeyword = words.find((word: string) => 
         word.length > 3 && 
         !['the', 'and', 'for', 'with', 'from', 'this', 'that', 'your', 'how', 'what', 'why', 'when', 'where'].includes(word)
       ) || words[0] || 'content';
@@ -383,7 +383,7 @@ class ContentSuggestionService {
         title: title,
         type: type === 'guide' ? 'pillar' : type === 'how-to' ? 'how-to' : 'supporting',
         primary_keyword: primaryKeyword,
-        secondary_keywords: words.slice(0, 3).filter(word => word !== primaryKeyword),
+        secondary_keywords: words.slice(0, 3).filter((word: string) => word !== primaryKeyword),
         target_audience: targetAudience,
         word_count_target: type === 'pillar' ? 2500 : 1500,
         difficulty: 'medium',
