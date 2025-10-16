@@ -104,6 +104,12 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
         console.log('🔍 blogContent.text:', typeof blogContent.text, blogContent.text);
         console.log('🔍 blogContent.article:', typeof blogContent.article, blogContent.article);
         console.log('🔍 blogContent.body:', typeof blogContent.body, blogContent.body);
+        console.log('🔍 blogContent.data:', typeof blogContent.data, blogContent.data);
+        console.log('🔍 blogContent.result:', typeof blogContent.result, blogContent.result);
+        console.log('🔍 blogContent.blog:', typeof blogContent.blog, blogContent.blog);
+        console.log('🔍 blogContent.post:', typeof blogContent.post, blogContent.post);
+        console.log('🔍 blogContent.html:', typeof blogContent.html, blogContent.html);
+        console.log('🔍 blogContent.markdown:', typeof blogContent.markdown, blogContent.markdown);
         
         if (typeof blogContent.content === 'string') {
           content = blogContent.content;
@@ -120,11 +126,59 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
         } else if (typeof blogContent.body === 'string') {
           content = blogContent.body;
           console.log('✅ Using blogContent.body');
+        } else if (typeof blogContent.data === 'string') {
+          content = blogContent.data;
+          console.log('✅ Using blogContent.data');
+        } else if (typeof blogContent.result === 'string') {
+          content = blogContent.result;
+          console.log('✅ Using blogContent.result');
+        } else if (typeof blogContent.blog === 'string') {
+          content = blogContent.blog;
+          console.log('✅ Using blogContent.blog');
+        } else if (typeof blogContent.post === 'string') {
+          content = blogContent.post;
+          console.log('✅ Using blogContent.post');
+        } else if (typeof blogContent.html === 'string') {
+          content = blogContent.html;
+          console.log('✅ Using blogContent.html');
+        } else if (typeof blogContent.markdown === 'string') {
+          content = blogContent.markdown;
+          console.log('✅ Using blogContent.markdown');
         } else {
           // If no direct content field, try to extract from nested objects
           console.log('🔍 No direct content field found, checking nested structure...');
-          content = JSON.stringify(blogContent, null, 2);
-          console.log('⚠️ Using JSON.stringify fallback');
+          
+          // Check if any of the fields contain nested objects with content
+          const nestedFields = ['data', 'result', 'response', 'content'];
+          for (const field of nestedFields) {
+            if (blogContent[field] && typeof blogContent[field] === 'object') {
+              console.log(`🔍 Checking nested field: ${field}`, blogContent[field]);
+              const nested = blogContent[field];
+              if (typeof nested.content === 'string') {
+                content = nested.content;
+                console.log(`✅ Using nested.${field}.content`);
+                break;
+              } else if (typeof nested.text === 'string') {
+                content = nested.text;
+                console.log(`✅ Using nested.${field}.text`);
+                break;
+              } else if (typeof nested.body === 'string') {
+                content = nested.body;
+                console.log(`✅ Using nested.${field}.body`);
+                break;
+              } else if (typeof nested.article === 'string') {
+                content = nested.article;
+                console.log(`✅ Using nested.${field}.article`);
+                break;
+              }
+            }
+          }
+          
+          // If still no content found, use JSON fallback
+          if (!content) {
+            content = JSON.stringify(blogContent, null, 2);
+            console.log('⚠️ Using JSON.stringify fallback');
+          }
         }
         
         // Extract excerpt
