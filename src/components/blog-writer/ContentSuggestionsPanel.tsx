@@ -196,11 +196,11 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
         console.log('🔍 Extracted excerpt length:', excerpt.length);
         console.log('🔍 Content preview (first 200 chars):', content.substring(0, 200));
         
-        // Save the generated content as a draft
-        const draftData = {
-          title: suggestion.title,
+        // Prepare the content data to pass back to parent
+        const processedContent = {
           content: content,
           excerpt: excerpt,
+          title: suggestion.title,
           seo_data: {
             primary_keyword: suggestion.primary_keyword,
             secondary_keywords: suggestion.secondary_keywords,
@@ -222,19 +222,12 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
           }
         };
 
-        const savedDraft = await createDraft(draftData);
+        // Pass the content back to parent instead of saving directly
+        console.log('📝 Passing content back to parent component...');
+        onBlogGenerated?.(processedContent);
         
-        if (savedDraft) {
-          console.log('✅ Blog saved as draft successfully:', savedDraft);
-          onBlogGenerated?.(blogContent);
-          onDraftSaved?.(savedDraft.post_id);
-          
-          // Show success message
-          alert(`✅ Blog "${suggestion.title}" has been generated and saved as a draft! You can find it in your drafts list.`);
-        } else {
-          console.error('❌ Failed to save draft');
-          alert('❌ Blog was generated but failed to save as draft. Please try again.');
-        }
+        // Show success message
+        alert(`✅ Blog content has been generated! You can now review and save it as a draft.`);
       } else {
         console.error('❌ No blog content generated');
         alert('❌ Failed to generate blog content. Please try again.');

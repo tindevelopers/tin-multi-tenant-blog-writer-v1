@@ -71,7 +71,9 @@ function NewDraftContent() {
     tone: "professional",
     word_count: 800,
     preset: "seo_focused",
-    quality_level: "high"
+    quality_level: "high",
+    content: "",
+    excerpt: ""
   });
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
@@ -164,13 +166,27 @@ function NewDraftContent() {
       topic: suggestion.primary_keyword || suggestion.target_keyword || '',
       keywords: keywords,
       target_audience: suggestion.target_audience || 'general',
-      word_count: suggestion.word_count_target || suggestion.estimated_word_count || 1500
+      word_count: suggestion.word_count_target || suggestion.estimated_word_count || 1500,
+      content: suggestion.content || '',
+      excerpt: suggestion.excerpt || ''
     }));
     setShowContentSuggestions(false);
   };
 
   const handleBlogGenerated = (blogContent: any) => {
+    console.log('📝 handleBlogGenerated called with:', blogContent);
     setGeneratedContent(blogContent);
+    
+    // Update form data with generated content
+    if (blogContent) {
+      setFormData(prev => ({
+        ...prev,
+        title: blogContent.title || prev.title,
+        content: blogContent.content || prev.content,
+        excerpt: blogContent.excerpt || prev.excerpt
+      }));
+    }
+    
     setShowContentSuggestions(false);
   };
 
@@ -224,6 +240,13 @@ function NewDraftContent() {
 
       if (result) {
         setGeneratedContent(result);
+        
+        // Update form data with generated content
+        setFormData(prev => ({
+          ...prev,
+          content: String(result.content || ""),
+          excerpt: String(result.excerpt || "")
+        }));
       } else {
         alert("Failed to generate content. Please try again.");
       }
@@ -244,8 +267,8 @@ function NewDraftContent() {
     try {
       const draftData = {
         title: formData.title,
-        content: String(generatedContent?.content || ""),
-        excerpt: String(generatedContent?.excerpt || ""),
+        content: String(formData.content || generatedContent?.content || ""),
+        excerpt: String(formData.excerpt || generatedContent?.excerpt || ""),
         seo_data: {
           topic: formData.topic,
           keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
