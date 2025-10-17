@@ -78,11 +78,13 @@ class KeywordStorageService {
       // Let's try a simpler approach first - test with minimal data
       const sessionData = {
         user_id: userId,
-        org_id: userId, // Using userId as org_id for now since we don't have org structure yet
-        primary_keyword: topic,
-        location_targeting: 'United States',
-        language_code: 'en',
-        total_keywords: keywords.length,
+        topic: topic,
+        research_results: {
+          total_keywords: keywords.length,
+          location_targeting: 'United States',
+          language_code: 'en',
+          generated_at: new Date().toISOString()
+        }
       };
       console.log('💾 Session data:', sessionData);
       
@@ -126,28 +128,25 @@ class KeywordStorageService {
 
       // Then save individual keywords
       const keywordInserts = keywords.map(keyword => ({
-        session_id: sessionResult.id,
-        org_id: userId, // Using userId as org_id for now
+        user_id: userId,
+        research_session_id: sessionResult.id,
         keyword: keyword.keyword,
-        search_volume: keyword.search_volume,
-        keyword_difficulty: keyword.difficulty === 'easy' ? 20 : keyword.difficulty === 'medium' ? 50 : 80,
-        competition_level: keyword.competition < 0.3 ? 'LOW' : keyword.competition < 0.7 ? 'MEDIUM' : 'HIGH',
-        cpc: keyword.cpc,
-        trend_score: keyword.trend_score,
-        easy_win_score: keyword.recommended ? 70 : 30,
-        high_value_score: keyword.trend_score || 50,
-        pillar_potential: keyword.recommended && (keyword.search_volume || 0) > 1000,
-        supporting_potential: keyword.recommended && (keyword.search_volume || 0) > 100,
-        related_keywords: keyword.related_keywords,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        search_volume: keyword.search_volume || 0,
+        difficulty: keyword.difficulty === 'easy' ? 'easy' : keyword.difficulty === 'medium' ? 'medium' : 'hard',
+        competition: parseFloat(keyword.competition) || 0.5,
+        cpc: parseFloat(keyword.cpc) || 0,
+        trend_score: parseFloat(keyword.trend_score) || 0,
+        recommended: keyword.recommended || false,
+        reason: keyword.reason || '',
+        related_keywords: keyword.related_keywords || [],
+        long_tail_keywords: keyword.long_tail_keywords || [],
       }));
 
       console.log('💾 Inserting keywords...');
       console.log('💾 First keyword insert:', keywordInserts[0]);
       
       const { data: keywordResult, error: keywordsError } = await supabase
-        .from('research_keywords')
+        .from('user_keywords')
         .insert(keywordInserts)
         .select();
 
@@ -208,7 +207,7 @@ class KeywordStorageService {
         .from('keyword_research_sessions')
         .select(`
           *,
-          research_keywords (*)
+          user_keywords (*)
         `)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -222,9 +221,9 @@ class KeywordStorageService {
       return data?.map(session => ({
         id: session.id,
         user_id: session.user_id,
-        topic: session.primary_keyword,
-        keywords: session.research_keywords || [],
-        research_results: {},
+        topic: session.topic,
+        keywords: session.user_keywords || [],
+        research_results: session.research_results || {},
         created_at: session.created_at,
       })) || [];
     } catch (error: unknown) {
