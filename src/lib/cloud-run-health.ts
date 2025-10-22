@@ -1,5 +1,3 @@
-"use client";
-
 interface CloudRunHealthStatus {
   isHealthy: boolean;
   isWakingUp: boolean;

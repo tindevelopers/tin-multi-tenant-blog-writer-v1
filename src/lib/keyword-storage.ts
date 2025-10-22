@@ -121,6 +121,16 @@ class KeywordStorageService {
 
       if (sessionError) {
         console.error('❌ Failed to save research session:', sessionError);
+        console.error('❌ Session data that failed:', sessionData);
+        
+        // Try to provide more helpful error information
+        if (sessionError.code === 'PGRST301' || sessionError.message?.includes('permission denied')) {
+          return { 
+            success: false, 
+            error: `Permission denied. This might be an RLS issue. Error: ${sessionError.message}` 
+          };
+        }
+        
         return { success: false, error: sessionError.message || JSON.stringify(sessionError) };
       }
       

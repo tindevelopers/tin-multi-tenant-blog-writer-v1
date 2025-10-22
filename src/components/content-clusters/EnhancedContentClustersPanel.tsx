@@ -154,18 +154,9 @@ export default function EnhancedContentClustersPanel({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-            <Layers className="h-7 w-7 text-purple-600 dark:text-purple-400" />
-            Content Clusters
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            AI-powered content strategy based on keyword research
-          </p>
-        </div>
-        {researchResults && !currentClusters && (
+      {/* Generate Clusters Button */}
+      {researchResults && !currentClusters && (
+        <div className="flex justify-end">
           <button
             onClick={handleGenerateClusters}
             className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
@@ -173,8 +164,8 @@ export default function EnhancedContentClustersPanel({
             <Sparkles className="h-4 w-4" />
             Generate Clusters
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Error Alert */}
       {error && (

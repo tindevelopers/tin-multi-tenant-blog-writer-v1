@@ -238,17 +238,33 @@ function NewDraftContent() {
         word_count: wordCount
       });
 
-      if (result) {
+      console.log('🔍 Generated result:', result);
+
+      if (result && result.content && result.content.trim().length > 0) {
         setGeneratedContent(result);
         
         // Update form data with generated content
         setFormData(prev => ({
           ...prev,
           content: String(result.content || ""),
-          excerpt: String(result.excerpt || "")
+          excerpt: String(result.excerpt || ""),
+          title: result.title || prev.title
         }));
+        
+        console.log('✅ Content updated in form data:', {
+          contentLength: String(result.content || "").length,
+          excerpt: String(result.excerpt || ""),
+          title: result.title || 'No title from result',
+          fullContent: String(result.content || "").substring(0, 500) + '...'
+        });
       } else {
-        alert("Failed to generate content. Please try again.");
+        console.error('❌ Generated result is empty or invalid:', {
+          hasResult: !!result,
+          hasContent: !!(result?.content),
+          contentLength: result?.content?.length || 0,
+          resultKeys: result ? Object.keys(result) : 'No result'
+        });
+        alert("Failed to generate content. The API returned empty content. Please try again.");
       }
     } catch (error) {
       console.error("Error generating content:", error);
@@ -265,10 +281,29 @@ function NewDraftContent() {
     }
 
     try {
+      const contentToSave = String(formData.content || generatedContent?.content || "");
+      const excerptToSave = String(formData.excerpt || generatedContent?.excerpt || "");
+      
+      // Validate that we have actual content to save
+      if (!contentToSave || contentToSave.trim().length === 0) {
+        alert("Cannot save draft: No content available. Please generate content first or add some content manually.");
+        return;
+      }
+      
+      console.log('💾 Saving draft with data:', {
+        title: formData.title,
+        contentLength: contentToSave.length,
+        excerptLength: excerptToSave.length,
+        hasGeneratedContent: !!generatedContent,
+        formDataContent: formData.content,
+        generatedContent: generatedContent?.content,
+        contentPreview: contentToSave.substring(0, 200) + '...'
+      });
+
       const draftData = {
         title: formData.title,
-        content: String(formData.content || generatedContent?.content || ""),
-        excerpt: String(formData.excerpt || generatedContent?.excerpt || ""),
+        content: contentToSave,
+        excerpt: excerptToSave,
         seo_data: {
           topic: formData.topic,
           keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
@@ -283,11 +318,16 @@ function NewDraftContent() {
         }
       };
 
+      console.log('🚀 Calling createDraft with data:', draftData);
       const result = await createDraft(draftData);
+      console.log('📝 createDraft result:', result);
+      
       if (result) {
+        console.log('✅ Draft saved successfully:', result);
         alert("Draft saved successfully!");
         router.push("/admin/drafts");
       } else {
+        console.log('❌ createDraft returned null/undefined');
         alert("Failed to save draft. Please try again.");
       }
     } catch (error) {
