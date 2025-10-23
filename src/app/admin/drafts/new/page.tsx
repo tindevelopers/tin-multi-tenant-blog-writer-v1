@@ -240,7 +240,7 @@ function NewDraftContent() {
 
       console.log('🔍 Generated result:', result);
 
-      if (result && result.content && result.content.trim().length > 0) {
+      if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
         setGeneratedContent(result);
         
         // Update form data with generated content
@@ -261,7 +261,7 @@ function NewDraftContent() {
         console.error('❌ Generated result is empty or invalid:', {
           hasResult: !!result,
           hasContent: !!(result?.content),
-          contentLength: result?.content?.length || 0,
+          contentLength: (result?.content && typeof result.content === 'string') ? result.content.length : 0,
           resultKeys: result ? Object.keys(result) : 'No result'
         });
         alert("Failed to generate content. The API returned empty content. Please try again.");
