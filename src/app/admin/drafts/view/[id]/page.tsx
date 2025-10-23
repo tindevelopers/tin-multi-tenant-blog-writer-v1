@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useRouter, useParams } from "next/navigation";
-import { useBlogPost } from "@/hooks/useBlogPosts";
+import { useBlogPost, useBlogPostMutations } from "@/hooks/useBlogPosts";
 import { 
   ArrowLeftIcon,
   DocumentTextIcon,
@@ -17,6 +17,7 @@ export default function ViewDraftPage() {
   const draftId = params.id as string;
   
   const { post: draft, loading, error } = useBlogPost(draftId);
+  const { deletePost } = useBlogPostMutations();
 
   const handleEdit = () => {
     router.push(`/admin/drafts/edit/${draftId}`);
@@ -27,10 +28,20 @@ export default function ViewDraftPage() {
     alert('Share functionality coming soon!');
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this draft? This action cannot be undone.')) {
-      // TODO: Implement delete functionality
-      alert('Delete functionality coming soon!');
+      try {
+        const success = await deletePost(draftId);
+        if (success) {
+          alert('Draft deleted successfully!');
+          router.push('/admin/drafts');
+        } else {
+          alert('Failed to delete draft. Please try again.');
+        }
+      } catch (err) {
+        console.error('Error deleting draft:', err);
+        alert('Error deleting draft. Please try again.');
+      }
     }
   };
 
@@ -135,9 +146,14 @@ export default function ViewDraftPage() {
       {/* Draft Content */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <div className="prose dark:prose-invert max-w-none">
-          <div className="whitespace-pre-wrap text-gray-900 dark:text-white">
-            {draft.content || 'No content available'}
-          </div>
+          <div 
+            className="text-gray-900 dark:text-white leading-relaxed"
+            dangerouslySetInnerHTML={{ 
+              __html: draft.content 
+                ? draft.content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>')
+                : '<p class="text-gray-500 italic">No content available</p>'
+            }}
+          />
         </div>
       </div>
 

@@ -67,9 +67,23 @@ class BlogPostsService {
     try {
       console.log('📝 Updating blog post:', postId);
       
-      // TODO: Implement API route for updating posts
-      console.log('⚠️ updatePost not implemented yet');
-      return null;
+      const response = await fetch(`/api/drafts/${postId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ API error:', errorData);
+        throw new Error(`Failed to update post: ${errorData.error || 'Unknown error'}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Post updated successfully:', result.data?.title);
+      return result.data || null;
     } catch (error) {
       console.error('❌ Error in updatePost:', error);
       throw error;
@@ -109,9 +123,17 @@ class BlogPostsService {
     try {
       console.log('📝 Fetching blog post:', postId);
       
-      // TODO: Implement API route for fetching single post
-      console.log('⚠️ getPost not implemented yet');
-      return null;
+      const response = await fetch(`/api/drafts/${postId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ API error:', errorData);
+        throw new Error(`Failed to fetch post: ${errorData.error || 'Unknown error'}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Post fetched successfully:', result.data?.title);
+      return result.data || null;
     } catch (error) {
       console.error('❌ Error in getPost:', error);
       throw error;
@@ -125,9 +147,19 @@ class BlogPostsService {
     try {
       console.log('📝 Deleting blog post:', postId);
       
-      // TODO: Implement API route for deleting posts
-      console.log('⚠️ deletePost not implemented yet');
-      return false;
+      const response = await fetch(`/api/drafts/${postId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ API error:', errorData);
+        throw new Error(`Failed to delete post: ${errorData.error || 'Unknown error'}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Post deleted successfully');
+      return result.success || false;
     } catch (error) {
       console.error('❌ Error in deletePost:', error);
       throw error;
