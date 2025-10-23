@@ -248,7 +248,7 @@ function NewDraftContent() {
           ...prev,
           content: String(result.content || ""),
           excerpt: String(result.excerpt || ""),
-          title: result.title || prev.title
+          title: String(result.title || prev.title)
         }));
         
         console.log('✅ Content updated in form data:', {
