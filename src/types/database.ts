@@ -231,6 +231,100 @@ export interface Database {
           created_at?: string;
         };
       };
+      integrations: {
+        Row: {
+          integration_id: string;
+          org_id: string;
+          type: string;
+          name: string;
+          status: "active" | "inactive" | "error" | "pending";
+          config: Json;
+          field_mappings: Json;
+          health_status: "healthy" | "warning" | "error" | "unknown";
+          last_sync: string | null;
+          metadata: Json;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          integration_id?: string;
+          org_id: string;
+          type: string;
+          name: string;
+          status?: "active" | "inactive" | "error" | "pending";
+          config?: Json;
+          field_mappings?: Json;
+          health_status?: "healthy" | "warning" | "error" | "unknown";
+          last_sync?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          integration_id?: string;
+          org_id?: string;
+          type?: string;
+          name?: string;
+          status?: "active" | "inactive" | "error" | "pending";
+          config?: Json;
+          field_mappings?: Json;
+          health_status?: "healthy" | "warning" | "error" | "unknown";
+          last_sync?: string | null;
+          metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+        };
+      };
+      integration_publish_logs: {
+        Row: {
+          log_id: string;
+          org_id: string;
+          post_id: string;
+          integration_id: string;
+          status: "pending" | "success" | "failed" | "synced" | "syncing";
+          external_id: string | null;
+          external_url: string | null;
+          error_message: string | null;
+          error_code: string | null;
+          request_metadata: Json;
+          response_metadata: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          log_id?: string;
+          org_id: string;
+          post_id: string;
+          integration_id: string;
+          status?: "pending" | "success" | "failed" | "synced" | "syncing";
+          external_id?: string | null;
+          external_url?: string | null;
+          error_message?: string | null;
+          error_code?: string | null;
+          request_metadata?: Json;
+          response_metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          log_id?: string;
+          org_id?: string;
+          post_id?: string;
+          integration_id?: string;
+          status?: "pending" | "success" | "failed" | "synced" | "syncing";
+          external_id?: string | null;
+          external_url?: string | null;
+          error_message?: string | null;
+          error_code?: string | null;
+          request_metadata?: Json;
+          response_metadata?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }
@@ -242,4 +336,6 @@ export type ContentTemplate =
   Database["public"]["Tables"]["content_templates"]["Row"];
 export type ApiUsageLog = Database["public"]["Tables"]["api_usage_logs"]["Row"];
 export type MediaAsset = Database["public"]["Tables"]["media_assets"]["Row"];
+export type Integration = Database["public"]["Tables"]["integrations"]["Row"];
+export type IntegrationPublishLog = Database["public"]["Tables"]["integration_publish_logs"]["Row"];
 
