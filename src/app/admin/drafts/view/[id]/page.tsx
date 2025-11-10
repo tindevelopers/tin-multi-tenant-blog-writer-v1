@@ -144,17 +144,85 @@ export default function ViewDraftPage() {
       </div>
 
       {/* Draft Content */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="prose dark:prose-invert max-w-none">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 lg:p-12">
+        <article className="prose prose-lg dark:prose-invert max-w-none 
+          prose-headings:text-gray-900 dark:prose-headings:text-white
+          prose-p:text-gray-700 dark:prose-p:text-gray-300
+          prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+          prose-strong:text-gray-900 dark:prose-strong:text-white
+          prose-ul:text-gray-700 dark:prose-ul:text-gray-300
+          prose-ol:text-gray-700 dark:prose-ol:text-gray-300
+          prose-li:text-gray-700 dark:prose-li:text-gray-300
+          prose-blockquote:border-l-blue-500 prose-blockquote:text-gray-600 dark:prose-blockquote:text-gray-400
+          prose-code:text-blue-600 dark:prose-code:text-blue-400
+          prose-pre:bg-gray-100 dark:prose-pre:bg-gray-900
+          prose-img:rounded-lg prose-img:shadow-lg prose-img:my-8
+          prose-figure:my-8
+          prose-hr:border-gray-300 dark:prose-hr:border-gray-700">
           <div 
-            className="text-gray-900 dark:text-white leading-relaxed"
             dangerouslySetInnerHTML={{ 
               __html: draft.content 
-                ? draft.content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>')
+                ? (() => {
+                    // If content is already HTML, use it directly
+                    if (draft.content.includes('<') && draft.content.includes('>')) {
+                      return draft.content;
+                    }
+                    // Otherwise, convert markdown-like formatting to HTML
+                    let html = draft.content
+                      // Convert line breaks
+                      .replace(/\n\n/g, '</p><p>')
+                      .replace(/\n/g, '<br>')
+                      // Convert headers
+                      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                      // Convert bold
+                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                      .replace(/__(.*?)__/g, '<strong>$1</strong>')
+                      // Convert italic
+                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                      .replace(/_(.*?)_/g, '<em>$1</em>')
+                      // Convert links [text](url)
+                      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+                      // Convert images ![alt](url)
+                      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="w-full h-auto rounded-lg shadow-lg my-8" />')
+                      // Convert lists
+                      .replace(/^\* (.+)$/gim, '<li>$1</li>')
+                      .replace(/^- (.+)$/gim, '<li>$1</li>')
+                      .replace(/^\d+\. (.+)$/gim, '<li>$1</li>')
+                      // Wrap in paragraphs if not already wrapped
+                      .split('</p><p>').map((chunk, i) => {
+                        if (i === 0 && !chunk.startsWith('<')) {
+                          return '<p>' + chunk;
+                        }
+                        if (!chunk.startsWith('<') && !chunk.includes('<')) {
+                          return '<p>' + chunk + '</p>';
+                        }
+                        return chunk;
+                      }).join('</p><p>');
+                    
+                    // Wrap list items in ul/ol tags
+                    html = html.replace(/(<li>.*<\/li>)/s, (match) => {
+                      if (match.match(/^\d+\./)) {
+                        return '<ol>' + match + '</ol>';
+                      }
+                      return '<ul>' + match + '</ul>';
+                    });
+                    
+                    // Ensure proper paragraph wrapping
+                    if (!html.startsWith('<')) {
+                      html = '<p>' + html;
+                    }
+                    if (!html.endsWith('>')) {
+                      html = html + '</p>';
+                    }
+                    
+                    return html;
+                  })()
                 : '<p class="text-gray-500 italic">No content available</p>'
             }}
           />
-        </div>
+        </article>
       </div>
 
       {/* Metadata */}

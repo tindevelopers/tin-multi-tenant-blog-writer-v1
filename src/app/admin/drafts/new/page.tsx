@@ -569,60 +569,76 @@ function NewDraftContent() {
                   max="3000"
                 />
               </div>
+            </div>
+          </div>
 
-              {/* External Links Options */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                  External Links & Backlinks
-                </h3>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  Include external links to source documents and backlinks for better SEO
-                </p>
-                
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="include_external_links"
-                      checked={formData.include_external_links}
-                      onChange={handleInputChange}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Include external links to source documents
-                    </span>
+          {/* External Links & SEO Options */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-blue-200 dark:border-blue-800 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              External Links & SEO Options
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Configure external links and backlinks to improve SEO and content credibility
+            </p>
+            
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <input
+                  type="checkbox"
+                  id="include_external_links"
+                  name="include_external_links"
+                  checked={formData.include_external_links}
+                  onChange={handleInputChange}
+                  className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex-1">
+                  <label htmlFor="include_external_links" className="block text-sm font-medium text-gray-900 dark:text-white cursor-pointer">
+                    Include external links to source documents
                   </label>
-                  
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="include_backlinks"
-                      checked={formData.include_backlinks}
-                      onChange={handleInputChange}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      Include backlinks
-                    </span>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Automatically add links to authoritative sources and references in your blog content
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <input
+                  type="checkbox"
+                  id="include_backlinks"
+                  name="include_backlinks"
+                  checked={formData.include_backlinks}
+                  onChange={handleInputChange}
+                  className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex-1">
+                  <label htmlFor="include_backlinks" className="block text-sm font-medium text-gray-900 dark:text-white cursor-pointer">
+                    Include backlinks
                   </label>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Add strategic backlinks to improve SEO and content discoverability
+                  </p>
                   
                   {formData.include_backlinks && (
-                    <div className="ml-6">
-                      <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">
+                    <div className="mt-3 ml-0">
+                      <label htmlFor="backlink_count" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                         Number of backlinks:
                       </label>
                       <input
                         type="number"
+                        id="backlink_count"
                         name="backlink_count"
                         value={formData.backlink_count}
                         onChange={handleInputChange}
-                        className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                        className="w-32 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                         min="1"
                         max="20"
                       />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Recommended: 3-7 backlinks per article
+                      </p>
                     </div>
                   )}
                 </div>
