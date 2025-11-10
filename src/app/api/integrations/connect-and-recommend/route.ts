@@ -3,8 +3,10 @@
  * 
  * POST /api/integrations/connect-and-recommend
  * 
- * Connects to an integration via Blog Writer API and gets keyword-based recommendations.
- * Saves the integration and recommendations to the database.
+ * Connects to an integration via Blog Writer API (v1.1.0+) and gets keyword-based recommendations.
+ * The Blog Writer API handles persistence to Supabase automatically (best-effort):
+ * - integrations_{ENV} table for integration metadata
+ * - recommendations_{ENV} table for computed recommendations
  */
 
 import { NextRequest, NextResponse } from 'next/server';
