@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { 
   PlusIcon, 
@@ -16,68 +16,108 @@ import {
   CalendarIcon,
   UserIcon
 } from "@heroicons/react/24/outline";
+import { createClient } from "@/lib/supabase/client";
+import type { BlogPost } from "@/types/database";
+
+interface DraftListItem {
+  id: string;
+  title: string;
+  excerpt: string;
+  status: string;
+  lastModified: string;
+  author: string;
+  tags: string[];
+  wordCount: number;
+  readTime: string;
+}
 
 export default function DraftsPage() {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [selectedDrafts, setSelectedDrafts] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<DraftListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock draft data
-  const drafts = [
-    {
-      id: "1",
-      title: "The Future of AI in Content Creation",
-      excerpt: "Exploring how artificial intelligence is revolutionizing the way we create and consume content...",
-      status: "draft",
-      lastModified: "2024-01-15T10:30:00Z",
-      author: "Sarah Johnson",
-      tags: ["AI", "Content Creation", "Technology"],
-      wordCount: 1247,
-      readTime: "5 min read"
-    },
-    {
-      id: "2",
-      title: "10 Tips for Better Blog Writing",
-      excerpt: "Master the art of blog writing with these proven techniques and strategies...",
-      status: "review",
-      lastModified: "2024-01-14T15:45:00Z",
-      author: "Mike Chen",
-      tags: ["Writing Tips", "Blogging", "Content Strategy"],
-      wordCount: 892,
-      readTime: "4 min read"
-    },
-    {
-      id: "3",
-      title: "SEO Best Practices for 2024",
-      excerpt: "Stay ahead of the curve with the latest SEO strategies and techniques...",
-      status: "draft",
-      lastModified: "2024-01-13T09:20:00Z",
-      author: "Emma Davis",
-      tags: ["SEO", "Digital Marketing", "Strategy"],
-      wordCount: 1567,
-      readTime: "7 min read"
-    },
-    {
-      id: "4",
-      title: "Building a Content Calendar That Works",
-      excerpt: "Learn how to create and maintain an effective content calendar for your business...",
-      status: "archived",
-      lastModified: "2024-01-12T14:15:00Z",
-      author: "Alex Rodriguez",
-      tags: ["Content Planning", "Marketing", "Strategy"],
-      wordCount: 2103,
-      readTime: "9 min read"
+  useEffect(() => {
+    async function fetchDrafts() {
+      try {
+        const supabase = createClient();
+        
+        // Get current user
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !user) {
+          setError("You must be logged in to view drafts");
+          setLoading(false);
+          return;
+        }
+
+        // Fetch drafts from Supabase
+        const { data, error: fetchError } = await supabase
+          .from("blog_posts")
+          .select("*")
+          .order("updated_at", { ascending: false });
+
+        if (fetchError) {
+          console.error("Error fetching drafts:", fetchError);
+          setError(`Failed to fetch drafts: ${fetchError.message}`);
+          setLoading(false);
+          return;
+        }
+
+        // Transform data to match our interface
+        const transformedDrafts: DraftListItem[] = (data || []).map((post: BlogPost) => {
+          // Calculate word count from content
+          const wordCount = post.content 
+            ? post.content.replace(/<[^>]*>/g, '').split(/\s+/).filter(word => word.length > 0).length
+            : 0;
+          
+          // Calculate read time (average reading speed: 200 words per minute)
+          const readTime = Math.max(1, Math.ceil(wordCount / 200));
+
+          // Extract tags from metadata if available
+          const tags: string[] = [];
+          if (post.metadata && typeof post.metadata === 'object' && 'tags' in post.metadata) {
+            const metadataTags = post.metadata.tags;
+            if (Array.isArray(metadataTags)) {
+              tags.push(...metadataTags);
+            }
+          }
+
+          return {
+            id: post.post_id,
+            title: post.title || "Untitled Draft",
+            excerpt: post.excerpt || post.content?.replace(/<[^>]*>/g, '').substring(0, 150) + "..." || "No excerpt available",
+            status: post.status,
+            lastModified: post.updated_at,
+            author: post.created_by ? post.created_by.substring(0, 8) + "..." : "Unknown",
+            tags: tags.length > 0 ? tags : [],
+            wordCount,
+            readTime: `${readTime} min read`
+          };
+        });
+
+        setDrafts(transformedDrafts);
+        setLoading(false);
+      } catch (err) {
+        console.error("Unexpected error:", err);
+        setError(err instanceof Error ? err.message : "An unexpected error occurred");
+        setLoading(false);
+      }
     }
-  ];
+
+    fetchDrafts();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "draft": return "bg-yellow-100 text-yellow-800";
-      case "review": return "bg-blue-100 text-blue-800";
-      case "archived": return "bg-gray-100 text-gray-800";
-      case "published": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "draft": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+      case "scheduled": return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+      case "archived": return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200";
+      case "published": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+      default: return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200";
     }
   };
 
@@ -98,6 +138,18 @@ export default function DraftsPage() {
     
     return matchesSearch && matchesFilter;
   });
+
+  // Calculate stats from actual data
+  const stats = {
+    total: drafts.length,
+    inReview: drafts.filter(d => d.status === "scheduled").length,
+    published: drafts.filter(d => d.status === "published").length,
+    thisMonth: drafts.filter(d => {
+      const draftDate = new Date(d.lastModified);
+      const now = new Date();
+      return draftDate.getMonth() === now.getMonth() && draftDate.getFullYear() === now.getFullYear();
+    }).length
+  };
 
   const handleSelectDraft = (draftId: string) => {
     setSelectedDrafts(prev => 
@@ -144,7 +196,9 @@ export default function DraftsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Drafts</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">24</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? "..." : stats.total}
+              </p>
             </div>
             <DocumentTextIcon className="w-8 h-8 text-blue-600" />
           </div>
@@ -153,8 +207,10 @@ export default function DraftsPage() {
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Review</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">8</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Scheduled</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? "..." : stats.inReview}
+              </p>
             </div>
             <ClockIcon className="w-8 h-8 text-yellow-600" />
           </div>
@@ -164,7 +220,9 @@ export default function DraftsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Published</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">156</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? "..." : stats.published}
+              </p>
             </div>
             <EyeIcon className="w-8 h-8 text-green-600" />
           </div>
@@ -174,7 +232,9 @@ export default function DraftsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">This Month</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">12</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? "..." : stats.thisMonth}
+              </p>
             </div>
             <CalendarIcon className="w-8 h-8 text-purple-600" />
           </div>
@@ -205,7 +265,7 @@ export default function DraftsPage() {
               >
                 <option value="all">All Status</option>
                 <option value="draft">Draft</option>
-                <option value="review">In Review</option>
+                <option value="scheduled">Scheduled</option>
                 <option value="published">Published</option>
                 <option value="archived">Archived</option>
               </select>
@@ -214,7 +274,23 @@ export default function DraftsPage() {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+          <p className="text-red-600 dark:text-red-300">{error}</p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading drafts...</p>
+        </div>
+      )}
+
       {/* Drafts Table */}
+      {!loading && (
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -261,28 +337,35 @@ export default function DraftsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="max-w-md">
-                      <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                        {draft.title}
-                      </h3>
+                      <button
+                        onClick={() => router.push(`/admin/drafts/view/${draft.id}`)}
+                        className="text-left w-full"
+                      >
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                          {draft.title}
+                        </h3>
+                      </button>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
                         {draft.excerpt}
                       </p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {draft.tags.slice(0, 3).map((tag, index) => (
-                          <span
-                            key={index}
-                            className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                          >
-                            <TagIcon className="w-3 h-3 mr-1" />
-                            {tag}
-                          </span>
-                        ))}
-                        {draft.tags.length > 3 && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            +{draft.tags.length - 3} more
-                          </span>
-                        )}
-                      </div>
+                      {draft.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {draft.tags.slice(0, 3).map((tag, index) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                            >
+                              <TagIcon className="w-3 h-3 mr-1" />
+                              {tag}
+                            </span>
+                          ))}
+                          {draft.tags.length > 3 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              +{draft.tags.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -312,16 +395,24 @@ export default function DraftsPage() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                      <button 
+                        onClick={() => router.push(`/admin/drafts/view/${draft.id}`)}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                        title="View draft"
+                      >
                         <EyeIcon className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                      <button 
+                        onClick={() => router.push(`/admin/drafts/edit/${draft.id}`)}
+                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                        title="Edit draft"
+                      >
                         <PencilIcon className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                      <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1" title="Share draft">
                         <ShareIcon className="w-4 h-4" />
                       </button>
-                      <button className="text-gray-400 hover:text-red-600 p-1">
+                      <button className="text-gray-400 hover:text-red-600 p-1" title="Delete draft">
                         <TrashIcon className="w-4 h-4" />
                       </button>
                     </div>
@@ -353,6 +444,7 @@ export default function DraftsPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Empty State */}
       {filteredDrafts.length === 0 && (
