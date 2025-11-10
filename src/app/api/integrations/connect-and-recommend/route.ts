@@ -41,11 +41,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check admin permissions
-    if (!['owner', 'admin'].includes(userProfile.role)) {
+    // Check admin permissions - allow system_admin, super_admin, admin, and manager
+    const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
+    if (!allowedRoles.includes(userProfile.role)) {
       console.error('❌ Insufficient permissions:', userProfile.role);
       return NextResponse.json(
-        { error: 'Insufficient permissions. Admin or owner role required.' },
+        { error: 'Insufficient permissions. Admin, Manager, or higher role required.' },
         { status: 403 }
       );
     }

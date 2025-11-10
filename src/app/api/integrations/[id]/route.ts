@@ -86,8 +86,10 @@ export async function PUT(
       return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(userProfile.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    // Check admin permissions - allow system_admin, super_admin, admin, and manager
+    const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
+    if (!allowedRoles.includes(userProfile.role)) {
+      return NextResponse.json({ error: 'Insufficient permissions. Admin, Manager, or higher role required.' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -160,8 +162,10 @@ export async function DELETE(
       return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
     }
 
-    if (!['owner', 'admin'].includes(userProfile.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    // Check admin permissions - allow system_admin, super_admin, admin, and manager
+    const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
+    if (!allowedRoles.includes(userProfile.role)) {
+      return NextResponse.json({ error: 'Insufficient permissions. Admin, Manager, or higher role required.' }, { status: 403 });
     }
 
     const { id } = await params;
