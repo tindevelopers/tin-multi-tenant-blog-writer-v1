@@ -35,6 +35,8 @@ export function registerBlogWriterAPIProviders(): void {
 /**
  * Auto-register providers if not already registered
  * This allows the providers to be available immediately
+ * Note: In Next.js, this runs on both server and client, but we only register server-side
+ * Client-side registration should be done explicitly in client components
  */
 if (typeof window === 'undefined') {
   // Server-side: register immediately
