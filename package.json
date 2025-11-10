@@ -51,7 +51,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "echo 'No tests defined' && exit 0"
   },
   "dependencies": {
     "@heroicons/react": "^2.1.0",

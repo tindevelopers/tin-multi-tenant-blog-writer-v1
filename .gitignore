@@ -106,4 +106,9 @@ jspm_packages/
 tmp/
 temp/
 .env*.local
+
+# Reference files (may contain sensitive data)
+TIN Blog Writer.json
+*_collaborators_*.csv
+
 # Trigger CI/CD

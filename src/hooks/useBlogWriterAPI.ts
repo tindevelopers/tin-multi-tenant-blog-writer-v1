@@ -156,6 +156,33 @@ export function usePostMutation() {
 }
 
 // Hook for managing API connection status
+export function useGenerateBlog() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const generateBlog = useCallback(async (params: {
+    topic?: string;
+    keywords?: string[];
+    target_audience?: string;
+    tone?: string;
+    word_count?: number;
+  }) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await blogWriterAPI.generateBlog(params);
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate blog content');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { generateBlog, loading, error };
+}
+
 export function useAPIConnection() {
   const { isHealthy, checking } = useAPIHealth();
   const [lastConnected, setLastConnected] = useState<Date | null>(null);

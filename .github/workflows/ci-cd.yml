@@ -87,6 +87,15 @@ jobs:
         
       - name: Build application
         run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BLOG_WRITER_API_URL: ${{ secrets.BLOG_WRITER_API_URL }}
+          BLOG_WRITER_API_KEY: ${{ secrets.BLOG_WRITER_API_KEY }}
+          NEXT_PUBLIC_BLOG_WRITER_API_URL: ${{ secrets.NEXT_PUBLIC_BLOG_WRITER_API_URL }}
+          NEXT_PUBLIC_BLOG_WRITER_API_KEY: ${{ secrets.NEXT_PUBLIC_BLOG_WRITER_API_KEY }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
         
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

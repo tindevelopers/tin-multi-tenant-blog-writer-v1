@@ -1,22 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { 
   ArrowLeftIcon,
   DocumentTextIcon,
   SparklesIcon,
   MagnifyingGlassIcon
 } from "@heroicons/react/24/outline";
-import { usePostMutation } from "@/hooks/useBlogWriterAPI";
+import { useBlogPostMutations } from "@/hooks/useBlogPosts";
 import { blogWriterAPI } from "@/lib/blog-writer-api";
 import BlogResearchPanel from "@/components/blog-writer/BlogResearchPanel";
+import ContentSuggestionsPanel from "@/components/blog-writer/ContentSuggestionsPanel";
+import EnhancedContentClustersPanel from "@/components/content-clusters/EnhancedContentClustersPanel";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
 
-export default function NewDraftPage() {
+function NewDraftContent() {
   const router = useRouter();
-  const { createPost, loading: creatingPost } = usePostMutation();
+  const searchParams = useSearchParams();
+  const { createDraft, loading: creatingPost } = useBlogPostMutations();
   const [userId, setUserId] = useState<string | undefined>(undefined);
   
   // Get current user ID
@@ -28,6 +31,37 @@ export default function NewDraftPage() {
       }
     });
   }, []);
+
+  // Handle URL parameters from content clusters page
+  useEffect(() => {
+    if (searchParams) {
+      const title = searchParams.get('title');
+      const topic = searchParams.get('topic');
+      const keywords = searchParams.get('keywords');
+      const target_audience = searchParams.get('target_audience');
+      const word_count = searchParams.get('word_count');
+
+      if (title || topic || keywords || target_audience || word_count) {
+        console.log('🔍 URL parameters detected, populating form:', {
+          title, topic, keywords, target_audience, word_count
+        });
+
+        setFormData(prev => ({
+          ...prev,
+          title: title || prev.title,
+          topic: topic || prev.topic,
+          keywords: keywords || prev.keywords,
+          target_audience: target_audience || prev.target_audience,
+          word_count: word_count ? parseInt(word_count) : prev.word_count
+        }));
+
+        // Skip research panel since we already have the data
+        setShowResearchPanel(false);
+        setShowContentClusters(false);
+        setShowContentSuggestions(true);
+      }
+    }
+  }, [searchParams]);
   
   const [formData, setFormData] = useState({
     title: "",
@@ -37,7 +71,9 @@ export default function NewDraftPage() {
     tone: "professional",
     word_count: 800,
     preset: "seo_focused",
-    quality_level: "high"
+    quality_level: "high",
+    content: "",
+    excerpt: ""
   });
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
@@ -46,6 +82,8 @@ export default function NewDraftPage() {
   // Research workflow state
   const [researchResults, setResearchResults] = useState<BlogResearchResults | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(true);
+  const [showContentSuggestions, setShowContentSuggestions] = useState(false);
+  const [showContentClusters, setShowContentClusters] = useState(false);
 
   const presets = [
     { value: "seo_focused", label: "SEO Focused", description: "Optimized for search engines" },
@@ -77,8 +115,16 @@ export default function NewDraftPage() {
 
   // Research workflow handlers
   const handleResearchComplete = (results: BlogResearchResults) => {
+    console.log('🎯 Research completed, setting results:', results);
+    console.log('🔍 Research results structure:', {
+      keyword_analysis: results.keyword_analysis,
+      title_suggestions: results.title_suggestions,
+      content_strategy: results.content_strategy,
+      seo_insights: results.seo_insights
+    });
     setResearchResults(results);
     setShowResearchPanel(false);
+    setShowContentClusters(true);
     
     // Auto-populate form with research insights
     if (results.seo_insights.primary_keyword) {
@@ -92,6 +138,62 @@ export default function NewDraftPage() {
 
   const handleTitleSelect = (title: TitleSuggestion) => {
     setFormData(prev => ({ ...prev, title: title.title }));
+  };
+
+  // Content suggestions handlers
+  const handleSuggestionSelect = (suggestion: any) => {
+    console.log('🔍 handleSuggestionSelect called with suggestion:', {
+      suggestion,
+      suggestionKeys: suggestion ? Object.keys(suggestion) : 'No suggestion object',
+      secondary_keywords: suggestion?.secondary_keywords,
+      secondary_keywordsType: typeof suggestion?.secondary_keywords,
+      target_keyword: suggestion?.target_keyword,
+      primary_keyword: suggestion?.primary_keyword
+    });
+
+    // Safely handle secondary_keywords - it might not exist or might not be an array
+    const keywords = suggestion.secondary_keywords 
+      ? Array.isArray(suggestion.secondary_keywords) 
+        ? suggestion.secondary_keywords.join(', ')
+        : String(suggestion.secondary_keywords)
+      : suggestion.target_keyword || suggestion.primary_keyword || '';
+
+    console.log('🔍 Processed keywords:', keywords);
+
+    setFormData(prev => ({
+      ...prev,
+      title: suggestion.title || '',
+      topic: suggestion.primary_keyword || suggestion.target_keyword || '',
+      keywords: keywords,
+      target_audience: suggestion.target_audience || 'general',
+      word_count: suggestion.word_count_target || suggestion.estimated_word_count || 1500,
+      content: suggestion.content || '',
+      excerpt: suggestion.excerpt || ''
+    }));
+    setShowContentSuggestions(false);
+  };
+
+  const handleBlogGenerated = (blogContent: any) => {
+    console.log('📝 handleBlogGenerated called with:', blogContent);
+    setGeneratedContent(blogContent);
+    
+    // Update form data with generated content
+    if (blogContent) {
+      setFormData(prev => ({
+        ...prev,
+        title: blogContent.title || prev.title,
+        content: blogContent.content || prev.content,
+        excerpt: blogContent.excerpt || prev.excerpt
+      }));
+    }
+    
+    setShowContentSuggestions(false);
+  };
+
+  const handleDraftSaved = (draftId: string) => {
+    console.log('📝 Draft saved with ID:', draftId);
+    // Optionally redirect to drafts page or show success message
+    // router.push('/admin/drafts');
   };
 
   const handleGenerateContent = async () => {
@@ -136,10 +238,33 @@ export default function NewDraftPage() {
         word_count: wordCount
       });
 
-      if (result) {
+      console.log('🔍 Generated result:', result);
+
+      if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
         setGeneratedContent(result);
+        
+        // Update form data with generated content
+        setFormData(prev => ({
+          ...prev,
+          content: String(result.content || ""),
+          excerpt: String(result.excerpt || ""),
+          title: String(result.title || prev.title)
+        }));
+        
+        console.log('✅ Content updated in form data:', {
+          contentLength: String(result.content || "").length,
+          excerpt: String(result.excerpt || ""),
+          title: result.title || 'No title from result',
+          fullContent: String(result.content || "").substring(0, 500) + '...'
+        });
       } else {
-        alert("Failed to generate content. Please try again.");
+        console.error('❌ Generated result is empty or invalid:', {
+          hasResult: !!result,
+          hasContent: !!(result?.content),
+          contentLength: (result?.content && typeof result.content === 'string') ? result.content.length : 0,
+          resultKeys: result ? Object.keys(result) : 'No result'
+        });
+        alert("Failed to generate content. The API returned empty content. Please try again.");
       }
     } catch (error) {
       console.error("Error generating content:", error);
@@ -156,21 +281,53 @@ export default function NewDraftPage() {
     }
 
     try {
+      const contentToSave = String(formData.content || generatedContent?.content || "");
+      const excerptToSave = String(formData.excerpt || generatedContent?.excerpt || "");
+      
+      // Validate that we have actual content to save
+      if (!contentToSave || contentToSave.trim().length === 0) {
+        alert("Cannot save draft: No content available. Please generate content first or add some content manually.");
+        return;
+      }
+      
+      console.log('💾 Saving draft with data:', {
+        title: formData.title,
+        contentLength: contentToSave.length,
+        excerptLength: excerptToSave.length,
+        hasGeneratedContent: !!generatedContent,
+        formDataContent: formData.content,
+        generatedContent: generatedContent?.content,
+        contentPreview: contentToSave.substring(0, 200) + '...'
+      });
+
       const draftData = {
         title: formData.title,
-        content: String(generatedContent?.content || ""),
-        excerpt: String(generatedContent?.excerpt || ""),
-        status: "draft" as const,
-        author: "Current User", // TODO: Get from auth context
-        category: formData.topic,
-        tags: formData.keywords.split(',').map(k => k.trim()).filter(k => k)
+        content: contentToSave,
+        excerpt: excerptToSave,
+        seo_data: {
+          topic: formData.topic,
+          keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
+          target_audience: formData.target_audience || "general",
+          tone: formData.tone || "professional"
+        },
+        metadata: {
+          generated_from_research: true,
+          research_results: researchResults,
+          generation_timestamp: new Date().toISOString(),
+          ai_generated: true
+        }
       };
 
-      const result = await createPost(draftData);
+      console.log('🚀 Calling createDraft with data:', draftData);
+      const result = await createDraft(draftData);
+      console.log('📝 createDraft result:', result);
+      
       if (result) {
+        console.log('✅ Draft saved successfully:', result);
         alert("Draft saved successfully!");
         router.push("/admin/drafts");
       } else {
+        console.log('❌ createDraft returned null/undefined');
         alert("Failed to save draft. Please try again.");
       }
     } catch (error) {
@@ -201,6 +358,15 @@ export default function NewDraftPage() {
             </p>
           </div>
           <div className="flex items-center space-x-2">
+            {researchResults && (
+              <button
+                onClick={() => setShowContentSuggestions(!showContentSuggestions)}
+                className="flex items-center px-3 py-2 text-sm font-medium text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors"
+              >
+                <SparklesIcon className="w-4 h-4 mr-2" />
+                {showContentSuggestions ? 'Hide Suggestions' : 'Show Suggestions'}
+              </button>
+            )}
             <button
               onClick={() => setShowResearchPanel(!showResearchPanel)}
               className="flex items-center px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
@@ -219,6 +385,31 @@ export default function NewDraftPage() {
                 onResearchComplete={handleResearchComplete}
                 onTitleSelect={handleTitleSelect}
                 userId={userId}
+              />
+            </div>
+          )}
+
+          {/* Content Clusters Panel */}
+          {showContentClusters && researchResults && (
+            <div className="mb-8">
+              <EnhancedContentClustersPanel
+                researchResults={researchResults}
+                onSuggestionSelect={handleSuggestionSelect}
+                onGenerateBlog={handleBlogGenerated}
+                onDraftSaved={handleDraftSaved}
+              />
+            </div>
+          )}
+
+          {/* Content Suggestions Panel */}
+          {showContentSuggestions && researchResults && (
+            <div className="mb-8">
+              <ContentSuggestionsPanel
+                researchResults={researchResults}
+                targetAudience={formData.target_audience || "general"}
+                onSuggestionSelect={handleSuggestionSelect}
+                onBlogGenerated={handleBlogGenerated}
+                onDraftSaved={handleDraftSaved}
               />
             </div>
           )}
@@ -441,5 +632,38 @@ export default function NewDraftPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function NewDraftPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded mb-8"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+                <div className="space-y-4">
+                  <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+                <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <NewDraftContent />
+    </Suspense>
   );
 }

@@ -265,24 +265,24 @@ class BlogWriterAPI {
     word_count?: number;
   }): Promise<Record<string, unknown> | null> {
     try {
-      console.log('🚀 Starting blog generation with Cloud Run health check...');
-      
-      // First, ensure Cloud Run is awake and healthy
-      console.log('🌅 Checking Cloud Run health...');
-      const healthStatus = await cloudRunHealth.wakeUpAndWait();
-      
-      if (!healthStatus.isHealthy) {
-        throw new Error(`Cloud Run is not healthy: ${healthStatus.error}`);
-      }
-      
-      console.log('✅ Cloud Run is healthy, proceeding with blog generation...');
+      console.log('🚀 Starting blog generation via local API route...');
       console.log('🚀 Generating blog with params:', params);
       
-      const result = await this.makeRequest<Record<string, unknown>>('/api/v1/blog/generate', {
+      // Use local API route instead of external API to avoid CORS issues
+      const response = await fetch('/api/blog-writer/generate', {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(params),
       });
       
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
+      }
+      
+      const result = await response.json();
       console.log('✅ Blog generation result:', result);
       return result;
     } catch (error) {

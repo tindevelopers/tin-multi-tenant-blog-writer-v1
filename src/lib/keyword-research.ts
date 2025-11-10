@@ -142,13 +142,23 @@ class KeywordResearchService {
       const data = await response.json();
       
       // Enhance the analysis with clustering
-      const clusters = this.createKeywordClusters(data.keyword_analysis);
+      const keywordAnalysis = data.keyword_analysis || data;
+      const clusters = this.createKeywordClusters(keywordAnalysis);
       
       console.log('✅ Keywords analyzed via API');
+      console.log('🔍 API response data structure:', data);
+      
+      // Debug search volume data
+      console.log('🔍 Search volume data check:', Object.entries(keywordAnalysis).map(([key, data]: [string, any]) => ({
+        keyword: key,
+        search_volume: data?.search_volume,
+        search_volume_type: typeof data?.search_volume
+      })));
+      
       return {
-        keyword_analysis: data,
-        overall_score: this.calculateOverallScore(data.keyword_analysis),
-        recommendations: this.generateRecommendations(data.keyword_analysis),
+        keyword_analysis: keywordAnalysis,
+        overall_score: this.calculateOverallScore(keywordAnalysis),
+        recommendations: this.generateRecommendations(keywordAnalysis),
         cluster_groups: clusters,
       };
     } catch (error: unknown) {
@@ -394,11 +404,12 @@ class KeywordResearchService {
       suggestions.push(`${keyword} tutorial`);
     });
     
-    return [...new Set(suggestions)].slice(0, 15);
+    return [...new Set(suggestions)].slice(0, 25);
   }
 
   private fallbackKeywordAnalysis(keywords: string[]): KeywordAnalysis {
     console.log('📊 Using fallback keyword analysis...');
+    console.log('📊 Keywords to analyze:', keywords);
     
     // Generate mock keyword data for each keyword
     const keywordAnalysis: Record<string, KeywordData> = {};
@@ -428,6 +439,13 @@ class KeywordResearchService {
         long_tail_keywords: this.generateLongTailKeywords(keyword),
       };
     });
+    
+    // Debug generated search volumes
+    console.log('📊 Generated search volumes:', Object.entries(keywordAnalysis).map(([key, data]) => ({
+      keyword: key,
+      search_volume: data.search_volume,
+      search_volume_type: typeof data.search_volume
+    })));
     
     // Create clusters
     const clusters = this.createKeywordClusters(keywordAnalysis);

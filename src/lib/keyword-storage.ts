@@ -51,55 +51,126 @@ class KeywordStorageService {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       console.log('💾 Saving keywords to database for user:', userId);
+      console.log('💾 Topic:', topic);
+      console.log('💾 Keywords count:', keywords.length);
+      console.log('💾 First few keywords:', keywords.slice(0, 3));
       
       // Create a fresh Supabase client with auth context
       const supabase = createClient();
       
+      // Test auth first
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      console.log('💾 Auth check:', { userId: user?.id, error: authError?.message });
+      
+      if (authError) {
+        console.error('💾 Auth error:', authError);
+        return { success: false, error: authError.message };
+      }
+      
+      if (!user) {
+        console.error('💾 No user found');
+        return { success: false, error: 'User not authenticated' };
+      }
+      
       // First, save the research session
-      const { data: sessionData, error: sessionError } = await supabase
+      console.log('💾 Inserting research session...');
+      
+      // Let's try a simpler approach first - test with minimal data
+      const sessionData = {
+        user_id: userId,
+        topic: topic,
+        research_results: {
+          total_keywords: keywords.length,
+          location_targeting: 'United States',
+          language_code: 'en',
+          generated_at: new Date().toISOString()
+        }
+      };
+      console.log('💾 Session data:', sessionData);
+      
+      // Test the insert step by step
+      console.log('💾 Testing table access...');
+      const { data: tableTest, error: tableError } = await supabase
         .from('keyword_research_sessions')
-        .insert({
-          user_id: userId,
-          topic: topic,
-          research_results: researchResults || {},
-          created_at: new Date().toISOString(),
-        })
+        .select('id')
+        .limit(1);
+      
+      console.log('💾 Table access test:', { data: tableTest, error: tableError });
+      
+      if (tableError) {
+        console.error('❌ Cannot access keyword_research_sessions table:', tableError);
+        return { success: false, error: `Table access error: ${tableError.message}` };
+      }
+      
+      console.log('✅ Table access successful');
+      
+      console.log('💾 Attempting insert...');
+      const { data: sessionResult, error: sessionError } = await supabase
+        .from('keyword_research_sessions')
+        .insert(sessionData)
         .select()
         .single();
 
+      console.log('💾 Session insert result:', { 
+        data: sessionResult, 
+        error: sessionError,
+        errorCode: sessionError?.code,
+        errorDetails: sessionError?.details,
+        errorHint: sessionError?.hint
+      });
+
       if (sessionError) {
-        console.error('Failed to save research session:', sessionError);
-        return { success: false, error: sessionError.message };
+        console.error('❌ Failed to save research session:', sessionError);
+        console.error('❌ Session data that failed:', sessionData);
+        
+        // Try to provide more helpful error information
+        if (sessionError.code === 'PGRST301' || sessionError.message?.includes('permission denied')) {
+          return { 
+            success: false, 
+            error: `Permission denied. This might be an RLS issue. Error: ${sessionError.message}` 
+          };
+        }
+        
+        return { success: false, error: sessionError.message || JSON.stringify(sessionError) };
       }
+      
+      console.log('✅ Research session saved:', sessionResult.id);
 
       // Then save individual keywords
       const keywordInserts = keywords.map(keyword => ({
         user_id: userId,
-        research_session_id: sessionData.id,
+        research_session_id: sessionResult.id,
         keyword: keyword.keyword,
-        search_volume: keyword.search_volume,
-        difficulty: keyword.difficulty,
-        competition: keyword.competition,
-        cpc: keyword.cpc,
-        trend_score: keyword.trend_score,
-        recommended: keyword.recommended,
-        reason: keyword.reason,
-        related_keywords: keyword.related_keywords,
-        long_tail_keywords: keyword.long_tail_keywords,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        search_volume: keyword.search_volume || 0,
+        difficulty: keyword.difficulty === 'easy' ? 'easy' : keyword.difficulty === 'medium' ? 'medium' : 'hard',
+        competition: parseFloat(String(keyword.competition)) || 0.5,
+        cpc: parseFloat(String(keyword.cpc)) || 0,
+        trend_score: parseFloat(String(keyword.trend_score)) || 0,
+        recommended: keyword.recommended || false,
+        reason: keyword.reason || '',
+        related_keywords: keyword.related_keywords || [],
+        long_tail_keywords: keyword.long_tail_keywords || [],
       }));
 
-      const { error: keywordsError } = await supabase
+      console.log('💾 Inserting keywords...');
+      console.log('💾 First keyword insert:', keywordInserts[0]);
+      
+      const { data: keywordResult, error: keywordsError } = await supabase
         .from('user_keywords')
-        .insert(keywordInserts);
+        .insert(keywordInserts)
+        .select();
+
+      console.log('💾 Keywords insert result:', { 
+        count: keywordResult?.length, 
+        error: keywordsError?.message 
+      });
 
       if (keywordsError) {
-        console.error('Failed to save keywords:', keywordsError);
+        console.error('❌ Failed to save keywords:', keywordsError);
         return { success: false, error: keywordsError.message };
       }
 
-      console.log('✅ Successfully saved keywords to database');
+      console.log('✅ Successfully saved keywords to database:', keywordResult?.length, 'keywords');
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -115,9 +186,12 @@ class KeywordStorageService {
     try {
       const supabase = createClient();
       const { data, error } = await supabase
-        .from('user_keywords')
-        .select('*')
-        .eq('user_id', userId)
+        .from('research_keywords')
+        .select(`
+          *,
+          keyword_research_sessions!inner(user_id)
+        `)
+        .eq('keyword_research_sessions.user_id', userId)
         .order('created_at', { ascending: false })
         .limit(limit);
 
