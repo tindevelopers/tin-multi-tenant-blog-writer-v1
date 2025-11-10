@@ -203,7 +203,18 @@ export default function KeywordResearchPage() {
 
       // Extract keywords from research results
       const keywordAnalysis = researchResults.keyword_analysis?.keyword_analysis || {};
-      const keywordList: KeywordWithMetrics[] = Object.entries(keywordAnalysis).map(([keyword, data]: [string, any]) => ({
+      
+      // Filter out single-word keywords that don't make sense as standalone keywords
+      // Keep only phrases (2+ words) or meaningful single words
+      const filteredKeywords = Object.entries(keywordAnalysis).filter(([keyword]) => {
+        const wordCount = keyword.trim().split(/\s+/).length;
+        // Keep phrases (2+ words) or single words that are meaningful (length > 5)
+        return wordCount > 1 || keyword.trim().length > 5;
+      });
+      
+      console.log('📋 Filtered keywords (phrases preserved):', filteredKeywords.map(([kw]) => kw));
+      
+      const keywordList: KeywordWithMetrics[] = filteredKeywords.map(([keyword, data]: [string, any]) => ({
         keyword,
         search_volume: data.search_volume || 0,
         difficulty: data.difficulty || 'medium',

@@ -98,7 +98,20 @@ class KeywordResearchService {
 
       const data = await response.json();
       console.log('✅ Keywords extracted via API');
-      return data.keywords || [];
+      console.log('📋 Raw API response:', JSON.stringify(data, null, 2));
+      const keywords = data.keywords || [];
+      
+      // Ensure we're preserving phrases, not individual words
+      // Filter out single-word keywords that are likely stop words or too generic
+      const phraseKeywords = keywords.filter((kw: string) => {
+        const trimmed = kw.trim();
+        // Keep phrases (2+ words) or single words that are meaningful
+        const wordCount = trimmed.split(/\s+/).length;
+        return wordCount > 1 || trimmed.length > 5;
+      });
+      
+      console.log('📋 Filtered keywords (phrases preserved):', phraseKeywords);
+      return phraseKeywords;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.warn(`⚠️ Keyword extraction error: ${errorMessage}. Using fallback method.`);
@@ -143,22 +156,37 @@ class KeywordResearchService {
       
       // Enhance the analysis with clustering
       const keywordAnalysis = data.keyword_analysis || data;
-      const clusters = this.createKeywordClusters(keywordAnalysis);
+      
+      // Filter out single-word keywords that don't make sense as standalone keywords
+      // Keep only phrases (2+ words) or meaningful single words
+      const filteredAnalysis: Record<string, KeywordData> = {};
+      Object.entries(keywordAnalysis).forEach(([keyword, data]: [string, any]) => {
+        const wordCount = keyword.trim().split(/\s+/).length;
+        // Keep phrases (2+ words) or single words that are meaningful (length > 5)
+        if (wordCount > 1 || keyword.trim().length > 5) {
+          filteredAnalysis[keyword] = data;
+        } else {
+          console.log(`⚠️ Filtering out single-word keyword: "${keyword}"`);
+        }
+      });
+      
+      const clusters = this.createKeywordClusters(filteredAnalysis);
       
       console.log('✅ Keywords analyzed via API');
       console.log('🔍 API response data structure:', data);
+      console.log('🔍 Filtered keyword analysis (phrases only):', Object.keys(filteredAnalysis));
       
       // Debug search volume data
-      console.log('🔍 Search volume data check:', Object.entries(keywordAnalysis).map(([key, data]: [string, any]) => ({
+      console.log('🔍 Search volume data check:', Object.entries(filteredAnalysis).map(([key, data]: [string, any]) => ({
         keyword: key,
         search_volume: data?.search_volume,
         search_volume_type: typeof data?.search_volume
       })));
       
       return {
-        keyword_analysis: keywordAnalysis,
-        overall_score: this.calculateOverallScore(keywordAnalysis),
-        recommendations: this.generateRecommendations(keywordAnalysis),
+        keyword_analysis: filteredAnalysis,
+        overall_score: this.calculateOverallScore(filteredAnalysis),
+        recommendations: this.generateRecommendations(filteredAnalysis),
         cluster_groups: clusters,
       };
     } catch (error: unknown) {
@@ -380,15 +408,48 @@ class KeywordResearchService {
 
   // Helper methods
   private fallbackKeywordExtraction(text: string): string[] {
-    // Simple keyword extraction as fallback
+    // Improved keyword extraction that preserves phrases
+    // First, try to extract meaningful phrases (2-5 words)
+    const phrases: string[] = [];
     const words = text.toLowerCase()
       .replace(/[^\w\s]/g, '')
       .split(/\s+/)
-      .filter(word => word.length > 3)
-      .filter(word => !['this', 'that', 'with', 'have', 'will', 'from', 'they', 'been', 'were', 'said', 'each', 'which', 'their', 'time', 'would', 'there', 'could', 'other', 'after', 'first', 'well', 'also', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'may', 'say', 'she', 'use', 'her', 'many', 'some', 'very', 'when', 'much', 'then', 'them', 'can', 'only', 'other', 'new', 'some', 'take', 'come', 'work', 'first', 'well', 'way', 'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'may', 'say', 'she', 'use', 'her', 'many'].includes(word));
+      .filter(word => word.length > 2);
     
-    // Get unique words and return top 10
-    return [...new Set(words)].slice(0, 10);
+    // Extract 2-word phrases
+    for (let i = 0; i < words.length - 1; i++) {
+      const phrase = `${words[i]} ${words[i + 1]}`;
+      if (phrase.length > 5) {
+        phrases.push(phrase);
+      }
+    }
+    
+    // Extract 3-word phrases
+    for (let i = 0; i < words.length - 2; i++) {
+      const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+      if (phrase.length > 8) {
+        phrases.push(phrase);
+      }
+    }
+    
+    // Extract 4-word phrases (long-tail keywords)
+    for (let i = 0; i < words.length - 3; i++) {
+      const phrase = `${words[i]} ${words[i + 1]} ${words[i + 2]} ${words[i + 3]}`;
+      if (phrase.length > 12) {
+        phrases.push(phrase);
+      }
+    }
+    
+    // Also include the full original text if it's a meaningful phrase
+    const cleanedText = text.trim().toLowerCase();
+    if (cleanedText.split(/\s+/).length >= 2 && cleanedText.length > 10) {
+      phrases.push(cleanedText);
+    }
+    
+    // Return unique phrases, prioritizing longer ones
+    return [...new Set(phrases)]
+      .sort((a, b) => b.split(/\s+/).length - a.split(/\s+/).length)
+      .slice(0, 20);
   }
 
   private generateFallbackSuggestions(seedKeywords: string[]): string[] {
