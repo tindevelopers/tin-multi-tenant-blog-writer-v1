@@ -261,21 +261,22 @@ export default function TopicsPage() {
 
       {/* Alerts */}
       {error && (
-        <Alert
-          variant="error"
-          title="Error"
-          message={error}
-          onClose={() => setError(null)}
-          className="mb-6"
-        />
+        <div className="mb-6">
+          <Alert
+            variant="error"
+            title="Error"
+            message={error}
+          />
+        </div>
       )}
       {success && (
-        <Alert
-          variant="success"
-          title="Success"
-          message={success}
-          className="mb-6"
-        />
+        <div className="mb-6">
+          <Alert
+            variant="success"
+            title="Success"
+            message={success}
+          />
+        </div>
       )}
 
       {/* Empty State */}

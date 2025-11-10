@@ -19,7 +19,7 @@ export default function ObjectivePage() {
     content_goal: 'seo' as 'seo' | 'engagement' | 'conversions' | 'brand_awareness'
   });
 
-  const contentGoals = [
+  const contentGoals: Array<{ value: 'seo' | 'engagement' | 'conversions' | 'brand_awareness'; label: string; description: string }> = [
     { value: 'seo', label: 'SEO & Rankings', description: 'Rank high in search results' },
     { value: 'engagement', label: 'Engagement', description: 'Increase shares and comments' },
     { value: 'conversions', label: 'Conversions', description: 'Drive sales and sign-ups' },
@@ -97,7 +97,7 @@ export default function ObjectivePage() {
             workflow_data: { content_goal: formData.content_goal },
             updated_at: new Date().toISOString()
           })
-          .eq('session_id', sessionId);
+          .eq('session_id', sessionId as string);
 
         if (updateError) throw updateError;
       } else {
@@ -117,9 +117,10 @@ export default function ObjectivePage() {
           .single();
 
         if (createError) throw createError;
-        if (newSession) {
-          sessionId = newSession.session_id;
-          localStorage.setItem('workflow_session_id', sessionId);
+        if (newSession && newSession.session_id) {
+          const newSessionId = newSession.session_id;
+          sessionId = newSessionId;
+          localStorage.setItem('workflow_session_id', newSessionId);
         }
       }
 
@@ -164,23 +165,24 @@ export default function ObjectivePage() {
 
       {/* Error Alert */}
       {error && (
-        <Alert
-          variant="error"
-          title="Error"
-          message={error}
-          onClose={() => setError(null)}
-          className="mb-6"
-        />
+        <div className="mb-6">
+          <Alert
+            variant="error"
+            title="Error"
+            message={error}
+          />
+        </div>
       )}
 
       {/* Success Message */}
       {saved && (
-        <Alert
-          variant="success"
-          title="Saved"
-          message="Your objective has been saved"
-          className="mb-6"
-        />
+        <div className="mb-6">
+          <Alert
+            variant="success"
+            title="Saved"
+            message="Your objective has been saved"
+          />
+        </div>
       )}
 
       {/* Form */}

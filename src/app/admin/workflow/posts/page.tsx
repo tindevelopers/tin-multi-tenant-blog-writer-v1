@@ -170,13 +170,13 @@ export default function PostsPage() {
 
       {/* Error */}
       {error && (
-        <Alert
-          variant="error"
-          title="Error"
-          message={error}
-          onClose={() => setError(null)}
-          className="mb-6"
-        />
+        <div className="mb-6">
+          <Alert
+            variant="error"
+            title="Error"
+            message={error}
+          />
+        </div>
       )}
 
       {/* Empty State */}
