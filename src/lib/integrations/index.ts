@@ -20,3 +20,9 @@ export {
 // Manager
 export { integrationManager, IntegrationManager } from './integration-manager';
 
+// Database Layer (Phase 1)
+export * from './database';
+
+// Providers (Phase 2)
+export * from './providers';
+

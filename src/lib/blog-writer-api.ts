@@ -310,6 +310,105 @@ class BlogWriterAPI {
       return [];
     }
   }
+
+  // ========== Integration API Methods ==========
+
+  /**
+   * Connect to an integration and get recommendations
+   * 
+   * @param params Connection parameters
+   * @returns Connection result with recommendations
+   */
+  async connectAndRecommend(params: {
+    tenant_id?: string;
+    provider: 'webflow' | 'wordpress' | 'shopify';
+    connection: Record<string, unknown>;
+    keywords: string[]; // 1-50 keywords
+  }): Promise<{
+    provider: string;
+    tenant_id?: string;
+    saved_integration: boolean;
+    recommended_backlinks: number;
+    recommended_interlinks: number;
+    per_keyword: Array<{
+      keyword: string;
+      difficulty?: number;
+      suggested_backlinks: number;
+      suggested_interlinks: number;
+    }>;
+    notes?: string;
+  }> {
+    try {
+      console.log('🔌 Connecting to integration and getting recommendations:', params.provider);
+      return await this.makeRequest<{
+        provider: string;
+        tenant_id?: string;
+        saved_integration: boolean;
+        recommended_backlinks: number;
+        recommended_interlinks: number;
+        per_keyword: Array<{
+          keyword: string;
+          difficulty?: number;
+          suggested_backlinks: number;
+          suggested_interlinks: number;
+        }>;
+        notes?: string;
+      }>('/api/v1/integrations/connect-and-recommend', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      });
+    } catch (error) {
+      console.error('Failed to connect and get recommendations:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get recommendations for keywords without connecting
+   * 
+   * @param params Recommendation parameters
+   * @returns Recommendations without saving integration
+   */
+  async getRecommendations(params: {
+    tenant_id?: string;
+    provider: 'webflow' | 'wordpress' | 'shopify';
+    keywords: string[]; // 1-50 keywords
+  }): Promise<{
+    provider: string;
+    tenant_id?: string;
+    recommended_backlinks: number;
+    recommended_interlinks: number;
+    per_keyword: Array<{
+      keyword: string;
+      difficulty?: number;
+      suggested_backlinks: number;
+      suggested_interlinks: number;
+    }>;
+    notes?: string;
+  }> {
+    try {
+      console.log('📊 Getting recommendations for:', params.provider);
+      return await this.makeRequest<{
+        provider: string;
+        tenant_id?: string;
+        recommended_backlinks: number;
+        recommended_interlinks: number;
+        per_keyword: Array<{
+          keyword: string;
+          difficulty?: number;
+          suggested_backlinks: number;
+          suggested_interlinks: number;
+        }>;
+        notes?: string;
+      }>('/api/v1/integrations/recommend', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      });
+    } catch (error) {
+      console.error('Failed to get recommendations:', error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance
@@ -332,6 +431,8 @@ export const {
   generateBlog,
   getPresets,
   getQualityLevels,
+  connectAndRecommend,
+  getRecommendations,
 } = blogWriterAPI;
 
 export default blogWriterAPI;
