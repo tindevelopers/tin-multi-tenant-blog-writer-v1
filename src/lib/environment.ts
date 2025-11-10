@@ -47,7 +47,7 @@ export function getTableName(baseName: string, env?: Environment): string {
  * Check if environment-suffixed tables should be used
  * This can be controlled via environment variable for gradual migration
  */
-export function useEnvironmentTables(): boolean {
+export function shouldUseEnvironmentTables(): boolean {
   return process.env.USE_ENVIRONMENT_TABLES !== 'false';
 }
 

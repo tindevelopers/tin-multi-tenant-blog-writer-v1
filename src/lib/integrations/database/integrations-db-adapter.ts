@@ -10,7 +10,7 @@
 
 import { EnvironmentIntegrationsDB } from './environment-integrations-db';
 import { IntegrationManager } from '../integration-manager';
-import { useEnvironmentTables } from '@/lib/environment';
+import { shouldUseEnvironmentTables } from '@/lib/environment';
 import type { Integration } from '../types';
 import type { IntegrationRecommendation } from './environment-integrations-db';
 
@@ -24,7 +24,7 @@ export class IntegrationsDBAdapter {
 
   constructor(forceEnvironmentTables?: boolean) {
     // Determine which schema to use
-    this.useEnvironmentTables = forceEnvironmentTables ?? useEnvironmentTables();
+    this.useEnvironmentTables = forceEnvironmentTables ?? shouldUseEnvironmentTables();
     
     if (this.useEnvironmentTables) {
       this.envDB = new EnvironmentIntegrationsDB();
