@@ -51,6 +51,22 @@ const blogWriterItems: NavItem[] = [
         icon: <LayoutDashboard className="w-4 h-4" />
       },
       { 
+        name: "Content Workflow", 
+        icon: <Target className="w-4 h-4" />,
+        isAccordionHeader: true,
+        new: true,
+        subItems: [
+          { name: "Start Workflow", path: "/admin/workflow/objective", icon: <Target className="w-4 h-4" />, new: true },
+          { name: "Keyword Research", path: "/admin/workflow/keywords", icon: <TrendingUp className="w-4 h-4" />, new: true },
+          { name: "Clustering", path: "/admin/workflow/clusters", icon: <LayoutDashboard className="w-4 h-4" />, new: true },
+          { name: "Content Ideas", path: "/admin/workflow/ideas", icon: <FileText className="w-4 h-4" />, new: true },
+          { name: "Topic Suggestions", path: "/admin/workflow/topics", icon: <FileText className="w-4 h-4" />, new: true },
+          { name: "Strategy", path: "/admin/workflow/strategy", icon: <Target className="w-4 h-4" />, new: true },
+          { name: "Content Editor", path: "/admin/workflow/editor", icon: <FileText className="w-4 h-4" />, new: true },
+          { name: "My Posts", path: "/admin/workflow/posts", icon: <FolderOpen className="w-4 h-4" />, new: true },
+        ]
+      },
+      { 
         name: "Content Management", 
         icon: <FileText className="w-4 h-4" />,
         isAccordionHeader: true,
