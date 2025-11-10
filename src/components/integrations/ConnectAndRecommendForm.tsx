@@ -130,16 +130,29 @@ export function ConnectAndRecommendForm({
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        const text = await response.text();
+        throw new Error(`Failed to parse response: ${text.substring(0, 200)}`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to connect and get recommendations');
+        const errorMsg = data?.error || data?.detail || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMsg);
+      }
+
+      // Validate response structure
+      if (!data || !data.data) {
+        throw new Error('Invalid response format from server');
       }
 
       setResult(data.data);
       onSuccess?.(data.data);
     } catch (err: any) {
-      const errorMessage = err.message || 'An error occurred';
+      console.error('ConnectAndRecommendForm error:', err);
+      const errorMessage = err?.message || err?.toString() || 'An error occurred';
       setError(errorMessage);
       onError?.(errorMessage);
     } finally {

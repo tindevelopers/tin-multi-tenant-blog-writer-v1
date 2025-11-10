@@ -7,35 +7,15 @@
 
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeftIcon,
   LinkIcon,
   ChartBarIcon,
 } from '@heroicons/react/24/outline';
-import dynamic from 'next/dynamic';
-
-// Dynamically import components to avoid SSR issues
-const ConnectAndRecommendForm = dynamic(
-  () => import('@/components/integrations/ConnectAndRecommendForm').then(
-    (mod) => ({ default: mod.ConnectAndRecommendForm })
-  ),
-  { 
-    ssr: false, 
-    loading: () => <div className="p-4 text-center text-gray-500">Loading form...</div> 
-  }
-);
-
-const RecommendationsForm = dynamic(
-  () => import('@/components/integrations/RecommendationsForm').then(
-    (mod) => ({ default: mod.RecommendationsForm })
-  ),
-  { 
-    ssr: false, 
-    loading: () => <div className="p-4 text-center text-gray-500">Loading form...</div> 
-  }
-);
+import { ConnectAndRecommendForm } from '@/components/integrations/ConnectAndRecommendForm';
+import { RecommendationsForm } from '@/components/integrations/RecommendationsForm';
 
 type Provider = 'webflow' | 'wordpress' | 'shopify';
 type ViewMode = 'connect' | 'recommend';
@@ -175,21 +155,19 @@ export default function BlogWriterIntegrationsPage() {
             : `Get Recommendations for ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
         </h2>
 
-        <Suspense fallback={<div className="p-4 text-center">Loading...</div>}>
-          {viewMode === 'connect' ? (
-            <ConnectAndRecommendForm
-              provider={selectedProvider}
-              onSuccess={handleSuccess}
-              onError={handleError}
-            />
-          ) : (
-            <RecommendationsForm
-              provider={selectedProvider}
-              onSuccess={handleSuccess}
-              onError={handleError}
-            />
-          )}
-        </Suspense>
+        {viewMode === 'connect' ? (
+          <ConnectAndRecommendForm
+            provider={selectedProvider}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        ) : (
+          <RecommendationsForm
+            provider={selectedProvider}
+            onSuccess={handleSuccess}
+            onError={handleError}
+          />
+        )}
       </div>
     </div>
   );
