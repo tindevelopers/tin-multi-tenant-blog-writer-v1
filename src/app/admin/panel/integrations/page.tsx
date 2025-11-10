@@ -271,6 +271,33 @@ export default function IntegrationsManagementPage() {
         </div>
       </div>
 
+      {/* Blog Writer API Integrations Card */}
+      <div className="bg-gradient-to-r from-brand-50 to-brand-100 dark:from-brand-900/20 dark:to-brand-800/20 rounded-xl shadow-sm border-2 border-brand-200 dark:border-brand-700 p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-brand-600 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Blog Writer API Integrations
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Connect to Webflow, WordPress, or Shopify for AI-powered content publishing and keyword recommendations
+              </p>
+            </div>
+          </div>
+          <a
+            href="/admin/integrations/blog-writer"
+            className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors font-medium"
+          >
+            Connect Now
+          </a>
+        </div>
+      </div>
+
       {/* Integrations Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredIntegrations.map((integration) => (
