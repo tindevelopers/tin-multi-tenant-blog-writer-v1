@@ -43,9 +43,20 @@ export function useBlogPost(postId: string) {
       setLoading(true);
       setError(null);
       const data = await blogPostsService.getPost(postId);
-      setPost(data);
+      
+      if (!data) {
+        setError('Draft not found. It may have been deleted or you may not have permission to access it.');
+        setPost(null);
+      } else {
+        setPost(data);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch post');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch post';
+      console.error('Error fetching post:', err);
+      setError(errorMessage.includes('not found') || errorMessage.includes('404') 
+        ? 'Draft not found. It may have been deleted or you may not have permission to access it.'
+        : errorMessage);
+      setPost(null);
     } finally {
       setLoading(false);
     }
