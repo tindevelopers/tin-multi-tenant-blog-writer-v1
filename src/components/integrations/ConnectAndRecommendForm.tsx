@@ -110,6 +110,13 @@ export function ConnectAndRecommendForm({
         );
       }
 
+      // Validate keywords - API requires at least 1 keyword
+      if (!keywords || keywords.length === 0) {
+        throw new Error(
+          'At least one keyword is required. Please add at least one keyword to get recommendations.'
+        );
+      }
+
       // Call API
       const response = await fetch('/api/integrations/connect-and-recommend', {
         method: 'POST',
@@ -170,9 +177,11 @@ export function ConnectAndRecommendForm({
 
         {/* Keywords Input */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">Keywords (Optional)</h3>
+          <h3 className="text-lg font-semibold mb-4">
+            Keywords <span className="text-red-500">*</span>
+          </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Add keywords to get backlink and interlink recommendations. Maximum 50 keywords.
+            Add at least one keyword to get backlink and interlink recommendations. Maximum 50 keywords.
           </p>
           <div className="flex gap-2 mb-4">
             <input
@@ -227,7 +236,7 @@ export function ConnectAndRecommendForm({
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || keywords.length === 0}
           className="w-full px-4 py-3 bg-brand-600 text-white rounded-md hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
@@ -239,6 +248,11 @@ export function ConnectAndRecommendForm({
             `Connect ${provider.charAt(0).toUpperCase() + provider.slice(1)} & Get Recommendations`
           )}
         </button>
+        {keywords.length === 0 && (
+          <p className="text-sm text-red-600 dark:text-red-400 text-center mt-2">
+            Please add at least one keyword to continue
+          </p>
+        )}
       </form>
 
       {/* Error Display */}

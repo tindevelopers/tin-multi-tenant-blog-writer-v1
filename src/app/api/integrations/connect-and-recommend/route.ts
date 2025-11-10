@@ -72,11 +72,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate keywords (optional, but if provided should be array)
+    // Validate keywords - API requires at least 1 keyword
     const keywordArray = keywords || [];
     if (!Array.isArray(keywordArray)) {
       return NextResponse.json(
         { error: 'Keywords must be an array' },
+        { status: 400 }
+      );
+    }
+
+    if (keywordArray.length === 0) {
+      return NextResponse.json(
+        { error: 'At least one keyword is required. Please add at least one keyword to get recommendations.' },
         { status: 400 }
       );
     }
