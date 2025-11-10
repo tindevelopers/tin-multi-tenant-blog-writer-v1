@@ -17,31 +17,49 @@ CREATE TABLE IF NOT EXISTS workflow_sessions (
 );
 
 -- Keyword Collections Table
-CREATE TABLE IF NOT EXISTS keyword_collections (
-  collection_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  session_id UUID REFERENCES workflow_sessions(session_id) ON DELETE CASCADE,
-  org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
-  created_by UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  keywords JSONB NOT NULL DEFAULT '[]',
-  search_query TEXT,
-  niche TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- Create table only if it doesn't exist, handling foreign key dependencies
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'keyword_collections'
+  ) THEN
+    CREATE TABLE keyword_collections (
+      collection_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      session_id UUID REFERENCES workflow_sessions(session_id) ON DELETE CASCADE,
+      org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
+      created_by UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      keywords JSONB NOT NULL DEFAULT '[]',
+      search_query TEXT,
+      niche TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  END IF;
+END $$;
 
 -- Keyword Clusters Table (Parent Topics)
-CREATE TABLE IF NOT EXISTS keyword_clusters (
-  cluster_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  session_id UUID REFERENCES workflow_sessions(session_id) ON DELETE CASCADE,
-  collection_id UUID REFERENCES keyword_collections(collection_id) ON DELETE CASCADE,
-  org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
-  parent_topic TEXT NOT NULL,
-  keywords JSONB NOT NULL DEFAULT '[]',
-  cluster_metrics JSONB DEFAULT '{}',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- Create table only if it doesn't exist, handling foreign key dependencies
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'keyword_clusters'
+  ) THEN
+    CREATE TABLE keyword_clusters (
+      cluster_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      session_id UUID REFERENCES workflow_sessions(session_id) ON DELETE CASCADE,
+      collection_id UUID REFERENCES keyword_collections(collection_id) ON DELETE CASCADE,
+      org_id UUID NOT NULL REFERENCES organizations(org_id) ON DELETE CASCADE,
+      parent_topic TEXT NOT NULL,
+      keywords JSONB NOT NULL DEFAULT '[]',
+      cluster_metrics JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  END IF;
+END $$;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_workflow_sessions_org_id ON workflow_sessions(org_id);
