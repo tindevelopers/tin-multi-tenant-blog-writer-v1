@@ -8,14 +8,26 @@ export async function POST(request: NextRequest) {
     
     // Parse request body
     const body = await request.json();
-    const { topic, keywords, target_audience, tone, word_count } = body;
+    const { 
+      topic, 
+      keywords, 
+      target_audience, 
+      tone, 
+      word_count,
+      include_external_links,
+      include_backlinks,
+      backlink_count
+    } = body;
     
     console.log('📝 Generation parameters:', {
       topic,
       keywords,
       target_audience,
       tone,
-      word_count
+      word_count,
+      include_external_links,
+      include_backlinks,
+      backlink_count
     });
     
     // Validate required fields
@@ -52,13 +64,28 @@ export async function POST(request: NextRequest) {
     
     console.log('🌐 Calling external API:', `${API_BASE_URL}/api/v1/blog/generate`);
     console.log('🔑 API Key present:', !!API_KEY);
-    console.log('📤 Request payload:', {
+    
+    // Build request payload with optional external links parameters
+    const requestPayload: Record<string, unknown> = {
       topic,
       keywords,
       target_audience,
       tone,
       word_count
-    });
+    };
+    
+    // Add external links parameters if provided
+    if (include_external_links !== undefined) {
+      requestPayload.include_external_links = include_external_links;
+    }
+    if (include_backlinks !== undefined) {
+      requestPayload.include_backlinks = include_backlinks;
+    }
+    if (backlink_count !== undefined) {
+      requestPayload.backlink_count = backlink_count;
+    }
+    
+    console.log('📤 Request payload:', requestPayload);
     
     const response = await fetch(`${API_BASE_URL}/api/v1/blog/generate`, {
       method: 'POST',
@@ -66,13 +93,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
         ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` })
       },
-      body: JSON.stringify({
-        topic,
-        keywords,
-        target_audience,
-        tone,
-        word_count
-      }),
+      body: JSON.stringify(requestPayload),
     });
     
     console.log('📥 External API response status:', response.status);

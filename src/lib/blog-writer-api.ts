@@ -263,6 +263,9 @@ class BlogWriterAPI {
     target_audience?: string;
     tone?: string;
     word_count?: number;
+    include_external_links?: boolean;
+    include_backlinks?: boolean;
+    backlink_count?: number;
   }): Promise<Record<string, unknown> | null> {
     try {
       console.log('🚀 Starting blog generation via local API route...');
