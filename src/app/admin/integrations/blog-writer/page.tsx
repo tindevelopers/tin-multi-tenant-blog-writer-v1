@@ -7,15 +7,25 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeftIcon,
   LinkIcon,
   ChartBarIcon,
 } from '@heroicons/react/24/outline';
-import { ConnectAndRecommendForm } from '@/components/integrations/ConnectAndRecommendForm';
-import { RecommendationsForm } from '@/components/integrations/RecommendationsForm';
+import dynamic from 'next/dynamic';
+
+// Dynamically import components to avoid SSR issues
+const ConnectAndRecommendForm = dynamic(
+  () => import('@/components/integrations/ConnectAndRecommendForm').then(mod => ({ default: mod.ConnectAndRecommendForm })),
+  { ssr: false, loading: () => <div className="p-4 text-center">Loading form...</div> }
+);
+
+const RecommendationsForm = dynamic(
+  () => import('@/components/integrations/RecommendationsForm').then(mod => ({ default: mod.RecommendationsForm })),
+  { ssr: false, loading: () => <div className="p-4 text-center">Loading form...</div> }
+);
 
 type Provider = 'webflow' | 'wordpress' | 'shopify';
 type ViewMode = 'connect' | 'recommend';
@@ -24,6 +34,25 @@ export default function BlogWriterIntegrationsPage() {
   const router = useRouter();
   const [selectedProvider, setSelectedProvider] = useState<Provider>('webflow');
   const [viewMode, setViewMode] = useState<ViewMode>('connect');
+  const [error, setError] = useState<string | null>(null);
+
+  // Catch any initialization errors
+  if (error) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">Error</h3>
+          <p className="text-red-700 dark:text-red-300">{error}</p>
+          <button
+            onClick={() => setError(null)}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const providers: Array<{ value: Provider; label: string; description: string }> = [
     {
@@ -50,6 +79,7 @@ export default function BlogWriterIntegrationsPage() {
 
   const handleError = (error: string) => {
     console.error('Integration error:', error);
+    setError(error);
   };
 
   return (
@@ -135,19 +165,21 @@ export default function BlogWriterIntegrationsPage() {
             : `Get Recommendations for ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
         </h2>
 
-        {viewMode === 'connect' ? (
-          <ConnectAndRecommendForm
-            provider={selectedProvider}
-            onSuccess={handleSuccess}
-            onError={handleError}
-          />
-        ) : (
-          <RecommendationsForm
-            provider={selectedProvider}
-            onSuccess={handleSuccess}
-            onError={handleError}
-          />
-        )}
+        <Suspense fallback={<div className="p-4 text-center">Loading...</div>}>
+          {viewMode === 'connect' ? (
+            <ConnectAndRecommendForm
+              provider={selectedProvider}
+              onSuccess={handleSuccess}
+              onError={handleError}
+            />
+          ) : (
+            <RecommendationsForm
+              provider={selectedProvider}
+              onSuccess={handleSuccess}
+              onError={handleError}
+            />
+          )}
+        </Suspense>
       </div>
     </div>
   );
