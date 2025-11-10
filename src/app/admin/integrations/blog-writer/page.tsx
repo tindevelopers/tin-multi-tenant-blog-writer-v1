@@ -18,13 +18,23 @@ import dynamic from 'next/dynamic';
 
 // Dynamically import components to avoid SSR issues
 const ConnectAndRecommendForm = dynamic(
-  () => import('@/components/integrations/ConnectAndRecommendForm').then(mod => mod.ConnectAndRecommendForm),
-  { ssr: false, loading: () => <div className="p-4 text-center text-gray-500">Loading form...</div> }
+  () => import('@/components/integrations/ConnectAndRecommendForm').then(
+    (mod) => ({ default: mod.ConnectAndRecommendForm })
+  ),
+  { 
+    ssr: false, 
+    loading: () => <div className="p-4 text-center text-gray-500">Loading form...</div> 
+  }
 );
 
 const RecommendationsForm = dynamic(
-  () => import('@/components/integrations/RecommendationsForm').then(mod => mod.RecommendationsForm),
-  { ssr: false, loading: () => <div className="p-4 text-center text-gray-500">Loading form...</div> }
+  () => import('@/components/integrations/RecommendationsForm').then(
+    (mod) => ({ default: mod.RecommendationsForm })
+  ),
+  { 
+    ssr: false, 
+    loading: () => <div className="p-4 text-center text-gray-500">Loading form...</div> 
+  }
 );
 
 type Provider = 'webflow' | 'wordpress' | 'shopify';
