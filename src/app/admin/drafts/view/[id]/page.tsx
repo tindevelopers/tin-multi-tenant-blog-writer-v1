@@ -143,79 +143,162 @@ export default function ViewDraftPage() {
         </div>
       </div>
 
-      {/* Draft Content */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 lg:p-12">
+      {/* Draft Content - Rich HTML Preview */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {/* Website-like header with featured image if available */}
+        {draft.metadata && typeof draft.metadata === 'object' && 'featured_image' in draft.metadata && draft.metadata.featured_image && (
+          <div className="w-full h-64 md:h-96 bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <img 
+              src={String(draft.metadata.featured_image)} 
+              alt={draft.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
+        
         <article className="prose prose-lg dark:prose-invert max-w-none 
-          prose-headings:text-gray-900 dark:prose-headings:text-white
-          prose-p:text-gray-700 dark:prose-p:text-gray-300
-          prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
-          prose-strong:text-gray-900 dark:prose-strong:text-white
-          prose-ul:text-gray-700 dark:prose-ul:text-gray-300
-          prose-ol:text-gray-700 dark:prose-ol:text-gray-300
-          prose-li:text-gray-700 dark:prose-li:text-gray-300
-          prose-blockquote:border-l-blue-500 prose-blockquote:text-gray-600 dark:prose-blockquote:text-gray-400
-          prose-code:text-blue-600 dark:prose-code:text-blue-400
-          prose-pre:bg-gray-100 dark:prose-pre:bg-gray-900
-          prose-img:rounded-lg prose-img:shadow-lg prose-img:my-8
-          prose-figure:my-8
-          prose-hr:border-gray-300 dark:prose-hr:border-gray-700">
+          prose-headings:text-gray-900 dark:prose-headings:text-white prose-headings:font-bold
+          prose-h1:text-4xl prose-h1:mb-6 prose-h1:mt-8 prose-h1:leading-tight
+          prose-h2:text-3xl prose-h2:mb-4 prose-h2:mt-8 prose-h2:leading-tight
+          prose-h3:text-2xl prose-h3:mb-3 prose-h3:mt-6 prose-h3:leading-tight
+          prose-h4:text-xl prose-h4:mb-2 prose-h4:mt-4
+          prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:leading-relaxed prose-p:mb-4 prose-p:text-base
+          prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-a:font-medium
+          prose-strong:text-gray-900 dark:prose-strong:text-white prose-strong:font-bold
+          prose-ul:text-gray-700 dark:prose-ul:text-gray-300 prose-ul:my-4 prose-ul:pl-6
+          prose-ol:text-gray-700 dark:prose-ol:text-gray-300 prose-ol:my-4 prose-ol:pl-6
+          prose-li:text-gray-700 dark:prose-li:text-gray-300 prose-li:my-2 prose-li:leading-relaxed
+          prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-gray-600 dark:prose-blockquote:text-gray-400 prose-blockquote:my-6
+          prose-code:text-blue-600 dark:prose-code:text-blue-400 prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono
+          prose-pre:bg-gray-100 dark:prose-pre:bg-gray-900 prose-pre:rounded-lg prose-pre:p-4 prose-pre:overflow-x-auto prose-pre:my-6
+          prose-img:rounded-lg prose-img:shadow-xl prose-img:my-8 prose-img:w-full prose-img:h-auto prose-img:object-contain
+          prose-figure:my-8 prose-figure:mx-auto
+          prose-figcaption:text-sm prose-figcaption:text-gray-500 dark:prose-figcaption:text-gray-400 prose-figcaption:text-center prose-figcaption:mt-2
+          prose-hr:border-gray-300 dark:prose-hr:border-gray-700 prose-hr:my-8
+          prose-table:w-full prose-table:my-6 prose-table:border-collapse
+          prose-th:border prose-th:border-gray-300 dark:prose-th:border-gray-700 prose-th:bg-gray-50 dark:prose-th:bg-gray-800 prose-th:px-4 prose-th:py-2 prose-th:text-left prose-th:font-semibold
+          prose-td:border prose-td:border-gray-300 dark:prose-td:border-gray-700 prose-td:px-4 prose-td:py-2
+          prose-video:w-full prose-video:rounded-lg prose-video:my-8
+          prose-iframe:w-full prose-iframe:rounded-lg prose-iframe:my-8
+          [&>*]:max-w-none
+          p-6 lg:p-12">
           <div 
+            className="blog-content"
             dangerouslySetInnerHTML={{ 
               __html: draft.content 
                 ? (() => {
-                    // If content is already HTML, use it directly
-                    if (draft.content.includes('<') && draft.content.includes('>')) {
-                      return draft.content;
-                    }
-                    // Otherwise, convert markdown-like formatting to HTML
-                    let html = draft.content
-                      // Convert line breaks
-                      .replace(/\n\n/g, '</p><p>')
-                      .replace(/\n/g, '<br>')
-                      // Convert headers
-                      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-                      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-                      // Convert bold
-                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                      .replace(/__(.*?)__/g, '<strong>$1</strong>')
-                      // Convert italic
-                      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                      .replace(/_(.*?)_/g, '<em>$1</em>')
-                      // Convert links [text](url)
-                      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-                      // Convert images ![alt](url)
-                      .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="w-full h-auto rounded-lg shadow-lg my-8" />')
-                      // Convert lists
-                      .replace(/^\* (.+)$/gim, '<li>$1</li>')
-                      .replace(/^- (.+)$/gim, '<li>$1</li>')
-                      .replace(/^\d+\. (.+)$/gim, '<li>$1</li>')
-                      // Wrap in paragraphs if not already wrapped
-                      .split('</p><p>').map((chunk, i) => {
-                        if (i === 0 && !chunk.startsWith('<')) {
-                          return '<p>' + chunk;
-                        }
-                        if (!chunk.startsWith('<') && !chunk.includes('<')) {
-                          return '<p>' + chunk + '</p>';
-                        }
-                        return chunk;
-                      }).join('</p><p>');
+                    let html = String(draft.content);
                     
-                    // Wrap list items in ul/ol tags
-                    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, (match) => {
-                      if (match.match(/^\d+\./)) {
-                        return '<ol>' + match + '</ol>';
+                    // If content is already HTML, clean it up
+                    if (html.includes('<') && html.includes('>')) {
+                      // Ensure all images have proper styling
+                      html = html.replace(/<img([^>]*)>/gi, (match, attrs) => {
+                        // Check if class already exists
+                        if (!attrs.includes('class=')) {
+                          return `<img${attrs} class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" />`;
+                        } else if (!attrs.includes('rounded-lg')) {
+                          return match.replace(/class="([^"]*)"/, 'class="$1 rounded-lg shadow-xl my-8"');
+                        }
+                        return match;
+                      });
+                      
+                      // Ensure all links open in new tab
+                      html = html.replace(/<a([^>]*)>/gi, (match, attrs) => {
+                        if (!attrs.includes('target=')) {
+                          return `<a${attrs} target="_blank" rel="noopener noreferrer">`;
+                        }
+                        return match;
+                      });
+                      
+                      // Ensure videos are responsive
+                      html = html.replace(/<video([^>]*)>/gi, (match, attrs) => {
+                        if (!attrs.includes('class=')) {
+                          return `<video${attrs} class="w-full rounded-lg my-8" controls>`;
+                        }
+                        return match;
+                      });
+                      
+                      // Ensure iframes are responsive
+                      html = html.replace(/<iframe([^>]*)>/gi, (match, attrs) => {
+                        if (!attrs.includes('class=')) {
+                          return `<iframe${attrs} class="w-full rounded-lg my-8" allowfullscreen>`;
+                        }
+                        return match;
+                      });
+                      
+                      return html;
+                    }
+                    
+                    // Convert markdown-like formatting to HTML
+                    // Split by double line breaks first to preserve paragraphs
+                    const paragraphs = html.split(/\n\n+/);
+                    
+                    html = paragraphs.map(para => {
+                      let processed = para.trim();
+                      if (!processed) return '';
+                      
+                      // Convert headers (must be at start of line)
+                      processed = processed
+                        .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+                        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                        .replace(/^# (.*$)/gim, '<h1>$1</h1>');
+                      
+                      // Convert blockquotes
+                      if (processed.startsWith('> ')) {
+                        processed = processed.replace(/^> (.*)$/gm, '<blockquote>$1</blockquote>');
                       }
-                      return '<ul>' + match + '</ul>';
-                    });
-                    
-                    // Ensure proper paragraph wrapping
-                    if (!html.startsWith('<')) {
-                      html = '<p>' + html;
-                    }
-                    if (!html.endsWith('>')) {
-                      html = html + '</p>';
-                    }
+                      
+                      // Convert code blocks
+                      if (processed.startsWith('```')) {
+                        const lines = processed.split('\n');
+                        const lang = lines[0].replace('```', '').trim();
+                        const code = lines.slice(1, -1).join('\n');
+                        return `<pre><code class="language-${lang}">${code}</code></pre>`;
+                      }
+                      
+                      // Convert inline code
+                      processed = processed.replace(/`([^`]+)`/g, '<code>$1</code>');
+                      
+                      // Convert bold and italic (order matters - bold first)
+                      processed = processed
+                        .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/__(.*?)__/g, '<strong>$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                        .replace(/_(.*?)_/g, '<em>$1</em>');
+                      
+                      // Convert links [text](url)
+                      processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+                      
+                      // Convert images ![alt](url)
+                      processed = processed.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" />');
+                      
+                      // Convert horizontal rules
+                      processed = processed.replace(/^---$/gm, '<hr />');
+                      
+                      // Convert lists (handle both ordered and unordered)
+                      const listItems = processed.match(/^[\*\-\+] (.+)$/gm);
+                      if (listItems && listItems.length > 0) {
+                        const items = listItems.map(item => item.replace(/^[\*\-\+] /, ''));
+                        processed = processed.replace(/^[\*\-\+] (.+)$/gm, '').trim();
+                        processed += '<ul>' + items.map(item => `<li>${item}</li>`).join('') + '</ul>';
+                      }
+                      
+                      const orderedListItems = processed.match(/^\d+\. (.+)$/gm);
+                      if (orderedListItems && orderedListItems.length > 0) {
+                        const items = orderedListItems.map(item => item.replace(/^\d+\. /, ''));
+                        processed = processed.replace(/^\d+\. (.+)$/gm, '').trim();
+                        processed += '<ol>' + items.map(item => `<li>${item}</li>`).join('') + '</ol>';
+                      }
+                      
+                      // Wrap in paragraph if it's not already a block element
+                      if (processed && !processed.match(/^<(h[1-6]|ul|ol|pre|blockquote|hr|div|figure)/i)) {
+                        processed = `<p>${processed}</p>`;
+                      }
+                      
+                      return processed;
+                    }).filter(p => p).join('\n');
                     
                     return html;
                   })()
