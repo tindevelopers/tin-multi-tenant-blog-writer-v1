@@ -202,7 +202,7 @@ export default function ViewDraftPage() {
                       }).join('</p><p>');
                     
                     // Wrap list items in ul/ol tags
-                    html = html.replace(/(<li>.*<\/li>)/s, (match) => {
+                    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, (match) => {
                       if (match.match(/^\d+\./)) {
                         return '<ol>' + match + '</ol>';
                       }

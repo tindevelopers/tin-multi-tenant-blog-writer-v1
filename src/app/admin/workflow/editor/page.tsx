@@ -130,8 +130,8 @@ export default function EditorPage() {
         setFormData(prev => ({
           ...prev,
           content: typeof content === 'string' ? content : JSON.stringify(content),
-          title: title,
-          excerpt: excerpt
+          title: typeof title === 'string' ? title : (title ? String(title) : prev.title),
+          excerpt: typeof excerpt === 'string' ? excerpt : (excerpt ? String(excerpt) : prev.excerpt)
         }));
 
         setSuccess('Content generated successfully');
@@ -166,8 +166,7 @@ export default function EditorPage() {
       const success = await createDraft({
         title: formData.title,
         content: formData.content,
-        excerpt: formData.excerpt,
-        status: 'draft'
+        excerpt: formData.excerpt
       });
 
       if (success) {
@@ -220,21 +219,22 @@ export default function EditorPage() {
 
       {/* Alerts */}
       {error && (
-        <Alert
-          variant="error"
-          title="Error"
-          message={error}
-          onClose={() => setError(null)}
-          className="mb-6"
-        />
+        <div className="mb-6">
+          <Alert
+            variant="error"
+            title="Error"
+            message={error}
+          />
+        </div>
       )}
       {success && (
-        <Alert
-          variant="success"
-          title="Success"
-          message={success}
-          className="mb-6"
-        />
+        <div className="mb-6">
+          <Alert
+            variant="success"
+            title="Success"
+            message={success}
+          />
+        </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
