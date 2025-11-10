@@ -21,9 +21,18 @@
 5. Click **"RUN"**
 6. Wait for success message ✅
 
+**Run the Workflow Migration:**
+
+1. Open: https://supabase.com/dashboard/project/edtxtpqrfpxeogukfunq/sql/new
+2. Open `supabase/migrations/20250116000000_add_workflow_tables.sql` in your editor
+3. Copy ALL contents
+4. Paste into SQL Editor
+5. Click **"RUN"**
+6. Wait for success message ✅
+
 **Verify Tables:**
 - Go to: https://supabase.com/dashboard/project/edtxtpqrfpxeogukfunq/editor
-- Check you see: organizations, users, blog_posts, content_templates, api_usage_logs, media_assets
+- Check you see: organizations, users, blog_posts, content_templates, api_usage_logs, media_assets, workflow_sessions, keyword_collections, keyword_clusters
 
 **Configure Auth URLs:**
 - Go to: https://supabase.com/dashboard/project/edtxtpqrfpxeogukfunq/auth/url-configuration
