@@ -17,6 +17,13 @@ interface Integration {
 
 const availableIntegrations = [
   {
+    name: "Webflow",
+    type: "cms",
+    description: "Connect to Webflow CMS for AI-powered content publishing and SEO optimization",
+    icon: "🌐",
+    status: "inactive"
+  },
+  {
     name: "WordPress",
     type: "cms",
     description: "Connect to WordPress sites for content publishing",
@@ -333,25 +340,43 @@ export default function IntegrationsManagementPage() {
 
             <div className="flex items-center justify-between">
               {canManageIntegrations ? (
-                <button
-                  onClick={() => handleIntegrationToggle(integration.id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    integration.status === 'active'
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
-                      : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
-                  }`}
-                >
-                  {integration.status === 'active' ? 'Disconnect' : 'Connect'}
-                </button>
+                integration.name === 'Webflow' ? (
+                  <a
+                    href="/admin/integrations/blog-writer?provider=webflow"
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800"
+                  >
+                    Connect via OAuth
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => handleIntegrationToggle(integration.id)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      integration.status === 'active'
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
+                        : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
+                    }`}
+                  >
+                    {integration.status === 'active' ? 'Disconnect' : 'Connect'}
+                  </button>
+                )
               ) : (
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                   No permissions
                 </span>
               )}
               
-              <button className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
-                Configure
-              </button>
+              {integration.name === 'Webflow' ? (
+                <a
+                  href="/admin/integrations/blog-writer?provider=webflow"
+                  className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  Configure
+                </a>
+              ) : (
+                <button className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+                  Configure
+                </button>
+              )}
             </div>
           </div>
         ))}

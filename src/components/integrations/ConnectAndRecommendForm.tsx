@@ -7,12 +7,13 @@
 
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   CheckCircleIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
+  LinkIcon,
 } from '@heroicons/react/24/outline';
 
 interface ConnectAndRecommendFormProps {
@@ -44,11 +45,14 @@ export function ConnectAndRecommendForm({
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Form state
   const [connection, setConnection] = useState<Record<string, string>>({});
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState('');
+  const [useOAuth, setUseOAuth] = useState(provider === 'webflow'); // Default to OAuth for Webflow
+  const [oauthInProgress, setOauthInProgress] = useState(false);
 
   // Provider-specific config fields
   const getConfigFields = () => {
@@ -97,17 +101,27 @@ export function ConnectAndRecommendForm({
     setResult(null);
 
     try {
-      // Validate required fields
-      const configFields = getConfigFields();
-      const requiredFields = configFields.filter((f) => f.required);
-      const missingFields = requiredFields.filter(
-        (f) => !connection[f.key] || connection[f.key].trim() === ''
-      );
+      // If using OAuth, connection should already be established
+      if (useOAuth && provider === 'webflow') {
+        // Check if OAuth connection was successful (this would be set from OAuth callback)
+        // For now, we'll need to get the OAuth token from session/cookie
+        // This is a placeholder - actual implementation would retrieve stored OAuth token
+        throw new Error('OAuth connection not completed. Please connect via OAuth first.');
+      }
 
-      if (missingFields.length > 0) {
-        throw new Error(
-          `Missing required fields: ${missingFields.map((f) => f.label).join(', ')}`
+      // Validate required fields (for API key method)
+      if (!useOAuth) {
+        const configFields = getConfigFields();
+        const requiredFields = configFields.filter((f) => f.required);
+        const missingFields = requiredFields.filter(
+          (f) => !connection[f.key] || connection[f.key].trim() === ''
         );
+
+        if (missingFields.length > 0) {
+          throw new Error(
+            `Missing required fields: ${missingFields.map((f) => f.label).join(', ')}`
+          );
+        }
       }
 
       // Validate keywords - API requires at least 1 keyword
@@ -133,7 +147,7 @@ export function ConnectAndRecommendForm({
       let data;
       try {
         data = await response.json();
-      } catch (jsonError) {
+      } catch {
         const text = await response.text();
         throw new Error(`Failed to parse response: ${text.substring(0, 200)}`);
       }
@@ -162,31 +176,127 @@ export function ConnectAndRecommendForm({
 
   const configFields = getConfigFields();
 
+  // Handle OAuth flow initiation
+  const handleOAuthConnect = () => {
+    setOauthInProgress(true);
+    // Redirect to OAuth authorization endpoint
+    window.location.href = `/api/integrations/oauth/${provider}/authorize`;
+  };
+
+  // Check for OAuth success/error in URL params
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthSuccess = params.get('oauth_success');
+    const oauthError = params.get('error');
+    const oauthErrorDesc = params.get('error_description');
+
+    if (oauthSuccess === 'true') {
+      setSuccess('OAuth connection successful! Please add keywords and click connect to get recommendations.');
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (oauthError) {
+      setError(`OAuth error: ${oauthErrorDesc || oauthError}`);
+      // Clean URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   return (
     <div className="space-y-6">
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Connection Configuration */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">Connection Configuration</h3>
-          <div className="space-y-4">
-            {configFields.map((field) => (
-              <div key={field.key}>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  {field.label}
-                  {field.required && <span className="text-red-500 ml-1">*</span>}
-                </label>
+        {/* Connection Method Selection (OAuth vs API Key) */}
+        {provider === 'webflow' && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">Connection Method</h3>
+            <div className="space-y-3">
+              <label className="flex items-center space-x-3 cursor-pointer">
                 <input
-                  type={field.type}
-                  value={connection[field.key] || ''}
-                  onChange={(e) => handleConfigChange(field.key, e.target.value)}
-                  placeholder={field.label}
-                  required={field.required}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white"
+                  type="radio"
+                  name="connection_method"
+                  checked={useOAuth}
+                  onChange={() => setUseOAuth(true)}
+                  className="w-4 h-4 text-brand-600 focus:ring-brand-500"
                 />
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-white">
+                    OAuth (Recommended)
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Secure connection using Webflow OAuth. No API keys needed.
+                  </div>
+                </div>
+              </label>
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="connection_method"
+                  checked={!useOAuth}
+                  onChange={() => setUseOAuth(false)}
+                  className="w-4 h-4 text-brand-600 focus:ring-brand-500"
+                />
+                <div>
+                  <div className="font-medium text-gray-900 dark:text-white">
+                    API Key (Manual)
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Connect using Webflow API key, Site ID, and Collection ID.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            {useOAuth && (
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
+                  Click the button below to connect via OAuth. You&apos;ll be redirected to Webflow to authorize access.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOAuthConnect}
+                  disabled={oauthInProgress}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {oauthInProgress ? (
+                    <>
+                      <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                      Redirecting...
+                    </>
+                  ) : (
+                    <>
+                      <LinkIcon className="w-5 h-5" />
+                      Connect with Webflow OAuth
+                    </>
+                  )}
+                </button>
               </div>
-            ))}
+            )}
           </div>
-        </div>
+        )}
+
+        {/* Connection Configuration (API Key method) */}
+        {!useOAuth && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-4">Connection Configuration</h3>
+            <div className="space-y-4">
+              {configFields.map((field) => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    {field.label}
+                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  <input
+                    type={field.type}
+                    value={connection[field.key] || ''}
+                    onChange={(e) => handleConfigChange(field.key, e.target.value)}
+                    placeholder={field.label}
+                    required={field.required}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Keywords Input */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
@@ -249,7 +359,7 @@ export function ConnectAndRecommendForm({
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={loading || keywords.length === 0}
+          disabled={loading || keywords.length === 0 || (useOAuth && provider === 'webflow' && !connection.access_token)}
           className="w-full px-4 py-3 bg-brand-600 text-white rounded-md hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {loading ? (
@@ -264,6 +374,11 @@ export function ConnectAndRecommendForm({
         {keywords.length === 0 && (
           <p className="text-sm text-red-600 dark:text-red-400 text-center mt-2">
             Please add at least one keyword to continue
+          </p>
+        )}
+        {useOAuth && provider === 'webflow' && !connection.access_token && (
+          <p className="text-sm text-blue-600 dark:text-blue-400 text-center mt-2">
+            Please connect via OAuth first, then add keywords
           </p>
         )}
       </form>

@@ -7,24 +7,42 @@
 
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeftIcon,
   LinkIcon,
   ChartBarIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline';
 import { ConnectAndRecommendForm } from '@/components/integrations/ConnectAndRecommendForm';
 import { RecommendationsForm } from '@/components/integrations/RecommendationsForm';
+import { WebflowOAuthConfig } from '@/components/integrations/WebflowOAuthConfig';
 
 type Provider = 'webflow' | 'wordpress' | 'shopify';
 type ViewMode = 'connect' | 'recommend';
 
-export default function BlogWriterIntegrationsPage() {
+function BlogWriterIntegrationsContent() {
   const router = useRouter();
-  const [selectedProvider, setSelectedProvider] = useState<Provider>('webflow');
+  const searchParams = useSearchParams();
+  const providerParam = searchParams.get('provider') as Provider | null;
+  
+  // Initialize provider from URL param or default to webflow
+  const [selectedProvider, setSelectedProvider] = useState<Provider>(
+    (providerParam && ['webflow', 'wordpress', 'shopify'].includes(providerParam))
+      ? providerParam
+      : 'webflow'
+  );
   const [viewMode, setViewMode] = useState<ViewMode>('connect');
   const [error, setError] = useState<string | null>(null);
+  const [showOAuthConfig, setShowOAuthConfig] = useState(false);
+
+  // Update provider if URL param changes
+  useEffect(() => {
+    if (providerParam && ['webflow', 'wordpress', 'shopify'].includes(providerParam)) {
+      setSelectedProvider(providerParam);
+    }
+  }, [providerParam]);
 
   // Catch any initialization errors
   if (error) {
@@ -96,7 +114,18 @@ export default function BlogWriterIntegrationsPage() {
 
       {/* Provider Selection */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-lg font-semibold mb-4">Select Integration Provider</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Select Integration Provider</h2>
+          {selectedProvider === 'webflow' && (
+            <button
+              onClick={() => setShowOAuthConfig(true)}
+              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium flex items-center gap-2"
+            >
+              <KeyIcon className="w-4 h-4" />
+              Configure OAuth
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {providers.map((provider) => (
             <button
@@ -169,7 +198,28 @@ export default function BlogWriterIntegrationsPage() {
           />
         )}
       </div>
+
+      {/* OAuth Configuration Modal */}
+      {showOAuthConfig && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <WebflowOAuthConfig onClose={() => setShowOAuthConfig(false)} />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function BlogWriterIntegrationsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-600"></div>
+      </div>
+    }>
+      <BlogWriterIntegrationsContent />
+    </Suspense>
   );
 }
 

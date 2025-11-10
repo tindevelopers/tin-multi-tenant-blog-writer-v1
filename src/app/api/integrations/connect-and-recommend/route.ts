@@ -7,13 +7,26 @@
  * The Blog Writer API handles persistence to Supabase automatically (best-effort):
  * - integrations_{ENV} table for integration metadata
  * - recommendations_{ENV} table for computed recommendations
+ * 
+ * Comprehensive logging is performed at each step for debugging and audit purposes.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { blogWriterAPI } from '@/lib/blog-writer-api';
+import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
+
+// Helper to get client IP address
+function getClientIp(request: NextRequest): string | undefined {
+  const forwarded = request.headers.get('x-forwarded-for');
+  const realIp = request.headers.get('x-real-ip');
+  return forwarded?.split(',')[0] || realIp || undefined;
+}
 
 export async function POST(request: NextRequest) {
+  let logId: string | null = null;
+  const startTime = Date.now();
+
   try {
     console.log('🚀 POST /api/integrations/connect-and-recommend');
 
@@ -54,6 +67,25 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const body = await request.json();
     const { provider, connection, keywords } = body;
+
+    // Log connection initiation
+    logId = await integrationLogger.log({
+      org_id: userProfile.org_id,
+      user_id: user.id,
+      provider: provider as 'webflow' | 'wordpress' | 'shopify',
+      status: 'initiated',
+      api_request_payload: {
+        provider,
+        keywords_count: keywords?.length || 0,
+        has_connection: !!connection,
+        connection_keys: connection ? Object.keys(connection) : [],
+      },
+      connection_metadata: {
+        connection_method: 'api_key', // vs 'oauth'
+      },
+      ip_address: getClientIp(request),
+      user_agent: request.headers.get('user-agent') || undefined,
+    });
 
     // Validate required fields
     if (!provider || !connection) {
@@ -97,20 +129,78 @@ export async function POST(request: NextRequest) {
 
     console.log(`📝 Connecting to ${provider} with ${keywordArray.length} keywords`);
 
-    // Call Blog Writer API
-    const apiResult = await blogWriterAPI.connectAndRecommend({
-      tenant_id: userProfile.org_id,
-      provider: provider as 'webflow' | 'wordpress' | 'shopify',
-      connection: connection as Record<string, unknown>,
-      keywords: keywordArray,
-    });
+    // Update log: validating credentials
+    if (logId) {
+      await integrationLogger.updateLog(logId, {
+        status: 'validating_credentials',
+      });
+    }
 
-    console.log('✅ Blog Writer API response:', {
-      saved_integration: apiResult.saved_integration,
-      recommended_backlinks: apiResult.recommended_backlinks,
-      recommended_interlinks: apiResult.recommended_interlinks,
-      per_keyword_count: apiResult.per_keyword?.length || 0,
-    });
+    // Update log: calling API
+    if (logId) {
+      await integrationLogger.updateLog(logId, {
+        status: 'api_called',
+      });
+    }
+
+    const apiStartTime = Date.now();
+    let apiResult;
+
+    try {
+      // Call Blog Writer API
+      apiResult = await blogWriterAPI.connectAndRecommend({
+        tenant_id: userProfile.org_id,
+        provider: provider as 'webflow' | 'wordpress' | 'shopify',
+        connection: connection as Record<string, unknown>,
+        keywords: keywordArray,
+      });
+
+      const apiDuration = Date.now() - apiStartTime;
+
+      console.log('✅ Blog Writer API response:', {
+        saved_integration: apiResult.saved_integration,
+        recommended_backlinks: apiResult.recommended_backlinks,
+        recommended_interlinks: apiResult.recommended_interlinks,
+        per_keyword_count: apiResult.per_keyword?.length || 0,
+      });
+
+      // Update log: API success
+      if (logId) {
+        await integrationLogger.updateLog(logId, {
+          status: 'api_success',
+          api_response: {
+            saved_integration: apiResult.saved_integration,
+            recommended_backlinks: apiResult.recommended_backlinks,
+            recommended_interlinks: apiResult.recommended_interlinks,
+            per_keyword_count: apiResult.per_keyword?.length || 0,
+            has_notes: !!apiResult.notes,
+          },
+          api_duration_ms: apiDuration,
+          saved_integration_id: apiResult.saved_integration ? 'api_handled' : undefined,
+        });
+      }
+
+    } catch (error: any) {
+      const apiDuration = Date.now() - apiStartTime;
+
+      console.error('❌ Blog Writer API error:', error);
+
+      // Update log: API error
+      if (logId) {
+        await integrationLogger.updateLog(logId, {
+          status: 'api_error',
+          error_message: error.message || 'Unknown API error',
+          error_code: error.code || 'api_call_failed',
+          error_details: {
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+            name: error.name,
+          },
+          api_duration_ms: apiDuration,
+        });
+      }
+
+      throw error;
+    }
 
     // Note: The Blog Writer API (v1.1.0+) handles persistence to Supabase automatically:
     // - Saves to integrations_{ENV} table for integration metadata
@@ -119,20 +209,46 @@ export async function POST(request: NextRequest) {
     // The API's best-effort persistence means it may or may not succeed,
     // but the recommendations are still returned in the response.
 
+    // Update log: connection saved (by API)
+    if (logId && apiResult) {
+      await integrationLogger.updateLog(logId, {
+        status: apiResult.saved_integration ? 'saved' : 'api_success',
+      });
+    }
+
+    const totalDuration = Date.now() - startTime;
+    console.log(`✅ Connection completed in ${totalDuration}ms`);
+
     // Return success response
     return NextResponse.json({
       success: true,
       data: {
         ...apiResult,
+        log_id: logId, // Include log ID for debugging
       },
     }, { status: 201 });
 
   } catch (error: any) {
     console.error('❌ Error in connect-and-recommend:', error);
+
+    // Update log: failed
+    if (logId) {
+      await integrationLogger.updateLog(logId, {
+        status: 'failed',
+        error_message: error.message || 'Unknown error',
+        error_code: error.code || 'connection_failed',
+        error_details: {
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+          name: error.name,
+        },
+      });
+    }
+
     return NextResponse.json(
       {
         error: error.message || 'Failed to connect integration and get recommendations',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        log_id: logId, // Include log ID for debugging
       },
       { status: 500 }
     );
