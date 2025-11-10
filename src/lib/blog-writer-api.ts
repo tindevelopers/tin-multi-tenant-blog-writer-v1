@@ -319,18 +319,27 @@ class BlogWriterAPI {
   /**
    * Connect to an integration and get recommendations
    * 
+   * API v1.1.0+: POST /api/v1/integrations/connect-and-recommend
+   * - Target-agnostic integration input (provider label + opaque connection object)
+   * - Computes backlink and interlink recommendations from selected keywords
+   * - Best-effort persistence to Supabase (integrations_{ENV} and recommendations_{ENV})
+   * 
    * @param params Connection parameters
-   * @returns Connection result with recommendations
+   * @param params.tenant_id Optional tenant/organization ID
+   * @param params.provider Provider type: 'webflow' | 'wordpress' | 'shopify'
+   * @param params.connection Opaque connection object (provider-specific credentials)
+   * @param params.keywords Array of 1-50 keywords for recommendation computation
+   * @returns Connection result with recommendations and persistence status
    */
   async connectAndRecommend(params: {
     tenant_id?: string;
     provider: 'webflow' | 'wordpress' | 'shopify';
     connection: Record<string, unknown>;
-    keywords: string[]; // 1-50 keywords
+    keywords: string[]; // 1-50 keywords (required)
   }): Promise<{
     provider: string;
     tenant_id?: string;
-    saved_integration: boolean;
+    saved_integration: boolean; // Indicates if API successfully persisted to Supabase
     recommended_backlinks: number;
     recommended_interlinks: number;
     per_keyword: Array<{
@@ -342,7 +351,12 @@ class BlogWriterAPI {
     notes?: string;
   }> {
     try {
-      console.log('🔌 Connecting to integration and getting recommendations:', params.provider);
+      console.log('🔌 Connecting to integration and getting recommendations:', {
+        provider: params.provider,
+        keyword_count: params.keywords.length,
+        has_tenant_id: !!params.tenant_id,
+      });
+      
       return await this.makeRequest<{
         provider: string;
         tenant_id?: string;
@@ -358,7 +372,12 @@ class BlogWriterAPI {
         notes?: string;
       }>('/api/v1/integrations/connect-and-recommend', {
         method: 'POST',
-        body: JSON.stringify(params),
+        body: JSON.stringify({
+          provider: params.provider,
+          connection: params.connection,
+          keywords: params.keywords,
+          ...(params.tenant_id && { tenant_id: params.tenant_id }),
+        }),
       });
     } catch (error) {
       console.error('Failed to connect and get recommendations:', error);
