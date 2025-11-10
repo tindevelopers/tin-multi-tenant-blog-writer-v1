@@ -15,57 +15,57 @@ interface Integration {
   icon?: string;
 }
 
+const availableIntegrations = [
+  {
+    name: "WordPress",
+    type: "cms",
+    description: "Connect to WordPress sites for content publishing",
+    icon: "📝",
+    status: "inactive"
+  },
+  {
+    name: "Medium",
+    type: "platform",
+    description: "Publish content directly to Medium",
+    icon: "📰",
+    status: "inactive"
+  },
+  {
+    name: "Google Analytics",
+    type: "analytics",
+    description: "Track content performance and user engagement",
+    icon: "📊",
+    status: "inactive"
+  },
+  {
+    name: "Slack",
+    type: "communication",
+    description: "Send notifications and collaborate with your team",
+    icon: "💬",
+    status: "inactive"
+  },
+  {
+    name: "Zapier",
+    type: "automation",
+    description: "Connect with 3000+ apps and automate workflows",
+    icon: "⚡",
+    status: "inactive"
+  },
+  {
+    name: "HubSpot",
+    type: "crm",
+    description: "Sync leads and track content marketing ROI",
+    icon: "🎯",
+    status: "inactive"
+  }
+];
+
 export default function IntegrationsManagementPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [userRole, setUserRole] = useState<string>("");
-
-  const availableIntegrations = [
-    {
-      name: "WordPress",
-      type: "cms",
-      description: "Connect to WordPress sites for content publishing",
-      icon: "📝",
-      status: "inactive"
-    },
-    {
-      name: "Medium",
-      type: "platform",
-      description: "Publish content directly to Medium",
-      icon: "📰",
-      status: "inactive"
-    },
-    {
-      name: "Google Analytics",
-      type: "analytics",
-      description: "Track content performance and user engagement",
-      icon: "📊",
-      status: "inactive"
-    },
-    {
-      name: "Slack",
-      type: "communication",
-      description: "Send notifications and collaborate with your team",
-      icon: "💬",
-      status: "inactive"
-    },
-    {
-      name: "Zapier",
-      type: "automation",
-      description: "Connect with 3000+ apps and automate workflows",
-      icon: "⚡",
-      status: "inactive"
-    },
-    {
-      name: "HubSpot",
-      type: "crm",
-      description: "Sync leads and track content marketing ROI",
-      icon: "🎯",
-      status: "inactive"
-    }
-  ];
 
   useEffect(() => {
     const supabase = createClient();

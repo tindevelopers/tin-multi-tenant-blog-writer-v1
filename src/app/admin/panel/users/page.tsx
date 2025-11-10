@@ -122,7 +122,6 @@ export default function UsersManagementPage() {
   });
 
   const canEditRoles = ["system_admin", "super_admin"].includes(userRole);
-  const canViewAllUsers = ["system_admin", "super_admin", "admin"].includes(userRole);
 
   if (loading) {
     return (
