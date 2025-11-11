@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { KeyIcon, LockClosedIcon, PencilIcon, CheckCircleIcon, ArrowPathIcon, ArrowDownTrayIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import EditIntegrationModal from "@/components/admin/EditIntegrationModal";
 import { WebflowConfig } from "@/components/integrations/WebflowConfig";
+import { IntegrationRequirementsCard } from "@/components/integrations/IntegrationRequirementsCard";
+import type { IntegrationType } from "@/lib/integrations/types";
 
 interface Integration {
   integration_id: string;
@@ -784,6 +786,38 @@ export default function IntegrationsManagementPage() {
               <option value="expired">Expired</option>
             </select>
           </div>
+        </div>
+      </div>
+
+      {/* Integration Requirements Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            Publishing System Requirements
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Each publishing system has specific credential requirements. Review the requirements below before connecting.
+          </p>
+        </div>
+        
+        <div className="space-y-4">
+          {availableIntegrations.map((integration) => {
+            const existingIntegration = integrations.find(i => i.type === integration.type);
+            return (
+              <IntegrationRequirementsCard
+                key={integration.type}
+                provider={integration.type as IntegrationType}
+                config={existingIntegration?.config || {}}
+                onConfigure={() => {
+                  if (existingIntegration) {
+                    handleConfigureWebflow(existingIntegration);
+                  } else {
+                    window.location.href = `/admin/integrations/blog-writer?provider=${integration.type}`;
+                  }
+                }}
+              />
+            );
+          })}
         </div>
       </div>
 
