@@ -43,14 +43,22 @@ export default function OrganizationSettingsPage() {
         return;
       }
 
-      // Get user's organization
+      // Get user's organization and role
       const { data: userData, error: userError } = await supabase
         .from("users")
-        .select("org_id, organizations(*)")
+        .select("org_id, role, organizations(*)")
         .eq("user_id", user.id)
         .single();
 
       if (userError) throw userError;
+
+      // Check if user has permission (admin, owner, system_admin, super_admin)
+      const allowedRoles = ["admin", "owner", "system_admin", "super_admin"];
+      if (userData && !allowedRoles.includes(userData.role)) {
+        setError("You don't have permission to access organization settings");
+        setLoading(false);
+        return;
+      }
 
       if (userData && userData.organizations) {
         const org = userData.organizations as Organization;

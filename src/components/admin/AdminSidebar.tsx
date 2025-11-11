@@ -85,7 +85,7 @@ const menuItems: MenuItem[] = [
       {
         name: "Organization Settings",
         path: "/admin/panel/organizations/settings",
-        roles: ["system_admin", "super_admin"]
+        roles: ["system_admin", "super_admin", "admin", "owner"]
       }
     ]
   },
