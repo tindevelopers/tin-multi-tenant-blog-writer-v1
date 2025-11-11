@@ -66,7 +66,6 @@ function BlogWriterIntegrationsContent() {
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
-          setLoadingIntegrations(false);
           return;
         }
 
@@ -84,8 +83,6 @@ function BlogWriterIntegrationsContent() {
         }
       } catch (err) {
         console.error('Error fetching integrations:', err);
-      } finally {
-        setLoadingIntegrations(false);
       }
     };
 
