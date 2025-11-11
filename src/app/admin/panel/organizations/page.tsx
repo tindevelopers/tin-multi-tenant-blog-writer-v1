@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import CreateOrganizationModal from "@/components/admin/CreateOrganizationModal";
 
 interface Organization {
   org_id: string;
@@ -23,6 +24,9 @@ export default function OrganizationsManagementPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrgs, setSelectedOrgs] = useState<Set<string>>(new Set());
   const [userRole, setUserRole] = useState<string>("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deletingOrgId, setDeletingOrgId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -93,6 +97,84 @@ export default function OrganizationsManagementPage() {
 
   const canManageOrgs = ["system_admin", "super_admin"].includes(userRole);
 
+  const handleCreateSuccess = () => {
+    // Refresh organizations list
+    const fetchOrganizations = async () => {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("organizations")
+          .select(`
+            *,
+            _count:users(count)
+          `)
+          .order("created_at", { ascending: false });
+
+        if (!error && data) {
+          setOrganizations(data);
+        }
+      } catch (error) {
+        console.error("Error fetching organizations:", error);
+      }
+    };
+    fetchOrganizations();
+  };
+
+  const handleDeleteClick = (orgId: string) => {
+    setDeletingOrgId(orgId);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingOrgId) return;
+
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        alert("Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`/api/admin/organizations/${deletingOrgId}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete organization");
+      }
+
+      // Refresh organizations list
+      const { data: orgs, error } = await supabase
+        .from("organizations")
+        .select(`
+          *,
+          _count:users(count)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (!error && orgs) {
+        setOrganizations(orgs);
+      }
+
+      setShowDeleteConfirm(false);
+      setDeletingOrgId(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete organization");
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setDeletingOrgId(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
@@ -115,7 +197,10 @@ export default function OrganizationsManagementPage() {
             </p>
           </div>
           {canManageOrgs && (
-            <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
+            <button 
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+            >
               Create Organization
             </button>
           )}
@@ -312,7 +397,10 @@ export default function OrganizationsManagementPage() {
                         >
                           Settings
                         </button>
-                        <button className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                        <button 
+                          onClick={() => handleDeleteClick(org.org_id)}
+                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        >
                           Delete
                         </button>
                       </div>
@@ -336,6 +424,45 @@ export default function OrganizationsManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Create Organization Modal */}
+      <CreateOrganizationModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={handleCreateSuccess}
+      />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deletingOrgId && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleDeleteCancel} />
+            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Delete Organization
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                Are you sure you want to delete this organization? This action cannot be undone. 
+                The organization must have no users before it can be deleted.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
