@@ -943,22 +943,31 @@ export default function IntegrationsManagementPage() {
                   {new Date(integration.created_at).toLocaleDateString()}
                 </span>
               </div>
-              {integration.type === 'webflow' && integration.config.site_name && typeof integration.config.site_name === 'string' && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Site:</span>
-                  <span className="text-gray-900 dark:text-white font-medium">
-                    {integration.config.site_name}
-                  </span>
-                </div>
-              )}
-              {integration.type === 'webflow' && !integration.config.site_name && integration.config.site_id && typeof integration.config.site_id === 'string' && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Site ID:</span>
-                  <span className="text-gray-900 dark:text-white font-mono text-xs">
-                    {integration.config.site_id.substring(0, 8)}...
-                  </span>
-                </div>
-              )}
+              {integration.type === 'webflow' && (() => {
+                const siteName = integration.config.site_name;
+                const siteId = integration.config.site_id;
+                if (siteName && typeof siteName === 'string') {
+                  return (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">Site:</span>
+                      <span className="text-gray-900 dark:text-white font-medium">
+                        {siteName}
+                      </span>
+                    </div>
+                  );
+                }
+                if (siteId && typeof siteId === 'string') {
+                  return (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 dark:text-gray-400">Site ID:</span>
+                      <span className="text-gray-900 dark:text-white font-mono text-xs">
+                        {siteId.substring(0, 8)}...
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
               {/* Always show health status */}
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Health:</span>
