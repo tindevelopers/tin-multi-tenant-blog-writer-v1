@@ -69,7 +69,7 @@ export async function POST(
       org_id: userProfile.org_id,
       user_id: user.id,
       provider: integration.type as 'webflow' | 'wordpress' | 'shopify',
-      status: 'sync_initiated',
+      status: 'initiated',
       connection_metadata: {
         connection_method: 'sync',
       },
@@ -93,7 +93,7 @@ export async function POST(
 
       if (logId) {
         await integrationLogger.updateLog(logId, {
-          status: 'sync_completed',
+          status: 'api_success',
           api_duration_ms: Date.now() - startTime,
         });
       }
@@ -110,7 +110,7 @@ export async function POST(
     } catch (error: any) {
       if (logId) {
         await integrationLogger.updateLog(logId, {
-          status: 'sync_failed',
+          status: 'api_error',
           error_message: error.message,
           api_duration_ms: Date.now() - startTime,
         });
