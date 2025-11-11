@@ -25,6 +25,7 @@ export default function EditIntegrationModal({
   integration 
 }: EditIntegrationModalProps) {
   const [apiKey, setApiKey] = useState("");
+  const [collectionId, setCollectionId] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [endpoints, setEndpoints] = useState<string[]>([]);
   const [newEndpoint, setNewEndpoint] = useState("");
@@ -53,6 +54,11 @@ export default function EditIntegrationModal({
               setApiKey('****');
             }
           }
+        }
+        
+        // Extract Collection ID (for Webflow)
+        if (config.collection_id && typeof config.collection_id === 'string') {
+          setCollectionId(config.collection_id);
         }
         
         // Extract endpoints
@@ -108,6 +114,11 @@ export default function EditIntegrationModal({
         configUpdate.api_key = apiKey;
       }
 
+      // Update Collection ID for Webflow
+      if (integration.type === 'webflow' && collectionId) {
+        configUpdate.collection_id = collectionId;
+      }
+
       const response = await fetch(`/api/integrations/${integration.integration_id}`, {
         method: 'PATCH',
         headers: {
@@ -143,6 +154,7 @@ export default function EditIntegrationModal({
 
   const handleClose = () => {
     setApiKey("");
+    setCollectionId("");
     setEndpoints([]);
     setNewEndpoint("");
     setError(null);
@@ -234,6 +246,26 @@ export default function EditIntegrationModal({
                   {apiKey.includes('****') 
                     ? "Enter a new API key to replace the existing one, or leave as-is to keep current key."
                     : "Enter a new API key or leave blank to keep the current one."}
+                </p>
+              </div>
+            )}
+
+            {/* Collection ID (for Webflow) */}
+            {integration.type === 'webflow' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Collection ID *
+                </label>
+                <input
+                  type="text"
+                  value={collectionId}
+                  onChange={(e) => setCollectionId(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white"
+                  placeholder="Enter Collection ID"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  The Collection ID of your Webflow CMS collection where blog posts will be published
                 </p>
               </div>
             )}

@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KeyIcon, LockClosedIcon, PencilIcon } from "@heroicons/react/24/outline";
+import { KeyIcon, LockClosedIcon, PencilIcon, CheckCircleIcon, ArrowPathIcon, ArrowDownTrayIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import EditIntegrationModal from "@/components/admin/EditIntegrationModal";
+import { WebflowConfig } from "@/components/integrations/WebflowConfig";
 
 interface Integration {
   integration_id: string;
@@ -48,6 +49,10 @@ export default function IntegrationsManagementPage() {
   const [userRole, setUserRole] = useState<string>("");
   const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showWebflowConfig, setShowWebflowConfig] = useState(false);
+  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+  const [testingIntegrationId, setTestingIntegrationId] = useState<string | null>(null);
+  const [syncingIntegrationId, setSyncingIntegrationId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -136,6 +141,145 @@ export default function IntegrationsManagementPage() {
     } catch (err) {
       console.error('Error updating integration:', err);
     }
+  };
+
+  const handleTestConnection = async (integrationId: string) => {
+    setTestingIntegrationId(integrationId);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/integrations/${integrationId}/test`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Refresh integrations to update status
+        const refreshResponse = await fetch('/api/integrations', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+        if (refreshResponse.ok) {
+          const refreshResult = await refreshResponse.json();
+          if (refreshResult.success && Array.isArray(refreshResult.data)) {
+            setIntegrations(refreshResult.data);
+          }
+        }
+        alert('Connection test successful!');
+      } else {
+        alert(`Connection test failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error testing connection:', err);
+      alert('Failed to test connection');
+    } finally {
+      setTestingIntegrationId(null);
+    }
+  };
+
+  const handleSyncNow = async (integrationId: string) => {
+    setSyncingIntegrationId(integrationId);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/integrations/${integrationId}/sync`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alert('Sync initiated successfully!');
+      } else {
+        alert(`Sync failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error syncing:', err);
+      alert('Failed to sync');
+    } finally {
+      setSyncingIntegrationId(null);
+    }
+  };
+
+  const handleExportConfig = async (integrationId: string) => {
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/integrations/${integrationId}/export`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Download as JSON file
+        const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `integration-config-${integrationId}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        alert(`Export failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error exporting config:', err);
+      alert('Failed to export configuration');
+    }
+  };
+
+  const handleDisconnect = async (integrationId: string) => {
+    if (!confirm('Are you sure you want to disconnect this integration?')) {
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/integrations/${integrationId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        setIntegrations(prev => prev.filter(i => i.integration_id !== integrationId));
+        alert('Integration disconnected successfully');
+      } else {
+        const data = await response.json();
+        alert(`Failed to disconnect: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Error disconnecting:', err);
+      alert('Failed to disconnect integration');
+    }
+  };
+
+  const handleConfigureWebflow = (integration: Integration) => {
+    setSelectedIntegration(integration);
+    setShowWebflowConfig(true);
   };
 
   const filteredIntegrations = integrations.filter(integration => {
@@ -456,35 +600,87 @@ export default function IntegrationsManagementPage() {
               )}
             </div>
 
-            <div className="flex items-center justify-between">
-              {canManageIntegrations ? (
+            {/* Action Buttons */}
+            {integration.type === 'webflow' && canManageIntegrations ? (
+              <div className="space-y-2">
                 <button
-                  onClick={() => handleIntegrationToggle(integration.integration_id)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    integration.status === 'active'
-                      ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
-                      : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
-                  }`}
+                  onClick={() => handleConfigureWebflow(integration)}
+                  className="w-full px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors text-sm font-medium"
                 >
-                  {integration.status === 'active' ? 'Deactivate' : 'Activate'}
+                  Configure Webflow
                 </button>
-              ) : (
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  No permissions
-                </span>
-              )}
-              
-              <button
-                onClick={() => {
-                  setEditingIntegration(integration);
-                  setShowEditModal(true);
-                }}
-                className="px-3 py-1 text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-200 flex items-center gap-1"
-              >
-                <PencilIcon className="w-4 h-4" />
-                Edit
-              </button>
-            </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleTestConnection(integration.integration_id)}
+                    disabled={testingIntegrationId === integration.integration_id}
+                    className="px-3 py-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {testingIntegrationId === integration.integration_id ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    ) : (
+                      <CheckCircleIcon className="w-4 h-4" />
+                    )}
+                    Test
+                  </button>
+                  <button
+                    onClick={() => handleSyncNow(integration.integration_id)}
+                    disabled={syncingIntegrationId === integration.integration_id}
+                    className="px-3 py-2 text-sm text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 disabled:opacity-50 flex items-center justify-center gap-1"
+                  >
+                    {syncingIntegrationId === integration.integration_id ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                    ) : (
+                      <ArrowPathIcon className="w-4 h-4" />
+                    )}
+                    Sync
+                  </button>
+                  <button
+                    onClick={() => handleExportConfig(integration.integration_id)}
+                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 flex items-center justify-center gap-1"
+                  >
+                    <ArrowDownTrayIcon className="w-4 h-4" />
+                    Export
+                  </button>
+                  <button
+                    onClick={() => handleDisconnect(integration.integration_id)}
+                    className="px-3 py-2 text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 flex items-center justify-center gap-1"
+                  >
+                    <XMarkIcon className="w-4 h-4" />
+                    Disconnect
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                {canManageIntegrations ? (
+                  <button
+                    onClick={() => handleIntegrationToggle(integration.integration_id)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      integration.status === 'active'
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-200 dark:hover:bg-red-800'
+                        : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-200 dark:hover:bg-green-800'
+                    }`}
+                  >
+                    {integration.status === 'active' ? 'Deactivate' : 'Activate'}
+                  </button>
+                ) : (
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    No permissions
+                  </span>
+                )}
+                
+                <button
+                  onClick={() => {
+                    setEditingIntegration(integration);
+                    setShowEditModal(true);
+                  }}
+                  className="px-3 py-1 text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-200 flex items-center gap-1"
+                >
+                  <PencilIcon className="w-4 h-4" />
+                  Edit
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -556,6 +752,55 @@ export default function IntegrationsManagementPage() {
         }}
         integration={editingIntegration}
       />
+
+      {/* Webflow Configuration Modal */}
+      {showWebflowConfig && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => {
+              setShowWebflowConfig(false);
+              setSelectedIntegration(null);
+            }} />
+            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <WebflowConfig
+                integrationId={selectedIntegration?.integration_id}
+                onSuccess={() => {
+                  // Refresh integrations
+                  const fetchIntegrations = async () => {
+                    try {
+                      const supabase = createClient();
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (!session) return;
+
+                      const response = await fetch('/api/integrations', {
+                        headers: {
+                          'Authorization': `Bearer ${session.access_token}`,
+                        },
+                      });
+
+                      if (response.ok) {
+                        const result = await response.json();
+                        if (result.success && Array.isArray(result.data)) {
+                          setIntegrations(result.data);
+                        }
+                      }
+                    } catch (err) {
+                      console.error('Error fetching integrations:', err);
+                    }
+                  };
+                  fetchIntegrations();
+                  setShowWebflowConfig(false);
+                  setSelectedIntegration(null);
+                }}
+                onClose={() => {
+                  setShowWebflowConfig(false);
+                  setSelectedIntegration(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -125,11 +125,18 @@ async function handleUpdate(
     const body = await request.json();
     const { 
       connection,
+      config,
+      connection_method,
       status 
     }: {
       connection?: ConnectionConfig;
+      config?: Record<string, unknown>;
+      connection_method?: ConnectionMethod;
       status?: IntegrationStatus;
     } = body;
+
+    // Support both 'connection' and 'config' for backward compatibility
+    const connectionConfig = connection || config;
 
     // Get integration using new database adapter
     const dbAdapter = new EnvironmentIntegrationsDB();
@@ -141,13 +148,13 @@ async function handleUpdate(
     }
 
     // Determine connection_method from connection if provided
-    const connectionMethod = connection?.access_token ? 'oauth' : (connection ? 'api_key' : undefined);
+    const connectionMethod = connection_method || (connectionConfig?.access_token ? 'oauth' : (connectionConfig ? 'api_key' : undefined));
 
     // Update integration
     const integration = await dbAdapter.updateIntegration(
       id,
       {
-        connection: connection,
+        connection: connectionConfig as ConnectionConfig,
         connection_method: connectionMethod,
         status: status,
       },
