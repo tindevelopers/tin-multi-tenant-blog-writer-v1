@@ -18,6 +18,7 @@ import { createClient } from '@/lib/supabase/client';
 import keywordResearchService from '@/lib/keyword-research';
 import type { KeywordData, KeywordAnalysis } from '@/lib/keyword-research';
 import Alert from '@/components/ui/alert/Alert';
+import { Modal } from '@/components/ui/modal';
 
 interface KeywordWithMetrics extends KeywordData {
   keyword: string;
@@ -40,6 +41,7 @@ export default function KeywordResearchPage() {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   
   const [workflowSession, setWorkflowSession] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -363,8 +365,7 @@ export default function KeywordResearchPage() {
         // Don't throw - collection was saved successfully
       }
 
-      setSuccess('Keyword collection saved successfully');
-      setTimeout(() => setSuccess(null), 3000);
+      setShowSuccessModal(true);
     } catch (err: any) {
       console.error('Error saving collection:', err);
       setError(err.message || 'Failed to save keyword collection');
@@ -431,15 +432,6 @@ export default function KeywordResearchPage() {
             variant="error"
             title="Error"
             message={error}
-          />
-        </div>
-      )}
-      {success && (
-        <div className="mb-6">
-          <Alert
-            variant="success"
-            title="Success"
-            message={success}
           />
         </div>
       )}
@@ -797,6 +789,33 @@ export default function KeywordResearchPage() {
           </div>
         </div>
       )}
+
+      {/* Success Modal */}
+      <Modal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        className="max-w-md"
+      >
+        <div className="p-8">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
+            </div>
+            <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+              Collection Saved Successfully!
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Your keyword collection has been saved and is ready to use in the next steps of your workflow.
+            </p>
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
