@@ -20,7 +20,7 @@ import {
   XCircleIcon,
   ClockIcon,
 } from '@heroicons/react/24/outline';
-import { ConnectAndRecommendForm } from '@/components/integrations/ConnectAndRecommendForm';
+import { ConnectIntegrationForm } from '@/components/integrations/ConnectIntegrationForm';
 import { RecommendationsForm } from '@/components/integrations/RecommendationsForm';
 import { WebflowOAuthConfig } from '@/components/integrations/WebflowOAuthConfig';
 
@@ -358,7 +358,7 @@ function BlogWriterIntegrationsContent() {
         </h2>
 
         {viewMode === 'connect' ? (
-          <ConnectAndRecommendForm
+          <ConnectIntegrationForm
             provider={selectedProvider}
             onSuccess={handleSuccess}
             onError={handleError}
