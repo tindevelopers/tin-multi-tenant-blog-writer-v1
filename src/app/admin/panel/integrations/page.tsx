@@ -51,6 +51,7 @@ export default function IntegrationsManagementPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showWebflowConfig, setShowWebflowConfig] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+  const [selectedIntegrations, setSelectedIntegrations] = useState<Set<string>>(new Set());
   const [testingIntegrationId, setTestingIntegrationId] = useState<string | null>(null);
   const [syncingIntegrationId, setSyncingIntegrationId] = useState<string | null>(null);
 
@@ -266,6 +267,11 @@ export default function IntegrationsManagementPage() {
 
       if (response.ok) {
         setIntegrations(prev => prev.filter(i => i.integration_id !== integrationId));
+        setSelectedIntegrations(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(integrationId);
+          return newSet;
+        });
         alert('Integration disconnected successfully');
       } else {
         const data = await response.json();
@@ -275,6 +281,72 @@ export default function IntegrationsManagementPage() {
       console.error('Error disconnecting:', err);
       alert('Failed to disconnect integration');
     }
+  };
+
+  const handleBulkTestConnection = async () => {
+    if (selectedIntegrations.size === 0) return;
+    
+    const integrationIds = Array.from(selectedIntegrations);
+    setTestingIntegrationId(integrationIds[0]);
+    
+    try {
+      for (const id of integrationIds) {
+        await handleTestConnection(id);
+      }
+    } finally {
+      setTestingIntegrationId(null);
+    }
+  };
+
+  const handleBulkSyncNow = async () => {
+    if (selectedIntegrations.size === 0) return;
+    
+    const integrationIds = Array.from(selectedIntegrations);
+    setSyncingIntegrationId(integrationIds[0]);
+    
+    try {
+      for (const id of integrationIds) {
+        await handleSyncNow(id);
+      }
+    } finally {
+      setSyncingIntegrationId(null);
+    }
+  };
+
+  const handleBulkExportConfig = async () => {
+    if (selectedIntegrations.size === 0) return;
+    
+    const integrationIds = Array.from(selectedIntegrations);
+    for (const id of integrationIds) {
+      await handleExportConfig(id);
+    }
+  };
+
+  const handleBulkDisconnect = async () => {
+    if (selectedIntegrations.size === 0) return;
+    
+    if (!confirm(`Are you sure you want to disconnect ${selectedIntegrations.size} integration(s)?`)) {
+      return;
+    }
+    
+    const integrationIds = Array.from(selectedIntegrations);
+    for (const id of integrationIds) {
+      await handleDisconnect(id);
+    }
+    
+    setSelectedIntegrations(new Set());
+  };
+
+  const handleToggleSelection = (integrationId: string) => {
+    setSelectedIntegrations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(integrationId)) {
+        newSet.delete(integrationId);
+      } else {
+        newSet.add(integrationId);
+      }
+      return newSet;
+    });
   };
 
   const handleConfigureWebflow = (integration: Integration) => {
@@ -553,12 +625,64 @@ export default function IntegrationsManagementPage() {
         </div>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {selectedIntegrations.size > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl px-6 py-3 mb-6">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-blue-800 dark:text-blue-200">
+              {selectedIntegrations.size} integration{selectedIntegrations.size !== 1 ? 's' : ''} selected
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={handleBulkTestConnection}
+                disabled={testingIntegrationId !== null}
+                className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {testingIntegrationId ? 'Testing...' : 'Test Connection'}
+              </button>
+              <button
+                onClick={handleBulkSyncNow}
+                disabled={syncingIntegrationId !== null}
+                className="px-4 py-2 text-sm text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {syncingIntegrationId ? 'Syncing...' : 'Sync Now'}
+              </button>
+              <button
+                onClick={handleBulkExportConfig}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 font-medium"
+              >
+                Export Config
+              </button>
+              <button
+                onClick={handleBulkDisconnect}
+                className="px-4 py-2 text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 font-medium"
+              >
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Integrations Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredIntegrations.map((integration) => (
-          <div key={integration.integration_id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div 
+            key={integration.integration_id} 
+            className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 p-6 transition-all ${
+              selectedIntegrations.has(integration.integration_id)
+                ? 'border-blue-500 dark:border-blue-400'
+                : 'border-gray-200 dark:border-gray-700'
+            }`}
+          >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIntegrations.has(integration.integration_id)}
+                  onChange={() => handleToggleSelection(integration.integration_id)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
                 <div className="text-2xl">{getProviderIcon(integration.type)}</div>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
