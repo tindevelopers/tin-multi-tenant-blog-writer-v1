@@ -33,14 +33,13 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
     { value: "editor", label: "Editor" },
     { value: "manager", label: "Manager" },
     { value: "admin", label: "Admin" },
-    { value: "owner", label: "Owner" },
   ];
 
   // Filter roles based on user permissions
-  // Organization admins cannot assign admin/owner roles
+  // Organization admins cannot assign admin role
   const roles = ["system_admin", "super_admin"].includes(userRole)
     ? allRoles
-    : allRoles.filter(r => !["admin", "owner"].includes(r.value));
+    : allRoles.filter(r => r.value !== "admin");
 
   useEffect(() => {
     if (isOpen) {

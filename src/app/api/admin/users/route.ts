@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permissions
-    const allowedRoles = ["system_admin", "super_admin", "admin", "owner"];
+    const allowedRoles = ["system_admin", "super_admin", "admin"];
     if (!allowedRoles.includes(currentUserData.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions to create users" },
@@ -77,8 +77,8 @@ export async function POST(request: NextRequest) {
       targetOrgId = currentUserData.org_id;
     }
 
-    // Validate role assignment
-    const validRoles = ["writer", "editor", "manager", "admin", "owner"];
+    // Validate role assignment (matching database enum)
+    const validRoles = ["writer", "editor", "manager", "admin"];
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: `Invalid role. Must be one of: ${validRoles.join(", ")}` },
@@ -86,11 +86,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Organization admins cannot assign admin/owner roles
+    // Organization admins cannot assign admin role
     if (!["system_admin", "super_admin"].includes(currentUserData.role)) {
-      if (["admin", "owner"].includes(role)) {
+      if (role === "admin") {
         return NextResponse.json(
-          { error: "You cannot assign admin or owner roles" },
+          { error: "You cannot assign admin role" },
           { status: 403 }
         );
       }
