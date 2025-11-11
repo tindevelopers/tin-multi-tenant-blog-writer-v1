@@ -944,20 +944,20 @@ export default function IntegrationsManagementPage() {
                 </span>
               </div>
               {/* Display site name for Webflow integrations */}
-              {integration.type === 'webflow' && integration.config.site_name && (
+              {integration.type === 'webflow' && integration.config.site_name && typeof integration.config.site_name === 'string' && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Site:</span>
                   <span className="text-gray-900 dark:text-white font-medium">
-                    {integration.config.site_name as string}
+                    {integration.config.site_name}
                   </span>
                 </div>
               )}
               {/* Display site ID for Webflow integrations if name not available */}
-              {integration.type === 'webflow' && !integration.config.site_name && integration.config.site_id && (
+              {integration.type === 'webflow' && !integration.config.site_name && integration.config.site_id && typeof integration.config.site_id === 'string' && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Site ID:</span>
                   <span className="text-gray-900 dark:text-white font-mono text-xs">
-                    {(integration.config.site_id as string).substring(0, 8)}...
+                    {integration.config.site_id.substring(0, 8)}...
                   </span>
                 </div>
               )}
