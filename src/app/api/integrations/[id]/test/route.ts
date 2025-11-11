@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
+import { testWebflowConnection, autoDetectWebflowSiteId } from '@/lib/integrations/webflow-api';
 
 /**
  * POST /api/integrations/[id]/test
@@ -73,43 +74,108 @@ export async function POST(
     };
 
     try {
-      // TODO: Implement provider-specific connection testing
-      // For now, we'll do a basic validation
       const connection = integration.config;
       
-      // Basic validation based on connection method
-      let isValid = false;
-      if (connection.accessToken || connection.apiToken || connection.apiKey) {
-        // Basic structure validation - in production, make actual API call
-        isValid = true;
-      }
+      // Provider-specific connection testing
+      if (integration.type === 'webflow') {
+        // Webflow API connection test
+        const apiKey = connection.api_key || connection.apiToken || connection.accessToken;
+        if (!apiKey) {
+          throw new Error('Webflow API key not found in configuration');
+        }
 
-      if (isValid) {
-        testResult = {
-          success: true,
-          status: 'active',
-          message: 'Connection test successful',
-        };
+        // Auto-detect site_id if not provided
+        let siteId = connection.site_id;
+        if (!siteId) {
+          console.log('🔍 Auto-detecting Webflow Site ID for connection test...');
+          siteId = await autoDetectWebflowSiteId(
+            apiKey as string,
+            connection.collection_id as string | undefined
+          );
+          
+          // If we detected a site_id, update the integration config
+          if (siteId) {
+            const updatedConnection = { ...connection, site_id: siteId };
+            await dbAdapter.updateIntegration(
+              id,
+              { connection: updatedConnection as any },
+              userProfile.org_id
+            );
+            console.log(`✅ Auto-detected and saved Site ID: ${siteId}`);
+          }
+        }
 
-        // Update integration status
-        await dbAdapter.updateIntegration(
-          id,
-          {
+        // Test Webflow connection
+        const testResponse = await testWebflowConnection(
+          apiKey as string,
+          siteId as string | undefined,
+          connection.collection_id as string | undefined
+        );
+
+        if (testResponse.success) {
+          testResult = {
+            success: true,
+            status: 'active',
+            message: testResponse.message,
+          };
+
+          // Update integration status with detected site_id if available
+          const updateData: any = {
             status: 'active',
             last_tested_at: new Date().toISOString(),
             error_message: undefined,
-          },
-          userProfile.org_id
-        );
+          };
 
-        if (logId) {
-          await integrationLogger.updateLog(logId, {
-            status: 'connection_test_success',
-            api_duration_ms: Date.now() - startTime,
-          });
+          // If site_id was auto-detected, update the connection config
+          if (siteId && !connection.site_id) {
+            updateData.connection = { ...connection, site_id: siteId };
+          }
+
+          await dbAdapter.updateIntegration(id, updateData, userProfile.org_id);
+
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'connection_test_success',
+              api_duration_ms: Date.now() - startTime,
+              connection_metadata: {
+                site_id: siteId,
+                site_name: testResponse.siteName,
+              },
+            });
+          }
+        } else {
+          throw new Error(testResponse.message);
         }
       } else {
-        throw new Error('Invalid connection configuration');
+        // Generic validation for other providers
+        const isValid = connection.accessToken || connection.apiToken || connection.apiKey;
+        
+        if (isValid) {
+          testResult = {
+            success: true,
+            status: 'active',
+            message: 'Connection test successful',
+          };
+
+          await dbAdapter.updateIntegration(
+            id,
+            {
+              status: 'active',
+              last_tested_at: new Date().toISOString(),
+              error_message: undefined,
+            },
+            userProfile.org_id
+          );
+
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'connection_test_success',
+              api_duration_ms: Date.now() - startTime,
+            });
+          }
+        } else {
+          throw new Error('Invalid connection configuration');
+        }
       }
     } catch (error: any) {
       testResult = {

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
+import { autoDetectWebflowSiteId } from '@/lib/integrations/webflow-api';
 import type { IntegrationType, ConnectionConfig, IntegrationStatus } from '@/lib/integrations/types';
 
 // Helper to get client IP address
@@ -121,6 +122,27 @@ export async function POST(request: NextRequest) {
 
     // Create database adapter
     const dbAdapter = new EnvironmentIntegrationsDB();
+
+    // Webflow-specific: Auto-detect Site ID if not provided
+    if (provider === 'webflow' && connection.api_key && !connection.site_id) {
+      try {
+        console.log('🔍 Auto-detecting Webflow Site ID...');
+        const siteId = await autoDetectWebflowSiteId(
+          connection.api_key as string,
+          connection.collection_id as string | undefined
+        );
+        
+        if (siteId) {
+          connection.site_id = siteId;
+          console.log(`✅ Auto-detected Site ID: ${siteId}`);
+        } else {
+          console.warn('⚠️ Could not auto-detect Site ID - user may need to provide it manually');
+        }
+      } catch (error: any) {
+        console.error('❌ Error auto-detecting Site ID:', error);
+        // Don't fail the connection - site_id is optional, user can provide it later
+      }
+    }
 
     // Test connection if requested
     let connectionStatus: 'active' | 'inactive' | 'expired' | 'error' = 'inactive';
