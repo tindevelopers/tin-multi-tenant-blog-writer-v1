@@ -50,19 +50,28 @@ export default function ClustersPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
+        setLoading(true);
+        setError(null);
+
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !user) {
+          setError('Please log in to access workflow data.');
+          setLoading(false);
+          return;
+        }
 
         const sessionId = localStorage.getItem('workflow_session_id');
         if (!sessionId) {
           setError('No workflow session found. Please start a new workflow from the objective page.');
+          setLoading(false);
           return;
         }
 
         console.log('🔍 Loading clusters for session:', sessionId);
 
-        // Load workflow session
+        // Load workflow session with better error handling
         const { data: session, error: sessionError } = await supabase
           .from('workflow_sessions')
           .select('*')
@@ -71,14 +80,31 @@ export default function ClustersPage() {
 
         if (sessionError) {
           console.error('❌ Error loading session:', sessionError);
-          setError('Failed to load workflow session. Please start a new workflow.');
+          
+          // Handle specific error codes
+          if (sessionError.code === 'PGRST116') {
+            setError('Workflow session not found. Please start a new workflow from the objective page.');
+          } else if (sessionError.code === '42501' || sessionError.message?.includes('permission')) {
+            setError('You do not have permission to access this workflow session. Please check your organization access.');
+          } else if (sessionError.code === '42P01' || sessionError.message?.includes('does not exist')) {
+            setError('Workflow tables are not set up. Please contact your administrator to run database migrations.');
+          } else if (sessionError.code === '406' || sessionError.message?.includes('406')) {
+            setError('Database configuration error (406). Please ensure workflow_sessions table exists and RLS policies are configured.');
+          } else {
+            setError(`Failed to load workflow session: ${sessionError.message || 'Unknown error'}. Please try refreshing the page.`);
+          }
+          setLoading(false);
           return;
         }
 
-        if (session) {
-          setWorkflowSession(session);
-          console.log('✅ Loaded workflow session:', session.session_id);
+        if (!session) {
+          setError('Workflow session not found. Please start a new workflow.');
+          setLoading(false);
+          return;
         }
+
+        setWorkflowSession(session);
+        console.log('✅ Loaded workflow session:', session.session_id);
 
         // Load keyword collection (without .single() to avoid error if none found)
         const { data: collectionData, error: collectionError } = await supabase
@@ -88,9 +114,32 @@ export default function ClustersPage() {
           .order('created_at', { ascending: false })
           .limit(1);
 
-        if (collectionError && collectionError.code !== 'PGRST116') {
-          // PGRST116 is "no rows returned" which is fine, other errors are not
-          throw collectionError;
+        if (collectionError) {
+          // Handle specific error codes
+          if (collectionError.code === 'PGRST116') {
+            // No collection found - this is expected if user hasn't saved yet
+            console.log('ℹ️ No keyword collection found yet - user needs to save keywords first');
+            setKeywordCollection(null);
+            setLoading(false);
+            return;
+          } else if (collectionError.code === '42501' || collectionError.message?.includes('permission')) {
+            setError('You do not have permission to access keyword collections. Please check your organization access.');
+            setLoading(false);
+            return;
+          } else if (collectionError.code === '42P01' || collectionError.message?.includes('does not exist')) {
+            setError('Keyword collections table is not set up. Please contact your administrator to run database migrations.');
+            setLoading(false);
+            return;
+          } else if (collectionError.code === '406' || collectionError.message?.includes('406')) {
+            setError('Database configuration error (406). Please ensure keyword_collections table exists and RLS policies are configured.');
+            setLoading(false);
+            return;
+          } else {
+            console.error('❌ Unexpected error loading collection:', collectionError);
+            setError(`Failed to load keyword collection: ${collectionError.message || 'Unknown error'}`);
+            setLoading(false);
+            return;
+          }
         }
 
         const collection = collectionData && collectionData.length > 0 ? collectionData[0] : null;
@@ -107,11 +156,16 @@ export default function ClustersPage() {
           setKeywordCollection(collection);
           
           // Load existing clusters or generate from keywords
-          const { data: existingClusters } = await supabase
+          const { data: existingClusters, error: clustersError } = await supabase
             .from('keyword_clusters')
             .select('*')
             .eq('session_id', sessionId)
             .order('created_at', { ascending: true });
+
+          if (clustersError && clustersError.code !== 'PGRST116') {
+            console.warn('⚠️ Error loading clusters (non-critical):', clustersError);
+            // Don't fail completely - we can still generate clusters from keywords
+          }
 
           if (existingClusters && existingClusters.length > 0) {
             console.log('✅ Loaded existing clusters:', existingClusters.length);
@@ -123,9 +177,17 @@ export default function ClustersPage() {
             })));
           } else if (collection.keywords) {
             // Ensure keywords is an array
-            const keywordsArray = Array.isArray(collection.keywords) 
-              ? collection.keywords 
-              : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
+            let keywordsArray: any[] = [];
+            try {
+              keywordsArray = Array.isArray(collection.keywords) 
+                ? collection.keywords 
+                : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
+            } catch (parseError) {
+              console.error('❌ Error parsing keywords:', parseError);
+              setError('Failed to parse keyword data. Please return to keyword research and save your keywords again.');
+              setLoading(false);
+              return;
+            }
             
             if (keywordsArray.length > 0) {
               console.log('🔄 Generating clusters from keywords:', keywordsArray.length);
@@ -139,12 +201,15 @@ export default function ClustersPage() {
             setError('Keyword collection exists but contains no keywords. Please return to keyword research and save your keywords.');
           }
         } else {
-          console.warn('⚠️ No keyword collection found for session:', sessionId);
-          setError('No keyword collection found. Please complete keyword research first and click "Save Collection".');
+          console.log('ℹ️ No keyword collection found for session:', sessionId);
+          // Don't set error here - let the empty state UI handle it
+          setKeywordCollection(null);
         }
-      } catch (error) {
-        console.error('Error loading data:', error);
-        setError('Failed to load clusters');
+      } catch (error: any) {
+        console.error('❌ Unexpected error loading data:', error);
+        setError(`Failed to load clusters: ${error.message || 'Unknown error'}. Please try refreshing the page or contact support if the issue persists.`);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -387,31 +452,56 @@ export default function ClustersPage() {
         </div>
       )}
 
-      {/* Empty State */}
-      {clusters.length === 0 && !keywordCollection && (
+      {/* Loading State */}
+      {loading && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading workflow data...</p>
+        </div>
+      )}
+
+      {/* Empty State - No Collection */}
+      {!loading && clusters.length === 0 && !keywordCollection && !error && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
           <Layers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-            No keyword sets found
+            No keyword collection found
           </h3>
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             You need to search and save keywords first before clustering them.
           </p>
-          <div className="text-left max-w-md mx-auto bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-            <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">Follow these steps:</p>
-            <ol className="list-decimal list-inside space-y-1 text-sm text-gray-600 dark:text-gray-400">
+          <div className="text-left max-w-md mx-auto bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-2 font-medium">Follow these steps:</p>
+            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li>Go to <strong>Keyword Research</strong> tab</li>
               <li>Search for keywords in your niche</li>
-              <li>Select and save keyword sets</li>
+              <li>Select keywords you want to use</li>
+              <li>Click <strong>"Save Collection"</strong> button</li>
               <li>Return here to cluster them</li>
             </ol>
           </div>
           <button
             onClick={() => router.push('/admin/workflow/keywords')}
-            className="mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
           >
             Go to Keyword Research
           </button>
+        </div>
+      )}
+
+      {/* Empty State - Collection exists but no clusters */}
+      {!loading && clusters.length === 0 && keywordCollection && !error && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <Layers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Ready to cluster keywords
+          </h3>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            Your keyword collection has been loaded. Clusters will be generated automatically.
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            If clusters don't appear, please refresh the page or return to keyword research to verify your keywords were saved correctly.
+          </p>
         </div>
       )}
 
