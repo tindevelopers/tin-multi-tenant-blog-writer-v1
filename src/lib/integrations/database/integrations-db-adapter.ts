@@ -11,7 +11,7 @@
 import { EnvironmentIntegrationsDB } from './environment-integrations-db';
 import { IntegrationManager } from '../integration-manager';
 import { shouldUseEnvironmentTables } from '@/lib/environment';
-import type { Integration } from '../types';
+import type { Integration, IntegrationType, ConnectionConfig } from '../types';
 import type { IntegrationRecommendation } from './environment-integrations-db';
 
 /**
@@ -70,7 +70,19 @@ export class IntegrationsDBAdapter {
     config: Record<string, unknown>
   ): Promise<Integration> {
     if (this.useEnvironmentTables && this.envDB) {
-      return await this.envDB.createIntegration(tenantId, type, config);
+      const envIntegration = await this.envDB.createIntegration(
+        tenantId,
+        type as IntegrationType,
+        config as ConnectionConfig,
+        null, // connection_method - will be determined from config
+        'inactive' // status - will be updated after testing
+      );
+      // Convert EnvironmentIntegration to Integration
+      const integration = await this.envDB.getIntegration(envIntegration.id, tenantId);
+      if (!integration) {
+        throw new Error('Failed to retrieve created integration');
+      }
+      return integration;
     } else if (this.unifiedManager) {
       // For unified schema, we need more parameters
       // This is a simplified version - may need enhancement
@@ -93,7 +105,21 @@ export class IntegrationsDBAdapter {
     tenantId?: string
   ): Promise<Integration> {
     if (this.useEnvironmentTables && this.envDB) {
-      return await this.envDB.updateIntegration(integrationId, updates, tenantId);
+      const envIntegration = await this.envDB.updateIntegration(
+        integrationId,
+        {
+          connection: updates.connection as ConnectionConfig,
+          connection_method: null, // Will be determined from connection
+          status: 'inactive', // Will be updated after testing
+        },
+        tenantId
+      );
+      // Convert EnvironmentIntegration to Integration
+      const integration = await this.envDB.getIntegration(envIntegration.id, tenantId);
+      if (!integration) {
+        throw new Error('Failed to retrieve updated integration');
+      }
+      return integration;
     } else if (this.unifiedManager) {
       // Unified schema update would go through IntegrationManager
       throw new Error(

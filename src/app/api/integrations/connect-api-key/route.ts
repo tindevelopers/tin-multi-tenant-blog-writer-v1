@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
-import type { IntegrationType, ConnectionConfig } from '@/lib/integrations/types';
+import type { IntegrationType, ConnectionConfig, IntegrationStatus } from '@/lib/integrations/types';
 
 // Helper to get client IP address
 function getClientIp(request: NextRequest): string | undefined {
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
         
         if (logId) {
           await integrationLogger.updateLog(logId, {
-            status: 'connection_tested',
+            status: 'connection_test_success',
             connection_metadata: {
               connection_method: 'api_key',
               test_passed: true,

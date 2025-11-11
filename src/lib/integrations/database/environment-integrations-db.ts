@@ -13,6 +13,8 @@ import type {
   ConnectionConfig,
   EnvironmentIntegration,
   ConnectionMethod,
+  IntegrationStatus,
+  HealthStatus,
 } from '../types';
 import {
   encryptConnectionConfig,
@@ -340,6 +342,13 @@ export class EnvironmentIntegrationsDB {
       ...config
     } = connection;
 
+    // Ensure field_mappings is an array
+    const fieldMappings = Array.isArray(field_mappings) 
+      ? field_mappings 
+      : (field_mappings && typeof field_mappings === 'object' && Object.keys(field_mappings).length > 0
+          ? [] // If it's an object but not an array, default to empty array
+          : []);
+
     return {
       integration_id: row.id,
       org_id: row.org_id || row.tenant_id, // Use org_id if available, fallback to tenant_id
@@ -347,8 +356,8 @@ export class EnvironmentIntegrationsDB {
       name: `${row.provider} Integration`,
       status: (row.status || 'inactive') as IntegrationStatus,
       config: config as ConnectionConfig,
-      field_mappings: field_mappings || [],
-      health_status: health_status || 'unknown',
+      field_mappings: fieldMappings,
+      health_status: (health_status && typeof health_status === 'string' && ['healthy', 'warning', 'error', 'unknown'].includes(health_status) ? health_status : 'unknown') as HealthStatus,
       last_sync: row.last_sync_at || last_sync || undefined,
       created_at: row.created_at,
       updated_at: row.updated_at || row.created_at,

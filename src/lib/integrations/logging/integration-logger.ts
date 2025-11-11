@@ -12,6 +12,9 @@ type LogStatus =
   | 'initiated'
   | 'oauth_initiated'
   | 'oauth_callback_received'
+  | 'oauth_redirected'
+  | 'oauth_success'
+  | 'oauth_failed'
   | 'validating_credentials'
   | 'api_called'
   | 'api_success'
@@ -19,7 +22,11 @@ type LogStatus =
   | 'saving_to_db'
   | 'saved'
   | 'failed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'connection_test_initiated'
+  | 'connection_test_success'
+  | 'connection_test_failed'
+  | 'updated';
 
 interface LogEntry {
   org_id: string;
