@@ -67,14 +67,20 @@ export default function ClustersPage() {
             setWorkflowSession(session);
           }
 
-          // Load keyword collection
-          const { data: collection } = await supabase
+          // Load keyword collection (without .single() to avoid error if none found)
+          const { data: collectionData, error: collectionError } = await supabase
             .from('keyword_collections')
             .select('*')
             .eq('session_id', sessionId)
             .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+            .limit(1);
+
+          if (collectionError && collectionError.code !== 'PGRST116') {
+            // PGRST116 is "no rows returned" which is fine, other errors are not
+            throw collectionError;
+          }
+
+          const collection = collectionData && collectionData.length > 0 ? collectionData[0] : null;
 
           if (collection) {
             setKeywordCollection(collection);
