@@ -356,6 +356,11 @@ function BlogWriterIntegrationsContent() {
             ? `Connect ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`
             : `Get Recommendations for ${selectedProvider.charAt(0).toUpperCase() + selectedProvider.slice(1)}`}
         </h2>
+        {viewMode === 'connect' && (
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Connect your {selectedProvider} integration to enable publishing. Keywords and backlink recommendations are available when creating blog posts in the content workflow.
+          </p>
+        )}
 
         {viewMode === 'connect' ? (
           <ConnectIntegrationForm
