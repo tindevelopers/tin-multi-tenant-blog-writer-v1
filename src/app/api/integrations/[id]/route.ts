@@ -6,8 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { integrationManager } from '@/lib/integrations/integration-manager';
-import type { ConnectionConfig, FieldMapping } from '@/lib/integrations/types';
+import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
+import type { ConnectionConfig, FieldMapping, IntegrationStatus } from '@/lib/integrations/types';
 
 /**
  * GET /api/integrations/[id]
@@ -27,20 +27,28 @@ export async function GET(
     }
 
     const { id } = await params;
-    const integration = await integrationManager.getIntegration(id);
-
-    if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
-    }
-
-    // Verify user has access to this integration's organization
+    
+    // Get user's organization first
     const { data: userProfile } = await supabase
       .from('users')
       .select('org_id')
       .eq('user_id', user.id)
       .single();
 
-    if (!userProfile || userProfile.org_id !== integration.org_id) {
+    if (!userProfile) {
+      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
+    }
+
+    // Get integration using new database adapter
+    const dbAdapter = new EnvironmentIntegrationsDB();
+    const integration = await dbAdapter.getIntegration(id, userProfile.org_id);
+
+    if (!integration) {
+      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+    }
+
+    // Verify user has access to this integration's organization
+    if (integration.org_id !== userProfile.org_id) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
@@ -66,72 +74,18 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const supabase = await createClient(request);
-    
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  return handleUpdate(request, params);
+}
 
-    // Check admin permissions
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('org_id, role')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
-
-    // Check admin permissions - allow system_admin, super_admin, admin, and manager
-    const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
-    if (!allowedRoles.includes(userProfile.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions. Admin, Manager, or higher role required.' }, { status: 403 });
-    }
-
-    const { id } = await params;
-    const body = await request.json();
-    const { 
-      name, 
-      config, 
-      field_mappings, 
-      status 
-    }: {
-      name?: string;
-      config?: ConnectionConfig;
-      field_mappings?: FieldMapping[];
-      status?: 'active' | 'inactive' | 'error';
-    } = body;
-
-    // Verify integration exists and belongs to user's org
-    const existing = await integrationManager.getIntegration(id);
-    if (!existing || existing.org_id !== userProfile.org_id) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
-    }
-
-    // Update integration
-    const integration = await integrationManager.updateIntegration(id, {
-      name,
-      config,
-      field_mappings,
-      status,
-    });
-
-    return NextResponse.json({ 
-      success: true, 
-      data: integration 
-    });
-
-  } catch (error) {
-    console.error('Error updating integration:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update integration' },
-      { status: 500 }
-    );
-  }
+/**
+ * PATCH /api/integrations/[id]
+ * Update an integration (alias for PUT)
+ */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return handleUpdate(request, params);
 }
 
 /**
@@ -170,14 +124,17 @@ export async function DELETE(
 
     const { id } = await params;
 
+    // Get integration using new database adapter
+    const dbAdapter = new EnvironmentIntegrationsDB();
+    
     // Verify integration exists and belongs to user's org
-    const existing = await integrationManager.getIntegration(id);
-    if (!existing || existing.org_id !== userProfile.org_id) {
+    const existing = await dbAdapter.getIntegration(id, userProfile.org_id);
+    if (!existing) {
       return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
     }
 
     // Delete integration
-    await integrationManager.deleteIntegration(id);
+    await dbAdapter.deleteIntegration(id, userProfile.org_id);
 
     return NextResponse.json({ 
       success: true,

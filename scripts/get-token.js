@@ -3,15 +3,21 @@
 /**
  * Get JWT Token Script
  * 
- * Logs in via API and extracts the access token
+ * Logs in via Supabase client directly (no API route needed)
  * 
  * Usage:
  *   node scripts/get-token.js <email> <password>
  *   node scripts/get-token.js your@email.com yourpassword
  */
 
-const http = require('http');
-const https = require('https');
+// Try to use Supabase client if available (better method)
+let useSupabaseClient = false;
+try {
+  require.resolve('@supabase/supabase-js');
+  useSupabaseClient = true;
+} catch (e) {
+  // Supabase not available, will use HTTP method
+}
 
 const email = process.argv[2];
 const password = process.argv[3];
@@ -22,65 +28,34 @@ if (!email || !password) {
   console.error('   Example (dev): node scripts/get-token.js your@email.com yourpassword');
   console.error('   Example (prod): node scripts/get-token.js your@email.com yourpassword https://your-domain.com');
   console.error('\n   Or set INTEGRATION_TEST_BASE_URL environment variable');
+  console.error('\n   Note: This script uses Supabase client directly (no API route needed)');
   process.exit(1);
 }
 
-const url = new URL(`${baseUrl}/api/auth/login`);
-const data = JSON.stringify({ email, password });
-
-const options = {
-  hostname: url.hostname,
-  port: url.port || (url.protocol === 'https:' ? 443 : 80),
-  path: url.pathname,
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Content-Length': data.length
-  }
-};
-
-const client = url.protocol === 'https:' ? https : http;
-
-console.log(`🔐 Logging in as ${email}...`);
-console.log(`📡 Connecting to ${baseUrl}...\n`);
-
-const req = client.request(options, (res) => {
-  let responseData = '';
+// Method 1: Use Supabase client directly (preferred)
+if (useSupabaseClient) {
+  const { createClient } = require('@supabase/supabase-js');
   
-  res.on('data', (chunk) => {
-    responseData += chunk;
-  });
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://edtxtpqrfpxeogukfunq.supabase.co';
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVkdHh0cHFyZnB4ZW9ndWtmdW5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgxMTU5NTcsImV4cCI6MjA3MzY5MTk1N30.viyecHpzThDCp0JivzOsFpYbQCwoRMeVgEjcIgFuHBg';
   
-  res.on('end', () => {
-    if (res.statusCode !== 200) {
-      console.error(`❌ Login failed (HTTP ${res.statusCode})`);
-      try {
-        const error = JSON.parse(responseData);
-        console.error(`   Error: ${error.error || error.message || responseData}`);
-      } catch (e) {
-        console.error(`   Response: ${responseData}`);
-      }
-      process.exit(1);
-      return;
-    }
-    
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  console.log(`🔐 Logging in as ${email}...`);
+  console.log(`📡 Using Supabase directly...\n`);
+  
+  (async () => {
     try {
-      const json = JSON.parse(responseData);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       
-      // Check for access_token in various possible locations
-      let accessToken = null;
-      
-      if (json.access_token) {
-        accessToken = json.access_token;
-      } else if (json.data && json.data.access_token) {
-        accessToken = json.data.access_token;
-      } else if (json.session && json.session.access_token) {
-        accessToken = json.session.access_token;
-      } else if (json.token) {
-        accessToken = json.token;
+      if (error) {
+        console.error(`❌ Login failed: ${error.message}`);
+        process.exit(1);
+        return;
       }
       
-      if (accessToken) {
+      if (data.session?.access_token) {
+        const accessToken = data.session.access_token;
         console.log('✅ Login successful!\n');
         console.log('📋 Access Token:');
         console.log(accessToken);
@@ -92,7 +67,7 @@ const req = client.request(options, (res) => {
         console.log(`   Length: ${accessToken.length} characters`);
         console.log(`   Starts with: ${accessToken.substring(0, 20)}...`);
         
-        // Try to decode JWT to show expiration (if possible)
+        // Decode JWT to show expiration
         try {
           const parts = accessToken.split('.');
           if (parts.length === 3) {
@@ -103,35 +78,31 @@ const req = client.request(options, (res) => {
               const minutesUntilExpiry = Math.floor((expiresAt - now) / 1000 / 60);
               console.log(`   Expires: ${expiresAt.toLocaleString()} (${minutesUntilExpiry} minutes)`);
             }
+            if (payload.email) {
+              console.log(`   Email: ${payload.email}`);
+            }
           }
         } catch (e) {
           // JWT decode failed, that's OK
         }
+        
+        process.exit(0);
       } else {
-        console.error('❌ No access token found in response');
-        console.log('\n📄 Full response:');
-        console.log(JSON.stringify(json, null, 2));
-        console.log('\n💡 Tip: Check if your login endpoint returns the token in a different format');
+        console.error('❌ No access token in response');
         process.exit(1);
       }
-    } catch (e) {
-      console.error('❌ Failed to parse response:', e.message);
-      console.log('\n📄 Raw response:');
-      console.log(responseData);
+    } catch (error) {
+      console.error('❌ Error:', error.message);
       process.exit(1);
     }
-  });
-});
-
-req.on('error', (error) => {
-  console.error('❌ Request failed:', error.message);
-  console.error('\n💡 Make sure:');
-  console.error('   1. Your server is running (npm run dev)');
-  console.error(`   2. The server is accessible at ${baseUrl}`);
-  console.error('   3. The /api/auth/login endpoint exists');
+  })();
+  
+  // Keep process alive for async operation
+  setTimeout(() => {
+    console.error('❌ Timeout: Login took too long');
+    process.exit(1);
+  }, 10000);
+} else {
+  console.error('❌ @supabase/supabase-js not found. Please install: npm install @supabase/supabase-js');
   process.exit(1);
-});
-
-req.write(data);
-req.end();
-
+}

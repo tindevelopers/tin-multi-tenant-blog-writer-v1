@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { integrationManager } from '@/lib/integrations/integration-manager';
+import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import type { IntegrationType, ConnectionConfig, FieldMapping } from '@/lib/integrations/types';
 
 /**
@@ -34,8 +34,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
     }
 
-    // Get integrations
-    const integrations = await integrationManager.getIntegrations(userProfile.org_id);
+    // Get integrations using new database adapter
+    const dbAdapter = new EnvironmentIntegrationsDB();
+    const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
 
     return NextResponse.json({ 
       success: true, 
@@ -104,14 +105,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create integration
-    const integration = await integrationManager.createIntegration(
+    // Create integration using new database adapter
+    const dbAdapter = new EnvironmentIntegrationsDB();
+    // Determine connection_method from config
+    const connectionMethod = config.access_token ? 'oauth' : 'api_key';
+    const integration = await dbAdapter.createIntegration(
       userProfile.org_id,
       type,
-      name,
       config,
-      field_mappings,
-      user.id
+      connectionMethod,
+      'inactive' // Will be updated after testing
     );
 
     return NextResponse.json({ 
