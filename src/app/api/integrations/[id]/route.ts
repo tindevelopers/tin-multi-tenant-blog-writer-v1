@@ -89,6 +89,86 @@ export async function PATCH(
 }
 
 /**
+ * Shared update handler for PUT and PATCH
+ */
+async function handleUpdate(
+  request: NextRequest,
+  params: Promise<{ id: string }>
+) {
+  try {
+    const supabase = await createClient(request);
+    
+    // Get current user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check admin permissions
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('org_id, role')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!userProfile) {
+      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
+    }
+
+    // Check admin permissions - allow system_admin, super_admin, admin, and manager
+    const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
+    if (!allowedRoles.includes(userProfile.role)) {
+      return NextResponse.json({ error: 'Insufficient permissions. Admin, Manager, or higher role required.' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+    const { 
+      connection,
+      status 
+    }: {
+      connection?: ConnectionConfig;
+      status?: IntegrationStatus;
+    } = body;
+
+    // Get integration using new database adapter
+    const dbAdapter = new EnvironmentIntegrationsDB();
+    
+    // Verify integration exists and belongs to user's org
+    const existing = await dbAdapter.getIntegration(id, userProfile.org_id);
+    if (!existing) {
+      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+    }
+
+    // Determine connection_method from connection if provided
+    const connectionMethod = connection?.access_token ? 'oauth' : (connection ? 'api_key' : undefined);
+
+    // Update integration
+    const integration = await dbAdapter.updateIntegration(
+      id,
+      {
+        connection: connection,
+        connection_method: connectionMethod,
+        status: status,
+      },
+      userProfile.org_id
+    );
+
+    return NextResponse.json({ 
+      success: true, 
+      data: integration 
+    });
+
+  } catch (error) {
+    console.error('Error updating integration:', error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to update integration' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/integrations/[id]
  * Delete an integration
  */
