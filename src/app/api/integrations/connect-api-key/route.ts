@@ -202,7 +202,76 @@ export async function POST(request: NextRequest) {
               connection_method: 'api_key',
               status: connectionStatus,
               last_tested_at: lastTestedAt,
+              error_message: errorMessage,
+              metadata: name ? { name } : undefined,
+            },
+            userProfile.org_id
+          );
+
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'updated',
+              saved_integration_id: existingIntegration.integration_id,
+            });
+          }
+        } else {
+          // For Webflow without site_id, create new integration (allow multiple per provider)
+          integration = await dbAdapter.createIntegration(
+            userProfile.org_id,
+            provider as IntegrationType,
+            connection as ConnectionConfig,
+            'api_key',
+            connectionStatus,
+            lastTestedAt,
+            errorMessage,
+            name ? { name } : undefined
+          );
+
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'saved',
+              saved_integration_id: integration.id,
+            });
+          }
+        }
+      } else {
+        // For Webflow without site_id, create new integration (allow multiple per provider)
+        integration = await dbAdapter.createIntegration(
+          userProfile.org_id,
+          provider as IntegrationType,
+          connection as ConnectionConfig,
+          'api_key',
+          connectionStatus,
+          lastTestedAt,
+          errorMessage,
+          name ? { name } : undefined
+        );
+
+        if (logId) {
+          await integrationLogger.updateLog(logId, {
+            status: 'saved',
+            saved_integration_id: integration.id,
+          });
+        }
+      }
+    } else {
+      // For non-Webflow providers, check if integration already exists
+      const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
+      const existingIntegration = integrations.find(
+        (i) => i.type === provider
+      );
+
+      if (existingIntegration) {
+        // Update existing integration
+        integration = await dbAdapter.updateIntegration(
+          existingIntegration.integration_id,
+          {
+            connection: connection as ConnectionConfig,
+            connection_method: 'api_key',
+            status: connectionStatus,
+            last_tested_at: lastTestedAt,
             error_message: errorMessage,
+            metadata: name ? { name } : undefined,
           },
           userProfile.org_id
         );
@@ -220,7 +289,10 @@ export async function POST(request: NextRequest) {
           provider as IntegrationType,
           connection as ConnectionConfig,
           'api_key',
-          connectionStatus
+          connectionStatus,
+          lastTestedAt,
+          errorMessage,
+          name ? { name } : undefined
         );
 
         if (logId) {
