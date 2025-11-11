@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import RoleBadge from "@/components/ui/RoleBadge";
+import AddUserModal from "@/components/admin/AddUserModal";
 
 interface User {
   user_id: string;
@@ -23,6 +24,7 @@ export default function UsersManagementPage() {
   const [roleFilter, setRoleFilter] = useState("all");
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [userRole, setUserRole] = useState<string>("");
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
 
   const roles = [
     { value: "all", label: "All Roles" },
@@ -144,7 +146,10 @@ export default function UsersManagementPage() {
               Manage user accounts, roles, and permissions
             </p>
           </div>
-          <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
+          <button 
+            onClick={() => setShowAddUserModal(true)}
+            className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+          >
             Add User
           </button>
         </div>
@@ -310,6 +315,25 @@ export default function UsersManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Add User Modal */}
+      <AddUserModal
+        isOpen={showAddUserModal}
+        onClose={() => setShowAddUserModal(false)}
+        onSuccess={() => {
+          // Refresh users list
+          const supabase = createClient();
+          supabase
+            .from("users")
+            .select("*, organizations(*)")
+            .order("created_at", { ascending: false })
+            .then(({ data, error }) => {
+              if (!error && data) {
+                setUsers(data);
+              }
+            });
+        }}
+      />
     </div>
   );
 }
