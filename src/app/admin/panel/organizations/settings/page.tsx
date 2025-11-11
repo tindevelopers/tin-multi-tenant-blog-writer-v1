@@ -66,14 +66,19 @@ export default function OrganizationSettingsPage() {
             const org = Array.isArray(orgs) && orgs.length > 0 ? orgs[0] : null;
             if (org) {
               setOrganization(org);
-        
-        // Set form values
-        const companyNameValue = org.settings?.company_name || org.name || "";
-        setCompanyName(companyNameValue);
-        
-        const logoUrl = org.settings?.logo_url || org.logo_url || null;
-        setLogoPreview(logoUrl);
-      }
+              
+              // Set form values
+              const companyNameValue = org.settings?.company_name || org.name || "";
+              setCompanyName(companyNameValue);
+              
+              const logoUrl = org.settings?.logo_url || org.logo_url || null;
+              setLogoPreview(logoUrl);
+            } else {
+              setError("Organization not found for this user.");
+            }
+          } else {
+            setError("Organization not found for this user.");
+          }
     } catch (err) {
       console.error("Error fetching organization:", err);
       setError(err instanceof Error ? err.message : "Failed to load organization");
