@@ -144,7 +144,18 @@ async function handleUpdate(
     // Verify integration exists and belongs to user's org
     const existing = await dbAdapter.getIntegration(id, userProfile.org_id);
     if (!existing) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      console.error(`[Update] Integration ${id} not found for org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration not found or does not belong to your organization' 
+      }, { status: 404 });
+    }
+    
+    // Double-check organization ownership
+    if (existing.org_id !== userProfile.org_id) {
+      console.error(`[Update] Integration ${id} org_id ${existing.org_id} does not match user org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration does not belong to your organization' 
+      }, { status: 403 });
     }
 
     // Determine connection_method from connection if provided
