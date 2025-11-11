@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface Organization {
-  id: string;
+  org_id: string;
   name: string;
   slug: string;
   created_at: string;
@@ -82,7 +82,7 @@ export default function OrganizationsManagementPage() {
     if (selectedOrgs.size === filteredOrganizations.length) {
       setSelectedOrgs(new Set());
     } else {
-      setSelectedOrgs(new Set(filteredOrganizations.map(org => org.org_id || org.id)));
+      setSelectedOrgs(new Set(filteredOrganizations.map(org => org.org_id)));
     }
   };
 
@@ -268,13 +268,13 @@ export default function OrganizationsManagementPage() {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredOrganizations.map((org) => (
-                <tr key={org.org_id || org.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr key={org.org_id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   {canManageOrgs && (
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input
                         type="checkbox"
-                        checked={selectedOrgs.has(org.org_id || org.id)}
-                        onChange={() => handleOrgSelection(org.org_id || org.id)}
+                        checked={selectedOrgs.has(org.org_id)}
+                        onChange={() => handleOrgSelection(org.org_id)}
                         className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                       />
                     </td>
@@ -301,13 +301,13 @@ export default function OrganizationsManagementPage() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button 
-                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id || org.id}/edit`)}
+                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id}/edit`)}
                           className="text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
                         >
                           Edit
                         </button>
                         <button 
-                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id || org.id}/settings`)}
+                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id}/settings`)}
                           className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         >
                           Settings
