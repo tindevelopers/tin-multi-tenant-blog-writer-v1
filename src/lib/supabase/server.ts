@@ -25,20 +25,20 @@ export async function createClient(request?: NextRequest) {
           autoRefreshToken: false,
           persistSession: false,
         },
-        global: {
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-          },
-        },
       }
     );
-    // Verify the token works by calling getUser
-    const { data: { user }, error } = await client.auth.getUser();
-    if (error || !user) {
-      console.error('Token validation failed:', error);
-      // Still return the client, but getUser will fail
-      // The API route will handle the 401 response
+    // Set the session with the access token
+    // Note: getUser() will use this session
+    const { error: sessionError } = await client.auth.setSession({
+      access_token: authToken,
+      refresh_token: authToken, // Use same token as refresh (for API testing only)
+    });
+    
+    if (sessionError) {
+      console.error('Failed to set session:', sessionError);
+      // Still return client - API route will handle auth failure
     }
+    
     return client;
   }
 
