@@ -40,6 +40,9 @@ for (let i = 0; i < args.length; i++) {
   } else if (args[i] === '--org-id' && args[i + 1]) {
     config.orgId = args[i + 1];
     i++;
+  } else if (args[i].startsWith('http://') || args[i].startsWith('https://')) {
+    // Allow base URL as positional argument
+    config.baseUrl = args[i];
   }
 }
 
