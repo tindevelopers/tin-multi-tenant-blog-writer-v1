@@ -16,7 +16,9 @@ export async function POST(request: NextRequest) {
       word_count,
       include_external_links,
       include_backlinks,
-      backlink_count
+      backlink_count,
+      quality_level,
+      preset
     } = body;
     
     console.log('📝 Generation parameters:', {
@@ -83,6 +85,14 @@ export async function POST(request: NextRequest) {
     }
     if (backlink_count !== undefined) {
       requestPayload.backlink_count = backlink_count;
+    }
+    
+    // Add quality level and preset if provided (these control which AI model is used)
+    if (quality_level) {
+      requestPayload.quality_level = quality_level;
+    }
+    if (preset) {
+      requestPayload.preset = preset;
     }
     
     console.log('📤 Request payload:', requestPayload);

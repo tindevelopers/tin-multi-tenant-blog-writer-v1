@@ -39,8 +39,14 @@ export default function EditorPage() {
     excerpt: '',
     include_external_links: true,
     include_backlinks: true,
-    backlink_count: 5
+    backlink_count: 5,
+    quality_level: 'high', // Default to high quality
+    preset: '' // Optional preset
   });
+
+  const [qualityLevels, setQualityLevels] = useState<Array<{ value: string; label: string; description?: string }>>([]);
+  const [presets, setPresets] = useState<Array<{ value: string; label: string; description?: string }>>([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
 
   const tones = [
     { value: 'professional', label: 'Professional' },
@@ -96,6 +102,55 @@ export default function EditorPage() {
     loadData();
   }, []);
 
+  // Load quality levels and presets
+  useEffect(() => {
+    const loadQualityOptions = async () => {
+      setLoadingOptions(true);
+      try {
+        // Fetch quality levels
+        const qualityLevelsData = await blogWriterAPI.getQualityLevels();
+        if (Array.isArray(qualityLevelsData) && qualityLevelsData.length > 0) {
+          setQualityLevels(qualityLevelsData.map((level: any) => ({
+            value: level.id || level.value || level.name || String(level),
+            label: level.label || level.name || level.description || String(level),
+            description: level.description
+          })));
+        } else {
+          // Fallback to default quality levels if API doesn't return any
+          setQualityLevels([
+            { value: 'low', label: 'Low (Fast)', description: 'Quick generation, basic quality' },
+            { value: 'medium', label: 'Medium (Balanced)', description: 'Good balance of speed and quality' },
+            { value: 'high', label: 'High (Recommended)', description: 'Best quality, may take longer' },
+            { value: 'premium', label: 'Premium (Best)', description: 'Highest quality, uses advanced models' }
+          ]);
+        }
+
+        // Fetch presets
+        const presetsData = await blogWriterAPI.getPresets();
+        if (Array.isArray(presetsData) && presetsData.length > 0) {
+          setPresets(presetsData.map((preset: any) => ({
+            value: preset.id || preset.value || preset.name || String(preset),
+            label: preset.label || preset.name || preset.description || String(preset),
+            description: preset.description
+          })));
+        }
+      } catch (error) {
+        console.error('Error loading quality options:', error);
+        // Set default quality levels on error
+        setQualityLevels([
+          { value: 'low', label: 'Low (Fast)', description: 'Quick generation, basic quality' },
+          { value: 'medium', label: 'Medium (Balanced)', description: 'Good balance of speed and quality' },
+          { value: 'high', label: 'High (Recommended)', description: 'Best quality, may take longer' },
+          { value: 'premium', label: 'Premium (Best)', description: 'Highest quality, uses advanced models' }
+        ]);
+      } finally {
+        setLoadingOptions(false);
+      }
+    };
+
+    loadQualityOptions();
+  }, []);
+
   // Generate content
   const handleGenerateContent = async () => {
     if (!formData.topic) {
@@ -119,7 +174,9 @@ export default function EditorPage() {
         word_count: formData.word_count,
         include_external_links: formData.include_external_links,
         include_backlinks: formData.include_backlinks,
-        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined
+        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined,
+        quality_level: formData.quality_level || 'high',
+        preset: formData.preset || undefined
       });
 
       if (result && typeof result === 'object') {
@@ -329,6 +386,54 @@ export default function EditorPage() {
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 />
               </div>
+
+              {/* Quality Level Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Quality Level <span className="text-xs text-gray-500">(Affects AI model used)</span>
+                </label>
+                {loadingOptions ? (
+                  <div className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 text-sm text-gray-500">
+                    Loading quality options...
+                  </div>
+                ) : (
+                  <select
+                    value={formData.quality_level}
+                    onChange={(e) => setFormData({ ...formData, quality_level: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                  >
+                    {qualityLevels.map(level => (
+                      <option key={level.value} value={level.value}>
+                        {level.label} {level.description ? `- ${level.description}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Higher quality uses more advanced AI models for better content
+                </p>
+              </div>
+
+              {/* Preset Selection (Optional) */}
+              {presets.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Content Preset <span className="text-xs text-gray-500">(Optional)</span>
+                  </label>
+                  <select
+                    value={formData.preset}
+                    onChange={(e) => setFormData({ ...formData, preset: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="">None (Use default settings)</option>
+                    {presets.map(preset => (
+                      <option key={preset.value} value={preset.value}>
+                        {preset.label} {preset.description ? `- ${preset.description}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* External Links Options */}
               <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-3">
