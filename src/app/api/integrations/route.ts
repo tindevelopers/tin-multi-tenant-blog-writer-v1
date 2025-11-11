@@ -15,7 +15,7 @@ import type { IntegrationType, ConnectionConfig, FieldMapping } from '@/lib/inte
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(request);
     
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(request);
     
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();

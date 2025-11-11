@@ -1,10 +1,41 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { NextRequest } from "next/server";
 
-export async function createClient() {
+export async function createClient(request?: NextRequest) {
   const cookieStore = await cookies();
+  
+  // Check for Authorization header (for API testing)
+  let authToken: string | undefined;
+  if (request) {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      authToken = authHeader.substring(7);
+    }
+  }
 
+  // If we have a token from Authorization header, use it directly
+  if (authToken) {
+    const client = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+    // Set the session with the token
+    await client.auth.setSession({
+      access_token: authToken,
+      refresh_token: '', // Not needed for API testing
+    });
+    return client;
+  }
+
+  // Otherwise, use cookie-based authentication (normal browser flow)
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
