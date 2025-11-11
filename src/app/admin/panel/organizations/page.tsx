@@ -50,16 +50,46 @@ export default function OrganizationsManagementPage() {
     // Fetch organizations
     const fetchOrganizations = async () => {
       try {
-        const { data, error } = await supabase
+        // Fetch organizations
+        const { data: orgsData, error: orgsError } = await supabase
           .from("organizations")
-          .select(`
-            *,
-            _count:users(count)
-          `)
+          .select("*")
           .order("created_at", { ascending: false });
 
-        if (error) throw error;
-        setOrganizations(data || []);
+        if (orgsError) throw orgsError;
+
+        // Fetch user counts per organization
+        const { data: usersData, error: usersError } = await supabase
+          .from("users")
+          .select("org_id");
+
+        if (usersError) {
+          console.error("Error fetching user counts:", usersError);
+          // Still set organizations even if user count fails
+          setOrganizations(orgsData || []);
+          setLoading(false);
+          return;
+        }
+
+        // Count users per organization
+        const userCounts: Record<string, number> = {};
+        if (usersData) {
+          usersData.forEach((user) => {
+            if (user.org_id) {
+              userCounts[user.org_id] = (userCounts[user.org_id] || 0) + 1;
+            }
+          });
+        }
+
+        // Merge user counts with organizations
+        const organizationsWithCounts = (orgsData || []).map((org) => ({
+          ...org,
+          _count: {
+            users: userCounts[org.org_id] || 0,
+          },
+        }));
+
+        setOrganizations(organizationsWithCounts);
       } catch (error) {
         console.error("Error fetching organizations:", error);
       } finally {
@@ -102,16 +132,41 @@ export default function OrganizationsManagementPage() {
     const fetchOrganizations = async () => {
       try {
         const supabase = createClient();
-        const { data, error } = await supabase
+        
+        // Fetch organizations
+        const { data: orgsData, error: orgsError } = await supabase
           .from("organizations")
-          .select(`
-            *,
-            _count:users(count)
-          `)
+          .select("*")
           .order("created_at", { ascending: false });
 
-        if (!error && data) {
-          setOrganizations(data);
+        if (orgsError) throw orgsError;
+
+        // Fetch user counts per organization
+        const { data: usersData, error: usersError } = await supabase
+          .from("users")
+          .select("org_id");
+
+        if (!usersError && usersData) {
+          // Count users per organization
+          const userCounts: Record<string, number> = {};
+          usersData.forEach((user) => {
+            if (user.org_id) {
+              userCounts[user.org_id] = (userCounts[user.org_id] || 0) + 1;
+            }
+          });
+
+          // Merge user counts with organizations
+          const organizationsWithCounts = (orgsData || []).map((org) => ({
+            ...org,
+            _count: {
+              users: userCounts[org.org_id] || 0,
+            },
+          }));
+
+          setOrganizations(organizationsWithCounts);
+        } else {
+          // If user count fails, just set organizations without counts
+          setOrganizations(orgsData || []);
         }
       } catch (error) {
         console.error("Error fetching organizations:", error);
@@ -151,16 +206,41 @@ export default function OrganizationsManagementPage() {
       }
 
       // Refresh organizations list
-      const { data: orgs, error } = await supabase
+      const { data: orgsData, error: orgsError } = await supabase
         .from("organizations")
-        .select(`
-          *,
-          _count:users(count)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && orgs) {
-        setOrganizations(orgs);
+      if (orgsError) {
+        throw new Error(orgsError.message);
+      }
+
+      // Fetch user counts per organization
+      const { data: usersData, error: usersError } = await supabase
+        .from("users")
+        .select("org_id");
+
+      if (!usersError && usersData && orgsData) {
+        // Count users per organization
+        const userCounts: Record<string, number> = {};
+        usersData.forEach((user) => {
+          if (user.org_id) {
+            userCounts[user.org_id] = (userCounts[user.org_id] || 0) + 1;
+          }
+        });
+
+        // Merge user counts with organizations
+        const organizationsWithCounts = orgsData.map((org) => ({
+          ...org,
+          _count: {
+            users: userCounts[org.org_id] || 0,
+          },
+        }));
+
+        setOrganizations(organizationsWithCounts);
+      } else {
+        // If user count fails, just set organizations without counts
+        setOrganizations(orgsData || []);
       }
 
       setShowDeleteConfirm(false);
