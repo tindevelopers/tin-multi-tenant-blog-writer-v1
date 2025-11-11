@@ -435,11 +435,23 @@ export class EnvironmentIntegrationsDB {
       ? health_status 
       : calculatedHealthStatus) as HealthStatus;
 
+    // Get custom name from metadata if available
+    const customName = row.metadata?.name as string | undefined;
+    const siteName = config.site_name as string | undefined;
+    
+    // Build integration name: custom name > site_name > default
+    let integrationName = `${row.provider} Integration`;
+    if (customName) {
+      integrationName = customName;
+    } else if (siteName) {
+      integrationName = `${row.provider} Integration - ${siteName}`;
+    }
+
     return {
       integration_id: row.id,
       org_id: row.org_id || row.tenant_id, // Use org_id if available, fallback to tenant_id
       type: row.provider as IntegrationType,
-      name: `${row.provider} Integration${config.site_name ? ` - ${config.site_name}` : ''}`,
+      name: integrationName,
       status: (row.status || 'inactive') as IntegrationStatus,
       config: config as ConnectionConfig,
       connection_method: row.connection_method as ConnectionMethod | undefined,
