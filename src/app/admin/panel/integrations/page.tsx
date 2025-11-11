@@ -19,6 +19,7 @@ interface Integration {
   created_at: string;
   updated_at: string;
   health_status?: 'healthy' | 'warning' | 'error' | 'unknown';
+  last_tested_at?: string;
 }
 
 const availableIntegrations = [
