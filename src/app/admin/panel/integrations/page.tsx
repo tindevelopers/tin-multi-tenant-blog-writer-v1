@@ -943,7 +943,6 @@ export default function IntegrationsManagementPage() {
                   {new Date(integration.created_at).toLocaleDateString()}
                 </span>
               </div>
-              {/* Display site name for Webflow integrations */}
               {integration.type === 'webflow' && integration.config.site_name && typeof integration.config.site_name === 'string' && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Site:</span>
@@ -952,7 +951,6 @@ export default function IntegrationsManagementPage() {
                   </span>
                 </div>
               )}
-              {/* Display site ID for Webflow integrations if name not available */}
               {integration.type === 'webflow' && !integration.config.site_name && integration.config.site_id && typeof integration.config.site_id === 'string' && (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Site ID:</span>
