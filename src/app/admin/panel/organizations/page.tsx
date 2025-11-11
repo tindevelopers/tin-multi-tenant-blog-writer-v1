@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 interface Organization {
@@ -16,6 +17,7 @@ interface Organization {
 }
 
 export default function OrganizationsManagementPage() {
+  const router = useRouter();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -80,7 +82,7 @@ export default function OrganizationsManagementPage() {
     if (selectedOrgs.size === filteredOrganizations.length) {
       setSelectedOrgs(new Set());
     } else {
-      setSelectedOrgs(new Set(filteredOrganizations.map(org => org.id)));
+      setSelectedOrgs(new Set(filteredOrganizations.map(org => org.org_id || org.id)));
     }
   };
 
@@ -266,13 +268,13 @@ export default function OrganizationsManagementPage() {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredOrganizations.map((org) => (
-                <tr key={org.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr key={org.org_id || org.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   {canManageOrgs && (
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input
                         type="checkbox"
-                        checked={selectedOrgs.has(org.id)}
-                        onChange={() => handleOrgSelection(org.id)}
+                        checked={selectedOrgs.has(org.org_id || org.id)}
+                        onChange={() => handleOrgSelection(org.org_id || org.id)}
                         className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                       />
                     </td>
@@ -298,10 +300,16 @@ export default function OrganizationsManagementPage() {
                   {canManageOrgs && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
-                        <button className="text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
+                        <button 
+                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id || org.id}/edit`)}
+                          className="text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+                        >
                           Edit
                         </button>
-                        <button className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                        <button 
+                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id || org.id}/settings`)}
+                          className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
                           Settings
                         </button>
                         <button className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
