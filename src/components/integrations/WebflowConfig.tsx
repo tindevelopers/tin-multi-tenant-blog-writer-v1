@@ -158,6 +158,17 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         connection.site_name = siteName;
       }
 
+      // Prepare request body with optional name for multiple integrations
+      const requestBody: Record<string, unknown> = {
+        provider: 'webflow',
+        connection,
+        test_connection: false,
+      };
+      
+      if (integrationName) {
+        requestBody.name = integrationName;
+      }
+
       let response;
       if (integrationId) {
         // Update existing integration - need to merge with existing config
@@ -182,16 +193,22 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         };
 
         // Update existing integration
+        const updateBody: Record<string, unknown> = {
+          connection: mergedConfig,
+          connection_method: 'api_key',
+        };
+        
+        if (integrationName) {
+          updateBody.metadata = { name: integrationName };
+        }
+
         response = await fetch(`/api/integrations/${integrationId}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            connection: mergedConfig,
-            connection_method: 'api_key',
-          }),
+          body: JSON.stringify(updateBody),
         });
       } else {
         // Create new integration using connect-api-key endpoint
@@ -201,14 +218,7 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
             'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            provider: 'webflow',
-            connection: {
-              api_key: apiKey,
-              collection_id: collectionId,
-            },
-            test_connection: false,
-          }),
+          body: JSON.stringify(requestBody),
         });
       }
 
