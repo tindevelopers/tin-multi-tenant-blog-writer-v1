@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create auth user (using service client to bypass RLS)
-    const { data: authData, error: authError: signUpError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true, // Auto-confirm email
