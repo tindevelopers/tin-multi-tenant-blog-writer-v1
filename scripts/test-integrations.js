@@ -332,7 +332,8 @@ async function testUpdateIntegration() {
   assertStatus(response, 200);
   assertProperty(response.data, 'success', true);
   assertProperty(response.data, 'data');
-  assertProperty(response.data.data, 'integration_id', testIntegrationId);
+  // Update endpoint returns EnvironmentIntegration format with 'id' field
+  assertProperty(response.data.data, 'id', testIntegrationId);
 }
 
 // Test: Validation - Empty Keywords
