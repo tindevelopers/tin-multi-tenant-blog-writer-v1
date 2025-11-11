@@ -42,14 +42,20 @@ export async function GET(
     // Get integration using new database adapter
     const dbAdapter = new EnvironmentIntegrationsDB();
     const integration = await dbAdapter.getIntegration(id, userProfile.org_id);
-
+    
     if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      console.error(`[GET] Integration ${id} not found for org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration not found or does not belong to your organization' 
+      }, { status: 404 });
     }
 
-    // Verify user has access to this integration's organization
+    // Double-check organization ownership
     if (integration.org_id !== userProfile.org_id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+      console.error(`[GET] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration does not belong to your organization' 
+      }, { status: 403 });
     }
 
     return NextResponse.json({ 
