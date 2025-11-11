@@ -75,7 +75,12 @@ export class EnvironmentIntegrationsDB {
    */
   async getIntegrations(orgId: string): Promise<Integration[]> {
     const tableName = getTableName('integrations', this.env);
-    console.log(`[EnvironmentIntegrationsDB] getIntegrations: Using table "${tableName}" for env "${this.env}"`);
+    console.log(`[EnvironmentIntegrationsDB] getIntegrations: Using table "${tableName}" for env "${this.env}", orgId="${orgId}"`);
+    console.log(`[EnvironmentIntegrationsDB] Table name value:`, JSON.stringify(tableName));
+    
+    if (!tableName || tableName === 'integrations') {
+      throw new Error(`Invalid table name: "${tableName}". Expected table name with environment suffix (e.g., integrations_dev)`);
+    }
     
     const { data, error } = await this.supabase
       .from(tableName)
@@ -85,6 +90,7 @@ export class EnvironmentIntegrationsDB {
 
     if (error) {
       console.error(`[EnvironmentIntegrationsDB] Error querying table "${tableName}":`, error);
+      console.error(`[EnvironmentIntegrationsDB] Error details:`, JSON.stringify(error, null, 2));
       throw new Error(`Failed to fetch integrations: ${error.message}`);
     }
 
