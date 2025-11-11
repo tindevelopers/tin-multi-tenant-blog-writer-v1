@@ -1,0 +1,383 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
+import Image from "next/image";
+import { PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
+
+interface Organization {
+  org_id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  settings?: {
+    company_name?: string;
+    logo_url?: string;
+  };
+}
+
+export default function OrganizationSettingsPage() {
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  
+  const [companyName, setCompanyName] = useState("");
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    fetchOrganization();
+  }, []);
+
+  const fetchOrganization = async () => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setError("Not authenticated");
+        setLoading(false);
+        return;
+      }
+
+      // Get user's organization
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("org_id, organizations(*)")
+        .eq("user_id", user.id)
+        .single();
+
+      if (userError) throw userError;
+
+      if (userData && userData.organizations) {
+        const org = userData.organizations as Organization;
+        setOrganization(org);
+        
+        // Set form values
+        const companyNameValue = org.settings?.company_name || org.name || "";
+        setCompanyName(companyNameValue);
+        
+        const logoUrl = org.settings?.logo_url || org.logo_url || null;
+        setLogoPreview(logoUrl);
+      }
+    } catch (err) {
+      console.error("Error fetching organization:", err);
+      setError(err instanceof Error ? err.message : "Failed to load organization");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size must be less than 5MB");
+      return;
+    }
+
+    setLogoFile(file);
+    setError(null);
+
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+  };
+
+  const uploadLogo = async (file: File): Promise<string | null> => {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user || !organization) {
+        throw new Error("User or organization not found");
+      }
+
+      // Create a unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${organization.org_id}/${Date.now()}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('organization-logos')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) {
+        // Check if bucket doesn't exist
+        if (error.message?.includes('Bucket not found') || error.message?.includes('not found')) {
+          throw new Error(
+            "Storage bucket 'organization-logos' not found. " +
+            "Please create it in Supabase Dashboard > Storage with public access enabled."
+          );
+        }
+        console.error("Storage upload error:", error);
+        throw new Error(`Failed to upload logo: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('organization-logos')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (err) {
+      console.error("Error uploading logo:", err);
+      throw err;
+    }
+  };
+
+  const handleSave = async () => {
+    if (!organization) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const supabase = createClient();
+      let logoUrl = logoPreview;
+
+      // Upload new logo if selected
+      if (logoFile) {
+        setUploading(true);
+        try {
+          const uploadedUrl = await uploadLogo(logoFile);
+          if (uploadedUrl) {
+            logoUrl = uploadedUrl;
+          }
+        } catch (uploadError) {
+          console.error("Logo upload failed:", uploadError);
+          // Continue with save even if upload fails
+        } finally {
+          setUploading(false);
+        }
+      }
+
+      // Update organization
+      const { error: updateError } = await supabase
+        .from("organizations")
+        .update({
+          name: companyName,
+          settings: {
+            ...organization.settings,
+            company_name: companyName,
+            logo_url: logoUrl,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("org_id", organization.org_id);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setOrganization(prev => prev ? {
+        ...prev,
+        name: companyName,
+        settings: {
+          ...prev.settings,
+          company_name: companyName,
+          logo_url: logoUrl || undefined,
+        },
+      } : null);
+
+      setSuccess("Organization settings saved successfully!");
+      setLogoFile(null);
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error("Error saving organization:", err);
+      setError(err instanceof Error ? err.message : "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-600"></div>
+      </div>
+    );
+  }
+
+  if (!organization) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">Error</h3>
+          <p className="text-red-700 dark:text-red-300">{error || "Organization not found"}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Organization Settings
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Manage your organization's logo and company information
+          </p>
+        </div>
+      </div>
+
+      {/* Success Message */}
+      {success && (
+        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <p className="text-green-800 dark:text-green-200">{success}</p>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <p className="text-red-800 dark:text-red-200">{error}</p>
+        </div>
+      )}
+
+      {/* Logo Upload Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Organization Logo
+        </h2>
+        
+        <div className="flex items-start gap-6">
+          {/* Logo Preview/Upload Area */}
+          <div className="flex-shrink-0">
+            <div className="relative w-32 h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-700 flex items-center justify-center">
+              {logoPreview ? (
+                <>
+                  <Image
+                    src={logoPreview}
+                    alt="Organization logo"
+                    fill
+                    className="object-contain p-2"
+                  />
+                  <button
+                    onClick={handleRemoveLogo}
+                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                    type="button"
+                  >
+                    <XMarkIcon className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <div className="text-center p-4">
+                  <PhotoIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">No logo</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Upload Controls */}
+          <div className="flex-1">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Upload Logo
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoSelect}
+                  className="block w-full text-sm text-gray-500 dark:text-gray-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-lg file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-brand-50 file:text-brand-700
+                    hover:file:bg-brand-100
+                    dark:file:bg-brand-900 dark:file:text-brand-300
+                    dark:hover:file:bg-brand-800
+                    cursor-pointer"
+                />
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Recommended: Square image, at least 200x200px. Max file size: 5MB
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Company Name Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Company Information
+        </h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Company Name
+            </label>
+            <input
+              type="text"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="Enter your company name"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white"
+            />
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              This name will be displayed throughout the application
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Organization Slug
+            </label>
+            <input
+              type="text"
+              value={organization.slug}
+              disabled
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+            />
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Organization slug cannot be changed
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end gap-4">
+        <button
+          onClick={handleSave}
+          disabled={saving || uploading}
+          className="px-6 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {uploading ? "Uploading..." : saving ? "Saving..." : "Save Changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
