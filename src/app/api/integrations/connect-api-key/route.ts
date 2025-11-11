@@ -185,34 +185,55 @@ export async function POST(request: NextRequest) {
     // Create or update integration
     let integration;
     try {
-      // For Webflow, allow multiple integrations per organization (one per site)
-      // Check if integration already exists for this org + provider + site_id (if Webflow)
-      if (provider === 'webflow' && connection.site_id) {
-        const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
-        const existingIntegration = integrations.find(
-          (i) => i.type === provider && i.config.site_id === connection.site_id
-        );
-
-        if (existingIntegration) {
-          // Update existing integration for this site
-          integration = await dbAdapter.updateIntegration(
-            existingIntegration.integration_id,
-            {
-              connection: connection as ConnectionConfig,
-              connection_method: 'api_key',
-              status: connectionStatus,
-              last_tested_at: lastTestedAt,
-              error_message: errorMessage,
-              metadata: name ? { name } : undefined,
-            },
-            userProfile.org_id
+      if (provider === 'webflow') {
+        // For Webflow, allow multiple integrations per organization (one per site)
+        if (connection.site_id) {
+          // Check if integration already exists for this org + provider + site_id
+          const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
+          const existingIntegration = integrations.find(
+            (i) => i.type === provider && i.config.site_id === connection.site_id
           );
 
-          if (logId) {
-            await integrationLogger.updateLog(logId, {
-              status: 'updated',
-              saved_integration_id: existingIntegration.integration_id,
-            });
+          if (existingIntegration) {
+            // Update existing integration for this site
+            integration = await dbAdapter.updateIntegration(
+              existingIntegration.integration_id,
+              {
+                connection: connection as ConnectionConfig,
+                connection_method: 'api_key',
+                status: connectionStatus,
+                last_tested_at: lastTestedAt,
+                error_message: errorMessage,
+                metadata: name ? { name } : undefined,
+              },
+              userProfile.org_id
+            );
+
+            if (logId) {
+              await integrationLogger.updateLog(logId, {
+                status: 'updated',
+                saved_integration_id: existingIntegration.integration_id,
+              });
+            }
+          } else {
+            // Create new integration for this site
+            integration = await dbAdapter.createIntegration(
+              userProfile.org_id,
+              provider as IntegrationType,
+              connection as ConnectionConfig,
+              'api_key',
+              connectionStatus,
+              lastTestedAt,
+              errorMessage,
+              name ? { name } : undefined
+            );
+
+            if (logId) {
+              await integrationLogger.updateLog(logId, {
+                status: 'saved',
+                saved_integration_id: integration.id,
+              });
+            }
           }
         } else {
           // For Webflow without site_id, create new integration (allow multiple per provider)
@@ -235,74 +256,54 @@ export async function POST(request: NextRequest) {
           }
         }
       } else {
-        // For Webflow without site_id, create new integration (allow multiple per provider)
-        integration = await dbAdapter.createIntegration(
-          userProfile.org_id,
-          provider as IntegrationType,
-          connection as ConnectionConfig,
-          'api_key',
-          connectionStatus,
-          lastTestedAt,
-          errorMessage,
-          name ? { name } : undefined
+        // For non-Webflow providers, check if integration already exists
+        const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
+        const existingIntegration = integrations.find(
+          (i) => i.type === provider
         );
 
-        if (logId) {
-          await integrationLogger.updateLog(logId, {
-            status: 'saved',
-            saved_integration_id: integration.id,
-          });
-        }
-      }
-    } else {
-      // For non-Webflow providers, check if integration already exists
-      const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
-      const existingIntegration = integrations.find(
-        (i) => i.type === provider
-      );
+        if (existingIntegration) {
+          // Update existing integration
+          integration = await dbAdapter.updateIntegration(
+            existingIntegration.integration_id,
+            {
+              connection: connection as ConnectionConfig,
+              connection_method: 'api_key',
+              status: connectionStatus,
+              last_tested_at: lastTestedAt,
+              error_message: errorMessage,
+              metadata: name ? { name } : undefined,
+            },
+            userProfile.org_id
+          );
 
-      if (existingIntegration) {
-        // Update existing integration
-        integration = await dbAdapter.updateIntegration(
-          existingIntegration.integration_id,
-          {
-            connection: connection as ConnectionConfig,
-            connection_method: 'api_key',
-            status: connectionStatus,
-            last_tested_at: lastTestedAt,
-            error_message: errorMessage,
-            metadata: name ? { name } : undefined,
-          },
-          userProfile.org_id
-        );
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'updated',
+              saved_integration_id: existingIntegration.integration_id,
+            });
+          }
+        } else {
+          // Create new integration
+          integration = await dbAdapter.createIntegration(
+            userProfile.org_id,
+            provider as IntegrationType,
+            connection as ConnectionConfig,
+            'api_key',
+            connectionStatus,
+            lastTestedAt,
+            errorMessage,
+            name ? { name } : undefined
+          );
 
-        if (logId) {
-          await integrationLogger.updateLog(logId, {
-            status: 'updated',
-            saved_integration_id: existingIntegration.integration_id,
-          });
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'saved',
+              saved_integration_id: integration.id,
+            });
+          }
         }
-      } else {
-        // Create new integration
-        integration = await dbAdapter.createIntegration(
-          userProfile.org_id,
-          provider as IntegrationType,
-          connection as ConnectionConfig,
-          'api_key',
-          connectionStatus,
-          lastTestedAt,
-          errorMessage,
-          name ? { name } : undefined
-        );
-
-        if (logId) {
-          await integrationLogger.updateLog(logId, {
-            status: 'saved',
-            saved_integration_id: integration.id,
-          });
-        }
-      }
-    } catch (error: any) {
+      } catch (error: any) {
       console.error('❌ Database error:', error);
       
       if (logId) {
