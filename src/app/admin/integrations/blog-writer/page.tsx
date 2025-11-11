@@ -9,11 +9,16 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import {
   ArrowLeftIcon,
   LinkIcon,
   ChartBarIcon,
   KeyIcon,
+  LockClosedIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 import { ConnectAndRecommendForm } from '@/components/integrations/ConnectAndRecommendForm';
 import { RecommendationsForm } from '@/components/integrations/RecommendationsForm';
@@ -21,6 +26,15 @@ import { WebflowOAuthConfig } from '@/components/integrations/WebflowOAuthConfig
 
 type Provider = 'webflow' | 'wordpress' | 'shopify';
 type ViewMode = 'connect' | 'recommend';
+
+interface ExistingIntegration {
+  integration_id: string;
+  type: string;
+  status: 'active' | 'inactive' | 'error' | 'pending' | 'expired';
+  connection_method?: 'api_key' | 'oauth';
+  created_at: string;
+  updated_at: string;
+}
 
 function BlogWriterIntegrationsContent() {
   const router = useRouter();
@@ -36,6 +50,8 @@ function BlogWriterIntegrationsContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('connect');
   const [error, setError] = useState<string | null>(null);
   const [showOAuthConfig, setShowOAuthConfig] = useState(false);
+  const [existingIntegrations, setExistingIntegrations] = useState<ExistingIntegration[]>([]);
+  const [loadingIntegrations, setLoadingIntegrations] = useState(true);
 
   // Update provider if URL param changes
   useEffect(() => {
@@ -43,6 +59,67 @@ function BlogWriterIntegrationsContent() {
       setSelectedProvider(providerParam);
     }
   }, [providerParam]);
+
+  // Fetch existing integrations
+  useEffect(() => {
+    const fetchIntegrations = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setLoadingIntegrations(false);
+          return;
+        }
+
+        const response = await fetch('/api/integrations', {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && Array.isArray(result.data)) {
+            setExistingIntegrations(result.data);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching integrations:', err);
+      } finally {
+        setLoadingIntegrations(false);
+      }
+    };
+
+    fetchIntegrations();
+  }, []);
+
+  const getExistingIntegration = (provider: Provider) => {
+    return existingIntegrations.find(i => i.type === provider);
+  };
+
+  const getStatusBadge = (status: ExistingIntegration['status']) => {
+    const styles = {
+      active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+      inactive: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+      error: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+      pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+      expired: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+    };
+    return `inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || styles.inactive}`;
+  };
+
+  const getStatusIcon = (status: ExistingIntegration['status']) => {
+    switch (status) {
+      case 'active':
+        return <CheckCircleIcon className="w-4 h-4" />;
+      case 'error':
+        return <XCircleIcon className="w-4 h-4" />;
+      case 'pending':
+        return <ClockIcon className="w-4 h-4" />;
+      default:
+        return null;
+    }
+  };
 
   // Catch any initialization errors
   if (error) {
@@ -127,24 +204,54 @@ function BlogWriterIntegrationsContent() {
           )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {providers.map((provider) => (
-            <button
-              key={provider.value}
-              onClick={() => setSelectedProvider(provider.value)}
-              className={`p-4 border-2 rounded-lg text-left transition-all ${
-                selectedProvider === provider.value
-                  ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-              }`}
-            >
-              <div className="font-semibold text-gray-900 dark:text-white">
-                {provider.label}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                {provider.description}
-              </div>
-            </button>
-          ))}
+          {providers.map((provider) => {
+            const existing = getExistingIntegration(provider.value);
+            return (
+              <button
+                key={provider.value}
+                onClick={() => setSelectedProvider(provider.value)}
+                className={`p-4 border-2 rounded-lg text-left transition-all relative ${
+                  selectedProvider === provider.value
+                    ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                      {provider.label}
+                      {existing && (
+                        <span className={getStatusBadge(existing.status)}>
+                          {getStatusIcon(existing.status)}
+                          {existing.status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {provider.description}
+                    </div>
+                    {existing && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        {existing.connection_method === 'oauth' ? (
+                          <>
+                            <LockClosedIcon className="w-3 h-3" />
+                            Connected via OAuth
+                          </>
+                        ) : (
+                          <>
+                            <KeyIcon className="w-3 h-3" />
+                            Connected via API Key
+                          </>
+                        )}
+                        <span>•</span>
+                        <span>Updated {new Date(existing.updated_at).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
