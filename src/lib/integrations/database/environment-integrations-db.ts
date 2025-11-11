@@ -71,6 +71,7 @@ export class EnvironmentIntegrationsDB {
    */
   async getIntegrations(orgId: string): Promise<Integration[]> {
     const tableName = getTableName('integrations', this.env);
+    console.log(`[EnvironmentIntegrationsDB] getIntegrations: Using table "${tableName}" for env "${this.env}"`);
     
     const { data, error } = await this.supabase
       .from(tableName)
@@ -79,6 +80,7 @@ export class EnvironmentIntegrationsDB {
       .order('created_at', { ascending: false });
 
     if (error) {
+      console.error(`[EnvironmentIntegrationsDB] Error querying table "${tableName}":`, error);
       throw new Error(`Failed to fetch integrations: ${error.message}`);
     }
 
