@@ -81,18 +81,31 @@ export default function KeywordResearchPage() {
             setNiche(session.industry || '');
             
             // Load existing keyword collection if any
-            const { data: collection } = await supabase
+            const { data: collectionData, error: collectionError } = await supabase
               .from('keyword_collections')
               .select('*')
               .eq('session_id', sessionId)
               .order('created_at', { ascending: false })
-              .limit(1)
-              .single();
+              .limit(1);
+
+            if (collectionError && collectionError.code !== 'PGRST116') {
+              console.error('Error loading collection:', collectionError);
+            }
+
+            const collection = collectionData && collectionData.length > 0 ? collectionData[0] : null;
 
             if (collection && collection.keywords) {
+              // Ensure keywords is an array
               const savedKeywords = Array.isArray(collection.keywords) 
                 ? collection.keywords as KeywordWithMetrics[]
-                : [];
+                : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
+              
+              console.log('📋 Loaded existing collection:', {
+                collectionId: collection.collection_id,
+                keywordCount: savedKeywords.length,
+                name: collection.name
+              });
+
               setKeywords(savedKeywords);
               setCollectionName(collection.name || '');
               generateClusters(savedKeywords);
