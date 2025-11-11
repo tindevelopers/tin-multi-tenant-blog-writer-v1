@@ -477,10 +477,7 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
               type="text"
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}
-              readOnly={!!siteId && !siteId.includes('****')}
-              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white ${
-                siteId && !siteId.includes('****') ? 'bg-gray-50 dark:bg-gray-800 cursor-not-allowed' : ''
-              }`}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white"
               placeholder="Will be auto-detected from API key"
             />
             {siteId && !siteId.includes('****') && (
