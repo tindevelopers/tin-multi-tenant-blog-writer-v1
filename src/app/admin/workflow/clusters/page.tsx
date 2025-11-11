@@ -71,25 +71,25 @@ export default function ClustersPage() {
 
         console.log('🔍 Loading clusters for session:', sessionId);
 
-        // Load workflow session with better error handling
-        const { data: session, error: sessionError } = await supabase
+        // Load workflow session with better error handling (use maybeSingle to avoid 406 errors)
+        const { data: sessionData, error: sessionError } = await supabase
           .from('workflow_sessions')
           .select('*')
           .eq('session_id', sessionId)
-          .single();
+          .maybeSingle();
 
         if (sessionError) {
           console.error('❌ Error loading session:', sessionError);
           
           // Handle specific error codes
-          if (sessionError.code === 'PGRST116') {
+          if (sessionError.code === 'PGRST116' || sessionError.code === '406') {
+            // Session not found - clear localStorage and show helpful message
+            localStorage.removeItem('workflow_session_id');
             setError('Workflow session not found. Please start a new workflow from the objective page.');
           } else if (sessionError.code === '42501' || sessionError.message?.includes('permission')) {
             setError('You do not have permission to access this workflow session. Please check your organization access.');
           } else if (sessionError.code === '42P01' || sessionError.message?.includes('does not exist')) {
             setError('Workflow tables are not set up. Please contact your administrator to run database migrations.');
-          } else if (sessionError.code === '406' || sessionError.message?.includes('406')) {
-            setError('Database configuration error (406). Please ensure workflow_sessions table exists and RLS policies are configured.');
           } else {
             setError(`Failed to load workflow session: ${sessionError.message || 'Unknown error'}. Please try refreshing the page.`);
           }
@@ -97,14 +97,16 @@ export default function ClustersPage() {
           return;
         }
 
-        if (!session) {
-          setError('Workflow session not found. Please start a new workflow.');
+        if (!sessionData) {
+          // Session doesn't exist - clear localStorage and show helpful message
+          localStorage.removeItem('workflow_session_id');
+          setError('Workflow session not found. Please start a new workflow from the objective page.');
           setLoading(false);
           return;
         }
 
-        setWorkflowSession(session);
-        console.log('✅ Loaded workflow session:', session.session_id);
+        setWorkflowSession(sessionData);
+        console.log('✅ Loaded workflow session:', sessionData.session_id);
 
         // Load keyword collection (without .single() to avoid error if none found)
         const { data: collectionData, error: collectionError } = await supabase

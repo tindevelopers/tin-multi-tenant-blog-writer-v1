@@ -36,11 +36,15 @@ export default function ObjectivePage() {
 
         const sessionId = localStorage.getItem('workflow_session_id');
         if (sessionId) {
-          const { data: session } = await supabase
+          const { data: session, error: sessionError } = await supabase
             .from('workflow_sessions')
             .select('objective, target_audience, industry, workflow_data')
             .eq('session_id', sessionId)
-            .single();
+            .maybeSingle();
+
+          if (sessionError && sessionError.code !== 'PGRST116') {
+            console.error('Error loading session:', sessionError);
+          }
 
           if (session) {
             setFormData({
@@ -49,6 +53,9 @@ export default function ObjectivePage() {
               industry: session.industry || '',
               content_goal: (session.workflow_data as any)?.content_goal || 'seo'
             });
+          } else if (sessionError?.code === 'PGRST116') {
+            // Session doesn't exist - clear localStorage
+            localStorage.removeItem('workflow_session_id');
           }
         }
       } catch (error) {

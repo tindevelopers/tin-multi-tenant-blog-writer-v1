@@ -31,15 +31,23 @@ export default function WorkflowLayout({
         if (savedSessionId) {
           setWorkflowSessionId(savedSessionId);
           
-          // Load completed steps from session
-          const { data: session } = await supabase
+          // Load completed steps from session (use maybeSingle to avoid 406 errors)
+          const { data: session, error: sessionError } = await supabase
             .from('workflow_sessions')
             .select('completed_steps')
             .eq('session_id', savedSessionId)
-            .single();
+            .maybeSingle();
+          
+          if (sessionError && sessionError.code !== 'PGRST116') {
+            console.error('Error loading workflow session:', sessionError);
+          }
           
           if (session?.completed_steps) {
             setCompletedSteps(session.completed_steps);
+          } else if (sessionError?.code === 'PGRST116') {
+            // Session doesn't exist - clear localStorage
+            localStorage.removeItem('workflow_session_id');
+            setWorkflowSessionId(undefined);
           }
         }
       } catch (error) {
