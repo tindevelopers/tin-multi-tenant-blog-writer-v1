@@ -228,18 +228,13 @@ async function testGetIntegration() {
   const response = await makeRequest('GET', `/api/integrations/${testIntegrationId}`);
 
   assertStatus(response, 200);
-  assertProperty(response.data, 'id', testIntegrationId);
-  assertProperty(response.data, 'connection_method', 'api_key');
-  assertProperty(response.data, 'connection');
+  assertProperty(response.data, 'success', true);
+  assertProperty(response.data, 'data');
+  assertProperty(response.data.data, 'integration_id', testIntegrationId);
+  assertProperty(response.data.data, 'type');
   
-  // Verify credentials are decrypted (not in encrypted format)
-  const connection = response.data.connection;
-  assert(
-    connection.api_token && !connection.api_token.includes(':'),
-    'API token should be decrypted (not in encrypted format)'
-  );
-  
-  logVerbose(`Connection method: ${response.data.connection_method}`);
+  // Note: connection_method and connection are not exposed in GET response for security
+  logVerbose(`Integration type: ${response.data.data.type}`);
   logVerbose(`Status: ${response.data.status}`);
 }
 
@@ -265,13 +260,15 @@ async function testListIntegrations() {
   const response = await makeRequest('GET', '/api/integrations');
 
   assertStatus(response, 200);
-  assert(Array.isArray(response.data), 'Response should be an array');
+  assertProperty(response.data, 'success', true);
+  assertProperty(response.data, 'data');
+  assert(Array.isArray(response.data.data), 'Response data should be an array');
   
-  const integration = response.data.find(i => i.id === testIntegrationId);
+  const integration = response.data.data.find(i => i.integration_id === testIntegrationId);
   assert(integration, 'Created integration should be in the list');
-  assertProperty(integration, 'connection_method', 'api_key');
+  assertProperty(integration, 'type');
   
-  logVerbose(`Found ${response.data.length} integration(s)`);
+  logVerbose(`Found ${response.data.data.length} integration(s)`);
 }
 
 // Test: Connect and Get Recommendations
@@ -326,7 +323,9 @@ async function testUpdateIntegration() {
   }
 
   assertStatus(response, 200);
-  assertProperty(response.data, 'id', testIntegrationId);
+  assertProperty(response.data, 'success', true);
+  assertProperty(response.data, 'data');
+  assertProperty(response.data.data, 'integration_id', testIntegrationId);
 }
 
 // Test: Validation - Empty Keywords
