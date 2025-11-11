@@ -34,6 +34,7 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
   const [collectionId, setCollectionId] = useState("");
   const [siteId, setSiteId] = useState("");
   const [siteName, setSiteName] = useState("");
+  const [integrationName, setIntegrationName] = useState(""); // Custom name for multiple integrations
   const [showApiKey, setShowApiKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -98,6 +99,15 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
             // Extract Site Name (if available)
             if (config.site_name && typeof config.site_name === 'string') {
               setSiteName(config.site_name);
+            }
+            
+            // Extract custom integration name from metadata if available
+            // This is used to distinguish multiple Webflow integrations
+            if (integration.metadata?.name && typeof integration.metadata.name === 'string') {
+              setIntegrationName(integration.metadata.name);
+            } else if (config.site_name && typeof config.site_name === 'string') {
+              // Use site name as default name if no custom name set
+              setIntegrationName(config.site_name);
             }
           }
         }

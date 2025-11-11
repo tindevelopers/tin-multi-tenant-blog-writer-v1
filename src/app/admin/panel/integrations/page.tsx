@@ -112,6 +112,17 @@ export default function IntegrationsManagementPage() {
     };
 
     fetchIntegrations();
+
+    // Set up periodic health checks every 30 minutes
+    const healthCheckInterval = setInterval(() => {
+      console.log('Running periodic health check for integrations...');
+      fetchIntegrations();
+    }, 30 * 60 * 1000); // 30 minutes
+
+    // Cleanup interval on unmount
+    return () => {
+      clearInterval(healthCheckInterval);
+    };
   }, []);
 
   const handleIntegrationToggle = async (integrationId: string) => {
@@ -931,17 +942,45 @@ export default function IntegrationsManagementPage() {
                   {new Date(integration.created_at).toLocaleDateString()}
                 </span>
               </div>
-              {integration.health_status && (
+              {/* Display site name for Webflow integrations */}
+              {integration.type === 'webflow' && integration.config.site_name && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 dark:text-gray-400">Health:</span>
-                  <span className={`capitalize ${
-                    integration.health_status === 'healthy' 
-                      ? 'text-green-600 dark:text-green-400'
-                      : integration.health_status === 'warning'
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    {integration.health_status}
+                  <span className="text-gray-500 dark:text-gray-400">Site:</span>
+                  <span className="text-gray-900 dark:text-white font-medium">
+                    {integration.config.site_name as string}
+                  </span>
+                </div>
+              )}
+              {/* Display site ID for Webflow integrations if name not available */}
+              {integration.type === 'webflow' && !integration.config.site_name && integration.config.site_id && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Site ID:</span>
+                  <span className="text-gray-900 dark:text-white font-mono text-xs">
+                    {(integration.config.site_id as string).substring(0, 8)}...
+                  </span>
+                </div>
+              )}
+              {/* Always show health status */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 dark:text-gray-400">Health:</span>
+                <span className={`capitalize ${
+                  integration.health_status === 'healthy' 
+                    ? 'text-green-600 dark:text-green-400'
+                    : integration.health_status === 'warning'
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : integration.health_status === 'error'
+                    ? 'text-red-600 dark:text-red-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}>
+                  {integration.health_status || 'unknown'}
+                </span>
+              </div>
+              {/* Show last tested time if available */}
+              {integration.last_tested_at && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">Last Tested:</span>
+                  <span className="text-gray-900 dark:text-white text-xs">
+                    {new Date(integration.last_tested_at).toLocaleString()}
                   </span>
                 </div>
               )}

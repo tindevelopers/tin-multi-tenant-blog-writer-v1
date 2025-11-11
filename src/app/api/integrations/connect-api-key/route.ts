@@ -179,24 +179,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Parse optional name from body
+    const { name } = body;
+    
     // Create or update integration
     let integration;
     try {
-      // Check if integration already exists for this org + provider
-      const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
-      const existingIntegration = integrations.find(
-        (i) => i.type === provider
-      );
+      // For Webflow, allow multiple integrations per organization (one per site)
+      // Check if integration already exists for this org + provider + site_id (if Webflow)
+      if (provider === 'webflow' && connection.site_id) {
+        const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
+        const existingIntegration = integrations.find(
+          (i) => i.type === provider && i.config.site_id === connection.site_id
+        );
 
-      if (existingIntegration) {
-        // Update existing integration
-        integration = await dbAdapter.updateIntegration(
-          existingIntegration.integration_id,
-          {
-            connection: connection as ConnectionConfig,
-            connection_method: 'api_key',
-            status: connectionStatus,
-            last_tested_at: lastTestedAt,
+        if (existingIntegration) {
+          // Update existing integration for this site
+          integration = await dbAdapter.updateIntegration(
+            existingIntegration.integration_id,
+            {
+              connection: connection as ConnectionConfig,
+              connection_method: 'api_key',
+              status: connectionStatus,
+              last_tested_at: lastTestedAt,
             error_message: errorMessage,
           },
           userProfile.org_id

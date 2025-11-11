@@ -132,22 +132,39 @@ export class EnvironmentIntegrationsDB {
     provider: IntegrationType,
     connection: ConnectionConfig,
     connectionMethod: ConnectionMethod,
-    status: IntegrationStatus = 'inactive'
+    status: IntegrationStatus = 'inactive',
+    lastTestedAt?: string,
+    errorMessage?: string,
+    metadata?: Record<string, unknown>
   ): Promise<EnvironmentIntegration> {
     const tableName = getTableName('integrations', this.env);
     
     // Encrypt sensitive credentials before storing
     const encryptedConnection = encryptConnectionConfig(connection as Record<string, unknown>);
     
+    const insertData: Record<string, unknown> = {
+      org_id: orgId,
+      provider,
+      connection_method: connectionMethod,
+      connection: encryptedConnection,
+      status,
+    };
+
+    if (lastTestedAt) {
+      insertData.last_tested_at = lastTestedAt;
+    }
+
+    if (errorMessage !== undefined) {
+      insertData.error_message = errorMessage;
+    }
+
+    if (metadata) {
+      insertData.metadata = metadata;
+    }
+    
     const { data, error } = await this.supabase
       .from(tableName)
-      .insert({
-        org_id: orgId,
-        provider,
-        connection_method: connectionMethod,
-        connection: encryptedConnection,
-        status,
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -340,6 +357,52 @@ export class EnvironmentIntegrationsDB {
   }
 
   /**
+   * Calculate health status based on integration status and last_tested_at
+   */
+  private calculateHealthStatus(
+    status: IntegrationStatus,
+    lastTestedAt?: string | null
+  ): HealthStatus {
+    // If status is error, health is error
+    if (status === 'error') {
+      return 'error';
+    }
+
+    // If status is inactive, health is unknown
+    if (status === 'inactive') {
+      return 'unknown';
+    }
+
+    // If status is pending, health is unknown
+    if (status === 'pending') {
+      return 'unknown';
+    }
+
+    // If status is active but never tested, health is unknown
+    if (!lastTestedAt) {
+      return 'unknown';
+    }
+
+    // Calculate time since last test
+    const lastTested = new Date(lastTestedAt);
+    const now = new Date();
+    const hoursSinceTest = (now.getTime() - lastTested.getTime()) / (1000 * 60 * 60);
+
+    // If tested within last hour, health is healthy
+    if (hoursSinceTest < 1) {
+      return 'healthy';
+    }
+
+    // If tested within last 24 hours, health is warning (stale but not critical)
+    if (hoursSinceTest < 24) {
+      return 'warning';
+    }
+
+    // If tested more than 24 hours ago, health is unknown (too stale)
+    return 'unknown';
+  }
+
+  /**
    * Map database row to Integration type (for backward compatibility)
    */
   private mapToIntegration(row: any): Integration {
@@ -361,16 +424,27 @@ export class EnvironmentIntegrationsDB {
           ? [] // If it's an object but not an array, default to empty array
           : []);
 
+    // Calculate health status from status and last_tested_at
+    const calculatedHealthStatus = this.calculateHealthStatus(
+      (row.status || 'inactive') as IntegrationStatus,
+      row.last_tested_at
+    );
+
+    // Use calculated health status, or fallback to stored health_status if it exists
+    const finalHealthStatus = (health_status && typeof health_status === 'string' && ['healthy', 'warning', 'error', 'unknown'].includes(health_status) 
+      ? health_status 
+      : calculatedHealthStatus) as HealthStatus;
+
     return {
       integration_id: row.id,
       org_id: row.org_id || row.tenant_id, // Use org_id if available, fallback to tenant_id
       type: row.provider as IntegrationType,
-      name: `${row.provider} Integration`,
+      name: `${row.provider} Integration${config.site_name ? ` - ${config.site_name}` : ''}`,
       status: (row.status || 'inactive') as IntegrationStatus,
       config: config as ConnectionConfig,
       connection_method: row.connection_method as ConnectionMethod | undefined,
       field_mappings: fieldMappings,
-      health_status: (health_status && typeof health_status === 'string' && ['healthy', 'warning', 'error', 'unknown'].includes(health_status) ? health_status : 'unknown') as HealthStatus,
+      health_status: finalHealthStatus,
       last_sync: row.last_sync_at || last_sync || undefined,
       last_tested_at: row.last_tested_at,
       last_synced_at: row.last_sync_at,
