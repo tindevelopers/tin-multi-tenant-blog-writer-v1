@@ -8,7 +8,8 @@
 // Integration Types
 export type IntegrationType = 'webflow' | 'wordpress' | 'shopify' | 'medium' | 'google-analytics' | 'slack' | 'zapier' | 'hubspot';
 
-export type IntegrationStatus = 'active' | 'inactive' | 'error' | 'pending';
+export type IntegrationStatus = 'active' | 'inactive' | 'error' | 'pending' | 'expired';
+export type ConnectionMethod = 'api_key' | 'oauth' | null;
 
 export type HealthStatus = 'healthy' | 'warning' | 'error' | 'unknown';
 
@@ -86,10 +87,25 @@ export interface FieldTransform {
 
 // Connection Types
 export interface ConnectionConfig {
+  // API Key method fields
   apiToken?: string;
   apiKey?: string;
+  apiSecret?: string;
   siteId?: string;
   collectionId?: string;
+  siteUrl?: string;
+  storeName?: string;
+  username?: string;
+  applicationPassword?: string;
+  
+  // OAuth method fields
+  accessToken?: string;
+  refreshToken?: string;
+  expiresAt?: string;
+  tokenType?: string;
+  scope?: string;
+  
+  // Common fields
   endpoint?: string;
   [key: string]: unknown; // Allow provider-specific config
 }
@@ -280,6 +296,23 @@ export interface Integration {
   created_at: string;
   updated_at: string;
   created_by?: string;
+}
+
+// Environment-specific Integration (for integrations_dev, integrations_staging, integrations_prod)
+export interface EnvironmentIntegration {
+  id: string;
+  org_id: string;
+  tenant_id?: string; // Legacy field, maps to org_id
+  provider: IntegrationType;
+  connection_method: ConnectionMethod;
+  connection: ConnectionConfig; // JSONB field with encrypted credentials
+  status: 'active' | 'inactive' | 'expired' | 'error';
+  last_tested_at?: string;
+  last_sync_at?: string;
+  error_message?: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 }
 
 // Publish Log Entry

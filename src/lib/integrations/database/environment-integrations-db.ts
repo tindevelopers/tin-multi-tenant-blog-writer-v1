@@ -11,7 +11,13 @@ import type {
   Integration,
   IntegrationType,
   ConnectionConfig,
+  EnvironmentIntegration,
+  ConnectionMethod,
 } from '../types';
+import {
+  encryptConnectionConfig,
+  decryptConnectionConfig,
+} from '../encryption/credential-encryption';
 
 /**
  * Integration Recommendation from Blog Writer API
@@ -59,15 +65,15 @@ export class EnvironmentIntegrationsDB {
   }
 
   /**
-   * Get all integrations for a tenant
+   * Get all integrations for an organization
    */
-  async getIntegrations(tenantId: string): Promise<Integration[]> {
+  async getIntegrations(orgId: string): Promise<Integration[]> {
     const tableName = getTableName('integrations', this.env);
     
     const { data, error } = await this.supabase
       .from(tableName)
       .select('*')
-      .eq('tenant_id', tenantId)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -80,7 +86,7 @@ export class EnvironmentIntegrationsDB {
   /**
    * Get a single integration by ID
    */
-  async getIntegration(integrationId: string, tenantId?: string): Promise<Integration | null> {
+  async getIntegration(integrationId: string, orgId?: string): Promise<Integration | null> {
     const tableName = getTableName('integrations', this.env);
     
     let query = this.supabase
@@ -88,8 +94,8 @@ export class EnvironmentIntegrationsDB {
       .select('*')
       .eq('id', integrationId);
 
-    if (tenantId) {
-      query = query.eq('tenant_id', tenantId);
+    if (orgId) {
+      query = query.eq('org_id', orgId);
     }
 
     const { data, error } = await query.single();
@@ -108,18 +114,25 @@ export class EnvironmentIntegrationsDB {
    * Create a new integration
    */
   async createIntegration(
-    tenantId: string,
-    provider: string,
-    connection: Record<string, unknown>
-  ): Promise<Integration> {
+    orgId: string,
+    provider: IntegrationType,
+    connection: ConnectionConfig,
+    connectionMethod: ConnectionMethod,
+    status: 'active' | 'inactive' | 'expired' | 'error' = 'inactive'
+  ): Promise<EnvironmentIntegration> {
     const tableName = getTableName('integrations', this.env);
+    
+    // Encrypt sensitive credentials before storing
+    const encryptedConnection = encryptConnectionConfig(connection as Record<string, unknown>);
     
     const { data, error } = await this.supabase
       .from(tableName)
       .insert({
-        tenant_id: tenantId,
+        org_id: orgId,
         provider,
-        connection,
+        connection_method: connectionMethod,
+        connection: encryptedConnection,
+        status,
       })
       .select()
       .single();
@@ -128,7 +141,7 @@ export class EnvironmentIntegrationsDB {
       throw new Error(`Failed to create integration: ${error.message}`);
     }
 
-    return this.mapToIntegration(data);
+    return this.mapToEnvironmentIntegration(data);
   }
 
   /**
@@ -137,23 +150,56 @@ export class EnvironmentIntegrationsDB {
   async updateIntegration(
     integrationId: string,
     updates: {
-      connection?: Record<string, unknown>;
-      provider?: string;
+      connection?: ConnectionConfig;
+      connection_method?: ConnectionMethod;
+      status?: 'active' | 'inactive' | 'expired' | 'error';
+      last_tested_at?: string;
+      last_sync_at?: string;
+      error_message?: string;
+      metadata?: Record<string, unknown>;
     },
-    tenantId?: string
-  ): Promise<Integration> {
+    orgId?: string
+  ): Promise<EnvironmentIntegration> {
     const tableName = getTableName('integrations', this.env);
+    
+    const updateData: Record<string, unknown> = {};
+    
+    if (updates.connection) {
+      // Encrypt credentials before storing
+      updateData.connection = encryptConnectionConfig(updates.connection as Record<string, unknown>);
+    }
+    
+    if (updates.connection_method !== undefined) {
+      updateData.connection_method = updates.connection_method;
+    }
+    
+    if (updates.status !== undefined) {
+      updateData.status = updates.status;
+    }
+    
+    if (updates.last_tested_at !== undefined) {
+      updateData.last_tested_at = updates.last_tested_at;
+    }
+    
+    if (updates.last_sync_at !== undefined) {
+      updateData.last_sync_at = updates.last_sync_at;
+    }
+    
+    if (updates.error_message !== undefined) {
+      updateData.error_message = updates.error_message;
+    }
+    
+    if (updates.metadata !== undefined) {
+      updateData.metadata = updates.metadata;
+    }
     
     let query = this.supabase
       .from(tableName)
-      .update({
-        ...updates,
-        connection: updates.connection || undefined,
-      })
+      .update(updateData)
       .eq('id', integrationId);
 
-    if (tenantId) {
-      query = query.eq('tenant_id', tenantId);
+    if (orgId) {
+      query = query.eq('org_id', orgId);
     }
 
     const { data, error } = await query.select().single();
@@ -162,28 +208,51 @@ export class EnvironmentIntegrationsDB {
       throw new Error(`Failed to update integration: ${error.message}`);
     }
 
-    return this.mapToIntegration(data);
+    return this.mapToEnvironmentIntegration(data);
   }
 
   /**
-   * Delete an integration
+   * Delete an integration (soft delete by setting status to inactive)
    */
-  async deleteIntegration(integrationId: string, tenantId?: string): Promise<boolean> {
+  async deleteIntegration(integrationId: string, orgId?: string, hardDelete: boolean = false): Promise<boolean> {
     const tableName = getTableName('integrations', this.env);
     
-    let query = this.supabase
-      .from(tableName)
-      .delete()
-      .eq('id', integrationId);
+    if (hardDelete) {
+      // Hard delete - remove from database
+      let query = this.supabase
+        .from(tableName)
+        .delete()
+        .eq('id', integrationId);
 
-    if (tenantId) {
-      query = query.eq('tenant_id', tenantId);
-    }
+      if (orgId) {
+        query = query.eq('org_id', orgId);
+      }
 
-    const { error } = await query;
+      const { error } = await query;
 
-    if (error) {
-      throw new Error(`Failed to delete integration: ${error.message}`);
+      if (error) {
+        throw new Error(`Failed to delete integration: ${error.message}`);
+      }
+    } else {
+      // Soft delete - set status to inactive and clear sensitive credentials
+      let query = this.supabase
+        .from(tableName)
+        .update({
+          status: 'inactive',
+          connection: {}, // Clear credentials
+          error_message: 'Integration disconnected',
+        })
+        .eq('id', integrationId);
+
+      if (orgId) {
+        query = query.eq('org_id', orgId);
+      }
+
+      const { error } = await query;
+
+      if (error) {
+        throw new Error(`Failed to delete integration: ${error.message}`);
+      }
     }
 
     return true;
@@ -257,11 +326,13 @@ export class EnvironmentIntegrationsDB {
   }
 
   /**
-   * Map database row to Integration type
+   * Map database row to Integration type (for backward compatibility)
    */
   private mapToIntegration(row: any): Integration {
+    // Decrypt credentials before returning
+    const connection = decryptConnectionConfig(row.connection || {});
+    
     // Extract field_mappings and other metadata from connection if stored there
-    const connection = row.connection || {};
     const {
       field_mappings,
       health_status,
@@ -271,17 +342,41 @@ export class EnvironmentIntegrationsDB {
 
     return {
       integration_id: row.id,
-      org_id: row.tenant_id, // Map tenant_id to org_id for compatibility
+      org_id: row.org_id || row.tenant_id, // Use org_id if available, fallback to tenant_id
       type: row.provider as IntegrationType,
       name: `${row.provider} Integration`,
-      status: 'active', // Default status, can be enhanced
+      status: (row.status || 'inactive') as IntegrationStatus,
       config: config as ConnectionConfig,
       field_mappings: field_mappings || [],
       health_status: health_status || 'unknown',
-      last_sync: last_sync || undefined,
+      last_sync: row.last_sync_at || last_sync || undefined,
       created_at: row.created_at,
-      updated_at: row.created_at, // Use created_at if updated_at not available
+      updated_at: row.updated_at || row.created_at,
       created_by: undefined, // Not in environment schema
+    };
+  }
+
+  /**
+   * Map database row to EnvironmentIntegration type (new schema)
+   */
+  private mapToEnvironmentIntegration(row: any): EnvironmentIntegration {
+    // Decrypt credentials before returning
+    const connection = decryptConnectionConfig(row.connection || {});
+    
+    return {
+      id: row.id,
+      org_id: row.org_id || row.tenant_id,
+      tenant_id: row.tenant_id, // Keep for backward compatibility
+      provider: row.provider as IntegrationType,
+      connection_method: row.connection_method as ConnectionMethod,
+      connection: connection as ConnectionConfig,
+      status: row.status || 'inactive',
+      last_tested_at: row.last_tested_at,
+      last_sync_at: row.last_sync_at,
+      error_message: row.error_message,
+      metadata: row.metadata || {},
+      created_at: row.created_at,
+      updated_at: row.updated_at || row.created_at,
     };
   }
 
