@@ -419,10 +419,17 @@ export default function KeywordResearchPage() {
         });
       }
 
+      // Clear any previous errors
+      setError(null);
+      
+      // Show success modal
       setShowSuccessModal(true);
+      console.log('✅ Success modal should be visible');
     } catch (err: any) {
       console.error('❌ Error saving collection:', err);
-      setError(err.message || 'Failed to save keyword collection. Please check the console for details.');
+      const errorMessage = err.message || err.code || 'Failed to save keyword collection. Please check the console for details.';
+      setError(errorMessage);
+      setShowSuccessModal(false); // Ensure modal is closed on error
     } finally {
       setLoading(false);
     }
@@ -847,8 +854,12 @@ export default function KeywordResearchPage() {
       {/* Success Modal */}
       <Modal
         isOpen={showSuccessModal}
-        onClose={() => setShowSuccessModal(false)}
+        onClose={() => {
+          console.log('Closing success modal');
+          setShowSuccessModal(false);
+        }}
         className="max-w-md"
+        showCloseButton={true}
       >
         <div className="p-8">
           <div className="flex flex-col items-center text-center">
