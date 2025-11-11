@@ -49,7 +49,18 @@ export async function GET(
     const integration = await dbAdapter.getIntegration(id, userProfile.org_id);
     
     if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      console.error(`[Export] Integration ${id} not found for org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration not found or does not belong to your organization' 
+      }, { status: 404 });
+    }
+    
+    // Verify integration belongs to user's organization
+    if (integration.org_id !== userProfile.org_id) {
+      console.error(`[Export] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration does not belong to your organization' 
+      }, { status: 403 });
     }
 
     // Prepare export data (mask sensitive information)

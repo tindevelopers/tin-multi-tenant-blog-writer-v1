@@ -50,7 +50,18 @@ export async function POST(
     const integration = await dbAdapter.getIntegration(id, userProfile.org_id);
     
     if (!integration) {
-      return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
+      console.error(`[Sync] Integration ${id} not found for org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration not found or does not belong to your organization' 
+      }, { status: 404 });
+    }
+    
+    // Verify integration belongs to user's organization
+    if (integration.org_id !== userProfile.org_id) {
+      console.error(`[Sync] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
+      return NextResponse.json({ 
+        error: 'Integration does not belong to your organization' 
+      }, { status: 403 });
     }
 
     // Log sync initiation
@@ -71,11 +82,11 @@ export async function POST(
       // For Webflow, this would sync blog posts to Webflow CMS
       // For now, we'll simulate a successful sync
       
-      // Update integration last_synced_at
+      // Update integration last_sync_at
       await dbAdapter.updateIntegration(
         id,
         {
-          last_synced_at: new Date().toISOString(),
+          last_sync_at: new Date().toISOString(),
         },
         userProfile.org_id
       );
