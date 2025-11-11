@@ -127,6 +127,13 @@ export default function OrganizationsManagementPage() {
 
   const canManageOrgs = ["system_admin", "super_admin"].includes(userRole);
 
+  // Redirect organization admins - they shouldn't access this page
+  useEffect(() => {
+    if (userRole && !canManageOrgs) {
+      router.push("/admin/panel");
+    }
+  }, [userRole, canManageOrgs, router]);
+
   const handleCreateSuccess = () => {
     // Refresh organizations list
     const fetchOrganizations = async () => {
@@ -259,6 +266,26 @@ export default function OrganizationsManagementPage() {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-600"></div>
+      </div>
+    );
+  }
+
+  // Show access denied if not system/super admin
+  if (userRole && !canManageOrgs) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">Access Denied</h3>
+          <p className="text-red-700 dark:text-red-300">
+            You do not have permission to access organization management. Only system administrators can manage organizations.
+          </p>
+          <button
+            onClick={() => router.push("/admin/panel")}
+            className="mt-4 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700"
+          >
+            Back to Dashboard
+          </button>
+        </div>
       </div>
     );
   }
