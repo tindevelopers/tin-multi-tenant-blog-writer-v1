@@ -32,6 +32,8 @@ interface WebflowConfigProps {
 export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConfigProps) {
   const [apiKey, setApiKey] = useState("");
   const [collectionId, setCollectionId] = useState("");
+  const [siteId, setSiteId] = useState("");
+  const [siteName, setSiteName] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -87,6 +89,16 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
             if (config.collection_id && typeof config.collection_id === 'string') {
               setCollectionId(config.collection_id);
             }
+            
+            // Extract Site ID
+            if (config.site_id && typeof config.site_id === 'string') {
+              setSiteId(config.site_id);
+            }
+            
+            // Extract Site Name (if available)
+            if (config.site_name && typeof config.site_name === 'string') {
+              setSiteName(config.site_name);
+            }
           }
         }
       }
@@ -124,6 +136,16 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
       // Only include API key if it was changed (not masked)
       if (apiKey && !apiKey.includes('****')) {
         connection.api_key = apiKey;
+      }
+      
+      // Include Site ID if provided
+      if (siteId) {
+        connection.site_id = siteId;
+      }
+      
+      // Include Site Name if available
+      if (siteName) {
+        connection.site_name = siteName;
       }
 
       let response;
@@ -186,6 +208,14 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         throw new Error(data.error || "Failed to save configuration");
       }
 
+      // If Site ID was auto-detected, update local state
+      if (data.data?.config?.site_id) {
+        setSiteId(data.data.config.site_id);
+      }
+      if (data.data?.config?.site_name) {
+        setSiteName(data.data.config.site_name);
+      }
+
       setSuccess("Configuration saved successfully!");
       setConnectionStatus('connected');
       
@@ -228,10 +258,18 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
       const data = await response.json();
 
       if (response.ok && data.success) {
-        setSuccess('Connection test successful!');
+        // Update Site ID if it was auto-detected during test
+        if (data.data?.site_id) {
+          setSiteId(data.data.site_id);
+        }
+        if (data.data?.site_name) {
+          setSiteName(data.data.site_name);
+        }
+        
+        setSuccess(data.data?.message || 'Connection test successful!');
         setConnectionStatus('connected');
       } else {
-        setError(data.error || 'Connection test failed');
+        setError(data.error || data.data?.error || 'Connection test failed');
         setConnectionStatus('disconnected');
       }
     } catch (err: any) {
@@ -426,6 +464,39 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             The Collection ID of your Webflow CMS collection where blog posts will be published
+          </p>
+        </div>
+
+        {/* Site ID (Auto-detected) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Site ID {siteId && <span className="text-green-600 dark:text-green-400 text-xs">(Auto-detected)</span>}
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              value={siteId}
+              onChange={(e) => setSiteId(e.target.value)}
+              readOnly={!!siteId && !siteId.includes('****')}
+              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white ${
+                siteId && !siteId.includes('****') ? 'bg-gray-50 dark:bg-gray-800 cursor-not-allowed' : ''
+              }`}
+              placeholder="Will be auto-detected from API key"
+            />
+            {siteId && !siteId.includes('****') && (
+              <div className="absolute right-3 top-2">
+                <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">
+                  Auto-detected
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {siteId 
+              ? siteName 
+                ? `Site: ${siteName} (Auto-detected from your API key)`
+                : 'Auto-detected from your API key'
+              : 'This will be automatically detected when you save or test the connection'}
           </p>
         </div>
       </div>
