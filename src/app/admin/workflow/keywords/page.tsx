@@ -277,25 +277,53 @@ export default function KeywordResearchPage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user || !workflowSession) {
-        setError('Session not found');
+      if (!user) {
+        setError('Please log in to save collections');
         return;
       }
 
-      const sessionId = workflowSession.session_id;
+      if (!workflowSession) {
+        setError('Workflow session not found. Please start a new workflow.');
+        return;
+      }
+
+      // Get user's org_id
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (userError || !userProfile) {
+        setError('User organization not found');
+        return;
+      }
+
+      const sessionId = workflowSession.session_id || localStorage.getItem('workflow_session_id');
+      if (!sessionId) {
+        setError('Workflow session ID not found');
+        return;
+      }
+
       const name = collectionName || `Keywords for ${searchQuery}`;
 
-      // Save or update collection
-      const { data: existing } = await supabase
+      // Check if collection already exists (without .single() to avoid error if none found)
+      const { data: existingData, error: checkError } = await supabase
         .from('keyword_collections')
         .select('collection_id')
         .eq('session_id', sessionId)
-        .limit(1)
-        .single();
+        .limit(1);
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 is "no rows returned" which is fine, other errors are not
+        throw checkError;
+      }
+
+      const existing = existingData && existingData.length > 0 ? existingData[0] : null;
 
       const collectionData = {
         session_id: sessionId,
-        org_id: workflowSession.org_id,
+        org_id: workflowSession.org_id || userProfile.org_id,
         created_by: user.id,
         name,
         keywords: keywords,
@@ -303,25 +331,37 @@ export default function KeywordResearchPage() {
         niche: niche
       };
 
+      let saveError;
       if (existing) {
-        await supabase
+        const { error } = await supabase
           .from('keyword_collections')
           .update(collectionData)
           .eq('collection_id', existing.collection_id);
+        saveError = error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('keyword_collections')
           .insert(collectionData);
+        saveError = error;
+      }
+
+      if (saveError) {
+        throw saveError;
       }
 
       // Update workflow session
-      await supabase
+      const { error: sessionError } = await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'keywords',
           completed_steps: ['objective', 'keywords']
         })
         .eq('session_id', sessionId);
+
+      if (sessionError) {
+        console.warn('Failed to update workflow session:', sessionError);
+        // Don't throw - collection was saved successfully
+      }
 
       setSuccess('Keyword collection saved successfully');
       setTimeout(() => setSuccess(null), 3000);
