@@ -95,6 +95,9 @@ export default function EditorPage() {
                 word_count: workflowData.selected_topics?.[0]?.word_count_estimate || 1500
               }));
             }
+          } else if (sessionError?.code === 'PGRST116') {
+            // Session doesn't exist - clear localStorage
+            localStorage.removeItem('workflow_session_id');
           }
         }
       } catch (error) {
