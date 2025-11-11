@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
-import type { ConnectionConfig, FieldMapping, IntegrationStatus } from '@/lib/integrations/types';
+import type { ConnectionConfig, FieldMapping, IntegrationStatus, ConnectionMethod } from '@/lib/integrations/types';
 
 /**
  * GET /api/integrations/[id]

@@ -110,7 +110,7 @@ export default function HorizontalWorkflowNav({
   const progress = ((currentIndex + 1) / workflowSteps.length) * 100;
 
   return (
-    <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+    <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-[64px] z-40">
       {/* Progress Bar */}
       <div className="h-1 bg-gray-200 dark:bg-gray-700">
         <div
