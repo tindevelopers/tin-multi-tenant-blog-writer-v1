@@ -132,7 +132,7 @@ export class EnvironmentIntegrationsDB {
     provider: IntegrationType,
     connection: ConnectionConfig,
     connectionMethod: ConnectionMethod,
-    status: 'active' | 'inactive' | 'expired' | 'error' = 'inactive'
+    status: IntegrationStatus = 'inactive'
   ): Promise<EnvironmentIntegration> {
     const tableName = getTableName('integrations', this.env);
     
@@ -166,7 +166,7 @@ export class EnvironmentIntegrationsDB {
     updates: {
       connection?: ConnectionConfig;
       connection_method?: ConnectionMethod;
-      status?: 'active' | 'inactive' | 'expired' | 'error';
+      status?: IntegrationStatus;
       last_tested_at?: string;
       last_sync_at?: string;
       error_message?: string;
