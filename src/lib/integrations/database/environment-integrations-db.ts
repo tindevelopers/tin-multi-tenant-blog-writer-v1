@@ -56,6 +56,8 @@ export class EnvironmentIntegrationsDB {
       const nodeEnv = String(process.env.NODE_ENV || 'development');
       const vercelEnv = process.env.VERCEL_ENV;
       
+      console.log(`[EnvironmentIntegrationsDB] Environment detection: NODE_ENV=${nodeEnv}, VERCEL_ENV=${vercelEnv}`);
+      
       if (vercelEnv === 'production' || nodeEnv === 'production') {
         this.env = 'prod';
       } else if (vercelEnv === 'preview' || nodeEnv === 'staging') {
@@ -63,6 +65,8 @@ export class EnvironmentIntegrationsDB {
       } else {
         this.env = 'dev';
       }
+      
+      console.log(`[EnvironmentIntegrationsDB] Detected environment: ${this.env}`);
     }
   }
 
