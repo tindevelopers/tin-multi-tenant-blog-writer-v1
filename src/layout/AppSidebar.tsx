@@ -86,7 +86,6 @@ const blogWriterItems: NavItem[] = [
         subItems: [
           { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, new: true },
           { name: "Media", path: "/admin/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
-          { name: "Integrations", path: "/admin/integrations", icon: <Globe className="w-4 h-4" />, new: true },
         ]
       },
       { 
