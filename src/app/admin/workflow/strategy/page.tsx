@@ -51,11 +51,15 @@ export default function StrategyPage() {
         const sessionId = localStorage.getItem('workflow_session_id');
         
         if (sessionId) {
-          const { data: session } = await supabase
+          const { data: session, error: sessionError } = await supabase
             .from('workflow_sessions')
             .select('*')
             .eq('session_id', sessionId)
-            .single();
+            .maybeSingle();
+
+          if (sessionError && sessionError.code !== 'PGRST116') {
+            console.error('Error loading session:', sessionError);
+          }
 
           if (session) {
             setWorkflowSession(session);
@@ -79,6 +83,9 @@ export default function StrategyPage() {
             } else {
               setError('No selected topics found. Please complete Topic Suggestions step first.');
             }
+          } else if (sessionError?.code === 'PGRST116') {
+            // Session doesn't exist - clear localStorage
+            localStorage.removeItem('workflow_session_id');
           }
         }
       } catch (error) {
