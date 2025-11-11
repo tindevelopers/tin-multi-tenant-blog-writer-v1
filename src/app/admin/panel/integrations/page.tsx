@@ -284,57 +284,246 @@ export default function IntegrationsManagementPage() {
   };
 
   const handleBulkTestConnection = async () => {
-    if (selectedIntegrations.size === 0) return;
+    if (selectedIntegrations.size === 0) {
+      alert('Please select at least one integration');
+      return;
+    }
     
     const integrationIds = Array.from(selectedIntegrations);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      alert('Please log in to test connections');
+      return;
+    }
+    
     setTestingIntegrationId(integrationIds[0]);
+    const results: { id: string; success: boolean; error?: string }[] = [];
     
     try {
       for (const id of integrationIds) {
-        await handleTestConnection(id);
+        try {
+          const response = await fetch(`/api/integrations/${id}/test`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          });
+
+          const data = await response.json();
+          
+          if (response.ok && data.success) {
+            results.push({ id, success: true });
+          } else {
+            results.push({ id, success: false, error: data.error || 'Unknown error' });
+          }
+        } catch (err: any) {
+          console.error(`Error testing connection for ${id}:`, err);
+          results.push({ id, success: false, error: err.message || 'Failed to test connection' });
+        }
       }
+      
+      // Refresh integrations
+      const refreshResponse = await fetch('/api/integrations', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+      if (refreshResponse.ok) {
+        const refreshResult = await refreshResponse.json();
+        if (refreshResult.success && Array.isArray(refreshResult.data)) {
+          setIntegrations(refreshResult.data);
+        }
+      }
+      
+      // Show summary
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+      if (failCount === 0) {
+        alert(`Successfully tested ${successCount} integration(s)`);
+      } else {
+        alert(`Tested ${successCount} successfully, ${failCount} failed. Check console for details.`);
+        console.log('Test results:', results);
+      }
+    } catch (err) {
+      console.error('Error in bulk test connection:', err);
+      alert('Failed to test connections');
     } finally {
       setTestingIntegrationId(null);
     }
   };
 
   const handleBulkSyncNow = async () => {
-    if (selectedIntegrations.size === 0) return;
+    if (selectedIntegrations.size === 0) {
+      alert('Please select at least one integration');
+      return;
+    }
     
     const integrationIds = Array.from(selectedIntegrations);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      alert('Please log in to sync integrations');
+      return;
+    }
+    
     setSyncingIntegrationId(integrationIds[0]);
+    const results: { id: string; success: boolean; error?: string }[] = [];
     
     try {
       for (const id of integrationIds) {
-        await handleSyncNow(id);
+        try {
+          const response = await fetch(`/api/integrations/${id}/sync`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          });
+
+          const data = await response.json();
+          
+          if (response.ok && data.success) {
+            results.push({ id, success: true });
+          } else {
+            results.push({ id, success: false, error: data.error || 'Unknown error' });
+          }
+        } catch (err: any) {
+          console.error(`Error syncing ${id}:`, err);
+          results.push({ id, success: false, error: err.message || 'Failed to sync' });
+        }
       }
+      
+      // Show summary
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+      if (failCount === 0) {
+        alert(`Successfully synced ${successCount} integration(s)`);
+      } else {
+        alert(`Synced ${successCount} successfully, ${failCount} failed. Check console for details.`);
+        console.log('Sync results:', results);
+      }
+    } catch (err) {
+      console.error('Error in bulk sync:', err);
+      alert('Failed to sync integrations');
     } finally {
       setSyncingIntegrationId(null);
     }
   };
 
   const handleBulkExportConfig = async () => {
-    if (selectedIntegrations.size === 0) return;
+    if (selectedIntegrations.size === 0) {
+      alert('Please select at least one integration');
+      return;
+    }
     
     const integrationIds = Array.from(selectedIntegrations);
-    for (const id of integrationIds) {
-      await handleExportConfig(id);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      alert('Please log in to export configurations');
+      return;
+    }
+    
+    try {
+      for (const id of integrationIds) {
+        try {
+          const response = await fetch(`/api/integrations/${id}/export`, {
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            // Download as JSON file
+            const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `integration-config-${id}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } else {
+            console.error(`Export failed for ${id}:`, data.error);
+            alert(`Export failed for integration ${id}: ${data.error || 'Unknown error'}`);
+          }
+        } catch (err: any) {
+          console.error(`Error exporting config for ${id}:`, err);
+          alert(`Failed to export configuration for integration ${id}`);
+        }
+      }
+    } catch (err) {
+      console.error('Error in bulk export:', err);
+      alert('Failed to export configurations');
     }
   };
 
   const handleBulkDisconnect = async () => {
-    if (selectedIntegrations.size === 0) return;
+    if (selectedIntegrations.size === 0) {
+      alert('Please select at least one integration');
+      return;
+    }
     
     if (!confirm(`Are you sure you want to disconnect ${selectedIntegrations.size} integration(s)?`)) {
       return;
     }
     
     const integrationIds = Array.from(selectedIntegrations);
-    for (const id of integrationIds) {
-      await handleDisconnect(id);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      alert('Please log in to disconnect integrations');
+      return;
     }
     
-    setSelectedIntegrations(new Set());
+    const results: { id: string; success: boolean; error?: string }[] = [];
+    
+    try {
+      for (const id of integrationIds) {
+        try {
+          const response = await fetch(`/api/integrations/${id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+          });
+
+          if (response.ok) {
+            results.push({ id, success: true });
+            setIntegrations(prev => prev.filter(i => i.integration_id !== id));
+          } else {
+            const data = await response.json();
+            results.push({ id, success: false, error: data.error || 'Unknown error' });
+          }
+        } catch (err: any) {
+          console.error(`Error disconnecting ${id}:`, err);
+          results.push({ id, success: false, error: err.message || 'Failed to disconnect' });
+        }
+      }
+      
+      // Clear selection
+      setSelectedIntegrations(new Set());
+      
+      // Show summary
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+      if (failCount === 0) {
+        alert(`Successfully disconnected ${successCount} integration(s)`);
+      } else {
+        alert(`Disconnected ${successCount} successfully, ${failCount} failed. Check console for details.`);
+        console.log('Disconnect results:', results);
+      }
+    } catch (err) {
+      console.error('Error in bulk disconnect:', err);
+      alert('Failed to disconnect integrations');
+    }
   };
 
   const handleToggleSelection = (integrationId: string) => {
