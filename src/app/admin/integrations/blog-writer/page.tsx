@@ -40,6 +40,8 @@ function BlogWriterIntegrationsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const providerParam = searchParams.get('provider') as Provider | null;
+  const [userRole, setUserRole] = useState<string>("");
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
   
   // Initialize provider from URL param or default to webflow
   const [selectedProvider, setSelectedProvider] = useState<Provider>(
@@ -51,6 +53,46 @@ function BlogWriterIntegrationsContent() {
   const [error, setError] = useState<string | null>(null);
   const [showOAuthConfig, setShowOAuthConfig] = useState(false);
   const [existingIntegrations, setExistingIntegrations] = useState<ExistingIntegration[]>([]);
+
+  // Check user role and authorization
+  useEffect(() => {
+    const checkAuthorization = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          setIsAuthorized(false);
+          return;
+        }
+
+        const { data: userData } = await supabase
+          .from("users")
+          .select("role")
+          .eq("user_id", user.id)
+          .single();
+
+        if (userData) {
+          setUserRole(userData.role);
+          // Only organization admins (admin, owner, manager) can access this page
+          // System admins should NOT access target publisher integrations
+          const allowedRoles = ["admin", "owner", "manager"];
+          setIsAuthorized(allowedRoles.includes(userData.role));
+          
+          if (!allowedRoles.includes(userData.role)) {
+            setError("Access denied. This page is only available to organization administrators.");
+          }
+        } else {
+          setIsAuthorized(false);
+        }
+      } catch (err) {
+        console.error("Error checking authorization:", err);
+        setIsAuthorized(false);
+      }
+    };
+
+    checkAuthorization();
+  }, []);
 
   // Update provider if URL param changes
   useEffect(() => {
@@ -117,8 +159,36 @@ function BlogWriterIntegrationsContent() {
     }
   };
 
+  // Check authorization first
+  if (isAuthorized === null) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-600"></div>
+      </div>
+    );
+  }
+
+  if (isAuthorized === false) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">Access Denied</h3>
+          <p className="text-red-700 dark:text-red-300">
+            {error || "This page is only available to organization administrators. System administrators should manage system-level API integrations through System Settings."}
+          </p>
+          <button
+            onClick={() => router.push("/admin/panel/integrations")}
+            className="mt-4 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700"
+          >
+            Go to Organization Integrations
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Catch any initialization errors
-  if (error) {
+  if (error && !error.includes("Access denied")) {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KeyIcon, LockClosedIcon } from "@heroicons/react/24/outline";
+import { KeyIcon, LockClosedIcon, PencilIcon } from "@heroicons/react/24/outline";
+import EditIntegrationModal from "@/components/admin/EditIntegrationModal";
 
 interface Integration {
   integration_id: string;
@@ -45,6 +46,8 @@ export default function IntegrationsManagementPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [userRole, setUserRole] = useState<string>("");
+  const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -220,12 +223,14 @@ export default function IntegrationsManagementPage() {
               Connect your favorite tools and automate your workflow
             </p>
           </div>
-          <a
-            href="/admin/integrations/blog-writer"
-            className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
-          >
-            Add Integration
-          </a>
+          {canManageIntegrations && (
+            <a
+              href="/admin/integrations/blog-writer"
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              Add Integration
+            </a>
+          )}
         </div>
       </div>
 
@@ -469,12 +474,16 @@ export default function IntegrationsManagementPage() {
                 </span>
               )}
               
-              <a
-                href={`/admin/integrations/blog-writer?provider=${integration.type}`}
-                className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+              <button
+                onClick={() => {
+                  setEditingIntegration(integration);
+                  setShowEditModal(true);
+                }}
+                className="px-3 py-1 text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-200 flex items-center gap-1"
               >
-                Configure
-              </a>
+                <PencilIcon className="w-4 h-4" />
+                Edit
+              </button>
             </div>
           </div>
         ))}
@@ -489,12 +498,14 @@ export default function IntegrationsManagementPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Get started by connecting your first integration.
           </p>
-          <a
-            href="/admin/integrations/blog-writer"
-            className="mt-4 inline-block px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
-          >
-            Add Integration
-          </a>
+          {canManageIntegrations && (
+            <a
+              href="/admin/integrations/blog-writer"
+              className="mt-4 inline-block px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              Add Integration
+            </a>
+          )}
         </div>
       )}
 
@@ -509,6 +520,42 @@ export default function IntegrationsManagementPage() {
           </p>
         </div>
       )}
+
+      {/* Edit Integration Modal */}
+      <EditIntegrationModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingIntegration(null);
+        }}
+        onSuccess={() => {
+          // Refresh integrations list
+          const fetchIntegrations = async () => {
+            try {
+              const supabase = createClient();
+              const { data: { session } } = await supabase.auth.getSession();
+              if (!session) return;
+
+              const response = await fetch('/api/integrations', {
+                headers: {
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
+              });
+
+              if (response.ok) {
+                const result = await response.json();
+                if (result.success && Array.isArray(result.data)) {
+                  setIntegrations(result.data);
+                }
+              }
+            } catch (err) {
+              console.error('Error fetching integrations:', err);
+            }
+          };
+          fetchIntegrations();
+        }}
+        integration={editingIntegration}
+      />
     </div>
   );
 }
