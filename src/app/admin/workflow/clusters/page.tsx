@@ -55,17 +55,30 @@ export default function ClustersPage() {
         if (!user) return;
 
         const sessionId = localStorage.getItem('workflow_session_id');
-        if (sessionId) {
-          // Load workflow session
-          const { data: session } = await supabase
-            .from('workflow_sessions')
-            .select('*')
-            .eq('session_id', sessionId)
-            .single();
+        if (!sessionId) {
+          setError('No workflow session found. Please start a new workflow from the objective page.');
+          return;
+        }
 
-          if (session) {
-            setWorkflowSession(session);
-          }
+        console.log('🔍 Loading clusters for session:', sessionId);
+
+        // Load workflow session
+        const { data: session, error: sessionError } = await supabase
+          .from('workflow_sessions')
+          .select('*')
+          .eq('session_id', sessionId)
+          .single();
+
+        if (sessionError) {
+          console.error('❌ Error loading session:', sessionError);
+          setError('Failed to load workflow session. Please start a new workflow.');
+          return;
+        }
+
+        if (session) {
+          setWorkflowSession(session);
+          console.log('✅ Loaded workflow session:', session.session_id);
+        }
 
           // Load keyword collection (without .single() to avoid error if none found)
           const { data: collectionData, error: collectionError } = await supabase
@@ -83,6 +96,14 @@ export default function ClustersPage() {
           const collection = collectionData && collectionData.length > 0 ? collectionData[0] : null;
 
           if (collection) {
+            console.log('📋 Loaded keyword collection:', {
+              collectionId: collection.collection_id,
+              sessionId: collection.session_id,
+              keywordCount: Array.isArray(collection.keywords) ? collection.keywords.length : 0,
+              keywordsType: typeof collection.keywords,
+              keywordsSample: Array.isArray(collection.keywords) ? collection.keywords.slice(0, 3) : collection.keywords
+            });
+
             setKeywordCollection(collection);
             
             // Load existing clusters or generate from keywords
@@ -93,18 +114,33 @@ export default function ClustersPage() {
               .order('created_at', { ascending: true });
 
             if (existingClusters && existingClusters.length > 0) {
+              console.log('✅ Loaded existing clusters:', existingClusters.length);
               setClusters(existingClusters.map(c => ({
                 cluster_id: c.cluster_id,
                 parent_topic: c.parent_topic,
                 keywords: Array.isArray(c.keywords) ? c.keywords : [],
                 cluster_metrics: c.cluster_metrics || {}
               })));
-            } else if (collection.keywords && Array.isArray(collection.keywords)) {
-              // Generate clusters from keywords
-              generateClustersFromKeywords(collection.keywords);
+            } else if (collection.keywords) {
+              // Ensure keywords is an array
+              const keywordsArray = Array.isArray(collection.keywords) 
+                ? collection.keywords 
+                : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
+              
+              if (keywordsArray.length > 0) {
+                console.log('🔄 Generating clusters from keywords:', keywordsArray.length);
+                generateClustersFromKeywords(keywordsArray);
+              } else {
+                console.warn('⚠️ Collection has no keywords array');
+                setError('Keyword collection exists but contains no keywords. Please return to keyword research and save your keywords.');
+              }
+            } else {
+              console.warn('⚠️ Collection has no keywords field');
+              setError('Keyword collection exists but contains no keywords. Please return to keyword research and save your keywords.');
             }
           } else {
-            setError('No keyword collection found. Please complete keyword research first.');
+            console.warn('⚠️ No keyword collection found for session:', sessionId);
+            setError('No keyword collection found. Please complete keyword research first and click "Save Collection".');
           }
         }
       } catch (error) {

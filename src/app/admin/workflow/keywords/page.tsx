@@ -328,27 +328,51 @@ export default function KeywordResearchPage() {
         org_id: workflowSession.org_id || userProfile.org_id,
         created_by: user.id,
         name,
-        keywords: keywords,
+        keywords: keywords, // Ensure keywords array is saved
         search_query: searchQuery,
         niche: niche
       };
 
-      let saveError;
+      console.log('💾 Saving keyword collection:', {
+        sessionId,
+        orgId: workflowSession.org_id || userProfile.org_id,
+        keywordCount: keywords.length,
+        hasExisting: !!existing
+      });
+
+      let result;
       if (existing) {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('keyword_collections')
           .update(collectionData)
-          .eq('collection_id', existing.collection_id);
-        saveError = error;
+          .eq('collection_id', existing.collection_id)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('❌ Update error:', error);
+          throw error;
+        }
+        result = data;
+        console.log('✅ Updated existing collection:', result?.collection_id);
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('keyword_collections')
-          .insert(collectionData);
-        saveError = error;
+          .insert(collectionData)
+          .select()
+          .single();
+        
+        if (error) {
+          console.error('❌ Insert error:', error);
+          throw error;
+        }
+        result = data;
+        console.log('✅ Created new collection:', result?.collection_id);
       }
 
-      if (saveError) {
-        throw saveError;
+      // Verify the save was successful
+      if (!result) {
+        throw new Error('Collection save returned no data');
       }
 
       // Update workflow session
@@ -365,10 +389,27 @@ export default function KeywordResearchPage() {
         // Don't throw - collection was saved successfully
       }
 
+      // Verify the collection was saved by fetching it back
+      const { data: verifyData, error: verifyError } = await supabase
+        .from('keyword_collections')
+        .select('collection_id, keywords')
+        .eq('session_id', sessionId)
+        .single();
+
+      if (verifyError || !verifyData) {
+        console.warn('⚠️ Could not verify collection save:', verifyError);
+        // Don't throw - the save might have succeeded but verification failed
+      } else {
+        console.log('✅ Verified collection saved:', {
+          collectionId: verifyData.collection_id,
+          keywordCount: Array.isArray(verifyData.keywords) ? verifyData.keywords.length : 0
+        });
+      }
+
       setShowSuccessModal(true);
     } catch (err: any) {
-      console.error('Error saving collection:', err);
-      setError(err.message || 'Failed to save keyword collection');
+      console.error('❌ Error saving collection:', err);
+      setError(err.message || 'Failed to save keyword collection. Please check the console for details.');
     } finally {
       setLoading(false);
     }
