@@ -12,6 +12,8 @@ import { createClient } from '@/lib/supabase/server';
 import { WebflowOAuth } from '@/lib/integrations/oauth/webflow-oauth';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
 import { createServiceClient } from '@/lib/supabase/service';
+import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
+import type { ConnectionConfig } from '@/lib/integrations/types';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -179,16 +181,90 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Store tokens securely (in a real implementation, encrypt before storing)
-      // For now, we'll pass them back to the frontend to complete the connection
-      // In production, store encrypted tokens in integrations table
+      // Store tokens securely in integrations table with connection_method: 'oauth'
+      const dbAdapter = new EnvironmentIntegrationsDB();
+      
+      // Calculate expiration timestamp
+      const expiresAt = tokenData.expires_in 
+        ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+        : undefined;
 
-      // Redirect back to integration page with success and token info
+      // Prepare connection config with OAuth tokens
+      const connectionConfig: ConnectionConfig = {
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        expiresAt,
+        tokenType: tokenData.token_type || 'Bearer',
+        scope: tokenData.scope,
+        // Webflow-specific fields can be added here
+      };
+
+      try {
+        // Check if integration already exists for this org + provider
+        const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
+        const existingIntegration = integrations.find(
+          (i) => i.type === 'webflow'
+        );
+
+        if (existingIntegration) {
+          // Update existing integration
+          await dbAdapter.updateIntegration(
+            existingIntegration.integration_id,
+            {
+              connection: connectionConfig,
+              connection_method: 'oauth',
+              status: 'active',
+              last_tested_at: new Date().toISOString(),
+              error_message: undefined,
+            },
+            userProfile.org_id
+          );
+
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'saved',
+              saved_integration_id: existingIntegration.integration_id,
+            });
+          }
+        } else {
+          // Create new integration
+          const integration = await dbAdapter.createIntegration(
+            userProfile.org_id,
+            'webflow',
+            connectionConfig,
+            'oauth',
+            'active'
+          );
+
+          if (logId) {
+            await integrationLogger.updateLog(logId, {
+              status: 'saved',
+              saved_integration_id: integration.id,
+            });
+          }
+        }
+      } catch (dbError: any) {
+        console.error('❌ Database error storing OAuth tokens:', dbError);
+        
+        if (logId) {
+          await integrationLogger.updateLog(logId, {
+            status: 'failed',
+            error_message: `Failed to save integration: ${dbError.message}`,
+            error_code: 'database_error',
+          });
+        }
+
+        // Still redirect but with warning
+        const errorUrl = new URL('/admin/integrations/blog-writer', request.url);
+        errorUrl.searchParams.set('error', 'save_failed');
+        errorUrl.searchParams.set('error_description', 'OAuth successful but failed to save integration');
+        return NextResponse.redirect(errorUrl);
+      }
+
+      // Redirect back to integration page with success
       const successUrl = new URL('/admin/integrations/blog-writer', request.url);
       successUrl.searchParams.set('oauth_success', 'true');
       successUrl.searchParams.set('provider', 'webflow');
-      // Store token in session or pass via secure cookie instead of URL
-      // For now, we'll use a temporary token storage mechanism
 
       return NextResponse.redirect(successUrl);
 

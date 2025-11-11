@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         connection_keys: connection ? Object.keys(connection) : [],
       },
       connection_metadata: {
-        connection_method: 'api_key', // vs 'oauth'
+        connection_method: connection.access_token ? 'oauth' : 'api_key',
       },
       ip_address: getClientIp(request),
       user_agent: request.headers.get('user-agent') || undefined,
