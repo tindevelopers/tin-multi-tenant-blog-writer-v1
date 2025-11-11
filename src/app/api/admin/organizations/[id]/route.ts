@@ -8,9 +8,10 @@ import { createServiceClient } from "@/lib/supabase/service";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const supabase = await createClient(request);
     const supabaseAdmin = createServiceClient();
 
@@ -48,7 +49,7 @@ export async function GET(
     const { data: org, error: orgError } = await supabaseAdmin
       .from("organizations")
       .select("*")
-      .eq("org_id", params.id)
+      .eq("org_id", id)
       .single();
 
     if (orgError) {
@@ -83,9 +84,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const supabase = await createClient(request);
     const supabaseAdmin = createServiceClient();
 
@@ -137,7 +139,7 @@ export async function PUT(
     const { data: updatedOrg, error: updateError } = await supabaseAdmin
       .from("organizations")
       .update(updateData)
-      .eq("org_id", params.id)
+      .eq("org_id", id)
       .select()
       .single();
 
@@ -173,9 +175,10 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const supabase = await createClient(request);
     const supabaseAdmin = createServiceClient();
 
@@ -214,7 +217,7 @@ export async function DELETE(
     const { data: users, error: usersError } = await supabaseAdmin
       .from("users")
       .select("user_id")
-      .eq("org_id", params.id)
+      .eq("org_id", id)
       .limit(1);
 
     if (usersError) {
@@ -235,7 +238,7 @@ export async function DELETE(
     const { error: deleteError } = await supabaseAdmin
       .from("organizations")
       .delete()
-      .eq("org_id", params.id);
+      .eq("org_id", id);
 
     if (deleteError) {
       return NextResponse.json(
