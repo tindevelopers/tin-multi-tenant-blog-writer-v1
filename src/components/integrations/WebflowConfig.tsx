@@ -516,6 +516,23 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
               : 'This will be automatically detected when you save or test the connection'}
           </p>
         </div>
+
+        {/* Integration Name (for multiple Webflow sites) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Integration Name (Optional)
+          </label>
+          <input
+            type="text"
+            value={integrationName}
+            onChange={(e) => setIntegrationName(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 dark:bg-gray-700 dark:text-white"
+            placeholder={siteName || "e.g., Main Site, Blog Site, etc."}
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Give this integration a custom name to distinguish it from other Webflow integrations. If left empty, the site name will be used.
+          </p>
+        </div>
       </div>
 
       {/* Action Buttons */}
