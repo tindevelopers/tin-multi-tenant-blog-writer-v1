@@ -51,7 +51,6 @@ function BlogWriterIntegrationsContent() {
   const [error, setError] = useState<string | null>(null);
   const [showOAuthConfig, setShowOAuthConfig] = useState(false);
   const [existingIntegrations, setExistingIntegrations] = useState<ExistingIntegration[]>([]);
-  const [loadingIntegrations, setLoadingIntegrations] = useState(true);
 
   // Update provider if URL param changes
   useEffect(() => {

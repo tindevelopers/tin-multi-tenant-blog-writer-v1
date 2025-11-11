@@ -55,7 +55,7 @@ export default function OrganizationSettingsPage() {
       // Check if user has permission (admin, owner, system_admin, super_admin)
       const allowedRoles = ["admin", "owner", "system_admin", "super_admin"];
       if (userData && !allowedRoles.includes(userData.role)) {
-        setError("You don't have permission to access organization settings");
+        setError("You don&apos;t have permission to access organization settings");
         setLoading(false);
         return;
       }
@@ -125,7 +125,7 @@ export default function OrganizationSettingsPage() {
       const fileName = `${organization.org_id}/${Date.now()}.${fileExt}`;
 
       // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('organization-logos')
         .upload(fileName, file, {
           cacheControl: '3600',
@@ -251,7 +251,7 @@ export default function OrganizationSettingsPage() {
             Organization Settings
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Manage your organization's logo and company information
+            Manage your organization&apos;s logo and company information
           </p>
         </div>
       </div>
