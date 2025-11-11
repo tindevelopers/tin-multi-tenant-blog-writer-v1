@@ -43,26 +43,29 @@ export default function OrganizationSettingsPage() {
         return;
       }
 
-      // Get user's organization and role
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("org_id, role, organizations(*)")
-        .eq("user_id", user.id)
-        .single();
+          // Get user's organization and role
+          const { data: userData, error: userError } = await supabase
+            .from("users")
+            .select("org_id, role, organizations(*)")
+            .eq("user_id", user.id)
+            .single();
 
-      if (userError) throw userError;
+          if (userError) throw userError;
 
-      // Check if user has permission (admin, owner, system_admin, super_admin)
-      const allowedRoles = ["admin", "owner", "system_admin", "super_admin"];
-      if (userData && !allowedRoles.includes(userData.role)) {
-        setError("You don&apos;t have permission to access organization settings");
-        setLoading(false);
-        return;
-      }
+          // Check if user has permission (admin, owner, system_admin, super_admin)
+          const allowedRoles = ["admin", "owner", "system_admin", "super_admin"];
+          if (userData && !allowedRoles.includes(userData.role)) {
+            setError("You don&apos;t have permission to access organization settings");
+            setLoading(false);
+            return;
+          }
 
-      if (userData && userData.organizations) {
-        const org = userData.organizations as Organization;
-        setOrganization(org);
+          if (userData && userData.organizations) {
+            // organizations is an array from Supabase join, get first element
+            const orgs = userData.organizations as unknown as Organization[];
+            const org = Array.isArray(orgs) && orgs.length > 0 ? orgs[0] : null;
+            if (org) {
+              setOrganization(org);
         
         // Set form values
         const companyNameValue = org.settings?.company_name || org.name || "";
