@@ -132,7 +132,7 @@ export function IntegrationRequirementsCard({
               {requirements.requiredFields.map((field) => {
                 const value = config[field.key as keyof ConnectionConfig];
                 const isPresent = value !== undefined && value !== null && value !== '';
-                const fieldError = analysis.errors[field.key];
+                const fieldError = analysis.errors?.[field.key];
                 
                 return (
                   <div
