@@ -80,68 +80,67 @@ export default function ClustersPage() {
           console.log('✅ Loaded workflow session:', session.session_id);
         }
 
-          // Load keyword collection (without .single() to avoid error if none found)
-          const { data: collectionData, error: collectionError } = await supabase
-            .from('keyword_collections')
+        // Load keyword collection (without .single() to avoid error if none found)
+        const { data: collectionData, error: collectionError } = await supabase
+          .from('keyword_collections')
+          .select('*')
+          .eq('session_id', sessionId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (collectionError && collectionError.code !== 'PGRST116') {
+          // PGRST116 is "no rows returned" which is fine, other errors are not
+          throw collectionError;
+        }
+
+        const collection = collectionData && collectionData.length > 0 ? collectionData[0] : null;
+
+        if (collection) {
+          console.log('📋 Loaded keyword collection:', {
+            collectionId: collection.collection_id,
+            sessionId: collection.session_id,
+            keywordCount: Array.isArray(collection.keywords) ? collection.keywords.length : 0,
+            keywordsType: typeof collection.keywords,
+            keywordsSample: Array.isArray(collection.keywords) ? collection.keywords.slice(0, 3) : collection.keywords
+          });
+
+          setKeywordCollection(collection);
+          
+          // Load existing clusters or generate from keywords
+          const { data: existingClusters } = await supabase
+            .from('keyword_clusters')
             .select('*')
             .eq('session_id', sessionId)
-            .order('created_at', { ascending: false })
-            .limit(1);
+            .order('created_at', { ascending: true });
 
-          if (collectionError && collectionError.code !== 'PGRST116') {
-            // PGRST116 is "no rows returned" which is fine, other errors are not
-            throw collectionError;
-          }
-
-          const collection = collectionData && collectionData.length > 0 ? collectionData[0] : null;
-
-          if (collection) {
-            console.log('📋 Loaded keyword collection:', {
-              collectionId: collection.collection_id,
-              sessionId: collection.session_id,
-              keywordCount: Array.isArray(collection.keywords) ? collection.keywords.length : 0,
-              keywordsType: typeof collection.keywords,
-              keywordsSample: Array.isArray(collection.keywords) ? collection.keywords.slice(0, 3) : collection.keywords
-            });
-
-            setKeywordCollection(collection);
+          if (existingClusters && existingClusters.length > 0) {
+            console.log('✅ Loaded existing clusters:', existingClusters.length);
+            setClusters(existingClusters.map(c => ({
+              cluster_id: c.cluster_id,
+              parent_topic: c.parent_topic,
+              keywords: Array.isArray(c.keywords) ? c.keywords : [],
+              cluster_metrics: c.cluster_metrics || {}
+            })));
+          } else if (collection.keywords) {
+            // Ensure keywords is an array
+            const keywordsArray = Array.isArray(collection.keywords) 
+              ? collection.keywords 
+              : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
             
-            // Load existing clusters or generate from keywords
-            const { data: existingClusters } = await supabase
-              .from('keyword_clusters')
-              .select('*')
-              .eq('session_id', sessionId)
-              .order('created_at', { ascending: true });
-
-            if (existingClusters && existingClusters.length > 0) {
-              console.log('✅ Loaded existing clusters:', existingClusters.length);
-              setClusters(existingClusters.map(c => ({
-                cluster_id: c.cluster_id,
-                parent_topic: c.parent_topic,
-                keywords: Array.isArray(c.keywords) ? c.keywords : [],
-                cluster_metrics: c.cluster_metrics || {}
-              })));
-            } else if (collection.keywords) {
-              // Ensure keywords is an array
-              const keywordsArray = Array.isArray(collection.keywords) 
-                ? collection.keywords 
-                : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
-              
-              if (keywordsArray.length > 0) {
-                console.log('🔄 Generating clusters from keywords:', keywordsArray.length);
-                generateClustersFromKeywords(keywordsArray);
-              } else {
-                console.warn('⚠️ Collection has no keywords array');
-                setError('Keyword collection exists but contains no keywords. Please return to keyword research and save your keywords.');
-              }
+            if (keywordsArray.length > 0) {
+              console.log('🔄 Generating clusters from keywords:', keywordsArray.length);
+              generateClustersFromKeywords(keywordsArray);
             } else {
-              console.warn('⚠️ Collection has no keywords field');
+              console.warn('⚠️ Collection has no keywords array');
               setError('Keyword collection exists but contains no keywords. Please return to keyword research and save your keywords.');
             }
           } else {
-            console.warn('⚠️ No keyword collection found for session:', sessionId);
-            setError('No keyword collection found. Please complete keyword research first and click "Save Collection".');
+            console.warn('⚠️ Collection has no keywords field');
+            setError('Keyword collection exists but contains no keywords. Please return to keyword research and save your keywords.');
           }
+        } else {
+          console.warn('⚠️ No keyword collection found for session:', sessionId);
+          setError('No keyword collection found. Please complete keyword research first and click "Save Collection".');
         }
       } catch (error) {
         console.error('Error loading data:', error);
