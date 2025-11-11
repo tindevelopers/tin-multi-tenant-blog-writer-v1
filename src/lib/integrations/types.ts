@@ -290,9 +290,12 @@ export interface Integration {
   name: string;
   status: IntegrationStatus;
   config: ConnectionConfig;
+  connection_method?: ConnectionMethod;
   field_mappings?: FieldMapping[];
   health_status: HealthStatus;
   last_sync?: string;
+  last_tested_at?: string;
+  last_synced_at?: string;
   created_at: string;
   updated_at: string;
   created_by?: string;

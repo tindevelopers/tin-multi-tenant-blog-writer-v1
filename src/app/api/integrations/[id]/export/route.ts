@@ -58,7 +58,7 @@ export async function GET(
       type: integration.type,
       name: integration.name,
       status: integration.status,
-      connection_method: integration.connection_method,
+      connection_method: integration.connection_method || null,
       config: {
         ...integration.config,
         // Mask API keys and tokens

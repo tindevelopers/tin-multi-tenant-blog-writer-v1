@@ -368,9 +368,12 @@ export class EnvironmentIntegrationsDB {
       name: `${row.provider} Integration`,
       status: (row.status || 'inactive') as IntegrationStatus,
       config: config as ConnectionConfig,
+      connection_method: row.connection_method as ConnectionMethod | undefined,
       field_mappings: fieldMappings,
       health_status: (health_status && typeof health_status === 'string' && ['healthy', 'warning', 'error', 'unknown'].includes(health_status) ? health_status : 'unknown') as HealthStatus,
       last_sync: row.last_sync_at || last_sync || undefined,
+      last_tested_at: row.last_tested_at,
+      last_synced_at: row.last_sync_at,
       created_at: row.created_at,
       updated_at: row.updated_at || row.created_at,
       created_by: undefined, // Not in environment schema
