@@ -476,7 +476,7 @@ export default function ClustersPage() {
               <li>Go to <strong>Keyword Research</strong> tab</li>
               <li>Search for keywords in your niche</li>
               <li>Select keywords you want to use</li>
-              <li>Click <strong>"Save Collection"</strong> button</li>
+              <li>Click <strong>&quot;Save Collection&quot;</strong> button</li>
               <li>Return here to cluster them</li>
             </ol>
           </div>
@@ -500,7 +500,7 @@ export default function ClustersPage() {
             Your keyword collection has been loaded. Clusters will be generated automatically.
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            If clusters don't appear, please refresh the page or return to keyword research to verify your keywords were saved correctly.
+            If clusters don&apos;t appear, please refresh the page or return to keyword research to verify your keywords were saved correctly.
           </p>
         </div>
       )}
