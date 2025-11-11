@@ -127,11 +127,22 @@ export async function POST(
           };
 
           // If site_id was auto-detected, update the connection config
+          const updatedConnection: any = { ...connection };
           if (siteId && !connection.site_id) {
-            updateData.connection = { ...connection, site_id: siteId };
+            updatedConnection.site_id = siteId;
+          }
+          if (testResponse.siteName && !connection.site_name) {
+            updatedConnection.site_name = testResponse.siteName;
+          }
+          
+          if (siteId || testResponse.siteName) {
+            updateData.connection = updatedConnection;
           }
 
           await dbAdapter.updateIntegration(id, updateData, userProfile.org_id);
+          
+          // Update connection reference for response
+          Object.assign(connection, updatedConnection);
 
           if (logId) {
             await integrationLogger.updateLog(logId, {
@@ -210,6 +221,11 @@ export async function POST(
         ...testResult,
         last_tested_at: new Date().toISOString(),
         log_id: logId,
+        // Include site_id and site_name for Webflow integrations
+        ...(integration.type === 'webflow' && {
+          site_id: integration.config.site_id,
+          site_name: integration.config.site_name,
+        }),
       }
     });
 
