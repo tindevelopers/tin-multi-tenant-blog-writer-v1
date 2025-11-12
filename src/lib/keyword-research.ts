@@ -630,14 +630,14 @@ class KeywordResearchService {
       const allKeywords = [...new Set([...extractedKeywords, ...suggestedKeywords, topic])];
       
       // Step 3: Analyze keywords
-      // IMPORTANT: Cloud Run API /analyze endpoint has max 50 keywords limit
-      // Batch analysis into chunks of 50 if we have more keywords
+      // IMPORTANT: Cloud Run API /analyze endpoint has max 30 keywords limit (reduced to avoid 422 errors)
+      // Batch analysis into chunks if we have more keywords
       let keywordAnalysis: KeywordAnalysis;
-      if (allKeywords.length > 50) {
-        console.log(`⚠️ Batching analysis: ${allKeywords.length} keywords exceed API limit of 50. Analyzing in batches...`);
+      const batchSize = 30; // Reduced from 50 to avoid 422 validation errors
+      if (allKeywords.length > batchSize) {
+        console.log(`⚠️ Batching analysis: ${allKeywords.length} keywords exceed API limit of ${batchSize}. Analyzing in batches...`);
         
-        // Analyze in batches of 50
-        const batchSize = 50;
+        // Analyze in batches
         const batches: KeywordAnalysis[] = [];
         
         for (let i = 0; i < allKeywords.length; i += batchSize) {
