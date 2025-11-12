@@ -2,23 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Layers, 
-  ArrowRight, 
+import {
+  Layers,
+  ArrowRight,
   ArrowLeft,
   Save,
-  Edit,
   CheckCircle2,
-  X,
-  TrendingUp,
-  Target,
-  BarChart3,
   Plus,
   Trash2,
   Link as LinkIcon,
   FileText,
   BookOpen,
-  Sparkles
+  Sparkles,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Alert from '@/components/ui/alert/Alert';
@@ -985,7 +980,7 @@ export default function ClustersPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Use the full keyword phrase that ranks in search (e.g., "pet grooming services")
+                Use the full keyword phrase that ranks in search (e.g., &quot;pet grooming services&quot;)
               </p>
             </div>
             <div>
@@ -1000,7 +995,7 @@ export default function ClustersPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Use the full keyword phrase as the title (e.g., "pet grooming services" not just "Pet")
+                Use the full keyword phrase as the title (e.g., &quot;pet grooming services&quot; not just &quot;Pet&quot;)
               </p>
             </div>
             <div>
@@ -1141,7 +1136,7 @@ export default function ClustersPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Use the full keyword phrase that ranks in search (e.g., "ultimate pet grooming services")
+                Use the full keyword phrase that ranks in search (e.g., &quot;ultimate pet grooming services&quot;)
               </p>
             </div>
             <div>
@@ -1156,7 +1151,7 @@ export default function ClustersPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Use the full keyword phrase as the title (e.g., "ultimate pet grooming services" not just "Ultimate")
+                Use the full keyword phrase as the title (e.g., &quot;ultimate pet grooming services&quot; not just &quot;Ultimate&quot;)
               </p>
             </div>
             <div>
