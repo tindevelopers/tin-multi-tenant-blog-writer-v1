@@ -208,7 +208,7 @@ export default function BrandVoiceSettings({ onSettingsChange, compact = false }
             Brand Voice Settings
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Configure your organization's brand voice for consistent content generation
+            Configure your organization&apos;s brand voice for consistent content generation
           </p>
         </div>
         {brandVoice && (

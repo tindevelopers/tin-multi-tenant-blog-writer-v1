@@ -232,7 +232,7 @@ export default function InternalLinkSuggestions({
                     </p>
                   )}
                   <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                    <span>Anchor: "{suggestion.suggested_anchor_text}"</span>
+                    <span>Anchor: &quot;{suggestion.suggested_anchor_text}&quot;</span>
                     <span>Type: {suggestion.link_type}</span>
                   </div>
                 </div>
