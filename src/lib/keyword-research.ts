@@ -393,7 +393,9 @@ class KeywordResearchService {
       }
 
       // Step 4: Generate title suggestions
-      const titleSuggestions = this.generateTitleSuggestions(topic, keywordAnalysis, targetAudience);
+      const primaryKeyword = Object.keys(keywordAnalysis.keyword_analysis)[0] || topic;
+      const secondaryKeywords = Object.keys(keywordAnalysis.keyword_analysis).slice(1, 10);
+      const titleSuggestions = this.generateTitleSuggestions(primaryKeyword, secondaryKeywords, targetAudience);
 
       // Step 5: Generate content strategy
       const contentStrategy = this.generateContentStrategy(keywordAnalysis, targetAudience);
