@@ -52,6 +52,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // Cloud Run API expects 'keyword' (singular), not 'keywords' (array)
+    // If keywords array is provided, use the first one
+    // If keyword is provided, use it directly
+    const requestBody = body.keywords && Array.isArray(body.keywords) && body.keywords.length > 0
+      ? { keyword: body.keywords[0] } // Use first keyword from array
+      : body.keyword
+      ? { keyword: body.keyword }
+      : body;
+    
     const response = await fetchWithRetry(
       `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`,
       {
@@ -59,7 +68,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(requestBody),
       }
     );
 
@@ -72,7 +81,10 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    // Cloud Run returns 'keyword_suggestions', map to 'suggestions' for consistency
+    return NextResponse.json({
+      suggestions: data.keyword_suggestions || data.suggestions || []
+    });
   } catch (error: unknown) {
     console.error('Error in keywords/suggest:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

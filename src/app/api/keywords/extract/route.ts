@@ -52,6 +52,21 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // Cloud Run API expects 'content' field, not 'text'
+    // Also requires at least 100 characters
+    const requestBody = body.text 
+      ? { content: body.text } 
+      : body;
+    
+    // If content is too short, return empty keywords array (not an error)
+    // The client will handle short queries by using the query itself as a keyword
+    const content = requestBody.content || '';
+    if (content.length < 100) {
+      return NextResponse.json(
+        { keywords: [] } // Return empty array for short queries
+      );
+    }
+    
     const response = await fetchWithRetry(
       `${BLOG_WRITER_API_URL}/api/v1/keywords/extract`,
       {
@@ -59,7 +74,7 @@ export async function POST(request: NextRequest) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify(requestBody),
       }
     );
 

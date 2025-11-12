@@ -132,9 +132,17 @@ class KeywordResearchService {
 
   /**
    * Extract keywords from text using NLP
+   * For short text (< 100 chars), returns the text as a single keyword
    */
   async extractKeywords(text: string): Promise<string[]> {
     console.log('🔍 Extracting keywords from text...');
+    
+    // If text is too short (< 100 chars), Cloud Run API requires longer content
+    // For short queries, just return the query itself as a keyword
+    if (text.trim().length < 100) {
+      console.log('📝 Text is too short for extraction, using as single keyword');
+      return [text.trim()];
+    }
     
     try {
       // If using API routes, we don't need to check Cloud Run health directly
@@ -171,6 +179,14 @@ class KeywordResearchService {
         }
 
         if (!response.ok) {
+          // If 400 error and it's about content length, return the text as keyword
+          if (response.status === 400) {
+            const errorData = await response.json().catch(() => ({}));
+            if (errorData.error?.includes('100 characters')) {
+              console.log('📝 Content too short, using text as single keyword');
+              return [text.trim()];
+            }
+          }
           throw new Error(`API returned ${response.status} ${response.statusText}`);
         }
 
@@ -194,6 +210,11 @@ class KeywordResearchService {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`❌ Keyword extraction failed after retries: ${errorMessage}`);
+      // For short text, fallback to using the text itself as a keyword
+      if (text.trim().length < 100) {
+        console.log('📝 Fallback: Using text as single keyword');
+        return [text.trim()];
+      }
       throw new Error(`Failed to extract keywords: ${errorMessage}. Please wait for the API to become ready and try again.`);
     }
   }
