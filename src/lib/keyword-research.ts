@@ -356,8 +356,25 @@ class KeywordResearchService {
               try {
                 // Try to parse as JSON
                 const errorData = JSON.parse(responseText);
-                if (errorData.error || errorData.detail || errorData.message) {
-                  errorMessage = String(errorData.error || errorData.detail || errorData.message);
+                // Per FRONTEND_API_INTEGRATION_GUIDE.md: errors can have 'detail', 'error', or 'message' fields
+                // Priority: detail > error > message (per guide's error handling pattern)
+                if (errorData.detail) {
+                  errorMessage = typeof errorData.detail === 'object' 
+                    ? JSON.stringify(errorData.detail) 
+                    : String(errorData.detail);
+                } else if (errorData.error) {
+                  if (typeof errorData.error === 'object' && errorData.error !== null) {
+                    errorMessage = JSON.stringify(errorData.error);
+                  } else if (typeof errorData.error === 'string' && errorData.error.includes('[object Object]')) {
+                    // Try to get message field
+                    errorMessage = errorData.message || JSON.stringify(errorData);
+                  } else {
+                    errorMessage = String(errorData.error);
+                  }
+                } else if (errorData.message) {
+                  errorMessage = typeof errorData.message === 'object'
+                    ? JSON.stringify(errorData.message)
+                    : String(errorData.message);
                 } else {
                   // If it's a JSON object but no standard error fields, stringify it
                   errorMessage = JSON.stringify(errorData);
