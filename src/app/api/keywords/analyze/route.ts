@@ -70,17 +70,14 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Always use enhanced endpoint for better results (search volume, clustering, etc.)
+    // Try enhanced endpoint first, fallback to regular if unavailable
     // Enhanced endpoint requires max_suggestions_per_keyword >= 5
-    // If 0 or undefined, set to 5 (minimum) to satisfy requirement while still using enhanced endpoint
-    const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
-    
-    // Request body - per FRONTEND_API_INTEGRATION_GUIDE.md
-    // Note: 'text' field is ignored if keywords are provided, so we don't include it
-    // For optimal long-tail keyword research, default to 75 suggestions per keyword
-    // This ensures comprehensive coverage while maintaining good performance
-    // Range: 5-150, default: 75 (optimal for long-tail research)
+    // Default to 75 for optimal long-tail keyword research
     const DEFAULT_MAX_SUGGESTIONS = 75; // Optimal for long-tail keyword discovery
+    
+    const maxSuggestions = body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5
+      ? Math.min(150, body.max_suggestions_per_keyword) // Cap at API maximum
+      : DEFAULT_MAX_SUGGESTIONS; // Default to 75 for optimal long-tail results
     
     const requestBody: {
       keywords: string[];
@@ -93,23 +90,39 @@ export async function POST(request: NextRequest) {
       location: body.location || 'United States',
       language: body.language || 'en',
       include_serp: body.include_serp || false,
-      // Enhanced endpoint requires >= 5, so use 5 as minimum when 0 or undefined
-      // Default to 75 for optimal long-tail results
-      max_suggestions_per_keyword: body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5
-        ? Math.min(150, body.max_suggestions_per_keyword) // Cap at API maximum
-        : DEFAULT_MAX_SUGGESTIONS, // Default to 75 for optimal long-tail results
+      max_suggestions_per_keyword: maxSuggestions,
     };
     
-    const response = await fetchWithRetry(
+    // Try enhanced endpoint first
+    let endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
+    let response = await fetchWithRetry(
       endpoint,
       {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
       }
     );
+    
+    // If enhanced endpoint returns 503 (not available), fallback to regular endpoint
+    if (response.status === 503) {
+      console.log('⚠️ Enhanced endpoint unavailable, falling back to regular endpoint');
+      endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
+      // Regular endpoint doesn't support max_suggestions_per_keyword, remove it
+      const { max_suggestions_per_keyword, ...regularRequestBody } = requestBody;
+      response = await fetchWithRetry(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(regularRequestBody),
+        }
+      );
+    }
 
     if (!response.ok) {
       // Clone the response so we can read it multiple times
