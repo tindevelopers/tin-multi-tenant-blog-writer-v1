@@ -88,14 +88,37 @@ export async function POST(request: NextRequest) {
       try {
         // Try to get the response text first
         const responseText = await response.text();
-        console.error(`❌ Blog Writer API error response body:`, responseText);
+        console.error(`❌ Blog Writer API error response body (raw):`, responseText);
         
         if (responseText) {
           try {
             // Try to parse as JSON
             const errorData = JSON.parse(responseText);
-            if (errorData.error || errorData.detail || errorData.message) {
-              errorMessage = String(errorData.error || errorData.detail || errorData.message);
+            console.error(`❌ Blog Writer API error data (parsed):`, errorData);
+            
+            // Handle different error formats
+            if (errorData.error) {
+              // If error is an object, stringify it properly
+              if (typeof errorData.error === 'object' && errorData.error !== null) {
+                errorMessage = JSON.stringify(errorData.error);
+              } 
+              // If error is already a string but contains [object Object], try to get more details
+              else if (typeof errorData.error === 'string' && errorData.error.includes('[object Object]')) {
+                // Try to get detail or message fields, or stringify the whole errorData
+                errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+              } 
+              // Otherwise use the error string as-is
+              else {
+                errorMessage = String(errorData.error);
+              }
+            } else if (errorData.detail) {
+              errorMessage = typeof errorData.detail === 'object' 
+                ? JSON.stringify(errorData.detail) 
+                : String(errorData.detail);
+            } else if (errorData.message) {
+              errorMessage = typeof errorData.message === 'object'
+                ? JSON.stringify(errorData.message)
+                : String(errorData.message);
             } else {
               // If it's a JSON object but no standard error fields, stringify it
               errorMessage = JSON.stringify(errorData);
