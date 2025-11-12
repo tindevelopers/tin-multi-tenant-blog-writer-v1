@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { KeyIcon, LockClosedIcon, PencilIcon, CheckCircleIcon, ArrowPathIcon, ArrowDownTrayIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import EditIntegrationModal from "@/components/admin/EditIntegrationModal";
 import { WebflowConfig } from "@/components/integrations/WebflowConfig";
+import { CloudinaryConfig } from "@/components/integrations/CloudinaryConfig";
 import { IntegrationRequirementsCard } from "@/components/integrations/IntegrationRequirementsCard";
 import type { IntegrationType } from "@/lib/integrations/types";
 
@@ -41,6 +42,12 @@ const availableIntegrations = [
     description: "Connect to Shopify stores for product content",
     icon: "🛒",
   },
+  {
+    name: "Cloudinary",
+    type: "cloudinary",
+    description: "Connect your Cloudinary account to automatically store generated blog images in your media library",
+    icon: "☁️",
+  },
 ];
 
 export default function IntegrationsManagementPage() {
@@ -53,6 +60,8 @@ export default function IntegrationsManagementPage() {
   const [editingIntegration, setEditingIntegration] = useState<Integration | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showWebflowConfig, setShowWebflowConfig] = useState(false);
+  const [showCloudinaryConfig, setShowCloudinaryConfig] = useState(false);
+  const [orgId, setOrgId] = useState<string>("");
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [selectedIntegrations, setSelectedIntegrations] = useState<Set<string>>(new Set());
   const [testingIntegrationId, setTestingIntegrationId] = useState<string | null>(null);
@@ -61,17 +70,18 @@ export default function IntegrationsManagementPage() {
   useEffect(() => {
     const supabase = createClient();
     
-    // Get current user role
+    // Get current user role and org_id
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase
           .from("users")
-          .select("role")
+          .select("role, org_id")
           .eq("user_id", user.id)
           .single()
           .then(({ data }) => {
             if (data) {
               setUserRole(data.role);
+              setOrgId(data.org_id);
             }
           });
       }
@@ -557,6 +567,10 @@ export default function IntegrationsManagementPage() {
     setShowWebflowConfig(true);
   };
 
+  const handleConfigureCloudinary = () => {
+    setShowCloudinaryConfig(true);
+  };
+
   const filteredIntegrations = integrations.filter(integration => {
     const matchesSearch = integration.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          integration.type.toLowerCase().includes(searchTerm.toLowerCase());
@@ -815,6 +829,35 @@ export default function IntegrationsManagementPage() {
         <div className="space-y-4">
           {availableIntegrations.map((integration) => {
             const existingIntegration = integrations.find(i => i.type === integration.type);
+            
+            // Cloudinary is handled differently - it's stored in organization settings
+            if (integration.type === 'cloudinary') {
+              return (
+                <div key={integration.type} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <span className="text-2xl">{integration.icon}</span>
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                          {integration.name}
+                        </h3>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                          {integration.description}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleConfigureCloudinary}
+                      disabled={!['owner', 'admin'].includes(userRole)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                    >
+                      Configure Cloudinary
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            
             return (
               <IntegrationRequirementsCard
                 key={integration.type}
@@ -822,7 +865,11 @@ export default function IntegrationsManagementPage() {
                 config={existingIntegration?.config || {}}
                 onConfigure={() => {
                   if (existingIntegration) {
-                    handleConfigureWebflow(existingIntegration);
+                    if (integration.type === 'webflow') {
+                      handleConfigureWebflow(existingIntegration);
+                    } else {
+                      window.location.href = `/admin/integrations/blog-writer?provider=${integration.type}`;
+                    }
                   } else {
                     window.location.href = `/admin/integrations/blog-writer?provider=${integration.type}`;
                   }
@@ -1189,6 +1236,36 @@ export default function IntegrationsManagementPage() {
                 onClose={() => {
                   setShowWebflowConfig(false);
                   setSelectedIntegration(null);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cloudinary Configuration Modal */}
+      {showCloudinaryConfig && orgId && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => {
+              setShowCloudinaryConfig(false);
+            }} />
+            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Cloudinary Configuration
+                </h2>
+                <button
+                  onClick={() => setShowCloudinaryConfig(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              <CloudinaryConfig
+                orgId={orgId}
+                onSave={() => {
+                  setShowCloudinaryConfig(false);
                 }}
               />
             </div>
