@@ -14,6 +14,9 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { blogWriterAPI } from '@/lib/blog-writer-api';
 import { useBlogPostMutations } from '@/hooks/useBlogPosts';
+import BrandVoiceSettings from '@/components/blog-writer/BrandVoiceSettings';
+import ContentPresetsManager from '@/components/blog-writer/ContentPresetsManager';
+import InternalLinkSuggestions from '@/components/blog-writer/InternalLinkSuggestions';
 import Alert from '@/components/ui/alert/Alert';
 
 export default function EditorPage() {
@@ -41,12 +44,16 @@ export default function EditorPage() {
     include_backlinks: true,
     backlink_count: 5,
     quality_level: 'high', // Default to high quality
-    preset: '' // Optional preset
+    preset: '', // Optional preset (legacy)
+    preset_id: '' // Content preset ID from database
   });
 
   const [qualityLevels, setQualityLevels] = useState<Array<{ value: string; label: string; description?: string }>>([]);
   const [presets, setPresets] = useState<Array<{ value: string; label: string; description?: string }>>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
+  const [brandVoice, setBrandVoice] = useState<any>(null);
+  const [selectedPreset, setSelectedPreset] = useState<any>(null);
+  const [savedPostId, setSavedPostId] = useState<string | null>(null);
 
   const tones = [
     { value: 'professional', label: 'Professional' },
@@ -179,11 +186,12 @@ export default function EditorPage() {
         target_audience: formData.target_audience || undefined,
         tone: formData.tone,
         word_count: formData.word_count,
+        preset_id: formData.preset_id || undefined,
+        quality_level: formData.quality_level || 'high',
+        preset: formData.preset || undefined,
         include_external_links: formData.include_external_links,
         include_backlinks: formData.include_backlinks,
-        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined,
-        quality_level: formData.quality_level || 'high',
-        preset: formData.preset || undefined
+        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined
       });
 
       if (result && typeof result === 'object') {
@@ -227,13 +235,30 @@ export default function EditorPage() {
       setLoading(true);
       setError(null);
 
-      const success = await createDraft({
+      const draftResult = await createDraft({
         title: formData.title,
         content: formData.content,
-        excerpt: formData.excerpt
+        excerpt: formData.excerpt,
+        seo_data: {
+          topic: formData.topic,
+          keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
+          target_audience: formData.target_audience,
+          tone: formData.tone
+        },
+        metadata: {
+          preset_id: formData.preset_id || null,
+          brand_voice_used: !!brandVoice,
+          quality_level: formData.quality_level
+        }
       });
 
-      if (success) {
+      if (draftResult) {
+        // Store post ID for internal link suggestions
+        const postId = (draftResult as any).post_id || (draftResult as any).id;
+        if (postId) {
+          setSavedPostId(postId);
+        }
+
         // Update workflow session
         const supabase = createClient();
         const sessionId = workflowSession?.session_id;
@@ -248,9 +273,10 @@ export default function EditorPage() {
         }
 
         setSuccess('Draft saved successfully');
-        setTimeout(() => {
-          router.push('/admin/workflow/posts');
-        }, 2000);
+        // Don't redirect immediately - allow user to add internal links
+        // setTimeout(() => {
+        //   router.push('/admin/workflow/posts');
+        // }, 2000);
       } else {
         setError('Failed to save draft');
       }
@@ -363,9 +389,45 @@ export default function EditorPage() {
                 />
               </div>
 
+              {/* Brand Voice & Presets */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Brand Voice & Presets
+                </h3>
+                <BrandVoiceSettings 
+                  compact={true}
+                  onSettingsChange={(settings) => {
+                    setBrandVoice(settings);
+                    if (settings?.tone) {
+                      setFormData(prev => ({ ...prev, tone: settings.tone }));
+                    }
+                    if (settings?.target_audience) {
+                      setFormData(prev => ({ ...prev, target_audience: settings.target_audience }));
+                    }
+                  }}
+                />
+                <ContentPresetsManager
+                  compact={true}
+                  selectedPresetId={formData.preset_id}
+                  onPresetSelect={(preset) => {
+                    setSelectedPreset(preset);
+                    if (preset) {
+                      setFormData(prev => ({
+                        ...prev,
+                        preset_id: preset.preset_id || '',
+                        word_count: preset.word_count || prev.word_count,
+                        quality_level: preset.quality_level || prev.quality_level
+                      }));
+                    } else {
+                      setFormData(prev => ({ ...prev, preset_id: '' }));
+                    }
+                  }}
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Writing Tone
+                  Writing Tone {brandVoice && <span className="text-xs text-green-600">(from brand voice)</span>}
                 </label>
                 <select
                   value={formData.tone}
@@ -382,7 +444,7 @@ export default function EditorPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Target Word Count
+                  Target Word Count {selectedPreset && <span className="text-xs text-blue-600">(from preset)</span>}
                 </label>
                 <input
                   type="number"
@@ -558,6 +620,18 @@ export default function EditorPage() {
               </div>
             )}
           </div>
+
+          {/* Internal Link Suggestions */}
+          {savedPostId && formData.content && (
+            <InternalLinkSuggestions
+              postId={savedPostId}
+              content={formData.content}
+              compact={true}
+              onLinkAdd={(link) => {
+                console.log('Internal link added:', link);
+              }}
+            />
+          )}
 
           {/* Excerpt */}
           {formData.excerpt && (

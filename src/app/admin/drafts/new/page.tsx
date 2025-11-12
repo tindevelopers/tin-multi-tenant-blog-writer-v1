@@ -13,6 +13,9 @@ import { blogWriterAPI } from "@/lib/blog-writer-api";
 import BlogResearchPanel from "@/components/blog-writer/BlogResearchPanel";
 import ContentSuggestionsPanel from "@/components/blog-writer/ContentSuggestionsPanel";
 import EnhancedContentClustersPanel from "@/components/content-clusters/EnhancedContentClustersPanel";
+import BrandVoiceSettings from "@/components/blog-writer/BrandVoiceSettings";
+import ContentPresetsManager from "@/components/blog-writer/ContentPresetsManager";
+import InternalLinkSuggestions from "@/components/blog-writer/InternalLinkSuggestions";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
 
@@ -71,6 +74,7 @@ function NewDraftContent() {
     tone: "professional",
     word_count: 800,
     preset: "seo_focused",
+    preset_id: "", // New: Content preset ID
     quality_level: "high",
     content: "",
     excerpt: "",
@@ -81,6 +85,9 @@ function NewDraftContent() {
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [savedPostId, setSavedPostId] = useState<string | null>(null);
+  const [brandVoice, setBrandVoice] = useState<any>(null);
+  const [selectedPreset, setSelectedPreset] = useState<any>(null);
   
   // Research workflow state
   const [researchResults, setResearchResults] = useState<BlogResearchResults | null>(null);
@@ -239,6 +246,8 @@ function NewDraftContent() {
         target_audience: targetAudience || undefined,
         tone: formData.tone,
         word_count: wordCount,
+        preset_id: formData.preset_id || undefined,
+        quality_level: formData.quality_level,
         include_external_links: formData.include_external_links,
         include_backlinks: formData.include_backlinks,
         backlink_count: formData.include_backlinks ? formData.backlink_count : undefined
@@ -320,7 +329,9 @@ function NewDraftContent() {
           generated_from_research: true,
           research_results: researchResults,
           generation_timestamp: new Date().toISOString(),
-          ai_generated: true
+          ai_generated: true,
+          preset_id: formData.preset_id || null,
+          brand_voice_used: !!brandVoice
         }
       };
 
@@ -330,8 +341,10 @@ function NewDraftContent() {
       
       if (result) {
         console.log('✅ Draft saved successfully:', result);
+        setSavedPostId(result.post_id || result.id);
         alert("Draft saved successfully!");
-        router.push("/admin/drafts");
+        // Don't redirect immediately - allow user to add internal links
+        // router.push("/admin/drafts");
       } else {
         console.log('❌ createDraft returned null/undefined');
         alert("Failed to save draft. Please try again.");
@@ -512,6 +525,48 @@ function NewDraftContent() {
             </div>
           </div>
 
+          {/* Brand Voice & Presets */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Brand Voice & Presets
+            </h2>
+            
+            <div className="space-y-4">
+              {/* Brand Voice Compact View */}
+              <BrandVoiceSettings 
+                compact={true}
+                onSettingsChange={(settings) => {
+                  setBrandVoice(settings);
+                  if (settings?.tone) {
+                    setFormData(prev => ({ ...prev, tone: settings.tone }));
+                  }
+                  if (settings?.target_audience) {
+                    setFormData(prev => ({ ...prev, target_audience: settings.target_audience }));
+                  }
+                }}
+              />
+
+              {/* Content Preset Selection */}
+              <ContentPresetsManager
+                compact={true}
+                selectedPresetId={formData.preset_id}
+                onPresetSelect={(preset) => {
+                  setSelectedPreset(preset);
+                  if (preset) {
+                    setFormData(prev => ({
+                      ...prev,
+                      preset_id: preset.preset_id || '',
+                      word_count: preset.word_count || prev.word_count,
+                      quality_level: preset.quality_level || prev.quality_level
+                    }));
+                  } else {
+                    setFormData(prev => ({ ...prev, preset_id: '' }));
+                  }
+                }}
+              />
+            </div>
+          </div>
+
           {/* Content Settings */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -521,7 +576,7 @@ function NewDraftContent() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Writing Preset
+                  Writing Preset (Legacy)
                 </label>
                 <select
                   name="preset"
@@ -535,11 +590,14 @@ function NewDraftContent() {
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Note: Use Content Preset above for organization-level presets
+                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Tone
+                  Tone {brandVoice && <span className="text-xs text-green-600">(from brand voice)</span>}
                 </label>
                 <select
                   name="tone"
@@ -557,7 +615,7 @@ function NewDraftContent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Word Count
+                  Word Count {selectedPreset && <span className="text-xs text-blue-600">(from preset)</span>}
                 </label>
                 <input
                   type="number"
@@ -568,6 +626,23 @@ function NewDraftContent() {
                   min="100"
                   max="3000"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Quality Level {selectedPreset && <span className="text-xs text-blue-600">(from preset)</span>}
+                </label>
+                <select
+                  name="quality_level"
+                  value={formData.quality_level}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="standard">Standard</option>
+                  <option value="high">High</option>
+                  <option value="premium">Premium</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
               </div>
             </div>
           </div>
@@ -679,14 +754,46 @@ function NewDraftContent() {
             
             {generatedContent ? (
               <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Response:</h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg max-h-96 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
-                      {JSON.stringify(generatedContent, null, 2)}
-                    </pre>
+                {generatedContent.title && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Title:</h3>
+                    <p className="text-gray-700 dark:text-gray-300">{String(generatedContent.title)}</p>
                   </div>
-                </div>
+                )}
+                {generatedContent.excerpt && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Excerpt:</h3>
+                    <p className="text-gray-700 dark:text-gray-300">{String(generatedContent.excerpt)}</p>
+                  </div>
+                )}
+                {generatedContent.content && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Content:</h3>
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg max-h-96 overflow-y-auto">
+                      <div className="prose dark:prose-invert max-w-none">
+                        <div className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
+                          {String(generatedContent.content)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {generatedContent.metadata && (
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Generation Info:</h3>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                      {generatedContent.metadata.used_brand_voice && (
+                        <div>✓ Brand voice applied</div>
+                      )}
+                      {generatedContent.metadata.used_preset && (
+                        <div>✓ Content preset applied</div>
+                      )}
+                      {generatedContent.metadata.enhanced && (
+                        <div>✓ Enhanced generation used</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-8">
@@ -697,6 +804,18 @@ function NewDraftContent() {
               </div>
             )}
           </div>
+
+          {/* Internal Link Suggestions */}
+          {savedPostId && generatedContent?.content && (
+            <InternalLinkSuggestions
+              postId={savedPostId}
+              content={String(generatedContent.content)}
+              compact={true}
+              onLinkAdd={(link) => {
+                console.log('Internal link added:', link);
+              }}
+            />
+          )}
 
           {/* API Status */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">

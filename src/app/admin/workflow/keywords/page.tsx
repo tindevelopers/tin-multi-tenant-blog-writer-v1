@@ -12,13 +12,16 @@ import {
   Layers,
   Bookmark,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import keywordResearchService from '@/lib/keyword-research';
 import type { KeywordData, KeywordAnalysis } from '@/lib/keyword-research';
 import Alert from '@/components/ui/alert/Alert';
 import { Modal } from '@/components/ui/modal';
+import { useCloudRunStatus } from '@/hooks/useCloudRunStatus';
 
 interface KeywordWithMetrics extends KeywordData {
   keyword: string;
@@ -42,6 +45,9 @@ export default function KeywordResearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  
+  // Cloud Run status tracking
+  const cloudRunStatus = useCloudRunStatus();
   
   const [workflowSession, setWorkflowSession] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -292,6 +298,23 @@ export default function KeywordResearchPage() {
       return;
     }
 
+    // Check if Cloud Run is available before saving
+    if (!cloudRunStatus.isHealthy) {
+      if (cloudRunStatus.isWakingUp) {
+        setError('The API is starting up. Please wait a moment and try again.');
+        return;
+      }
+      
+      // Try to wake it up if not already waking up
+      setError('Waking up the API...');
+      const wakeStatus = await cloudRunStatus.wakeUpAndWait();
+      
+      if (!wakeStatus.isHealthy) {
+        setError(wakeStatus.error || 'The API is still starting up. Please wait a moment and try again.');
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -492,6 +515,23 @@ export default function KeywordResearchPage() {
           </div>
         </div>
       </div>
+
+      {/* Cloud Run Status Banner */}
+      {cloudRunStatus.isWakingUp && (
+        <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-yellow-600 dark:text-yellow-400 animate-spin flex-shrink-0" />
+            <div className="flex-1">
+              <div className="font-medium text-yellow-800 dark:text-yellow-200">
+                API is Starting Up
+              </div>
+              <div className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                {cloudRunStatus.error || 'The system is waking up. Please wait a moment before saving your collection...'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Alerts */}
       {error && (
@@ -839,11 +879,21 @@ export default function KeywordResearchPage() {
             <div className="flex items-center gap-3">
               <button
                 onClick={handleSaveCollection}
-                disabled={loading}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
+                disabled={loading || cloudRunStatus.isWakingUp || (!cloudRunStatus.isHealthy && cloudRunStatus.isChecking)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                title={cloudRunStatus.isWakingUp ? 'API is starting up. Please wait...' : cloudRunStatus.isChecking ? 'Checking API status...' : undefined}
               >
-                <Save className="w-4 h-4" />
-                Save Collection
+                {cloudRunStatus.isWakingUp || cloudRunStatus.isChecking ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {cloudRunStatus.isWakingUp ? 'Starting Up...' : 'Checking...'}
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    Save Collection
+                  </>
+                )}
               </button>
               <button
                 onClick={() => router.push('/admin/workflow/clusters')}

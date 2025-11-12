@@ -266,8 +266,10 @@ class BlogWriterAPI {
     include_external_links?: boolean;
     include_backlinks?: boolean;
     backlink_count?: number;
-    quality_level?: string; // e.g., 'low', 'medium', 'high', 'premium'
-    preset?: string; // Optional preset ID
+    quality_level?: string; // e.g., 'low', 'medium', 'high', 'premium', 'enterprise'
+    preset?: string; // Legacy preset string
+    preset_id?: string; // Content preset ID from database
+    use_enhanced?: boolean; // Use enhanced endpoint
   }): Promise<Record<string, unknown> | null> {
     try {
       console.log('🚀 Starting blog generation via local API route...');

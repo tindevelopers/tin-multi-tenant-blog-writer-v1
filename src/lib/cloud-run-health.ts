@@ -18,53 +18,58 @@ class CloudRunHealthManager {
 
   /**
    * Wake up the Cloud Run instance and wait for it to be healthy
+   * Uses API route to avoid CORS issues
    */
   async wakeUpAndWait(): Promise<CloudRunHealthStatus> {
     console.log('🌅 Starting Cloud Run wake-up process...');
     
     let attempts = 0;
     let lastError: string | undefined;
+    const maxAttempts = 5; // More attempts for cold starts
 
-    while (attempts < this.maxWakeupAttempts) {
+    while (attempts < maxAttempts) {
       attempts++;
-      console.log(`🔄 Wake-up attempt ${attempts}/${this.maxWakeupAttempts}`);
+      console.log(`🔄 Wake-up attempt ${attempts}/${maxAttempts}`);
 
       try {
-        // Try to wake up the instance with a simple request
-        const response = await fetch(`${this.baseURL}/health`, {
+        // Use API route to avoid CORS issues
+        const response = await fetch('/api/cloud-run/health', {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
           },
-          // Add timeout to prevent hanging
           signal: AbortSignal.timeout(10000),
         });
 
-        if (response.ok) {
-          const healthData = await response.json();
-          console.log('✅ Cloud Run is awake and healthy:', healthData);
-          
-          // Wait a bit more to ensure it's fully ready
-          console.log(`⏳ Waiting ${this.healthCheckDelay/1000} seconds for full readiness...`);
-          await new Promise(resolve => setTimeout(resolve, this.healthCheckDelay));
-          
-          // Final health check
-          const finalHealth = await this.checkHealth();
-          if (finalHealth.isHealthy) {
-            return {
-              isHealthy: true,
-              isWakingUp: false,
-              lastChecked: new Date(),
-              attempts,
-            };
-          }
+        const data = await response.json();
+
+        if (data.isHealthy) {
+          console.log('✅ Cloud Run is awake and healthy');
+          return {
+            isHealthy: true,
+            isWakingUp: false,
+            lastChecked: new Date(),
+            attempts,
+          };
         }
+
+        // If it's waking up, continue retrying
+        if (data.isWakingUp && attempts < maxAttempts) {
+          lastError = data.error || 'Cloud Run is starting up...';
+          console.log(`⏳ Waiting ${this.wakeupDelay/1000} seconds before retry...`);
+          await new Promise(resolve => setTimeout(resolve, this.wakeupDelay));
+          continue;
+        }
+
+        // If not waking up but unhealthy, it's a different error
+        lastError = data.error || 'Cloud Run is not available';
+        break;
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         lastError = errorMessage;
         console.warn(`⚠️ Wake-up attempt ${attempts} failed:`, errorMessage);
         
-        if (attempts < this.maxWakeupAttempts) {
+        if (attempts < maxAttempts) {
           console.log(`⏳ Waiting ${this.wakeupDelay/1000} seconds before retry...`);
           await new Promise(resolve => setTimeout(resolve, this.wakeupDelay));
         }
@@ -73,7 +78,7 @@ class CloudRunHealthManager {
 
     return {
       isHealthy: false,
-      isWakingUp: false,
+      isWakingUp: attempts >= maxAttempts, // Still waking up if we exhausted attempts
       lastChecked: new Date(),
       attempts,
       error: lastError || 'Failed to wake up Cloud Run instance',
@@ -82,10 +87,11 @@ class CloudRunHealthManager {
 
   /**
    * Check if the Cloud Run instance is healthy
+   * Uses API route to avoid CORS issues
    */
   async checkHealth(): Promise<CloudRunHealthStatus> {
     try {
-      const response = await fetch(`${this.baseURL}/health`, {
+      const response = await fetch('/api/cloud-run/health', {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -93,32 +99,25 @@ class CloudRunHealthManager {
         signal: AbortSignal.timeout(5000), // 5 second timeout for health check
       });
 
-      if (response.ok) {
-        return {
-          isHealthy: true,
-          isWakingUp: false,
-          lastChecked: new Date(),
-          attempts: 0,
-        };
-      } else {
-        return {
-          isHealthy: false,
-          isWakingUp: false,
-          lastChecked: new Date(),
-          attempts: 0,
-          error: `Health check failed with status ${response.status}`,
-        };
-      }
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        return {
-          isHealthy: false,
-          isWakingUp: false,
-          lastChecked: new Date(),
-          attempts: 0,
-          error: errorMessage,
-        };
-      }
+      const data = await response.json();
+
+      return {
+        isHealthy: data.isHealthy === true,
+        isWakingUp: data.isWakingUp === true,
+        lastChecked: new Date(),
+        attempts: 0,
+        error: data.error || undefined,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        isHealthy: false,
+        isWakingUp: false,
+        lastChecked: new Date(),
+        attempts: 0,
+        error: errorMessage,
+      };
+    }
   }
 
   /**
