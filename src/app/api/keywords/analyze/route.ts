@@ -85,12 +85,14 @@ export async function POST(request: NextRequest) {
       language?: string;
       include_serp?: boolean;
       max_suggestions_per_keyword: number;
+      include_search_volume?: boolean; // Explicitly request search volume data
     } = {
       keywords: body.keywords,
       location: body.location || 'United States',
       language: body.language || 'en',
       include_serp: body.include_serp || false,
       max_suggestions_per_keyword: maxSuggestions,
+      include_search_volume: true, // Always request search volume for enhanced endpoint
     };
     
     // Try enhanced endpoint first
@@ -110,8 +112,13 @@ export async function POST(request: NextRequest) {
     if (response.status === 503) {
       console.log('⚠️ Enhanced endpoint unavailable, falling back to regular endpoint');
       endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
-      // Regular endpoint doesn't support max_suggestions_per_keyword, remove it
-      const { max_suggestions_per_keyword, ...regularRequestBody } = requestBody;
+      // Regular endpoint doesn't support max_suggestions_per_keyword or include_search_volume, remove them
+      const { max_suggestions_per_keyword, include_search_volume, ...regularRequestBody } = requestBody;
+      // Add include_search_volume to regular endpoint if it supports it
+      const regularRequestWithVolume = {
+        ...regularRequestBody,
+        include_search_volume: true, // Try to get search volume from regular endpoint too
+      };
       response = await fetchWithRetry(
         endpoint,
         {
@@ -119,7 +126,7 @@ export async function POST(request: NextRequest) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(regularRequestBody),
+          body: JSON.stringify(regularRequestWithVolume),
         }
       );
     }
