@@ -282,6 +282,11 @@ class KeywordResearchService {
   ): Promise<KeywordAnalysis> {
     console.log(`📊 Analyzing keywords for SEO potential (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
+    // Enforce API limit of 50 keywords per request
+    if (keywords.length > 50) {
+      throw new Error(`Cannot analyze more than 50 keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
+    }
+    
     try {
       // If using API routes, we don't need to check Cloud Run health directly
       // The API route will handle Cloud Run communication server-side
@@ -591,7 +596,53 @@ class KeywordResearchService {
       const allKeywords = [...new Set([...extractedKeywords, ...suggestedKeywords, topic])];
       
       // Step 3: Analyze keywords
-      const keywordAnalysis = await this.analyzeKeywords(allKeywords);
+      // IMPORTANT: Cloud Run API /analyze endpoint has max 50 keywords limit
+      // Batch analysis into chunks of 50 if we have more keywords
+      let keywordAnalysis: KeywordAnalysis;
+      if (allKeywords.length > 50) {
+        console.log(`⚠️ Batching analysis: ${allKeywords.length} keywords exceed API limit of 50. Analyzing in batches...`);
+        
+        // Analyze in batches of 50
+        const batchSize = 50;
+        const batches: KeywordAnalysis[] = [];
+        
+        for (let i = 0; i < allKeywords.length; i += batchSize) {
+          const batch = allKeywords.slice(i, i + batchSize);
+          console.log(`📊 Analyzing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allKeywords.length / batchSize)} (${batch.length} keywords)...`);
+          const batchAnalysis = await this.analyzeKeywords(batch);
+          batches.push(batchAnalysis);
+        }
+        
+        // Merge all batch results
+        const mergedAnalysis: Record<string, KeywordData> = {};
+        let totalScore = 0;
+        const allRecommendations: string[] = [];
+        const allClusters: KeywordCluster[] = [];
+        
+        batches.forEach((batch, index) => {
+          Object.assign(mergedAnalysis, batch.keyword_analysis);
+          totalScore += batch.overall_score;
+          allRecommendations.push(...batch.recommendations);
+          // Merge clusters, adding batch index to cluster IDs to avoid conflicts
+          batch.cluster_groups.forEach(cluster => {
+            allClusters.push({
+              ...cluster,
+              id: `batch-${index}-${cluster.id}`
+            });
+          });
+        });
+        
+        keywordAnalysis = {
+          keyword_analysis: mergedAnalysis,
+          overall_score: totalScore / batches.length,
+          recommendations: [...new Set(allRecommendations)], // Deduplicate
+          cluster_groups: allClusters
+        };
+        
+        console.log(`✅ Merged analysis from ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords analyzed`);
+      } else {
+        keywordAnalysis = await this.analyzeKeywords(allKeywords);
+      }
       console.log('📊 Keyword analysis completed');
 
       // Step 4: Generate title suggestions
