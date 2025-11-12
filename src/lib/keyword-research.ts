@@ -333,7 +333,17 @@ class KeywordResearchService {
         }
 
       if (!response.ok) {
-          throw new Error(`API returned ${response.status} ${response.statusText}`);
+          // Try to get error details from response
+          let errorMessage = `API returned ${response.status} ${response.statusText}`;
+          try {
+            const errorData = await response.json();
+            if (errorData.error || errorData.detail || errorData.message) {
+              errorMessage = errorData.error || errorData.detail || errorData.message;
+            }
+          } catch {
+            // If JSON parsing fails, use status text
+          }
+          throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -491,7 +501,17 @@ class KeywordResearchService {
         }
 
       if (!response.ok) {
-          throw new Error(`API returned ${response.status} ${response.statusText}`);
+          // Try to get error details from response
+          let errorMessage = `API returned ${response.status} ${response.statusText}`;
+          try {
+            const errorData = await response.json();
+            if (errorData.error || errorData.detail || errorData.message) {
+              errorMessage = errorData.error || errorData.detail || errorData.message;
+            }
+          } catch {
+            // If JSON parsing fails, use status text
+          }
+          throw new Error(errorMessage);
       }
 
       const data = await response.json();
