@@ -341,7 +341,7 @@ function NewDraftContent() {
       
       if (result) {
         console.log('✅ Draft saved successfully:', result);
-        setSavedPostId(result.post_id || result.id);
+        setSavedPostId(result.post_id);
         alert("Draft saved successfully!");
         // Don't redirect immediately - allow user to add internal links
         // router.push("/admin/drafts");
