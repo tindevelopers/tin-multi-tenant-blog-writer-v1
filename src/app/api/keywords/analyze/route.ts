@@ -103,25 +103,26 @@ export async function POST(request: NextRequest) {
             const errorData = JSON.parse(responseText);
             console.error(`❌ Blog Writer API error data (parsed):`, errorData);
             
-            // Handle different error formats
-            if (errorData.error) {
+            // Per FRONTEND_API_INTEGRATION_GUIDE.md: errors can have 'detail', 'error', or 'message' fields
+            // Priority: detail > error > message (per guide's error handling pattern)
+            if (errorData.detail) {
+              errorMessage = typeof errorData.detail === 'object' 
+                ? JSON.stringify(errorData.detail) 
+                : String(errorData.detail);
+            } else if (errorData.error) {
               // If error is an object, stringify it properly
               if (typeof errorData.error === 'object' && errorData.error !== null) {
                 errorMessage = JSON.stringify(errorData.error);
               } 
               // If error is already a string but contains [object Object], try to get more details
               else if (typeof errorData.error === 'string' && errorData.error.includes('[object Object]')) {
-                // Try to get detail or message fields, or stringify the whole errorData
-                errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+                // Try to get message field or stringify the whole errorData
+                errorMessage = errorData.message || JSON.stringify(errorData);
               } 
               // Otherwise use the error string as-is
               else {
                 errorMessage = String(errorData.error);
               }
-            } else if (errorData.detail) {
-              errorMessage = typeof errorData.detail === 'object' 
-                ? JSON.stringify(errorData.detail) 
-                : String(errorData.detail);
             } else if (errorData.message) {
               errorMessage = typeof errorData.message === 'object'
                 ? JSON.stringify(errorData.message)
