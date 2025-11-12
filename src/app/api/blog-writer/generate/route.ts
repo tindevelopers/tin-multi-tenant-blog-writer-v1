@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealth from '@/lib/cloud-run-health';
 import BlogImageGenerator, { type GeneratedImage } from '@/lib/image-generation';
+import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload';
 
 // Create server-side image generator (uses direct Cloud Run URL)
 const imageGenerator = new BlogImageGenerator(
@@ -318,6 +319,61 @@ export async function POST(request: NextRequest) {
           height: featuredImage.height,
           hasUrl: !!featuredImage.image_url
         });
+
+        // Upload to Cloudinary if org has credentials configured
+        try {
+          const imageFileName = `blog-featured-${Date.now()}.${featuredImage.format || 'png'}`;
+          const folder = `blog-images/${orgId}`;
+          
+          console.log('☁️ Uploading image to Cloudinary...');
+          const cloudinaryResult = await uploadViaBlogWriterAPI(
+            featuredImage.image_url || '',
+            featuredImage.image_data || null,
+            orgId,
+            imageFileName,
+            folder
+          );
+
+          if (cloudinaryResult) {
+            console.log('✅ Image uploaded to Cloudinary:', {
+              publicId: cloudinaryResult.public_id,
+              secureUrl: cloudinaryResult.secure_url,
+              width: cloudinaryResult.width,
+              height: cloudinaryResult.height
+            });
+
+            // Save to media_assets table
+            const assetId = await saveMediaAsset(
+              orgId,
+              userId || null,
+              cloudinaryResult,
+              imageFileName,
+              {
+                source: 'ai_generated',
+                blog_topic: imageTopic,
+                keywords: imageKeywords,
+                original_image_id: featuredImage.image_id,
+                quality_score: featuredImage.quality_score,
+                safety_score: featuredImage.safety_score,
+              }
+            );
+
+            if (assetId) {
+              console.log('✅ Image saved to media_assets:', assetId);
+              // Update featuredImage to use Cloudinary URL
+              featuredImage.image_url = cloudinaryResult.secure_url;
+              featuredImage.image_data = undefined; // Remove base64 data, use URL instead
+            } else {
+              console.warn('⚠️ Failed to save image to media_assets, but Cloudinary upload succeeded');
+            }
+          } else {
+            console.warn('⚠️ Cloudinary upload failed, keeping original image URL');
+            // Continue with original image URL if Cloudinary upload fails
+          }
+        } catch (uploadError) {
+          // Non-critical error - log but continue with original image
+          console.warn('⚠️ Cloudinary upload error (non-critical):', uploadError);
+        }
       } else {
         console.warn('⚠️ Featured image generation returned null (non-critical)');
       }
