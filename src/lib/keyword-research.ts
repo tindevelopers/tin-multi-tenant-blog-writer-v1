@@ -319,9 +319,8 @@ class KeywordResearchService {
           // Enhanced endpoint requires >= 5, so use 5 as minimum when 0 or undefined
           // This ensures we always get enhanced features (search volume, clustering)
           // Range: 5-150, default: 20 (per guide)
-          max_suggestions_per_keyword: maxSuggestionsPerKeyword && maxSuggestionsPerKeyword >= 5
-            ? maxSuggestionsPerKeyword
-            : 5, // Minimum required value for enhanced endpoint
+          // Use Math.max to ensure it's always at least 5
+          max_suggestions_per_keyword: Math.max(5, maxSuggestionsPerKeyword || 5)
         };
         
         try {
@@ -735,7 +734,8 @@ class KeywordResearchService {
         for (let i = 0; i < allKeywords.length; i += batchSize) {
           const batch = allKeywords.slice(i, i + batchSize);
           console.log(`📊 Analyzing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allKeywords.length / batchSize)} (${batch.length} keywords)...`);
-          const batchAnalysis = await this.analyzeKeywords(batch, 0, location);
+          // Use 5 (minimum) instead of 0 to ensure enhanced endpoint features (search volume, clustering)
+          const batchAnalysis = await this.analyzeKeywords(batch, 5, location);
           batches.push(batchAnalysis);
         }
         
@@ -767,7 +767,8 @@ class KeywordResearchService {
         
         console.log(`✅ Merged analysis from ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords analyzed`);
       } else {
-        keywordAnalysis = await this.analyzeKeywords(allKeywords, 0, location);
+        // Use 5 (minimum) instead of 0 to ensure enhanced endpoint features (search volume, clustering)
+        keywordAnalysis = await this.analyzeKeywords(allKeywords, 5, location);
       }
       console.log('📊 Keyword analysis completed');
 
