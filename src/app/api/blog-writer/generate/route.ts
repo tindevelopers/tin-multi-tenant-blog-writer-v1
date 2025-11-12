@@ -524,7 +524,7 @@ export async function POST(request: NextRequest) {
             });
 
             if (sectionImage.success && sectionImage.images.length > 0) {
-              let img = sectionImage.images[0];
+              const img = sectionImage.images[0];
               
               // Upload to Cloudinary
               const imageFileName = `blog-section-${i}-${Date.now()}.${img.format || 'png'}`;

@@ -262,7 +262,7 @@ export default function EditorPage() {
       const featuredImageUrl = imageMatch ? imageMatch[1] : null;
       
       // Ensure image is embedded in content if it exists
-      let finalContent = formData.content;
+      const finalContent = formData.content;
       if (featuredImageUrl && !finalContent.includes(featuredImageUrl)) {
         const imageHtml = `<figure class="featured-image"><img src="${featuredImageUrl}" alt="${formData.title}" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" /></figure>`;
         if (finalContent.includes('</p>')) {
