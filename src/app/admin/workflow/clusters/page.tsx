@@ -189,41 +189,43 @@ export default function ClustersPage() {
           const clusters: ClusterArticle[] = [];
           
           existingClusters.forEach((c: any) => {
-            const clusterType = c.cluster_type || 'supporting'; // 'pillar', 'supporting', or 'long-tail'
-            const title = c.cluster_name || c.parent_topic || 'Untitled';
+            // Extract cluster type from cluster_metrics or default
+            const clusterMetrics = c.cluster_metrics || {};
+            const clusterType = clusterMetrics.cluster_type || 'supporting';
+            const title = c.parent_topic || 'Untitled';
             
             if (clusterType === 'pillar') {
               pillars.push({
-                pillar_id: c.id || c.cluster_id,
+                pillar_id: c.cluster_id,
                 title: title,
-                description: c.description || '',
-                primary_keyword: c.primary_keyword || title,
-                target_word_count: c.target_word_count || 3000,
+                description: clusterMetrics.description || '',
+                primary_keyword: clusterMetrics.primary_keyword || title,
+                target_word_count: clusterMetrics.target_word_count || 3000,
                 keywords: Array.isArray(c.keywords) ? c.keywords : [],
-                cluster_articles: c.cluster_articles || [],
-                internal_links: c.internal_links || [],
-                metrics: c.cluster_metrics || {
-                  total_volume: c.total_search_volume || 0,
-                  avg_difficulty: c.avg_difficulty ? c.avg_difficulty / 100 : 0.5,
-                  avg_competition: 0.5,
-                  cluster_score: c.authority_potential || 0
+                cluster_articles: clusterMetrics.cluster_articles || [],
+                internal_links: clusterMetrics.internal_links || [],
+                metrics: {
+                  total_volume: clusterMetrics.total_volume || 0,
+                  avg_difficulty: clusterMetrics.avg_difficulty || 0.5,
+                  avg_competition: clusterMetrics.avg_competition || 0.5,
+                  cluster_score: clusterMetrics.cluster_score || 0
                 }
               });
             } else {
               clusters.push({
-                cluster_id: c.id || c.cluster_id,
-                pillar_id: c.pillar_id || null,
+                cluster_id: c.cluster_id,
+                pillar_id: clusterMetrics.pillar_id || null,
                 title: title,
-                description: c.description || '',
-                primary_keyword: c.primary_keyword || title,
-                target_word_count: c.target_word_count || 2000,
+                description: clusterMetrics.description || '',
+                primary_keyword: clusterMetrics.primary_keyword || title,
+                target_word_count: clusterMetrics.target_word_count || 2000,
                 keywords: Array.isArray(c.keywords) ? c.keywords : [],
-                related_clusters: c.related_clusters || [],
-                metrics: c.cluster_metrics || {
-                  total_volume: c.total_search_volume || 0,
-                  avg_difficulty: c.avg_difficulty ? c.avg_difficulty / 100 : 0.5,
-                  avg_competition: 0.5,
-                  cluster_score: c.authority_potential || 0
+                related_clusters: clusterMetrics.related_clusters || [],
+                metrics: {
+                  total_volume: clusterMetrics.total_volume || 0,
+                  avg_difficulty: clusterMetrics.avg_difficulty || 0.5,
+                  avg_competition: clusterMetrics.avg_competition || 0.5,
+                  cluster_score: clusterMetrics.cluster_score || 0
                 }
               });
             }
