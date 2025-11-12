@@ -713,7 +713,11 @@ export default function KeywordResearchPage() {
                   className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                 >
                   <option value="all">All Topics</option>
-                  {Array.from(new Set(clusters.map(c => c.parent_topic))).map(topic => (
+                  {Array.from(new Set(
+                    keywords
+                      .map(kw => kw.parent_topic || extractParentTopic(kw.keyword))
+                      .filter(topic => topic && topic.trim() !== '')
+                  )).sort().map(topic => (
                     <option key={topic} value={topic}>{topic}</option>
                   ))}
                 </select>
