@@ -44,11 +44,12 @@ export function KeywordDifficultyAnalyzer({
     }
   };
 
-  // Auto-analyze when keyword changes
+  // Auto-analyze when keyword changes (only once)
   React.useEffect(() => {
-    if (keyword.trim() && !hasAnalyzed) {
+    if (keyword.trim() && !hasAnalyzed && !loading && !data) {
       handleAnalyze();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyword]);
 
   if (loading) {

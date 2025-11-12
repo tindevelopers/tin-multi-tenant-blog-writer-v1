@@ -189,31 +189,42 @@ export default function ClustersPage() {
           const clusters: ClusterArticle[] = [];
           
           existingClusters.forEach((c: any) => {
-            const clusterType = c.cluster_type || 'cluster'; // 'pillar' or 'cluster'
+            const clusterType = c.cluster_type || 'supporting'; // 'pillar', 'supporting', or 'long-tail'
+            const title = c.cluster_name || c.parent_topic || 'Untitled';
             
             if (clusterType === 'pillar') {
               pillars.push({
-                pillar_id: c.cluster_id,
-                title: c.parent_topic,
+                pillar_id: c.id || c.cluster_id,
+                title: title,
                 description: c.description || '',
-                primary_keyword: c.primary_keyword || c.parent_topic,
+                primary_keyword: c.primary_keyword || title,
                 target_word_count: c.target_word_count || 3000,
                 keywords: Array.isArray(c.keywords) ? c.keywords : [],
                 cluster_articles: c.cluster_articles || [],
                 internal_links: c.internal_links || [],
-                metrics: c.cluster_metrics || {}
+                metrics: c.cluster_metrics || {
+                  total_volume: c.total_search_volume || 0,
+                  avg_difficulty: c.avg_difficulty ? c.avg_difficulty / 100 : 0.5,
+                  avg_competition: 0.5,
+                  cluster_score: c.authority_potential || 0
+                }
               });
             } else {
               clusters.push({
-                cluster_id: c.cluster_id,
+                cluster_id: c.id || c.cluster_id,
                 pillar_id: c.pillar_id || null,
-                title: c.parent_topic,
+                title: title,
                 description: c.description || '',
-                primary_keyword: c.primary_keyword || c.parent_topic,
+                primary_keyword: c.primary_keyword || title,
                 target_word_count: c.target_word_count || 2000,
                 keywords: Array.isArray(c.keywords) ? c.keywords : [],
                 related_clusters: c.related_clusters || [],
-                metrics: c.cluster_metrics || {}
+                metrics: c.cluster_metrics || {
+                  total_volume: c.total_search_volume || 0,
+                  avg_difficulty: c.avg_difficulty ? c.avg_difficulty / 100 : 0.5,
+                  avg_competition: 0.5,
+                  cluster_score: c.authority_potential || 0
+                }
               });
             }
           });
@@ -492,37 +503,48 @@ export default function ClustersPage() {
         .delete()
         .eq('session_id', sessionId);
 
-      // Insert pillar pages
-      const pillarsToInsert = topicClusters.pillar_pages.map((pillar, index) => ({
-        session_id: sessionId,
-        collection_id: collectionId,
-        org_id: workflowSession.org_id,
-        cluster_type: 'pillar',
-        parent_topic: pillar.title,
-        primary_keyword: pillar.primary_keyword,
-        description: pillar.description,
-        target_word_count: pillar.target_word_count,
-        keywords: pillar.keywords,
-        cluster_articles: pillar.cluster_articles,
-        internal_links: pillar.internal_links,
-        cluster_metrics: pillar.metrics
-      }));
+          // Insert pillar pages
+          // Note: Using cluster_name for newer schema, parent_topic for older schema compatibility
+          const pillarsToInsert = topicClusters.pillar_pages.map((pillar, index) => ({
+            session_id: sessionId,
+            collection_id: collectionId,
+            org_id: workflowSession.org_id,
+            cluster_type: 'pillar',
+            cluster_name: pillar.title, // New schema
+            parent_topic: pillar.title, // Old schema compatibility
+            primary_keyword: pillar.primary_keyword,
+            description: pillar.description,
+            target_word_count: pillar.target_word_count,
+            keywords: pillar.keywords,
+            cluster_articles: pillar.cluster_articles,
+            internal_links: pillar.internal_links,
+            cluster_metrics: pillar.metrics,
+            keyword_count: pillar.keywords.length,
+            total_search_volume: pillar.metrics?.total_volume || 0,
+            avg_difficulty: pillar.metrics?.avg_difficulty ? Math.round(pillar.metrics.avg_difficulty * 100) : null,
+            authority_potential: pillar.metrics?.cluster_score ? Math.round(pillar.metrics.cluster_score) : null
+          }));
 
-      // Insert cluster articles
-      const clustersToInsert = topicClusters.cluster_articles.map((cluster) => ({
-        session_id: sessionId,
-        collection_id: collectionId,
-        org_id: workflowSession.org_id,
-        cluster_type: 'cluster',
-        parent_topic: cluster.title,
-        primary_keyword: cluster.primary_keyword,
-        description: cluster.description,
-        target_word_count: cluster.target_word_count,
-        pillar_id: cluster.pillar_id || null,
-        keywords: cluster.keywords,
-        related_clusters: cluster.related_clusters,
-        cluster_metrics: cluster.metrics
-      }));
+          // Insert cluster articles
+          const clustersToInsert = topicClusters.cluster_articles.map((cluster) => ({
+            session_id: sessionId,
+            collection_id: collectionId,
+            org_id: workflowSession.org_id,
+            cluster_type: 'supporting', // Use 'supporting' for cluster articles
+            cluster_name: cluster.title, // New schema
+            parent_topic: cluster.title, // Old schema compatibility
+            primary_keyword: cluster.primary_keyword,
+            description: cluster.description,
+            target_word_count: cluster.target_word_count,
+            pillar_id: cluster.pillar_id || null,
+            keywords: cluster.keywords,
+            related_clusters: cluster.related_clusters,
+            cluster_metrics: cluster.metrics,
+            keyword_count: cluster.keywords.length,
+            total_search_volume: cluster.metrics?.total_volume || 0,
+            avg_difficulty: cluster.metrics?.avg_difficulty ? Math.round(cluster.metrics.avg_difficulty * 100) : null,
+            authority_potential: cluster.metrics?.cluster_score ? Math.round(cluster.metrics.cluster_score) : null
+          }));
 
       const { error: insertError } = await supabase
         .from('keyword_clusters')
