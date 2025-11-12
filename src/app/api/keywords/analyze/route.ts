@@ -151,14 +151,27 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     
-    // Return full response including new fields: total_keywords, original_keywords, suggested_keywords
-    // Map for backward compatibility
+    // Enhanced endpoint response format per FRONTEND_API_INTEGRATION_GUIDE.md:
+    // - enhanced_analysis: Record<string, KeywordAnalysis>
+    // - total_keywords: number
+    // - original_keywords: string[]
+    // - suggested_keywords: string[]
+    // - clusters: Array<{ parent_topic, keywords, cluster_score, category_type, keyword_count }>
+    // - cluster_summary: { total_keywords, cluster_count, unclustered_count }
+    
+    // Return full response including all enhanced fields
+    // Map for backward compatibility (some code may still expect keyword_analysis)
     return NextResponse.json({
       ...data,
+      // Backward compatibility mapping
       keyword_analysis: data.enhanced_analysis || data.keyword_analysis || data,
+      // Enhanced endpoint fields
+      enhanced_analysis: data.enhanced_analysis,
       total_keywords: data.total_keywords,
       original_keywords: data.original_keywords || [],
-      suggested_keywords: data.suggested_keywords || []
+      suggested_keywords: data.suggested_keywords || [],
+      clusters: data.clusters || [],
+      cluster_summary: data.cluster_summary || null
     });
   } catch (error: unknown) {
     console.error('Error in keywords/analyze:', error);
