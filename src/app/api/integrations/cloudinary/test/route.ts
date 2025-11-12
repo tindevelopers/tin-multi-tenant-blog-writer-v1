@@ -64,33 +64,102 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Test Cloudinary connection by making a simple API call
-    // We'll use the Blog Writer API's Cloudinary test endpoint if available
-    // Otherwise, we can test directly with Cloudinary API
+    // Test Cloudinary connection by uploading a tiny test image
+    // This is the most reliable way to verify credentials work
     try {
-      const testUrl = `https://api.cloudinary.com/v1_1/${cloud_name}/resources/image/upload/max_results=1`;
+      const crypto = await import('crypto');
       
-      // Create basic auth header
-      const authString = Buffer.from(`${api_key}:${api_secret}`).toString('base64');
+      // Create a tiny 1x1 transparent PNG as base64
+      const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
       
-      const response = await fetch(testUrl, {
-        method: 'GET',
+      // Use Cloudinary upload API with signed upload
+      const timestamp = Math.round(new Date().getTime() / 1000);
+      const publicId = `test_connection_${timestamp}`;
+      
+      // Create signature for upload
+      const paramsToSign = `folder=test_connections&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
+      const signature = crypto.createHash('sha1')
+        .update(paramsToSign + api_secret)
+        .digest('hex');
+      
+      // Create multipart/form-data body manually
+      const boundary = `----WebKitFormBoundary${crypto.randomBytes(16).toString('hex')}`;
+      const formDataParts: string[] = [];
+      
+      const appendField = (name: string, value: string) => {
+        formDataParts.push(`--${boundary}\r\n`);
+        formDataParts.push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+        formDataParts.push(`${value}\r\n`);
+      };
+      
+      const appendFile = (name: string, data: string, contentType: string) => {
+        formDataParts.push(`--${boundary}\r\n`);
+        formDataParts.push(`Content-Disposition: form-data; name="${name}"\r\n`);
+        formDataParts.push(`Content-Type: ${contentType}\r\n\r\n`);
+        formDataParts.push(`${data}\r\n`);
+      };
+      
+      appendField('api_key', api_key);
+      appendField('timestamp', timestamp.toString());
+      appendField('signature', signature);
+      appendField('public_id', publicId);
+      appendField('folder', 'test_connections');
+      appendField('overwrite', 'true');
+      appendFile('file', `data:image/png;base64,${testImageBase64}`, 'image/png');
+      formDataParts.push(`--${boundary}--\r\n`);
+      
+      const formDataBody = Buffer.from(formDataParts.join(''), 'utf-8');
+      
+      const uploadUrl = `https://api.cloudinary.com/v1_1/${cloud_name}/image/upload`;
+      
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
         headers: {
-          'Authorization': `Basic ${authString}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': formDataBody.length.toString(),
         },
+        body: formDataBody,
       });
 
-      if (response.ok || response.status === 200) {
+      const responseData = await response.json();
+
+      if (response.ok && responseData.public_id) {
+        // Successfully uploaded - now delete the test image
+        try {
+          const deleteTimestamp = Math.round(new Date().getTime() / 1000);
+          const deleteParams = `public_id=${responseData.public_id}&timestamp=${deleteTimestamp}`;
+          const deleteSignature = crypto.createHash('sha1')
+            .update(deleteParams + api_secret)
+            .digest('hex');
+          
+          const deleteFormData = new URLSearchParams();
+          deleteFormData.append('public_id', responseData.public_id);
+          deleteFormData.append('timestamp', deleteTimestamp.toString());
+          deleteFormData.append('signature', deleteSignature);
+          deleteFormData.append('api_key', api_key);
+          
+          await fetch(`https://api.cloudinary.com/v1_1/${cloud_name}/image/destroy`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: deleteFormData.toString(),
+          });
+        } catch (deleteError) {
+          // Non-critical - test image deletion failed but upload succeeded
+          console.warn('Failed to delete test image:', deleteError);
+        }
+        
         return NextResponse.json({
           success: true,
           message: 'Cloudinary connection test successful',
         });
       } else {
-        const errorText = await response.text();
+        const errorMessage = responseData.error?.message || responseData.error || response.statusText;
         return NextResponse.json(
           { 
-            error: `Cloudinary connection test failed: ${response.statusText}`,
-            details: errorText.substring(0, 200)
+            error: `Cloudinary connection test failed: ${errorMessage}`,
+            details: responseData.error?.message || 'Invalid credentials or API error'
           },
           { status: 400 }
         );
