@@ -199,9 +199,11 @@ export function CloudinaryConfig({ orgId, onSave }: CloudinaryConfigProps) {
         throw new Error(errorMessage);
       }
 
-      setSuccess(result.message || "Connection test successful! Cloudinary is properly configured.");
+      const successMessage = result.message || "Connection test successful! Cloudinary is properly configured.";
+      setSuccess(successMessage);
       setStatus("configured");
-      setTimeout(() => setSuccess(null), 5000);
+      // Keep success message visible longer for connection test
+      setTimeout(() => setSuccess(null), 8000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connection test failed");
     } finally {
