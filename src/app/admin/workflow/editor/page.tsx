@@ -207,9 +207,11 @@ export default function EditorPage() {
           
           // Try to insert after first paragraph or at the beginning
           if (finalContent.includes('</p>')) {
-            finalContent = finalContent.replace('</p>', `</p>${imageHtml}`, 1);
+            // Replace only the first occurrence
+            finalContent = finalContent.replace('</p>', `</p>${imageHtml}`);
           } else if (finalContent.includes('<p>')) {
-            finalContent = finalContent.replace('<p>', `${imageHtml}<p>`, 1);
+            // Replace only the first occurrence
+            finalContent = finalContent.replace('<p>', `${imageHtml}<p>`);
           } else {
             // If no paragraphs, prepend the image
             finalContent = imageHtml + finalContent;

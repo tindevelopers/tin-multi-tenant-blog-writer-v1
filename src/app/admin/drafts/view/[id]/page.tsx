@@ -466,7 +466,8 @@ export default function ViewDraftPage() {
       const imageHtml = `<figure class="featured-image"><img src="${imageUrl}" alt="${draft.title}" style="width: 100%; height: auto; border-radius: 8px; margin: 2rem 0;" /></figure>`;
       
       if (html.includes('</p>')) {
-        html = html.replace('</p>', `</p>${imageHtml}`, 1);
+        // Replace only the first occurrence
+        html = html.replace('</p>', `</p>${imageHtml}`);
       } else {
         html = imageHtml + html;
       }
