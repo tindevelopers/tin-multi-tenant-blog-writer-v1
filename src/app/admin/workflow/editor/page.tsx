@@ -253,7 +253,7 @@ export default function EditorPage() {
       setError(null);
 
       // Extract featured image from content if present
-      const imageMatch = formData.content.match(/<figure class="featured-image">.*?<img[^>]+src="([^"]+)"[^>]*>.*?<\/figure>/s);
+      const imageMatch = formData.content.match(/<figure class="featured-image">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>[\s\S]*?<\/figure>/);
       const featuredImageUrl = imageMatch ? imageMatch[1] : null;
       
       // Ensure image is embedded in content if it exists

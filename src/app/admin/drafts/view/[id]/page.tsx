@@ -164,7 +164,7 @@ export default function ViewDraftPage() {
             : null;
           
           // Also check if image is embedded in content
-          const contentImageMatch = draft.content?.match(/<figure class="featured-image">.*?<img[^>]+src="([^"]+)"[^>]*>/s);
+          const contentImageMatch = draft.content?.match(/<figure class="featured-image">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/);
           const embeddedImageUrl = contentImageMatch ? contentImageMatch[1] : null;
           
           const imageUrl = featuredImageUrl || embeddedImageUrl;
@@ -456,7 +456,7 @@ export default function ViewDraftPage() {
       ? String(draft.metadata.featured_image) 
       : null;
     
-    const contentImageMatch = html.match(/<figure class="featured-image">.*?<img[^>]+src="([^"]+)"[^>]*>/s);
+    const contentImageMatch = html.match(/<figure class="featured-image">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/);
     const embeddedImageUrl = contentImageMatch ? contentImageMatch[1] : null;
     
     const imageUrl = featuredImageUrl || embeddedImageUrl;
