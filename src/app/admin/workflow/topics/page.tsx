@@ -560,7 +560,7 @@ export default function TopicsPage() {
             <div className="text-center py-12">
               <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 dark:text-gray-400">
-                No saved topics yet. Select topics and click "Save Selected Topics" to save them.
+                No saved topics yet. Select topics and click &quot;Save Selected Topics&quot; to save them.
               </p>
             </div>
           ) : (

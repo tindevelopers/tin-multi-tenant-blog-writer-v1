@@ -198,10 +198,27 @@ export default function EditorPage() {
         const content = result.content || result.html || JSON.stringify(result, null, 2);
         const title = result.title || formData.title || formData.topic;
         const excerpt = result.excerpt || result.description || '';
+        const featuredImage = result.featured_image;
+
+        // If featured image exists, insert it into content after the first paragraph
+        let finalContent = typeof content === 'string' ? content : JSON.stringify(content);
+        if (featuredImage && featuredImage.image_url) {
+          const imageHtml = `<figure class="featured-image"><img src="${featuredImage.image_url}" alt="${featuredImage.alt_text || title}" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" /></figure>`;
+          
+          // Try to insert after first paragraph or at the beginning
+          if (finalContent.includes('</p>')) {
+            finalContent = finalContent.replace('</p>', `</p>${imageHtml}`, 1);
+          } else if (finalContent.includes('<p>')) {
+            finalContent = finalContent.replace('<p>', `${imageHtml}<p>`, 1);
+          } else {
+            // If no paragraphs, prepend the image
+            finalContent = imageHtml + finalContent;
+          }
+        }
 
         setFormData(prev => ({
           ...prev,
-          content: typeof content === 'string' ? content : JSON.stringify(content),
+          content: finalContent,
           title: typeof title === 'string' ? title : (title ? String(title) : prev.title),
           excerpt: typeof excerpt === 'string' ? excerpt : (excerpt ? String(excerpt) : prev.excerpt)
         }));
@@ -235,9 +252,24 @@ export default function EditorPage() {
       setLoading(true);
       setError(null);
 
+      // Extract featured image from content if present
+      const imageMatch = formData.content.match(/<figure class="featured-image">.*?<img[^>]+src="([^"]+)"[^>]*>.*?<\/figure>/s);
+      const featuredImageUrl = imageMatch ? imageMatch[1] : null;
+      
+      // Ensure image is embedded in content if it exists
+      let finalContent = formData.content;
+      if (featuredImageUrl && !finalContent.includes(featuredImageUrl)) {
+        const imageHtml = `<figure class="featured-image"><img src="${featuredImageUrl}" alt="${formData.title}" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" /></figure>`;
+        if (finalContent.includes('</p>')) {
+          finalContent = finalContent.replace('</p>', `</p>${imageHtml}`, 1);
+        } else {
+          finalContent = imageHtml + finalContent;
+        }
+      }
+
       const draftResult = await createDraft({
         title: formData.title,
-        content: formData.content,
+        content: finalContent,
         excerpt: formData.excerpt,
         seo_data: {
           topic: formData.topic,
@@ -337,6 +369,41 @@ export default function EditorPage() {
             </h2>
             
             <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Saved Topic <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.title}
+                  onChange={(e) => {
+                    const workflowData = workflowSession?.workflow_data || {};
+                    const savedTopics = workflowData.selected_topics || [];
+                    const selectedTopic = savedTopics.find((t: any) => t.title === e.target.value);
+                    if (selectedTopic) {
+                      setFormData({
+                        ...formData,
+                        title: selectedTopic.title,
+                        topic: selectedTopic.target_keywords?.[0] || '',
+                        keywords: selectedTopic.target_keywords?.slice(1).join(', ') || '',
+                        target_audience: workflowSession?.target_audience || '',
+                        word_count: selectedTopic.word_count_estimate || 1500
+                      });
+                    }
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select a saved topic...</option>
+                  {(workflowSession?.workflow_data?.selected_topics || []).map((topic: any, index: number) => (
+                    <option key={topic.id || index} value={topic.title}>
+                      {topic.title}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Choose from your saved topics to auto-populate the form
+                </p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Blog Post Title <span className="text-red-500">*</span>

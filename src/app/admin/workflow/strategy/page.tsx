@@ -258,6 +258,38 @@ export default function StrategyPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Saved Topic <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={formData.main_keyword}
+                  onChange={(e) => {
+                    const selectedTopic = selectedTopics.find(t => t.title === e.target.value);
+                    if (selectedTopic) {
+                      setFormData({
+                        ...formData,
+                        main_keyword: selectedTopic.target_keywords?.[0] || '',
+                        secondary_keywords: selectedTopic.target_keywords?.slice(1).join(', ') || '',
+                        content_type: selectedTopic.content_type || 'blog_post',
+                        target_audience: workflowSession?.target_audience || ''
+                      });
+                    }
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select a saved topic...</option>
+                  {selectedTopics.map((topic, index) => (
+                    <option key={topic.id || index} value={topic.title}>
+                      {topic.title}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Choose from your saved topics to auto-populate the form
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Main Keyword <span className="text-red-500">*</span>
                 </label>
                 <input

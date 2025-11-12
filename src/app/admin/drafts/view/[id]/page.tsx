@@ -8,13 +8,17 @@ import {
   DocumentTextIcon,
   PencilIcon,
   ShareIcon,
-  TrashIcon
+  TrashIcon,
+  EyeIcon
 } from "@heroicons/react/24/outline";
+import { useState } from "react";
+import { Modal } from "@/components/ui/modal/index";
 
 export default function ViewDraftPage() {
   const router = useRouter();
   const params = useParams();
   const draftId = params.id as string;
+  const [showPreview, setShowPreview] = useState(false);
   
   const { post: draft, loading, error } = useBlogPost(draftId);
   const { deletePost } = useBlogPostMutations();
@@ -119,6 +123,13 @@ export default function ViewDraftPage() {
           </div>
           <div className="flex items-center space-x-3">
             <button
+              onClick={() => setShowPreview(true)}
+              className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <EyeIcon className="w-4 h-4 mr-2" />
+              Preview HTML
+            </button>
+            <button
               onClick={handleEdit}
               className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
@@ -146,15 +157,28 @@ export default function ViewDraftPage() {
       {/* Draft Content - Rich HTML Preview */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Website-like header with featured image if available */}
-        {draft.metadata && typeof draft.metadata === 'object' && 'featured_image' in draft.metadata && draft.metadata.featured_image && (
-          <div className="w-full h-64 md:h-96 bg-gray-200 dark:bg-gray-700 overflow-hidden">
-            <img 
-              src={String(draft.metadata.featured_image)} 
-              alt={draft.title}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
+        {(() => {
+          // Check for featured image in metadata or content
+          const featuredImageUrl = draft.metadata && typeof draft.metadata === 'object' && 'featured_image' in draft.metadata 
+            ? String(draft.metadata.featured_image) 
+            : null;
+          
+          // Also check if image is embedded in content
+          const contentImageMatch = draft.content?.match(/<figure class="featured-image">.*?<img[^>]+src="([^"]+)"[^>]*>/s);
+          const embeddedImageUrl = contentImageMatch ? contentImageMatch[1] : null;
+          
+          const imageUrl = featuredImageUrl || embeddedImageUrl;
+          
+          return imageUrl ? (
+            <div className="w-full h-64 md:h-96 bg-gray-200 dark:bg-gray-700 overflow-hidden">
+              <img 
+                src={imageUrl} 
+                alt={draft.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : null;
+        })()}
         
         <article className="prose prose-lg dark:prose-invert max-w-none 
           prose-headings:text-gray-900 dark:prose-headings:text-white prose-headings:font-bold
@@ -357,6 +381,104 @@ export default function ViewDraftPage() {
           </div>
         </div>
       </div>
+
+      {/* Webflow HTML Preview Modal */}
+      <Modal
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        isFullscreen={true}
+      >
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Webflow HTML Preview
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Copy this HTML to paste into Webflow&apos;s rich text editor
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPreview(false)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-auto p-6">
+            <div className="mb-4 flex items-center gap-3">
+              <button
+                onClick={() => {
+                  const htmlContent = generateWebflowHTML();
+                  navigator.clipboard.writeText(htmlContent);
+                  alert('HTML copied to clipboard!');
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy HTML
+              </button>
+            </div>
+            
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 mb-6">
+              <pre className="text-xs text-gray-800 dark:text-gray-200 overflow-x-auto whitespace-pre-wrap break-words">
+                {generateWebflowHTML()}
+              </pre>
+            </div>
+            
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Preview
+              </h3>
+              <div 
+                className="prose prose-lg max-w-none"
+                dangerouslySetInnerHTML={{ __html: generateWebflowHTML() }}
+              />
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
+
+  function generateWebflowHTML(): string {
+    if (!draft?.content) return '';
+    
+    let html = String(draft.content);
+    
+    // Extract featured image if exists
+    const featuredImageUrl = draft.metadata && typeof draft.metadata === 'object' && 'featured_image' in draft.metadata 
+      ? String(draft.metadata.featured_image) 
+      : null;
+    
+    const contentImageMatch = html.match(/<figure class="featured-image">.*?<img[^>]+src="([^"]+)"[^>]*>/s);
+    const embeddedImageUrl = contentImageMatch ? contentImageMatch[1] : null;
+    
+    const imageUrl = featuredImageUrl || embeddedImageUrl;
+    
+    // If HTML already contains image, use it; otherwise prepend featured image
+    if (imageUrl && !html.includes(imageUrl)) {
+      const imageHtml = `<figure class="featured-image"><img src="${imageUrl}" alt="${draft.title}" style="width: 100%; height: auto; border-radius: 8px; margin: 2rem 0;" /></figure>`;
+      
+      if (html.includes('</p>')) {
+        html = html.replace('</p>', `</p>${imageHtml}`, 1);
+      } else {
+        html = imageHtml + html;
+      }
+    }
+    
+    // Clean up HTML for Webflow compatibility
+    // Remove any inline styles that might conflict
+    html = html.replace(/style="[^"]*"/gi, '');
+    
+    // Ensure proper semantic HTML
+    html = html.replace(/<figure class="featured-image">/g, '<figure>');
+    
+    return html;
+  }
 }
