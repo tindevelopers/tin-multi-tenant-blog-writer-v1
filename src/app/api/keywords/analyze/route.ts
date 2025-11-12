@@ -52,8 +52,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // Support enhanced analysis with max_suggestions_per_keyword
+    // If max_suggestions_per_keyword is provided, use enhanced endpoint
+    const useEnhanced = body.max_suggestions_per_keyword && body.max_suggestions_per_keyword > 0;
+    const endpoint = useEnhanced 
+      ? `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`
+      : `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
+    
     const response = await fetchWithRetry(
-      `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`,
+      endpoint,
       {
         method: 'POST',
         headers: {
@@ -72,7 +79,16 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json(data);
+    
+    // Return full response including new fields: total_keywords, original_keywords, suggested_keywords
+    // Map for backward compatibility
+    return NextResponse.json({
+      ...data,
+      keyword_analysis: data.enhanced_analysis || data.keyword_analysis || data,
+      total_keywords: data.total_keywords,
+      original_keywords: data.original_keywords || [],
+      suggested_keywords: data.suggested_keywords || []
+    });
   } catch (error: unknown) {
     console.error('Error in keywords/analyze:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

@@ -55,11 +55,24 @@ export async function POST(request: NextRequest) {
     // Cloud Run API expects 'keyword' (singular), not 'keywords' (array)
     // If keywords array is provided, use the first one
     // If keyword is provided, use it directly
-    const requestBody = body.keywords && Array.isArray(body.keywords) && body.keywords.length > 0
-      ? { keyword: body.keywords[0] } // Use first keyword from array
-      : body.keyword
-      ? { keyword: body.keyword }
-      : body;
+    const keyword = body.keywords && Array.isArray(body.keywords) && body.keywords.length > 0
+      ? body.keywords[0] // Use first keyword from array
+      : body.keyword || null;
+    
+    if (!keyword) {
+      return NextResponse.json(
+        { error: 'Keyword is required' },
+        { status: 400 }
+      );
+    }
+    
+    // Request 150 keywords by default (can be overridden by limit in body)
+    const limit = body.limit || 150;
+    
+    const requestBody = {
+      keyword: keyword,
+      limit: limit
+    };
     
     const response = await fetchWithRetry(
       `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`,
@@ -81,9 +94,16 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-    // Cloud Run returns 'keyword_suggestions', map to 'suggestions' for consistency
+    
+    // Return full response including new fields: suggestions_with_topics, total_suggestions, clusters, cluster_summary
+    // Map for backward compatibility
     return NextResponse.json({
-      suggestions: data.keyword_suggestions || data.suggestions || []
+      suggestions: data.keyword_suggestions || data.suggestions || [],
+      suggestions_with_topics: data.suggestions_with_topics || [],
+      keyword_suggestions: data.keyword_suggestions || data.suggestions || [],
+      total_suggestions: data.total_suggestions || (data.keyword_suggestions?.length || data.suggestions?.length || 0),
+      clusters: data.clusters || [],
+      cluster_summary: data.cluster_summary || {}
     });
   } catch (error: unknown) {
     console.error('Error in keywords/suggest:', error);

@@ -274,9 +274,13 @@ class KeywordResearchService {
 
   /**
    * Analyze keywords for SEO potential
+   * Supports enhanced analysis with max_suggestions_per_keyword for comprehensive research
    */
-  async analyzeKeywords(keywords: string[]): Promise<KeywordAnalysis> {
-    console.log('📊 Analyzing keywords for SEO potential...');
+  async analyzeKeywords(
+    keywords: string[], 
+    maxSuggestionsPerKeyword: number = 0
+  ): Promise<KeywordAnalysis> {
+    console.log(`📊 Analyzing keywords for SEO potential (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
     try {
       // If using API routes, we don't need to check Cloud Run health directly
@@ -296,17 +300,24 @@ class KeywordResearchService {
             ? '/api/keywords/analyze'
             : `${this.baseURL}/api/v1/keywords/analyze`;
           
+          const requestBody: any = { 
+            keywords,
+            text: keywords.join(' ') // Provide context
+          };
+          
+          // Add max_suggestions_per_keyword if specified (for enhanced analysis)
+          if (maxSuggestionsPerKeyword > 0) {
+            requestBody.max_suggestions_per_keyword = maxSuggestionsPerKeyword;
+          }
+          
           response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
             },
-            body: JSON.stringify({ 
-              keywords,
-              text: keywords.join(' ') // Provide context
-            }),
-            signal: AbortSignal.timeout(20000),
+            body: JSON.stringify(requestBody),
+            signal: AbortSignal.timeout(40000), // Increased timeout for enhanced analysis
           });
         } catch (fetchError: unknown) {
           // CORS errors and network errors are caught here
@@ -320,6 +331,13 @@ class KeywordResearchService {
         }
 
         const data = await response.json();
+        
+        // Log enhanced analysis response fields
+        if (data.total_keywords) {
+          console.log(`📊 Enhanced analysis: ${data.total_keywords} total keywords`);
+          console.log(`📊 Original keywords: ${data.original_keywords?.length || 0}`);
+          console.log(`📊 Suggested keywords: ${data.suggested_keywords?.length || 0}`);
+        }
         
         // Check if this is the enhanced analysis format with clustering
         const enhancedAnalysis = data.enhanced_analysis || data.keyword_analysis || data;
@@ -409,9 +427,13 @@ class KeywordResearchService {
 
   /**
    * Get keyword suggestions based on seed keywords
+   * Now supports 150+ keywords (AHREFs-style comprehensive research)
    */
-  async getKeywordSuggestions(seedKeywords: string[]): Promise<string[]> {
-    console.log('💡 Getting keyword suggestions...');
+  async getKeywordSuggestions(
+    seedKeywords: string[], 
+    limit: number = 150
+  ): Promise<string[]> {
+    console.log(`💡 Getting keyword suggestions (limit: ${limit})...`);
     
     try {
       // If using API routes, we don't need to check Cloud Run health directly
@@ -439,9 +461,9 @@ class KeywordResearchService {
             },
             body: JSON.stringify({ 
               keywords: seedKeywords,
-              limit: 20 
+              limit: limit // Request 150 keywords by default (was 20)
             }),
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(30000), // Increased timeout for 150 keywords
           });
         } catch (fetchError: unknown) {
           // CORS errors and network errors are caught here
@@ -456,7 +478,14 @@ class KeywordResearchService {
 
         const data = await response.json();
         console.log('✅ Keyword suggestions generated via API');
-        return data.suggestions || [];
+        console.log(`📊 Total suggestions: ${data.total_suggestions || (data.suggestions?.length || 0)}`);
+        
+        // Use suggestions_with_topics if available, otherwise fall back to suggestions
+        if (data.suggestions_with_topics && data.suggestions_with_topics.length > 0) {
+          return data.suggestions_with_topics.map((s: any) => s.keyword || s);
+        }
+        
+        return data.suggestions || data.keyword_suggestions || [];
       }, 8, 2000, 'Keyword suggestions');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -554,9 +583,9 @@ class KeywordResearchService {
       const extractedKeywords = await this.extractKeywords(topic);
       console.log('📋 Extracted keywords:', extractedKeywords);
 
-      // Step 2: Get additional keyword suggestions
-      const suggestedKeywords = await this.getKeywordSuggestions([topic]);
-      console.log('💡 Suggested keywords:', suggestedKeywords);
+      // Step 2: Get comprehensive keyword suggestions (150+ keywords)
+      const suggestedKeywords = await this.getKeywordSuggestions([topic], 150);
+      console.log(`💡 Suggested keywords (${suggestedKeywords.length}):`, suggestedKeywords.slice(0, 10), '...');
 
       // Combine and deduplicate keywords
       const allKeywords = [...new Set([...extractedKeywords, ...suggestedKeywords, topic])];

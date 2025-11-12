@@ -70,6 +70,10 @@ export default function KeywordResearchPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [minVolume, setMinVolume] = useState<number>(0);
   const [collectionName, setCollectionName] = useState('');
+  
+  // Pagination for large keyword lists (150+)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [keywordsPerPage, setKeywordsPerPage] = useState<number>(50);
 
   // Load workflow session and objective
   useEffect(() => {
@@ -269,15 +273,15 @@ export default function KeywordResearchPage() {
       
       // Filter out single-word keywords that don't make sense as standalone keywords
       // Keep only phrases (2+ words) or meaningful single words
-      const filteredKeywords = Object.entries(keywordAnalysis).filter(([keyword]) => {
+      const filteredKeywordEntries = Object.entries(keywordAnalysis).filter(([keyword]) => {
         const wordCount = keyword.trim().split(/\s+/).length;
         // Keep phrases (2+ words) or single words that are meaningful (length > 5)
         return wordCount > 1 || keyword.trim().length > 5;
       });
       
-      console.log('📋 Filtered keywords (phrases preserved):', filteredKeywords.map(([kw]) => kw));
+      console.log('📋 Filtered keywords (phrases preserved):', filteredKeywordEntries.map(([kw]) => kw));
       
-      const keywordList: KeywordWithMetrics[] = filteredKeywords.map(([keyword, data]: [string, any]) => ({
+      const keywordList: KeywordWithMetrics[] = filteredKeywordEntries.map(([keyword, data]: [string, any]) => ({
         keyword,
         search_volume: data.search_volume || 0,
         difficulty: data.difficulty || 'medium',
@@ -296,8 +300,14 @@ export default function KeywordResearchPage() {
 
       setKeywords(keywordList);
       generateClusters(keywordList);
-      setSuccess(`Found ${keywordList.length} keywords`);
-      setTimeout(() => setSuccess(null), 3000);
+      
+      // Show success message with total count
+      const totalCount = keywordList.length;
+      const message = totalCount >= 150 
+        ? `Found ${totalCount} keywords (comprehensive research)`
+        : `Found ${totalCount} keywords`;
+      setSuccess(message);
+      setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
       console.error('Error searching keywords:', err);
       setError(err.message || 'Failed to search keywords');
@@ -320,7 +330,7 @@ export default function KeywordResearchPage() {
   // Select all keywords
   const selectAllKeywords = () => {
     const allKeywords = viewMode === 'keywords' 
-      ? filteredKeywords.map(k => k.keyword)
+      ? keywords.map(k => k.keyword)
       : clusters.flatMap(c => c.keywords.map(k => k.keyword));
     setSelectedKeywords(new Set(allKeywords));
   };
@@ -543,6 +553,17 @@ export default function KeywordResearchPage() {
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
+  // Pagination for large lists (150+ keywords)
+  const totalPages = Math.ceil(filteredKeywords.length / keywordsPerPage);
+  const startIndex = (currentPage - 1) * keywordsPerPage;
+  const endIndex = startIndex + keywordsPerPage;
+  const paginatedKeywords = filteredKeywords.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [difficultyFilter, parentTopicFilter, categoryTypeFilter, minVolume, sortBy, sortOrder]);
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
@@ -668,7 +689,7 @@ export default function KeywordResearchPage() {
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                 }`}
               >
-                Keywords ({keywords.length})
+                Keywords ({keywords.length >= 150 ? '150+' : keywords.length})
               </button>
               <button
                 onClick={() => setViewMode('clusters')}
@@ -745,6 +766,44 @@ export default function KeywordResearchPage() {
                 >
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
+
+                {/* Pagination controls for large lists */}
+                {filteredKeywords.length > keywordsPerPage && (
+                  <>
+                    <select
+                      value={keywordsPerPage}
+                      onChange={(e) => {
+                        setKeywordsPerPage(parseInt(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    >
+                      <option value="25">25 per page</option>
+                      <option value="50">50 per page</option>
+                      <option value="100">100 per page</option>
+                      <option value="150">150 per page</option>
+                    </select>
+                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                      <span>
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </>
+                )}
               </>
             )}
 
@@ -780,8 +839,20 @@ export default function KeywordResearchPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                     <input
                       type="checkbox"
-                      checked={selectedKeywords.size === filteredKeywords.length && filteredKeywords.length > 0}
-                      onChange={(e) => e.target.checked ? selectAllKeywords() : deselectAllKeywords()}
+                      checked={paginatedKeywords.length > 0 && paginatedKeywords.every(k => selectedKeywords.has(k.keyword))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          // Select all keywords on current page
+                          const newSelected = new Set(selectedKeywords);
+                          paginatedKeywords.forEach(k => newSelected.add(k.keyword));
+                          setSelectedKeywords(newSelected);
+                        } else {
+                          // Deselect all keywords on current page
+                          const newSelected = new Set(selectedKeywords);
+                          paginatedKeywords.forEach(k => newSelected.delete(k.keyword));
+                          setSelectedKeywords(newSelected);
+                        }
+                      }}
                       className="rounded"
                     />
                   </th>
@@ -806,7 +877,14 @@ export default function KeywordResearchPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredKeywords.map((kw) => (
+                {paginatedKeywords.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                      No keywords match your filters
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedKeywords.map((kw) => (
                   <tr
                     key={kw.keyword}
                     className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${
@@ -867,10 +945,52 @@ export default function KeywordResearchPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+          {/* Pagination footer */}
+          {filteredKeywords.length > keywordsPerPage && (
+            <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredKeywords.length)} of {filteredKeywords.length} keywords
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  First
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <span className="px-3 py-1 text-sm">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
