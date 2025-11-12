@@ -455,13 +455,13 @@ class KeywordResearchService {
    * Generate title suggestions
    */
   generateTitleSuggestions(
-    topic: string,
-    analysis: KeywordAnalysis,
-    targetAudience: string
+    primaryKeyword: string,
+    secondaryKeywords: string[],
+    audience: string = 'general'
   ): TitleSuggestion[] {
     const titles: TitleSuggestion[] = [
       {
-        title: `Complete Guide to ${topic}`,
+        title: `Complete Guide to ${primaryKeyword}`,
         type: 'guide',
         seo_score: 85,
         readability_score: 90,
