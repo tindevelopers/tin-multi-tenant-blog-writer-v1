@@ -307,11 +307,13 @@ class KeywordResearchService {
           keywords: string[];
           location: string;
           language: string;
+          include_serp?: boolean;
           max_suggestions_per_keyword: number;
         } = { 
           keywords,
           location: location, // Add location parameter
           language: 'en', // Default language
+          include_serp: false, // Per guide: optional, default false
           // Always use enhanced endpoint for search volume
           // Set max_suggestions_per_keyword to 0 for basic analysis without suggestions
           // Range: 5-150, default: 20 (per guide)
