@@ -72,11 +72,27 @@ export async function GET(request: NextRequest) {
     }
   } catch (error: any) {
     console.error('❌ Error checking Cloud Run health:', error);
+    
+    // Extract a clean error message
+    let errorMessage = 'Failed to check Cloud Run health';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    } else if (error?.message) {
+      errorMessage = error.message;
+    }
+    
+    // Don't include URL parsing errors in the message - they're misleading
+    if (errorMessage.includes('Failed to parse URL')) {
+      errorMessage = 'Cloud Run health check failed - service may be starting up';
+    }
+    
     return NextResponse.json({
       isHealthy: false,
-      isWakingUp: false,
+      isWakingUp: errorMessage.includes('starting up') || errorMessage.includes('timeout'),
       lastChecked: new Date().toISOString(),
-      error: error.message || 'Failed to check Cloud Run health',
+      error: errorMessage,
     }, { status: 500 });
   }
 }

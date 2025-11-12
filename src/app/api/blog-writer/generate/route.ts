@@ -148,9 +148,25 @@ export async function POST(request: NextRequest) {
     
     if (!healthStatus.isHealthy) {
       console.error('❌ Cloud Run is not healthy:', healthStatus.error);
+      
+      // Provide a cleaner error message
+      let errorMessage = 'Cloud Run service is not available';
+      if (healthStatus.error) {
+        // Clean up URL parsing errors
+        if (healthStatus.error.includes('Failed to parse URL')) {
+          errorMessage = healthStatus.isWakingUp 
+            ? 'Cloud Run service is starting up. Please wait a moment and try again.'
+            : 'Cloud Run service is not available. Please try again later.';
+        } else {
+          errorMessage = healthStatus.isWakingUp
+            ? `Cloud Run is starting up: ${healthStatus.error}`
+            : `Cloud Run is not healthy: ${healthStatus.error}`;
+        }
+      }
+      
       return NextResponse.json(
-        { error: `Cloud Run is not healthy: ${healthStatus.error}` },
-        { status: 503 }
+        { error: errorMessage },
+        { status: healthStatus.isWakingUp ? 503 : 503 }
       );
     }
     

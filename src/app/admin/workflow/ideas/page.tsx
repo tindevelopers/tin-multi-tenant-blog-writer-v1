@@ -478,10 +478,17 @@ export default function ContentIdeasPage() {
       <Modal
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
-        title="Ideas Saved Successfully!"
-        description={`${savedIdeas.size} content idea${savedIdeas.size === 1 ? '' : 's'} saved to your workflow. You can now continue to generate topic suggestions.`}
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 p-6">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              Ideas Saved Successfully!
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              {savedIdeas.size} content idea{savedIdeas.size === 1 ? '' : 's'} saved to your workflow. You can now continue to generate topic suggestions.
+            </p>
+          </div>
+          
           <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <Sparkles className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />

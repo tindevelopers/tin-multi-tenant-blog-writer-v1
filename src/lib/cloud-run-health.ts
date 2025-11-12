@@ -28,13 +28,19 @@ class CloudRunHealthManager {
     const maxAttempts = 10; // More attempts for cold starts
     const baseDelay = 2000; // Start with 2 seconds
 
+    // Determine if we're running client-side or server-side
+    const isServerSide = typeof window === 'undefined';
+    const healthCheckUrl = isServerSide 
+      ? `${this.baseURL}/health` // Direct Cloud Run health check on server
+      : '/api/cloud-run/health'; // Use API route on client to avoid CORS
+
     while (attempts < maxAttempts) {
       attempts++;
       console.log(`🔄 Wake-up attempt ${attempts}/${maxAttempts}`);
 
       try {
-        // Check health via API route (avoids CORS)
-        const healthResponse = await fetch('/api/cloud-run/health', {
+        // Check health - use direct URL on server, API route on client
+        const healthResponse = await fetch(healthCheckUrl, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -42,7 +48,19 @@ class CloudRunHealthManager {
           signal: AbortSignal.timeout(10000),
         });
 
-        const healthData = await healthResponse.json();
+        let healthData: any;
+        if (isServerSide) {
+          // Server-side: Cloud Run returns { status: 'healthy', ... }
+          const rawData = await healthResponse.json();
+          healthData = {
+            isHealthy: rawData.status === 'healthy',
+            isWakingUp: false,
+            error: rawData.status !== 'healthy' ? 'Service not healthy' : undefined,
+          };
+        } else {
+          // Client-side: API route returns { isHealthy, isWakingUp, ... }
+          healthData = await healthResponse.json();
+        }
 
         if (healthData.isHealthy) {
           console.log('✅ Cloud Run health check passed - service is ready');
@@ -91,11 +109,17 @@ class CloudRunHealthManager {
 
   /**
    * Check if the Cloud Run instance is healthy
-   * Uses API route to avoid CORS issues
+   * Uses API route on client to avoid CORS issues, direct URL on server
    */
   async checkHealth(): Promise<CloudRunHealthStatus> {
     try {
-      const response = await fetch('/api/cloud-run/health', {
+      // Determine if we're running client-side or server-side
+      const isServerSide = typeof window === 'undefined';
+      const healthCheckUrl = isServerSide 
+        ? `${this.baseURL}/health` // Direct Cloud Run health check on server
+        : '/api/cloud-run/health'; // Use API route on client to avoid CORS
+
+      const response = await fetch(healthCheckUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -103,7 +127,19 @@ class CloudRunHealthManager {
         signal: AbortSignal.timeout(5000), // 5 second timeout for health check
       });
 
-      const data = await response.json();
+      let data: any;
+      if (isServerSide) {
+        // Server-side: Cloud Run returns { status: 'healthy', ... }
+        const rawData = await response.json();
+        data = {
+          isHealthy: rawData.status === 'healthy',
+          isWakingUp: false,
+          error: rawData.status !== 'healthy' ? 'Service not healthy' : undefined,
+        };
+      } else {
+        // Client-side: API route returns { isHealthy, isWakingUp, ... }
+        data = await response.json();
+      }
 
       return {
         isHealthy: data.isHealthy === true,
