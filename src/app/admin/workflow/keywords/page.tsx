@@ -347,7 +347,25 @@ export default function KeywordResearchPage() {
       setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
       console.error('Error searching keywords:', err);
-      setError(err.message || 'Failed to search keywords');
+      // Extract error message properly, handling both Error objects and plain objects
+      let errorMessage = 'Failed to search keywords';
+      if (err instanceof Error) {
+        errorMessage = err.message || errorMessage;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err?.message) {
+        errorMessage = String(err.message);
+      } else if (err?.error) {
+        errorMessage = String(err.error);
+      } else if (typeof err === 'object') {
+        // Try to stringify the error object
+        try {
+          errorMessage = JSON.stringify(err);
+        } catch {
+          errorMessage = 'Unknown error occurred';
+        }
+      }
+      setError(errorMessage);
     } finally {
       setSearching(false);
     }

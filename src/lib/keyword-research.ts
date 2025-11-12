@@ -445,7 +445,27 @@ class KeywordResearchService {
       };
       }, 8, 2000, 'Keyword analysis');
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      // Extract error message properly
+      let errorMessage = 'Unknown error';
+      if (error instanceof Error) {
+        errorMessage = error.message || 'Unknown error';
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        // Try to extract message from error object
+        const err = error as Record<string, unknown>;
+        if (err.message) {
+          errorMessage = String(err.message);
+        } else if (err.error) {
+          errorMessage = String(err.error);
+        } else {
+          try {
+            errorMessage = JSON.stringify(error);
+          } catch {
+            errorMessage = 'Unknown error occurred';
+          }
+        }
+      }
       console.error(`❌ Keyword analysis failed after retries: ${errorMessage}`);
       throw new Error(`Failed to analyze keywords: ${errorMessage}. Please wait for the API to become ready and try again.`);
     }

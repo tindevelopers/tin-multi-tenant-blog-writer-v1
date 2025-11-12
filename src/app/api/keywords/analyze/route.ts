@@ -81,24 +81,38 @@ export async function POST(request: NextRequest) {
     );
 
     if (!response.ok) {
+      // Clone the response so we can read it multiple times
+      const responseClone = response.clone();
       let errorMessage = `Blog Writer API error: ${response.status} ${response.statusText}`;
+      
       try {
-        const errorData = await response.json();
-        if (errorData.error || errorData.detail || errorData.message) {
-          errorMessage = errorData.error || errorData.detail || errorData.message;
-        }
-      } catch {
-        // If JSON parsing fails, try text
-        try {
-          const errorText = await response.text();
-          if (errorText) {
-            errorMessage = errorText;
+        // Try to get the response text first
+        const responseText = await response.text();
+        console.error(`❌ Blog Writer API error response body:`, responseText);
+        
+        if (responseText) {
+          try {
+            // Try to parse as JSON
+            const errorData = JSON.parse(responseText);
+            if (errorData.error || errorData.detail || errorData.message) {
+              errorMessage = String(errorData.error || errorData.detail || errorData.message);
+            } else {
+              // If it's a JSON object but no standard error fields, stringify it
+              errorMessage = JSON.stringify(errorData);
+            }
+          } catch {
+            // If not JSON, use the text directly
+            errorMessage = responseText;
           }
-        } catch {
-          // Use default error message
         }
+      } catch (parseError) {
+        console.error(`❌ Failed to parse error response:`, parseError);
+        // Use default error message
       }
+      
       console.error(`❌ Blog Writer API error (${response.status}):`, errorMessage);
+      console.error(`❌ Request body sent:`, JSON.stringify(requestBody, null, 2));
+      
       return NextResponse.json(
         { error: errorMessage },
         { status: response.status }
