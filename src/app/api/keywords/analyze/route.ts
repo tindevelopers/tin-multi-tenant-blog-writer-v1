@@ -68,13 +68,16 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Always use enhanced endpoint to get search volume data
-    // Enhanced endpoint provides comprehensive keyword analysis including search_volume
-    const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
+    // Determine which endpoint to use based on max_suggestions_per_keyword
+    // Enhanced endpoint requires max_suggestions_per_keyword >= 5
+    // If 0 or undefined, use regular analyze endpoint for basic analysis
+    const useEnhanced = body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5;
+    const endpoint = useEnhanced
+      ? `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`
+      : `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
     
-    // Enhanced endpoint request body - per FRONTEND_API_INTEGRATION_GUIDE.md
+    // Request body - per FRONTEND_API_INTEGRATION_GUIDE.md
     // Note: 'text' field is ignored if keywords are provided, so we don't include it
-    // Note: Enhanced endpoint requires max_suggestions_per_keyword >= 5, so omit it if 0
     const requestBody: {
       keywords: string[];
       location?: string;
@@ -88,10 +91,9 @@ export async function POST(request: NextRequest) {
       include_serp: body.include_serp || false,
     };
     
-    // Only include max_suggestions_per_keyword if >= 5 (enhanced endpoint requirement)
+    // Only include max_suggestions_per_keyword for enhanced endpoint (>= 5)
     // Range: 5-150, default: 20 (per guide)
-    // If 0 or undefined, omit the field for basic analysis
-    if (body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5) {
+    if (useEnhanced) {
       requestBody.max_suggestions_per_keyword = body.max_suggestions_per_keyword;
     }
     
