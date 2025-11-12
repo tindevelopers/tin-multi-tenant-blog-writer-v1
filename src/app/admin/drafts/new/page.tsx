@@ -754,19 +754,19 @@ function NewDraftContent() {
             
             {generatedContent ? (
               <div className="space-y-4">
-                {generatedContent.title && (
+                {generatedContent.title != null && String(generatedContent.title).trim() !== '' && (
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Title:</h3>
                     <p className="text-gray-700 dark:text-gray-300">{String(generatedContent.title)}</p>
                   </div>
                 )}
-                {generatedContent.excerpt && (
+                {generatedContent.excerpt != null && String(generatedContent.excerpt).trim() !== '' && (
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Excerpt:</h3>
                     <p className="text-gray-700 dark:text-gray-300">{String(generatedContent.excerpt)}</p>
                   </div>
                 )}
-                {generatedContent.content && (
+                {generatedContent.content != null && String(generatedContent.content).trim() !== '' && (
                   <div>
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Content:</h3>
                     <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg max-h-96 overflow-y-auto">
@@ -778,17 +778,17 @@ function NewDraftContent() {
                     </div>
                   </div>
                 )}
-                {generatedContent.metadata && (
+                {generatedContent.metadata != null && (
                   <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Generation Info:</h3>
                     <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                      {generatedContent.metadata.used_brand_voice && (
+                      {Boolean((generatedContent.metadata as Record<string, unknown>).used_brand_voice) && (
                         <div>✓ Brand voice applied</div>
                       )}
-                      {generatedContent.metadata.used_preset && (
+                      {Boolean((generatedContent.metadata as Record<string, unknown>).used_preset) && (
                         <div>✓ Content preset applied</div>
                       )}
-                      {generatedContent.metadata.enhanced && (
+                      {Boolean((generatedContent.metadata as Record<string, unknown>).enhanced) && (
                         <div>✓ Enhanced generation used</div>
                       )}
                     </div>
