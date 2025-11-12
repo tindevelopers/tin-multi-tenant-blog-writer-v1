@@ -263,7 +263,8 @@ export default function EditorPage() {
       if (featuredImageUrl && !finalContent.includes(featuredImageUrl)) {
         const imageHtml = `<figure class="featured-image"><img src="${featuredImageUrl}" alt="${formData.title}" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" /></figure>`;
         if (finalContent.includes('</p>')) {
-          finalContent = finalContent.replace('</p>', `</p>${imageHtml}`, 1);
+          // Replace only the first occurrence
+          finalContent = finalContent.replace('</p>', `</p>${imageHtml}`);
         } else {
           finalContent = imageHtml + finalContent;
         }
