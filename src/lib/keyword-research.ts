@@ -540,12 +540,13 @@ class KeywordResearchService {
         }
 
       if (!response.ok) {
-          // Clone response to read it multiple times if needed
+          // Clone response so we can read error details without consuming the original
+          const responseClone = response.clone();
           let errorMessage = `API returned ${response.status} ${response.statusText}`;
           
           try {
-            // Try to get the response text first
-            const responseText = await response.text();
+            // Try to get the response text from the clone
+            const responseText = await responseClone.text();
             console.error(`❌ Keyword suggestions API error response body:`, responseText);
             
             if (responseText) {
