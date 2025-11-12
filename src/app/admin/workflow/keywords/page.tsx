@@ -274,6 +274,14 @@ export default function KeywordResearchPage() {
     try {
       setSearching(true);
       setError(null);
+      setSuccess(null);
+      
+      // Clear old results when starting a new search
+      setKeywords([]);
+      setClusters([]);
+      setSelectedKeywords(new Set());
+      setCurrentPage(1); // Reset pagination
+      setCollectionName(''); // Clear collection name
 
       // Perform keyword research
       const researchResults = await keywordResearchService.performBlogResearch(

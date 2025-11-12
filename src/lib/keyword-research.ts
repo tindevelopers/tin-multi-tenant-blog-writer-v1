@@ -303,22 +303,26 @@ class KeywordResearchService {
         // Define requestBody outside try block so it's accessible in error handling
         // Per FRONTEND_API_INTEGRATION_GUIDE.md: enhanced endpoint doesn't need 'text' field
         // 'text' is ignored if keywords are provided
+        // Note: Enhanced endpoint requires max_suggestions_per_keyword >= 5, so omit it if 0
         const requestBody: {
           keywords: string[];
           location: string;
           language: string;
           include_serp?: boolean;
-          max_suggestions_per_keyword: number;
+          max_suggestions_per_keyword?: number;
         } = { 
           keywords,
           location: location, // Add location parameter
           language: 'en', // Default language
           include_serp: false, // Per guide: optional, default false
-          // Always use enhanced endpoint for search volume
-          // Set max_suggestions_per_keyword to 0 for basic analysis without suggestions
-          // Range: 5-150, default: 20 (per guide)
-          max_suggestions_per_keyword: maxSuggestionsPerKeyword || 0
         };
+        
+        // Only include max_suggestions_per_keyword if >= 5 (enhanced endpoint requirement)
+        // Range: 5-150, default: 20 (per guide)
+        // If 0 or undefined, omit the field for basic analysis
+        if (maxSuggestionsPerKeyword && maxSuggestionsPerKeyword >= 5) {
+          requestBody.max_suggestions_per_keyword = maxSuggestionsPerKeyword;
+        }
         
         try {
           // Use Next.js API route to avoid CORS issues

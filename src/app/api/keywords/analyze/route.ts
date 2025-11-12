@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
     
     // Enhanced endpoint request body - per FRONTEND_API_INTEGRATION_GUIDE.md
     // Note: 'text' field is ignored if keywords are provided, so we don't include it
+    // Note: Enhanced endpoint requires max_suggestions_per_keyword >= 5, so omit it if 0
     const requestBody: {
       keywords: string[];
       location?: string;
@@ -85,12 +86,14 @@ export async function POST(request: NextRequest) {
       location: body.location || 'United States',
       language: body.language || 'en',
       include_serp: body.include_serp || false,
-      // Set max_suggestions_per_keyword to 0 if not provided (for basic analysis without suggestions)
-      // Range: 5-150, default: 20 (per guide)
-      max_suggestions_per_keyword: body.max_suggestions_per_keyword !== undefined 
-        ? body.max_suggestions_per_keyword 
-        : 0,
     };
+    
+    // Only include max_suggestions_per_keyword if >= 5 (enhanced endpoint requirement)
+    // Range: 5-150, default: 20 (per guide)
+    // If 0 or undefined, omit the field for basic analysis
+    if (body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5) {
+      requestBody.max_suggestions_per_keyword = body.max_suggestions_per_keyword;
+    }
     
     const response = await fetchWithRetry(
       endpoint,
