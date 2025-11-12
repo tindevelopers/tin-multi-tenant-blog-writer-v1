@@ -68,55 +68,123 @@ class KeywordResearchService {
   }
 
   /**
+   * Retry API call with exponential backoff
+   * Handles CORS errors by retrying (service might still be configuring CORS)
+   */
+  private async retryApiCall<T>(
+    apiCall: () => Promise<T>,
+    maxRetries: number = 8,
+    baseDelay: number = 2000,
+    operationName: string = 'API call'
+  ): Promise<T> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await apiCall();
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Check if it's a CORS or network error (service might still be starting)
+        // CORS errors typically show up as TypeError with "Failed to fetch" or similar
+        const errorMessage = lastError.message.toLowerCase();
+        const errorName = lastError.name.toLowerCase();
+        const isCorsError = errorMessage.includes('cors') || 
+                           errorMessage.includes('failed to fetch') ||
+                           errorMessage.includes('blocked') ||
+                           errorMessage.includes('networkerror') ||
+                           errorMessage.includes('network error') ||
+                           (errorName === 'typeerror' && errorMessage.includes('fetch'));
+        
+        // Network errors (including CORS) are retryable
+        const isNetworkError = errorName === 'typeerror' || errorName === 'networkerror';
+        
+        if (attempt < maxRetries && (isCorsError || isNetworkError)) {
+          // CORS/network errors likely mean service is still starting up or CORS not configured yet
+          const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1), 10000);
+          console.log(`⏳ ${operationName} failed (CORS/network error - service may still be starting). Retry ${attempt}/${maxRetries} in ${Math.round(delay/1000)}s...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          
+          // Re-check health and wake up service before retrying
+          try {
+            const healthStatus = await cloudRunHealth.wakeUpAndWait();
+            if (!healthStatus.isHealthy && healthStatus.isWakingUp) {
+              console.log(`⏳ Service still starting up (${healthStatus.error}), continuing to wait...`);
+              // Continue retrying if service is still waking up
+              continue;
+            }
+          } catch (healthError) {
+            // Health check failed, but continue retrying API call
+            console.log(`⏳ Health check failed, but continuing to retry API call...`);
+            continue;
+          }
+        } else {
+          // Non-retryable error or max retries reached
+          throw lastError;
+        }
+      }
+    }
+    
+    throw lastError || new Error(`${operationName} failed after ${maxRetries} attempts`);
+  }
+
+  /**
    * Extract keywords from text using NLP
    */
   async extractKeywords(text: string): Promise<string[]> {
     console.log('🔍 Extracting keywords from text...');
     
     try {
-      // Try to ensure Cloud Run is awake, but don't fail if it's not
+      // Ensure Cloud Run is awake and operational
       const healthStatus = await cloudRunHealth.wakeUpAndWait();
       if (!healthStatus.isHealthy) {
-        console.warn(`⚠️ Cloud Run is not healthy: ${healthStatus.error}. Using fallback method.`);
-        return this.fallbackKeywordExtraction(text);
+        throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
       }
 
-      const response = await fetch(`${this.baseURL}/api/v1/keywords/extract`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(15000),
-      });
+      return await this.retryApiCall(async () => {
+        let response: Response;
+        try {
+          response = await fetch(`${this.baseURL}/api/v1/keywords/extract`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({ text }),
+            signal: AbortSignal.timeout(15000),
+          });
+        } catch (fetchError: unknown) {
+          // CORS errors and network errors are caught here
+          const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          // Re-throw as a network error that will be retried
+          throw new Error(`Network error: ${errorMsg}`);
+        }
 
-      if (!response.ok) {
-        console.warn(`⚠️ Keyword extraction API failed: ${response.status} ${response.statusText}. Using fallback method.`);
-        return this.fallbackKeywordExtraction(text);
-      }
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status} ${response.statusText}`);
+        }
 
-      const data = await response.json();
-      console.log('✅ Keywords extracted via API');
-      console.log('📋 Raw API response:', JSON.stringify(data, null, 2));
-      const keywords = data.keywords || [];
-      
-      // Ensure we're preserving phrases, not individual words
-      // Filter out single-word keywords that are likely stop words or too generic
-      const phraseKeywords = keywords.filter((kw: string) => {
-        const trimmed = kw.trim();
-        // Keep phrases (2+ words) or single words that are meaningful
-        const wordCount = trimmed.split(/\s+/).length;
-        return wordCount > 1 || trimmed.length > 5;
-      });
-      
-      console.log('📋 Filtered keywords (phrases preserved):', phraseKeywords);
-      return phraseKeywords;
+        const data = await response.json();
+        console.log('✅ Keywords extracted via API');
+        console.log('📋 Raw API response:', JSON.stringify(data, null, 2));
+        const keywords = data.keywords || [];
+        
+        // Ensure we're preserving phrases, not individual words
+        // Filter out single-word keywords that are likely stop words or too generic
+        const phraseKeywords = keywords.filter((kw: string) => {
+          const trimmed = kw.trim();
+          // Keep phrases (2+ words) or single words that are meaningful
+          const wordCount = trimmed.split(/\s+/).length;
+          return wordCount > 1 || trimmed.length > 5;
+        });
+        
+        console.log('📋 Filtered keywords (phrases preserved):', phraseKeywords);
+        return phraseKeywords;
+      }, 8, 2000, 'Keyword extraction');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`⚠️ Keyword extraction error: ${errorMessage}. Using fallback method.`);
-      // Fallback to simple text processing
-      return this.fallbackKeywordExtraction(text);
+      console.error(`❌ Keyword extraction failed after retries: ${errorMessage}`);
+      throw new Error(`Failed to extract keywords: ${errorMessage}. Please wait for the API to become ready and try again.`);
     }
   }
 
@@ -127,72 +195,80 @@ class KeywordResearchService {
     console.log('📊 Analyzing keywords for SEO potential...');
     
     try {
-      // Try to ensure Cloud Run is awake, but use fallback if not
+      // Ensure Cloud Run is awake and operational
       const healthStatus = await cloudRunHealth.wakeUpAndWait();
       if (!healthStatus.isHealthy) {
-        console.warn(`⚠️ Cloud Run is not healthy: ${healthStatus.error}. Using fallback analysis.`);
-        return this.fallbackKeywordAnalysis(keywords);
+        throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
       }
 
-      const response = await fetch(`${this.baseURL}/api/v1/keywords/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ 
-          keywords,
-          text: keywords.join(' ') // Provide context
-        }),
-        signal: AbortSignal.timeout(20000),
-      });
-
-      if (!response.ok) {
-        console.warn(`⚠️ Keyword analysis API failed: ${response.status} ${response.statusText}. Using fallback analysis.`);
-        return this.fallbackKeywordAnalysis(keywords);
-      }
-
-      const data = await response.json();
-      
-      // Enhance the analysis with clustering
-      const keywordAnalysis = data.keyword_analysis || data;
-      
-      // Filter out single-word keywords that don't make sense as standalone keywords
-      // Keep only phrases (2+ words) or meaningful single words
-      const filteredAnalysis: Record<string, KeywordData> = {};
-      Object.entries(keywordAnalysis).forEach(([keyword, data]: [string, any]) => {
-        const wordCount = keyword.trim().split(/\s+/).length;
-        // Keep phrases (2+ words) or single words that are meaningful (length > 5)
-        if (wordCount > 1 || keyword.trim().length > 5) {
-          filteredAnalysis[keyword] = data;
-        } else {
-          console.log(`⚠️ Filtering out single-word keyword: "${keyword}"`);
+      return await this.retryApiCall(async () => {
+        let response: Response;
+        try {
+          response = await fetch(`${this.baseURL}/api/v1/keywords/analyze`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({ 
+              keywords,
+              text: keywords.join(' ') // Provide context
+            }),
+            signal: AbortSignal.timeout(20000),
+          });
+        } catch (fetchError: unknown) {
+          // CORS errors and network errors are caught here
+          const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          // Re-throw as a network error that will be retried
+          throw new Error(`Network error: ${errorMsg}`);
         }
-      });
-      
-      const clusters = this.createKeywordClusters(filteredAnalysis);
-      
-      console.log('✅ Keywords analyzed via API');
-      console.log('🔍 API response data structure:', data);
-      console.log('🔍 Filtered keyword analysis (phrases only):', Object.keys(filteredAnalysis));
-      
-      // Debug search volume data
-      console.log('🔍 Search volume data check:', Object.entries(filteredAnalysis).map(([key, data]: [string, any]) => ({
-        keyword: key,
-        search_volume: data?.search_volume,
-        search_volume_type: typeof data?.search_volume
-      })));
-      
-      return {
-        keyword_analysis: filteredAnalysis,
-        overall_score: this.calculateOverallScore(filteredAnalysis),
-        recommendations: this.generateRecommendations(filteredAnalysis),
-        cluster_groups: clusters,
-      };
+
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        // Enhance the analysis with clustering
+        const keywordAnalysis = data.keyword_analysis || data;
+        
+        // Filter out single-word keywords that don't make sense as standalone keywords
+        // Keep only phrases (2+ words) or meaningful single words
+        const filteredAnalysis: Record<string, KeywordData> = {};
+        Object.entries(keywordAnalysis).forEach(([keyword, data]: [string, any]) => {
+          const wordCount = keyword.trim().split(/\s+/).length;
+          // Keep phrases (2+ words) or single words that are meaningful (length > 5)
+          if (wordCount > 1 || keyword.trim().length > 5) {
+            filteredAnalysis[keyword] = data;
+          } else {
+            console.log(`⚠️ Filtering out single-word keyword: "${keyword}"`);
+          }
+        });
+        
+        const clusters = this.createKeywordClusters(filteredAnalysis);
+        
+        console.log('✅ Keywords analyzed via API');
+        console.log('🔍 API response data structure:', data);
+        console.log('🔍 Filtered keyword analysis (phrases only):', Object.keys(filteredAnalysis));
+        
+        // Debug search volume data
+        console.log('🔍 Search volume data check:', Object.entries(filteredAnalysis).map(([key, data]: [string, any]) => ({
+          keyword: key,
+          search_volume: data?.search_volume,
+          search_volume_type: typeof data?.search_volume
+        })));
+        
+        return {
+          keyword_analysis: filteredAnalysis,
+          overall_score: this.calculateOverallScore(filteredAnalysis),
+          recommendations: this.generateRecommendations(filteredAnalysis),
+          cluster_groups: clusters,
+        };
+      }, 8, 2000, 'Keyword analysis');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`⚠️ Keyword analysis error: ${errorMessage}. Using fallback analysis.`);
-      return this.fallbackKeywordAnalysis(keywords);
+      console.error(`❌ Keyword analysis failed after retries: ${errorMessage}`);
+      throw new Error(`Failed to analyze keywords: ${errorMessage}. Please wait for the API to become ready and try again.`);
     }
   }
 
@@ -203,39 +279,46 @@ class KeywordResearchService {
     console.log('💡 Getting keyword suggestions...');
     
     try {
-      // Try to ensure Cloud Run is awake, but use fallback if not
+      // Ensure Cloud Run is awake and operational
       const healthStatus = await cloudRunHealth.wakeUpAndWait();
       if (!healthStatus.isHealthy) {
-        console.warn(`⚠️ Cloud Run is not healthy: ${healthStatus.error}. Using fallback suggestions.`);
-        return this.generateFallbackSuggestions(seedKeywords);
+        throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
       }
 
-      const response = await fetch(`${this.baseURL}/api/v1/keywords/suggest`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ 
-          keywords: seedKeywords,
-          limit: 20 
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
+      return await this.retryApiCall(async () => {
+        let response: Response;
+        try {
+          response = await fetch(`${this.baseURL}/api/v1/keywords/suggest`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: JSON.stringify({ 
+              keywords: seedKeywords,
+              limit: 20 
+            }),
+            signal: AbortSignal.timeout(15000),
+          });
+        } catch (fetchError: unknown) {
+          // CORS errors and network errors are caught here
+          const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+          // Re-throw as a network error that will be retried
+          throw new Error(`Network error: ${errorMsg}`);
+        }
 
-      if (!response.ok) {
-        console.warn(`⚠️ Keyword suggestions API failed: ${response.status} ${response.statusText}. Using fallback suggestions.`);
-        return this.generateFallbackSuggestions(seedKeywords);
-      }
+        if (!response.ok) {
+          throw new Error(`API returned ${response.status} ${response.statusText}`);
+        }
 
-      const data = await response.json();
-      console.log('✅ Keyword suggestions generated via API');
-      return data.suggestions || [];
+        const data = await response.json();
+        console.log('✅ Keyword suggestions generated via API');
+        return data.suggestions || [];
+      }, 8, 2000, 'Keyword suggestions');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`⚠️ Keyword suggestions error: ${errorMessage}. Using fallback suggestions.`);
-      // Fallback suggestions
-      return this.generateFallbackSuggestions(seedKeywords);
+      console.error(`❌ Keyword suggestions failed after retries: ${errorMessage}`);
+      throw new Error(`Failed to get keyword suggestions: ${errorMessage}. Please wait for the API to become ready and try again.`);
     }
   }
 

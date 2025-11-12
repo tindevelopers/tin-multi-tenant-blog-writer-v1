@@ -526,7 +526,24 @@ export default function KeywordResearchPage() {
                 API is Starting Up
               </div>
               <div className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                {cloudRunStatus.error || 'The system is waking up. Please wait a moment before saving your collection...'}
+                {cloudRunStatus.error || 'Cloud Run is starting up. Please wait a moment...'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* API Active Status Banner */}
+      {cloudRunStatus.isHealthy && !cloudRunStatus.isWakingUp && (
+        <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+            <div className="flex-1">
+              <div className="font-medium text-green-800 dark:text-green-200">
+                API is Active
+              </div>
+              <div className="text-sm text-green-700 dark:text-green-300 mt-1">
+                Cloud Run service is ready. You can now use all features.
               </div>
             </div>
           </div>

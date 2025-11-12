@@ -18,22 +18,23 @@ class CloudRunHealthManager {
 
   /**
    * Wake up the Cloud Run instance and wait for it to be healthy
-   * Uses API route to avoid CORS issues
+   * Note: CORS readiness is tested by actual API calls in keyword-research.ts retry logic
    */
   async wakeUpAndWait(): Promise<CloudRunHealthStatus> {
     console.log('🌅 Starting Cloud Run wake-up process...');
     
     let attempts = 0;
     let lastError: string | undefined;
-    const maxAttempts = 5; // More attempts for cold starts
+    const maxAttempts = 10; // More attempts for cold starts
+    const baseDelay = 2000; // Start with 2 seconds
 
     while (attempts < maxAttempts) {
       attempts++;
       console.log(`🔄 Wake-up attempt ${attempts}/${maxAttempts}`);
 
       try {
-        // Use API route to avoid CORS issues
-        const response = await fetch('/api/cloud-run/health', {
+        // Check health via API route (avoids CORS)
+        const healthResponse = await fetch('/api/cloud-run/health', {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -41,44 +42,47 @@ class CloudRunHealthManager {
           signal: AbortSignal.timeout(10000),
         });
 
-        const data = await response.json();
+        const healthData = await healthResponse.json();
 
-        if (data.isHealthy) {
-          console.log('✅ Cloud Run is awake and healthy');
+        if (healthData.isHealthy) {
+          console.log('✅ Cloud Run health check passed - service is ready');
           return {
             isHealthy: true,
             isWakingUp: false,
             lastChecked: new Date(),
             attempts,
           };
+        } else if (healthData.isWakingUp) {
+          lastError = healthData.error || 'Cloud Run is starting up...';
+          console.log(`⏳ Cloud Run is starting up...`);
+        } else {
+          lastError = healthData.error || 'Cloud Run is not available';
         }
 
-        // If it's waking up, continue retrying
-        if (data.isWakingUp && attempts < maxAttempts) {
-          lastError = data.error || 'Cloud Run is starting up...';
-          console.log(`⏳ Waiting ${this.wakeupDelay/1000} seconds before retry...`);
-          await new Promise(resolve => setTimeout(resolve, this.wakeupDelay));
-          continue;
-        }
-
-        // If not waking up but unhealthy, it's a different error
-        lastError = data.error || 'Cloud Run is not available';
-        break;
+        // Calculate exponential backoff delay
+        const delay = Math.min(baseDelay * Math.pow(1.5, attempts - 1), 10000); // Max 10 seconds
+        console.log(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         lastError = errorMessage;
         console.warn(`⚠️ Wake-up attempt ${attempts} failed:`, errorMessage);
         
         if (attempts < maxAttempts) {
-          console.log(`⏳ Waiting ${this.wakeupDelay/1000} seconds before retry...`);
-          await new Promise(resolve => setTimeout(resolve, this.wakeupDelay));
+          const delay = Math.min(baseDelay * Math.pow(1.5, attempts - 1), 10000);
+          console.log(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
+    // If we've exhausted attempts, still mark as waking up if it was a startup issue
+    const isStillWakingUp = lastError?.includes('starting up') || lastError?.includes('CORS');
+    
     return {
       isHealthy: false,
-      isWakingUp: attempts >= maxAttempts, // Still waking up if we exhausted attempts
+      isWakingUp: isStillWakingUp,
       lastChecked: new Date(),
       attempts,
       error: lastError || 'Failed to wake up Cloud Run instance',

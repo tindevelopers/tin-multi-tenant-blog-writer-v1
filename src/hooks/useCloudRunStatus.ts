@@ -70,15 +70,17 @@ export function useCloudRunStatus() {
 
     let attempts = 0;
     let lastError: string | null = null;
+    const maxAttempts = 10; // More attempts for cold starts and CORS configuration
+    const baseDelay = 2000;
 
-    while (attempts < MAX_WAKEUP_ATTEMPTS) {
+    while (attempts < maxAttempts) {
       attempts++;
-      console.log(`🔄 Wake-up attempt ${attempts}/${MAX_WAKEUP_ATTEMPTS}`);
+      console.log(`🔄 Wake-up attempt ${attempts}/${maxAttempts}`);
 
       const healthStatus = await checkHealth();
 
       if (healthStatus.isHealthy) {
-        console.log('✅ Cloud Run is awake and healthy');
+        console.log('✅ Cloud Run is awake and healthy - API is ACTIVE');
         setStatus(prev => ({
           ...prev,
           isHealthy: true,
@@ -89,11 +91,12 @@ export function useCloudRunStatus() {
         return healthStatus;
       }
 
-      // If it's still waking up, continue retrying
-      if (healthStatus.isWakingUp && attempts < MAX_WAKEUP_ATTEMPTS) {
+      // If it's still waking up, continue retrying with exponential backoff
+      if (healthStatus.isWakingUp && attempts < maxAttempts) {
         lastError = healthStatus.error || 'Cloud Run is starting up...';
-        console.log(`⏳ Waiting ${WAKEUP_RETRY_DELAY/1000} seconds before retry...`);
-        await new Promise(resolve => setTimeout(resolve, WAKEUP_RETRY_DELAY));
+        const delay = Math.min(baseDelay * Math.pow(1.5, attempts - 1), 10000);
+        console.log(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
 
@@ -105,11 +108,12 @@ export function useCloudRunStatus() {
     }
 
     // If we've exhausted attempts and it's still waking up, give it more time
-    if (attempts >= MAX_WAKEUP_ATTEMPTS) {
+    if (attempts >= maxAttempts) {
+      const isStillWakingUp = lastError?.includes('starting up') || lastError?.includes('CORS');
       console.warn('⚠️ Cloud Run wake-up attempts exhausted. It may still be starting up.');
       setStatus(prev => ({
         ...prev,
-        isWakingUp: true, // Keep showing as waking up
+        isWakingUp: isStillWakingUp, // Keep showing as waking up if it's a startup issue
         isChecking: false,
         error: lastError || 'Cloud Run is taking longer than expected to start. Please wait...',
       }));
@@ -117,7 +121,7 @@ export function useCloudRunStatus() {
 
     return {
       isHealthy: false,
-      isWakingUp: true,
+      isWakingUp: lastError?.includes('starting up') || lastError?.includes('CORS') || false,
       isChecking: false,
       lastChecked: new Date(),
       error: lastError || 'Failed to wake up Cloud Run',
