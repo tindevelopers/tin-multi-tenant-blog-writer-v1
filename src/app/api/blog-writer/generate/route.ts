@@ -448,7 +448,8 @@ export async function POST(request: NextRequest) {
         console.error('   4. API returned error');
       }
 
-        // Upload to Cloudinary if org has credentials configured
+      // Upload to Cloudinary if org has credentials configured
+      if (featuredImage) {
         try {
           const imageFileName = `blog-featured-${Date.now()}.${featuredImage.format || 'png'}`;
           const folder = `blog-images/${orgId}`;
