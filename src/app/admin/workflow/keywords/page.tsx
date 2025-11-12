@@ -129,18 +129,32 @@ export default function KeywordResearchPage() {
                 name: collection.name
               });
 
-              setKeywords(savedKeywords);
-              setCollectionName(collection.name || '');
-              generateClusters(savedKeywords);
+              // Only load saved keywords if they exist and are valid
+              if (savedKeywords && savedKeywords.length > 0) {
+                setKeywords(savedKeywords);
+                setCollectionName(collection.name || '');
+                generateClusters(savedKeywords);
+              } else {
+                // Clear if collection exists but has no valid keywords
+                setKeywords([]);
+                setClusters([]);
+                setCollectionName('');
+              }
               
               // If there's a saved search query in workflow_data, use it
               const workflowData = session.workflow_data as Record<string, unknown> | null;
               if (workflowData?.search_query && typeof workflowData.search_query === 'string') {
                 setSearchQuery(workflowData.search_query);
+              } else {
+                // Clear search query if no saved query
+                setSearchQuery('');
               }
             } else {
-              // No saved collection - search query should be empty
-              // Don't populate from objective as that's a different field
+              // No saved collection - clear everything to avoid artifacts
+              setKeywords([]);
+              setClusters([]);
+              setSelectedKeywords(new Set());
+              setCollectionName('');
               setSearchQuery('');
             }
           } else if (sessionError?.code === 'PGRST116') {
