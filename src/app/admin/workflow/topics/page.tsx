@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Alert from '@/components/ui/alert/Alert';
+import { Modal } from '@/components/ui/modal/index';
+import { Trash2, Edit2, X } from 'lucide-react';
 
 interface TopicSuggestion {
   id: string;
@@ -41,6 +43,9 @@ export default function TopicsPage() {
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [filterTraffic, setFilterTraffic] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'seo_score' | 'traffic' | 'title'>('seo_score');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [savedTopics, setSavedTopics] = useState<TopicSuggestion[]>([]);
+  const [editingTopic, setEditingTopic] = useState<TopicSuggestion | null>(null);
 
   // Load workflow session and saved ideas
   useEffect(() => {
@@ -64,6 +69,11 @@ export default function TopicsPage() {
             setWorkflowSession(session);
             const workflowData = session.workflow_data || {};
             const ideas = workflowData.saved_content_ideas || [];
+            const saved = workflowData.selected_topics || [];
+            
+            if (saved.length > 0) {
+              setSavedTopics(saved);
+            }
             
             if (ideas.length > 0) {
               setSavedIdeas(ideas);
@@ -195,6 +205,7 @@ export default function TopicsPage() {
       }
 
       const selectedTopicsList = topics.filter(t => selectedTopics.has(t.id));
+      const updatedSavedTopics = [...savedTopics, ...selectedTopicsList];
 
       await supabase
         .from('workflow_sessions')
@@ -203,18 +214,83 @@ export default function TopicsPage() {
           completed_steps: ['objective', 'keywords', 'clusters', 'ideas', 'topics'],
           workflow_data: {
             ...workflowSession.workflow_data,
-            selected_topics: selectedTopicsList
-          }
+            selected_topics: updatedSavedTopics
+          },
+          updated_at: new Date().toISOString()
         })
         .eq('session_id', sessionId);
 
-      setSuccess('Topic suggestions saved successfully');
-      setTimeout(() => setSuccess(null), 3000);
+      setSavedTopics(updatedSavedTopics);
+      setShowSaveModal(true);
+      setSelectedTopics(new Set()); // Clear selection after saving
     } catch (err: any) {
       console.error('Error saving topics:', err);
       setError(err.message || 'Failed to save topic suggestions');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Delete saved topic
+  const handleDeleteTopic = async (topicId: string) => {
+    try {
+      const updatedSavedTopics = savedTopics.filter(t => t.id !== topicId);
+      
+      const supabase = createClient();
+      const sessionId = workflowSession?.session_id;
+      
+      if (sessionId) {
+        await supabase
+          .from('workflow_sessions')
+          .update({
+            workflow_data: {
+              ...workflowSession.workflow_data,
+              selected_topics: updatedSavedTopics
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('session_id', sessionId);
+      }
+      
+      setSavedTopics(updatedSavedTopics);
+      setSuccess('Topic deleted successfully');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error deleting topic:', err);
+      setError(err.message || 'Failed to delete topic');
+    }
+  };
+
+  // Update saved topic
+  const handleUpdateTopic = async (updatedTopic: TopicSuggestion) => {
+    try {
+      const updatedSavedTopics = savedTopics.map(t => 
+        t.id === updatedTopic.id ? updatedTopic : t
+      );
+      
+      const supabase = createClient();
+      const sessionId = workflowSession?.session_id;
+      
+      if (sessionId) {
+        await supabase
+          .from('workflow_sessions')
+          .update({
+            workflow_data: {
+              ...workflowSession.workflow_data,
+              selected_topics: updatedSavedTopics
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('session_id', sessionId);
+      }
+      
+      setSavedTopics(updatedSavedTopics);
+      setEditingTopic(null);
+      setSuccess('Topic updated successfully');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error updating topic:', err);
+      setError(err.message || 'Failed to update topic');
     }
   };
 
@@ -446,7 +522,7 @@ export default function TopicsPage() {
               </button>
               <button
                 onClick={() => router.push('/admin/workflow/strategy')}
-                disabled={selectedTopics.size === 0}
+                disabled={savedTopics.length === 0}
                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium"
               >
                 Continue to Strategy
@@ -456,6 +532,152 @@ export default function TopicsPage() {
           </div>
         </div>
       )}
+
+      {/* Save Modal */}
+      <Modal
+        isOpen={showSaveModal}
+        onClose={() => setShowSaveModal(false)}
+      >
+        <div className="flex flex-col gap-6 p-6 max-w-4xl max-h-[80vh] overflow-y-auto">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Saved Topics
+              </h2>
+              <p className="text-gray-600 dark:text-gray-400">
+                {savedTopics.length} topic{savedTopics.length === 1 ? '' : 's'} saved. You can edit or delete them before proceeding.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSaveModal(false)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          {savedTopics.length === 0 ? (
+            <div className="text-center py-12">
+              <BookOpen className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 dark:text-gray-400">
+                No saved topics yet. Select topics and click "Save Selected Topics" to save them.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {savedTopics.map((topic) => (
+                <div
+                  key={topic.id}
+                  className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4"
+                >
+                  {editingTopic?.id === topic.id ? (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Title
+                        </label>
+                        <input
+                          type="text"
+                          value={editingTopic.title}
+                          onChange={(e) => setEditingTopic({ ...editingTopic, title: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Unique Angle
+                        </label>
+                        <textarea
+                          value={editingTopic.unique_angle}
+                          onChange={(e) => setEditingTopic({ ...editingTopic, unique_angle: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                          rows={2}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            if (editingTopic) {
+                              handleUpdateTopic(editingTopic);
+                            }
+                          }}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
+                        >
+                          Save Changes
+                        </button>
+                        <button
+                          onClick={() => setEditingTopic(null)}
+                          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                          {topic.title}
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                          <strong>Unique Angle:</strong> {topic.unique_angle}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-4 text-sm">
+                          <span className="text-gray-600 dark:text-gray-400">
+                            SEO Score: <strong>{topic.seo_score}</strong>
+                          </span>
+                          <span className="text-gray-600 dark:text-gray-400">
+                            Readability: <strong>{topic.readability_score}</strong>
+                          </span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTrafficColor(topic.estimated_traffic)}`}>
+                            {topic.estimated_traffic.toUpperCase()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <button
+                          onClick={() => setEditingTopic(topic)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                          title="Edit topic"
+                        >
+                          <Edit2 className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTopic(topic.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                          title="Delete topic"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <button
+              onClick={() => setShowSaveModal(false)}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => {
+                setShowSaveModal(false);
+                router.push('/admin/workflow/strategy');
+              }}
+              disabled={savedTopics.length === 0}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+            >
+              Continue to Strategy
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

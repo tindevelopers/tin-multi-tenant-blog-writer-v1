@@ -278,7 +278,8 @@ class KeywordResearchService {
    */
   async analyzeKeywords(
     keywords: string[], 
-    maxSuggestionsPerKeyword: number = 0
+    maxSuggestionsPerKeyword: number = 0,
+    location: string = 'United States'
   ): Promise<KeywordAnalysis> {
     console.log(`📊 Analyzing keywords for SEO potential (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
@@ -307,7 +308,8 @@ class KeywordResearchService {
           
           const requestBody: any = { 
             keywords,
-            text: keywords.join(' ') // Provide context
+            text: keywords.join(' '), // Provide context
+            location: location // Add location parameter
           };
           
           // Add max_suggestions_per_keyword if specified (for enhanced analysis)
@@ -436,7 +438,8 @@ class KeywordResearchService {
    */
   async getKeywordSuggestions(
     seedKeywords: string[], 
-    limit: number = 150
+    limit: number = 150,
+    location: string = 'United States'
   ): Promise<string[]> {
     console.log(`💡 Getting keyword suggestions (limit: ${limit})...`);
     
@@ -466,7 +469,8 @@ class KeywordResearchService {
         },
         body: JSON.stringify({ 
           keywords: seedKeywords,
-              limit: limit // Request 150 keywords by default (was 20)
+          limit: limit, // Request 150 keywords by default (was 20)
+          location: location // Add location parameter
         }),
             signal: AbortSignal.timeout(30000), // Increased timeout for 150 keywords
       });
@@ -579,7 +583,8 @@ class KeywordResearchService {
   async performBlogResearch(
     topic: string, 
     targetAudience: string = 'general',
-    userId?: string
+    userId?: string,
+    location: string = 'United States'
   ): Promise<BlogResearchResults> {
     console.log('🔬 Starting comprehensive blog research...');
     
@@ -589,7 +594,7 @@ class KeywordResearchService {
       console.log('📋 Extracted keywords:', extractedKeywords);
 
       // Step 2: Get comprehensive keyword suggestions (150+ keywords)
-      const suggestedKeywords = await this.getKeywordSuggestions([topic], 150);
+      const suggestedKeywords = await this.getKeywordSuggestions([topic], 150, location);
       console.log(`💡 Suggested keywords (${suggestedKeywords.length}):`, suggestedKeywords.slice(0, 10), '...');
 
       // Combine and deduplicate keywords
@@ -609,7 +614,7 @@ class KeywordResearchService {
         for (let i = 0; i < allKeywords.length; i += batchSize) {
           const batch = allKeywords.slice(i, i + batchSize);
           console.log(`📊 Analyzing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allKeywords.length / batchSize)} (${batch.length} keywords)...`);
-          const batchAnalysis = await this.analyzeKeywords(batch);
+          const batchAnalysis = await this.analyzeKeywords(batch, 0, location);
           batches.push(batchAnalysis);
         }
         
@@ -641,7 +646,7 @@ class KeywordResearchService {
         
         console.log(`✅ Merged analysis from ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords analyzed`);
       } else {
-        keywordAnalysis = await this.analyzeKeywords(allKeywords);
+        keywordAnalysis = await this.analyzeKeywords(allKeywords, 0, location);
       }
       console.log('📊 Keyword analysis completed');
 

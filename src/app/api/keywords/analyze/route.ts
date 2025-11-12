@@ -59,6 +59,12 @@ export async function POST(request: NextRequest) {
       ? `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`
       : `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
     
+    // Ensure location is included (default to United States)
+    const requestBody = {
+      ...body,
+      location: body.location || 'United States'
+    };
+    
     const response = await fetchWithRetry(
       endpoint,
       {
@@ -66,7 +72,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
       }
     );
 

@@ -70,6 +70,7 @@ export default function KeywordResearchPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [minVolume, setMinVolume] = useState<number>(0);
   const [collectionName, setCollectionName] = useState('');
+  const [location, setLocation] = useState<string>('United States');
   
   // Pagination for large keyword lists (150+)
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -277,7 +278,9 @@ export default function KeywordResearchPage() {
       // Perform keyword research
       const researchResults = await keywordResearchService.performBlogResearch(
         searchQuery,
-        workflowSession?.target_audience || 'general'
+        workflowSession?.target_audience || 'general',
+        undefined, // userId
+        location // Pass location parameter
       );
 
       // Extract keywords from research results

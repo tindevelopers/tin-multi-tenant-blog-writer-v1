@@ -69,10 +69,17 @@ export async function POST(request: NextRequest) {
     // Request 150 keywords by default (can be overridden by limit in body)
     const limit = body.limit || 150;
     
-    const requestBody = {
+    const requestBody: any = {
       keyword: keyword,
       limit: limit
     };
+    
+    // Add location if provided (defaults to United States)
+    if (body.location) {
+      requestBody.location = body.location;
+    } else {
+      requestBody.location = 'United States'; // Default location
+    }
     
     const response = await fetchWithRetry(
       `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`,
