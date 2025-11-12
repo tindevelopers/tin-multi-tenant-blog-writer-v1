@@ -148,14 +148,14 @@ export default function EditProfilePage() {
       setTimeout(() => setSuccess(false), 3000);
       
       // Refresh user profile
-      const { data } = await supabase
+      const { data: updatedProfile } = await supabase
         .from("users")
         .select("*, organizations(*)")
-        .eq("user_id", user?.id)
+        .eq("user_id", user.id)
         .single();
       
-      if (data) {
-        setUserProfile(data);
+      if (updatedProfile) {
+        setUserProfile(updatedProfile);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to update profile");
