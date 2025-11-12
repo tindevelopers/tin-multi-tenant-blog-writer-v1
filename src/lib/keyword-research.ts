@@ -62,9 +62,11 @@ export interface BlogResearchResults {
 
 class KeywordResearchService {
   private baseURL: string;
+  private useApiRoutes: boolean; // Use Next.js API routes instead of direct Cloud Run calls
 
-  constructor(baseURL: string) {
+  constructor(baseURL: string, useApiRoutes: boolean = true) {
     this.baseURL = baseURL;
+    this.useApiRoutes = useApiRoutes; // Default to using API routes to avoid CORS
   }
 
   /**
@@ -135,16 +137,24 @@ class KeywordResearchService {
     console.log('🔍 Extracting keywords from text...');
     
     try {
-      // Ensure Cloud Run is awake and operational
-      const healthStatus = await cloudRunHealth.wakeUpAndWait();
-      if (!healthStatus.isHealthy) {
-        throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
+      // If using API routes, we don't need to check Cloud Run health directly
+      // The API route will handle Cloud Run communication server-side
+      if (!this.useApiRoutes) {
+        const healthStatus = await cloudRunHealth.wakeUpAndWait();
+        if (!healthStatus.isHealthy) {
+          throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
+        }
       }
 
       return await this.retryApiCall(async () => {
         let response: Response;
         try {
-          response = await fetch(`${this.baseURL}/api/v1/keywords/extract`, {
+          // Use Next.js API route to avoid CORS issues
+          const apiUrl = this.useApiRoutes 
+            ? '/api/keywords/extract'
+            : `${this.baseURL}/api/v1/keywords/extract`;
+          
+          response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -195,16 +205,24 @@ class KeywordResearchService {
     console.log('📊 Analyzing keywords for SEO potential...');
     
     try {
-      // Ensure Cloud Run is awake and operational
-      const healthStatus = await cloudRunHealth.wakeUpAndWait();
-      if (!healthStatus.isHealthy) {
-        throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
+      // If using API routes, we don't need to check Cloud Run health directly
+      // The API route will handle Cloud Run communication server-side
+      if (!this.useApiRoutes) {
+        const healthStatus = await cloudRunHealth.wakeUpAndWait();
+        if (!healthStatus.isHealthy) {
+          throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
+        }
       }
 
       return await this.retryApiCall(async () => {
         let response: Response;
         try {
-          response = await fetch(`${this.baseURL}/api/v1/keywords/analyze`, {
+          // Use Next.js API route to avoid CORS issues
+          const apiUrl = this.useApiRoutes 
+            ? '/api/keywords/analyze'
+            : `${this.baseURL}/api/v1/keywords/analyze`;
+          
+          response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -279,16 +297,24 @@ class KeywordResearchService {
     console.log('💡 Getting keyword suggestions...');
     
     try {
-      // Ensure Cloud Run is awake and operational
-      const healthStatus = await cloudRunHealth.wakeUpAndWait();
-      if (!healthStatus.isHealthy) {
-        throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
+      // If using API routes, we don't need to check Cloud Run health directly
+      // The API route will handle Cloud Run communication server-side
+      if (!this.useApiRoutes) {
+        const healthStatus = await cloudRunHealth.wakeUpAndWait();
+        if (!healthStatus.isHealthy) {
+          throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
+        }
       }
 
       return await this.retryApiCall(async () => {
         let response: Response;
         try {
-          response = await fetch(`${this.baseURL}/api/v1/keywords/suggest`, {
+          // Use Next.js API route to avoid CORS issues
+          const apiUrl = this.useApiRoutes 
+            ? '/api/keywords/suggest'
+            : `${this.baseURL}/api/v1/keywords/suggest`;
+          
+          response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -744,8 +770,10 @@ class KeywordResearchService {
 }
 
 // Create singleton instance
+// Use API routes by default to avoid CORS issues
 const keywordResearchService = new KeywordResearchService(
-  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app'
+  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app',
+  true // useApiRoutes = true (use Next.js API routes instead of direct Cloud Run calls)
 );
 
 export default keywordResearchService;
