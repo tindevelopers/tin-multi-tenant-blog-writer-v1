@@ -113,7 +113,7 @@ class KeywordResearchService {
               // Continue retrying if service is still waking up
               continue;
             }
-          } catch (healthError) {
+          } catch {
             // Health check failed, but continue retrying API call
             console.log(`⏳ Health check failed, but continuing to retry API call...`);
             continue;

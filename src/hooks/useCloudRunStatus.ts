@@ -109,7 +109,7 @@ export function useCloudRunStatus() {
 
     // If we've exhausted attempts and it's still waking up, give it more time
     if (attempts >= maxAttempts) {
-      const isStillWakingUp = lastError?.includes('starting up') || lastError?.includes('CORS');
+      const isStillWakingUp = Boolean(lastError?.includes('starting up') || lastError?.includes('CORS'));
       console.warn('⚠️ Cloud Run wake-up attempts exhausted. It may still be starting up.');
       setStatus(prev => ({
         ...prev,
@@ -121,7 +121,7 @@ export function useCloudRunStatus() {
 
     return {
       isHealthy: false,
-      isWakingUp: lastError?.includes('starting up') || lastError?.includes('CORS') || false,
+      isWakingUp: Boolean(lastError?.includes('starting up') || lastError?.includes('CORS')),
       isChecking: false,
       lastChecked: new Date(),
       error: lastError || 'Failed to wake up Cloud Run',
