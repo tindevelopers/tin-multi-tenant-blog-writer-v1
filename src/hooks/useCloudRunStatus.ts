@@ -133,11 +133,46 @@ export function useCloudRunStatus() {
     checkHealth();
   }, [checkHealth]);
 
-  // Periodic health checks
+  // Auto-retry when waking up - check more frequently until healthy
   useEffect(() => {
+    if (!status.isWakingUp || status.isHealthy) {
+      return; // Don't retry if not waking up or already healthy
+    }
+
+    console.log('🔄 Auto-retrying health check while API is starting up...');
+    const retryInterval = setInterval(async () => {
+      const healthStatus = await checkHealth();
+      
+      // If it becomes healthy, stop retrying
+      if (healthStatus.isHealthy) {
+        console.log('✅ API became healthy - stopping auto-retry');
+        clearInterval(retryInterval);
+        setStatus(prev => ({
+          ...prev,
+          isHealthy: true,
+          isWakingUp: false,
+          isChecking: false,
+          error: null,
+        }));
+      } else if (!healthStatus.isWakingUp) {
+        // If it's no longer waking up but still not healthy, stop retrying
+        console.log('⚠️ API is no longer waking up but still not healthy - stopping auto-retry');
+        clearInterval(retryInterval);
+      }
+    }, 3000); // Check every 3 seconds when waking up
+
+    return () => clearInterval(retryInterval);
+  }, [status.isWakingUp, status.isHealthy, checkHealth]);
+
+  // Periodic health checks (only when not waking up)
+  useEffect(() => {
+    if (status.isWakingUp) {
+      return; // Skip periodic checks while waking up (handled by auto-retry above)
+    }
+
     const interval = setInterval(() => {
-      // Only check if not currently checking and not waking up
-      if (!status.isChecking && !status.isWakingUp) {
+      // Only check if not currently checking
+      if (!status.isChecking) {
         checkHealth();
       }
     }, CHECK_INTERVAL);

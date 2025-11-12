@@ -41,12 +41,28 @@ export async function GET(request: NextRequest) {
           data: healthData,
         });
       } else {
+        // If we got a response (even if error), the service is running
+        // 503 might mean overloaded or temporarily unavailable, but not starting up
+        const is503 = response.status === 503;
         console.warn(`⚠️ Cloud Run health check returned status ${response.status}`);
+        
+        // Try to parse error response
+        let errorMessage = `Health check failed with status ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData.error || errorData.message) {
+            errorMessage = errorData.error || errorData.message;
+          }
+        } catch {
+          // Ignore JSON parse errors
+        }
+        
         return NextResponse.json({
           isHealthy: false,
-          isWakingUp: false,
+          // Only mark as waking up if it's a 503 AND the error message suggests startup
+          isWakingUp: is503 && (errorMessage.includes('starting') || errorMessage.includes('cold')),
           lastChecked: new Date().toISOString(),
-          error: `Health check failed with status ${response.status}`,
+          error: errorMessage,
         }, { status: response.status });
       }
     } catch (fetchError: any) {

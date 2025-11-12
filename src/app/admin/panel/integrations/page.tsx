@@ -66,11 +66,12 @@ export default function IntegrationsManagementPage() {
   const [selectedIntegrations, setSelectedIntegrations] = useState<Set<string>>(new Set());
   const [testingIntegrationId, setTestingIntegrationId] = useState<string | null>(null);
   const [syncingIntegrationId, setSyncingIntegrationId] = useState<string | null>(null);
+  const [cloudinaryConfig, setCloudinaryConfig] = useState<{ cloud_name: string; configured: boolean } | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
     
-    // Get current user role and org_id
+    // Get current user role and org_id, and check Cloudinary config
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase
@@ -82,6 +83,27 @@ export default function IntegrationsManagementPage() {
             if (data) {
               setUserRole(data.role);
               setOrgId(data.org_id);
+              
+              // Check Cloudinary configuration
+              supabase
+                .from("organizations")
+                .select("settings")
+                .eq("org_id", data.org_id)
+                .single()
+                .then(({ data: orgData }) => {
+                  if (orgData?.settings) {
+                    const settings = orgData.settings as Record<string, unknown>;
+                    if (settings.cloudinary) {
+                      const cloudinary = settings.cloudinary as { cloud_name?: string; api_key?: string; api_secret?: string };
+                      if (cloudinary.cloud_name && cloudinary.api_key && cloudinary.api_secret) {
+                        setCloudinaryConfig({
+                          cloud_name: cloudinary.cloud_name,
+                          configured: true
+                        });
+                      }
+                    }
+                  }
+                });
             }
           });
       }
@@ -571,7 +593,26 @@ export default function IntegrationsManagementPage() {
     setShowCloudinaryConfig(true);
   };
 
-  const filteredIntegrations = integrations.filter(integration => {
+  // Create Cloudinary integration if configured
+  const cloudinaryIntegration: Integration | null = cloudinaryConfig?.configured ? {
+    integration_id: 'cloudinary-virtual',
+    org_id: orgId || '',
+    type: 'cloudinary',
+    name: 'Cloudinary',
+    status: 'active',
+    connection_method: 'api_key',
+    config: { cloud_name: cloudinaryConfig.cloud_name },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    health_status: 'healthy'
+  } : null;
+
+  // Combine real integrations with Cloudinary if configured
+  const allIntegrations = cloudinaryIntegration 
+    ? [...integrations, cloudinaryIntegration]
+    : integrations;
+
+  const filteredIntegrations = allIntegrations.filter(integration => {
     const matchesSearch = integration.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          integration.type.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || integration.status === statusFilter;
@@ -1015,6 +1056,16 @@ export default function IntegrationsManagementPage() {
                 }
                 return null;
               })()}
+              {integration.type === 'cloudinary' && cloudinaryConfig && (() => {
+                return (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">Cloud Name:</span>
+                    <span className="text-gray-900 dark:text-white font-medium">
+                      {cloudinaryConfig.cloud_name}
+                    </span>
+                  </div>
+                );
+              })()}
               {/* Always show health status */}
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Health:</span>
@@ -1090,6 +1141,62 @@ export default function IntegrationsManagementPage() {
                     Disconnect
                   </button>
                 </div>
+              </div>
+            ) : integration.type === 'cloudinary' && ['owner', 'admin'].includes(userRole) ? (
+              <div className="space-y-2">
+                <button
+                  onClick={handleConfigureCloudinary}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                >
+                  Configure Cloudinary
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!orgId) return;
+                    setTestingIntegrationId('cloudinary-virtual');
+                    try {
+                      const response = await fetch('/api/integrations/cloudinary/test', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          org_id: orgId,
+                          credentials: cloudinaryConfig ? {
+                            cloud_name: cloudinaryConfig.cloud_name,
+                            api_key: '', // We'll fetch from org settings in the API
+                            api_secret: ''
+                          } : null
+                        }),
+                      });
+                      const result = await response.json();
+                      if (response.ok && result.success) {
+                        alert('Cloudinary connection test successful!');
+                      } else {
+                        alert(`Connection test failed: ${result.error || 'Unknown error'}`);
+                      }
+                    } catch (err) {
+                      console.error('Error testing Cloudinary:', err);
+                      alert('Failed to test Cloudinary connection');
+                    } finally {
+                      setTestingIntegrationId(null);
+                    }
+                  }}
+                  disabled={testingIntegrationId === 'cloudinary-virtual'}
+                  className="w-full px-3 py-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 disabled:opacity-50 flex items-center justify-center gap-1 border border-blue-200 dark:border-blue-800 rounded-lg"
+                >
+                  {testingIntegrationId === 'cloudinary-virtual' ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircleIcon className="w-4 h-4" />
+                      Test Connection
+                    </>
+                  )}
+                </button>
               </div>
             ) : (
               <div className="flex items-center justify-between">
