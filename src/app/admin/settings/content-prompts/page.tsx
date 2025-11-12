@@ -21,6 +21,7 @@ type ContentGoal = 'seo' | 'engagement' | 'conversions' | 'brand_awareness';
 
 interface ContentGoalPrompt {
   prompt_id?: string;
+  org_id?: string;
   content_goal: ContentGoal;
   prompt_title: string;
   system_prompt: string;
