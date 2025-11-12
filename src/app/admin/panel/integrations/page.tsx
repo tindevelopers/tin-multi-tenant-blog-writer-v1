@@ -1371,8 +1371,32 @@ export default function IntegrationsManagementPage() {
               </div>
               <CloudinaryConfig
                 orgId={orgId}
-                onSave={() => {
+                onSave={async () => {
                   setShowCloudinaryConfig(false);
+                  // Refresh Cloudinary config status
+                  const supabase = createClient();
+                  const { data: orgData } = await supabase
+                    .from("organizations")
+                    .select("settings")
+                    .eq("org_id", orgId)
+                    .single();
+                  
+                  if (orgData?.settings) {
+                    const settings = orgData.settings as Record<string, unknown>;
+                    if (settings.cloudinary) {
+                      const cloudinary = settings.cloudinary as { cloud_name?: string; api_key?: string; api_secret?: string };
+                      if (cloudinary.cloud_name && cloudinary.api_key && cloudinary.api_secret) {
+                        setCloudinaryConfig({
+                          cloud_name: cloudinary.cloud_name,
+                          configured: true
+                        });
+                      } else {
+                        setCloudinaryConfig(null);
+                      }
+                    } else {
+                      setCloudinaryConfig(null);
+                    }
+                  }
                 }}
               />
             </div>
