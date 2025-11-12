@@ -70,10 +70,10 @@ export async function POST(request: NextRequest) {
     const response = await fetchWithRetry(
       `${BLOG_WRITER_API_URL}/api/v1/keywords/extract`,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
         body: JSON.stringify(requestBody),
       }
     );

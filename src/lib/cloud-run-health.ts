@@ -79,7 +79,7 @@ class CloudRunHealthManager {
 
     // If we've exhausted attempts, still mark as waking up if it was a startup issue
     const isStillWakingUp = Boolean(lastError?.includes('starting up') || lastError?.includes('CORS'));
-    
+
     return {
       isHealthy: false,
       isWakingUp: isStillWakingUp,

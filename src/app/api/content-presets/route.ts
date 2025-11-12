@@ -29,9 +29,9 @@ export async function GET(request: NextRequest) {
     let result;
     if (presetId) {
       result = await supabase
-        .from('content_presets')
-        .select('*')
-        .eq('org_id', userProfile.org_id)
+      .from('content_presets')
+      .select('*')
+      .eq('org_id', userProfile.org_id)
         .eq('is_active', true)
         .eq('preset_id', presetId)
         .maybeSingle();

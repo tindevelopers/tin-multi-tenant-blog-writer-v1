@@ -186,8 +186,8 @@ class KeywordResearchService {
       // If using API routes, we don't need to check Cloud Run health directly
       // The API route will handle Cloud Run communication server-side
       if (!this.useApiRoutes) {
-        const healthStatus = await cloudRunHealth.wakeUpAndWait();
-        if (!healthStatus.isHealthy) {
+      const healthStatus = await cloudRunHealth.wakeUpAndWait();
+      if (!healthStatus.isHealthy) {
           throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
         }
       }
@@ -201,14 +201,14 @@ class KeywordResearchService {
             : `${this.baseURL}/api/v1/keywords/extract`;
           
           response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: JSON.stringify({ text }),
-            signal: AbortSignal.timeout(15000),
-          });
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(15000),
+      });
         } catch (fetchError: unknown) {
           // CORS errors and network errors are caught here
           const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -216,7 +216,7 @@ class KeywordResearchService {
           throw new Error(`Network error: ${errorMsg}`);
         }
 
-        if (!response.ok) {
+      if (!response.ok) {
           // If 400 error and it's about content length, return the text as keyword
           if (response.status === 400) {
             const errorData = await response.json().catch(() => ({}));
@@ -226,11 +226,11 @@ class KeywordResearchService {
             }
           }
           throw new Error(`API returned ${response.status} ${response.statusText}`);
-        }
+      }
 
         const data: KeywordExtractResponse = await response.json();
-        console.log('✅ Keywords extracted via API');
-        console.log('📋 Raw API response:', JSON.stringify(data, null, 2));
+      console.log('✅ Keywords extracted via API');
+      console.log('📋 Raw API response:', JSON.stringify(data, null, 2));
         
         // Use keywords_with_topics if available, otherwise fall back to extracted_keywords or keywords
         let keywords: string[] = [];
@@ -242,23 +242,23 @@ class KeywordResearchService {
         } else if (data.keywords && data.keywords.length > 0) {
           keywords = data.keywords;
         }
-        
-        // Ensure we're preserving phrases, not individual words
-        // Filter out single-word keywords that are likely stop words or too generic
-        const phraseKeywords = keywords.filter((kw: string) => {
-          const trimmed = kw.trim();
-          // Keep phrases (2+ words) or single words that are meaningful
-          const wordCount = trimmed.split(/\s+/).length;
-          return wordCount > 1 || trimmed.length > 5;
-        });
-        
-        console.log('📋 Filtered keywords (phrases preserved):', phraseKeywords);
+      
+      // Ensure we're preserving phrases, not individual words
+      // Filter out single-word keywords that are likely stop words or too generic
+      const phraseKeywords = keywords.filter((kw: string) => {
+        const trimmed = kw.trim();
+        // Keep phrases (2+ words) or single words that are meaningful
+        const wordCount = trimmed.split(/\s+/).length;
+        return wordCount > 1 || trimmed.length > 5;
+      });
+      
+      console.log('📋 Filtered keywords (phrases preserved):', phraseKeywords);
         console.log('📊 Clustering data available:', {
           hasKeywordsWithTopics: !!data.keywords_with_topics,
           clusterCount: data.clusters?.length || 0,
           clusterSummary: data.cluster_summary
         });
-        return phraseKeywords;
+      return phraseKeywords;
       }, 8, 2000, 'Keyword extraction');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -291,8 +291,8 @@ class KeywordResearchService {
       // If using API routes, we don't need to check Cloud Run health directly
       // The API route will handle Cloud Run communication server-side
       if (!this.useApiRoutes) {
-        const healthStatus = await cloudRunHealth.wakeUpAndWait();
-        if (!healthStatus.isHealthy) {
+      const healthStatus = await cloudRunHealth.wakeUpAndWait();
+      if (!healthStatus.isHealthy) {
           throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
         }
       }
@@ -316,11 +316,11 @@ class KeywordResearchService {
           }
           
           response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
             body: JSON.stringify(requestBody),
             signal: AbortSignal.timeout(40000), // Increased timeout for enhanced analysis
           });
@@ -331,12 +331,12 @@ class KeywordResearchService {
           throw new Error(`Network error: ${errorMsg}`);
         }
 
-        if (!response.ok) {
+      if (!response.ok) {
           throw new Error(`API returned ${response.status} ${response.statusText}`);
-        }
+      }
 
-        const data = await response.json();
-        
+      const data = await response.json();
+      
         // Log enhanced analysis response fields
         if (data.total_keywords) {
           console.log(`📊 Enhanced analysis: ${data.total_keywords} total keywords`);
@@ -346,14 +346,14 @@ class KeywordResearchService {
         
         // Check if this is the enhanced analysis format with clustering
         const enhancedAnalysis = data.enhanced_analysis || data.keyword_analysis || data;
-        
-        // Filter out single-word keywords that don't make sense as standalone keywords
-        // Keep only phrases (2+ words) or meaningful single words
-        const filteredAnalysis: Record<string, KeywordData> = {};
+      
+      // Filter out single-word keywords that don't make sense as standalone keywords
+      // Keep only phrases (2+ words) or meaningful single words
+      const filteredAnalysis: Record<string, KeywordData> = {};
         Object.entries(enhancedAnalysis).forEach(([keyword, kwData]: [string, any]) => {
-          const wordCount = keyword.trim().split(/\s+/).length;
-          // Keep phrases (2+ words) or single words that are meaningful (length > 5)
-          if (wordCount > 1 || keyword.trim().length > 5) {
+        const wordCount = keyword.trim().split(/\s+/).length;
+        // Keep phrases (2+ words) or single words that are meaningful (length > 5)
+        if (wordCount > 1 || keyword.trim().length > 5) {
             // Extract clustering data from enhanced analysis if available
             const keywordWithClustering: KeywordData = {
               ...kwData,
@@ -362,11 +362,11 @@ class KeywordResearchService {
               category_type: kwData.category_type,
             };
             filteredAnalysis[keyword] = keywordWithClustering;
-          } else {
-            console.log(`⚠️ Filtering out single-word keyword: "${keyword}"`);
-          }
-        });
-        
+        } else {
+          console.log(`⚠️ Filtering out single-word keyword: "${keyword}"`);
+        }
+      });
+      
         // Use API-provided clusters if available, otherwise create clusters from analysis
         let clusters: KeywordCluster[] = [];
         if (data.clusters && Array.isArray(data.clusters) && data.clusters.length > 0) {
@@ -398,30 +398,30 @@ class KeywordResearchService {
           // Fallback: create clusters from analysis
           clusters = this.createKeywordClusters(filteredAnalysis);
         }
-        
-        console.log('✅ Keywords analyzed via API');
-        console.log('🔍 API response data structure:', data);
-        console.log('🔍 Filtered keyword analysis (phrases only):', Object.keys(filteredAnalysis));
+      
+      console.log('✅ Keywords analyzed via API');
+      console.log('🔍 API response data structure:', data);
+      console.log('🔍 Filtered keyword analysis (phrases only):', Object.keys(filteredAnalysis));
         console.log('📊 Clustering data:', {
           clusterCount: clusters.length,
           clusterSummary: data.cluster_summary,
           hasApiClusters: !!(data.clusters && data.clusters.length > 0)
         });
-        
-        // Debug search volume data
-        console.log('🔍 Search volume data check:', Object.entries(filteredAnalysis).map(([key, data]: [string, any]) => ({
-          keyword: key,
-          search_volume: data?.search_volume,
+      
+      // Debug search volume data
+      console.log('🔍 Search volume data check:', Object.entries(filteredAnalysis).map(([key, data]: [string, any]) => ({
+        keyword: key,
+        search_volume: data?.search_volume,
           search_volume_type: typeof data?.search_volume,
           parent_topic: data?.parent_topic
-        })));
-        
-        return {
-          keyword_analysis: filteredAnalysis,
-          overall_score: this.calculateOverallScore(filteredAnalysis),
-          recommendations: this.generateRecommendations(filteredAnalysis),
-          cluster_groups: clusters,
-        };
+      })));
+      
+      return {
+        keyword_analysis: filteredAnalysis,
+        overall_score: this.calculateOverallScore(filteredAnalysis),
+        recommendations: this.generateRecommendations(filteredAnalysis),
+        cluster_groups: clusters,
+      };
       }, 8, 2000, 'Keyword analysis');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -444,8 +444,8 @@ class KeywordResearchService {
       // If using API routes, we don't need to check Cloud Run health directly
       // The API route will handle Cloud Run communication server-side
       if (!this.useApiRoutes) {
-        const healthStatus = await cloudRunHealth.wakeUpAndWait();
-        if (!healthStatus.isHealthy) {
+      const healthStatus = await cloudRunHealth.wakeUpAndWait();
+      if (!healthStatus.isHealthy) {
           throw new Error(`Cloud Run is not ready: ${healthStatus.error}`);
         }
       }
@@ -459,17 +459,17 @@ class KeywordResearchService {
             : `${this.baseURL}/api/v1/keywords/suggest`;
           
           response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: JSON.stringify({ 
-              keywords: seedKeywords,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({ 
+          keywords: seedKeywords,
               limit: limit // Request 150 keywords by default (was 20)
-            }),
+        }),
             signal: AbortSignal.timeout(30000), // Increased timeout for 150 keywords
-          });
+      });
         } catch (fetchError: unknown) {
           // CORS errors and network errors are caught here
           const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
@@ -477,12 +477,12 @@ class KeywordResearchService {
           throw new Error(`Network error: ${errorMsg}`);
         }
 
-        if (!response.ok) {
+      if (!response.ok) {
           throw new Error(`API returned ${response.status} ${response.statusText}`);
-        }
+      }
 
-        const data = await response.json();
-        console.log('✅ Keyword suggestions generated via API');
+      const data = await response.json();
+      console.log('✅ Keyword suggestions generated via API');
         console.log(`📊 Total suggestions: ${data.total_suggestions || (data.suggestions?.length || 0)}`);
         
         // Use suggestions_with_topics if available, otherwise fall back to suggestions

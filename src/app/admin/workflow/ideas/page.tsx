@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Alert from '@/components/ui/alert/Alert';
+import { Modal } from '@/components/ui/modal';
 
 interface ContentIdea {
   id: string;
@@ -34,6 +35,7 @@ export default function ContentIdeasPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   
   const [workflowSession, setWorkflowSession] = useState<any>(null);
   const [clusters, setClusters] = useState<any[]>([]);
@@ -201,7 +203,7 @@ export default function ContentIdeasPage() {
       const savedIdeasList = ideas.filter(i => savedIdeas.has(i.id));
 
       // Update workflow session with saved ideas
-      await supabase
+      const { error: updateError } = await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'ideas',
@@ -209,12 +211,17 @@ export default function ContentIdeasPage() {
           workflow_data: {
             ...workflowSession.workflow_data,
             saved_content_ideas: savedIdeasList
-          }
+          },
+          updated_at: new Date().toISOString()
         })
         .eq('session_id', sessionId);
 
-      setSuccess('Content ideas saved successfully');
-      setTimeout(() => setSuccess(null), 3000);
+      if (updateError) {
+        throw updateError;
+      }
+
+      // Show success modal
+      setShowSuccessModal(true);
     } catch (err: any) {
       console.error('Error saving ideas:', err);
       setError(err.message || 'Failed to save content ideas');
@@ -466,6 +473,49 @@ export default function ContentIdeasPage() {
           </div>
         </div>
       )}
+
+      {/* Success Modal */}
+      <Modal
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        title="Ideas Saved Successfully!"
+        description={`${savedIdeas.size} content idea${savedIdeas.size === 1 ? '' : 's'} saved to your workflow. You can now continue to generate topic suggestions.`}
+      >
+        <div className="flex flex-col gap-4">
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-green-900 dark:text-green-100 mb-1">
+                  Content Ideas Saved
+                </h4>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  Your selected content ideas have been saved to the workflow session. These ideas will be used to generate more specific topic suggestions in the next step.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              Stay Here
+            </button>
+            <button
+              onClick={() => {
+                setShowSuccessModal(false);
+                router.push('/admin/workflow/topics');
+              }}
+              className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+            >
+              Continue to Topic Suggestions
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
