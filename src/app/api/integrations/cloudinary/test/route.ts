@@ -92,13 +92,6 @@ export async function POST(request: NextRequest) {
         formDataParts.push(`${value}\r\n`);
       };
       
-      const appendFile = (name: string, data: string, contentType: string) => {
-        formDataParts.push(`--${boundary}\r\n`);
-        formDataParts.push(`Content-Disposition: form-data; name="${name}"\r\n`);
-        formDataParts.push(`Content-Type: ${contentType}\r\n\r\n`);
-        formDataParts.push(`${data}\r\n`);
-      };
-      
       appendField('api_key', api_key);
       appendField('timestamp', timestamp.toString());
       appendField('signature', signature);
