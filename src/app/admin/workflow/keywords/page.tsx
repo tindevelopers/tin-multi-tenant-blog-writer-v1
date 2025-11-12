@@ -506,7 +506,14 @@ export default function KeywordResearchPage() {
         sessionId,
         orgId: workflowSession.org_id || userProfile.org_id,
         keywordCount: keywords.length,
-        hasExisting: !!existing
+        hasExisting: !!existing,
+        collectionName: name,
+        searchQuery: searchQuery,
+        keywordsSample: keywords.slice(0, 3).map(k => ({
+          keyword: k.keyword,
+          search_volume: k.search_volume,
+          difficulty: k.difficulty
+        }))
       });
 
       let result;
