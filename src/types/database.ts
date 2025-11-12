@@ -50,6 +50,8 @@ export interface Database {
           org_id: string;
           email: string;
           full_name: string | null;
+          phone: string | null;
+          bio: string | null;
           role: "owner" | "admin" | "editor" | "writer";
           permissions: Json;
           created_at: string;
@@ -60,6 +62,8 @@ export interface Database {
           org_id: string;
           email: string;
           full_name?: string | null;
+          phone?: string | null;
+          bio?: string | null;
           role?: "owner" | "admin" | "editor" | "writer";
           permissions?: Json;
           created_at?: string;
@@ -70,6 +74,8 @@ export interface Database {
           org_id?: string;
           email?: string;
           full_name?: string | null;
+          phone?: string | null;
+          bio?: string | null;
           role?: "owner" | "admin" | "editor" | "writer";
           permissions?: Json;
           created_at?: string;

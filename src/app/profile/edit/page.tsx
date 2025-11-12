@@ -90,20 +90,59 @@ export default function EditProfilePage() {
     setError(null);
     setSuccess(false);
 
+    if (!user?.id) {
+      setError("User not found. Please log in again.");
+      setSaving(false);
+      return;
+    }
+
     try {
       const supabase = createClient();
       
-      const { error } = await supabase
-        .from("users")
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-          bio: formData.bio,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", user?.id);
+      // Build update object
+      const updateData: Record<string, unknown> = {
+        full_name: formData.full_name?.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
 
-      if (error) throw error;
+      // Add phone and bio fields (will be added via migration)
+      if (formData.phone !== undefined) {
+        updateData.phone = formData.phone?.trim() || null;
+      }
+      if (formData.bio !== undefined) {
+        updateData.bio = formData.bio?.trim() || null;
+      }
+      
+      console.log("Updating profile with data:", { ...updateData, user_id: user.id });
+      
+      const { error, data } = await supabase
+        .from("users")
+        .update(updateData)
+        .eq("user_id", user.id)
+        .select();
+
+      if (error) {
+        console.error("Profile update error:", error);
+        console.error("Error details:", {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        
+        // Provide user-friendly error messages
+        if (error.code === '42703') {
+          // Column does not exist
+          throw new Error("Some profile fields are not yet available. Please try updating your name only, or contact support.");
+        } else if (error.code === '42501') {
+          // Insufficient privilege
+          throw new Error("You don't have permission to update your profile. Please contact your administrator.");
+        } else if (error.message?.includes('column')) {
+          throw new Error("Profile update failed: Invalid field. Please try again or contact support.");
+        }
+        
+        throw new Error(error.message || "Failed to update profile. Please try again.");
+      }
 
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
