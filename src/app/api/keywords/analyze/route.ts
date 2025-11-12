@@ -68,13 +68,10 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Determine which endpoint to use based on max_suggestions_per_keyword
+    // Always use enhanced endpoint for better results (search volume, clustering, etc.)
     // Enhanced endpoint requires max_suggestions_per_keyword >= 5
-    // If 0 or undefined, use regular analyze endpoint for basic analysis
-    const useEnhanced = body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5;
-    const endpoint = useEnhanced
-      ? `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`
-      : `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
+    // If 0 or undefined, set to 5 (minimum) to satisfy requirement while still using enhanced endpoint
+    const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
     
     // Request body - per FRONTEND_API_INTEGRATION_GUIDE.md
     // Note: 'text' field is ignored if keywords are provided, so we don't include it
@@ -83,19 +80,19 @@ export async function POST(request: NextRequest) {
       location?: string;
       language?: string;
       include_serp?: boolean;
-      max_suggestions_per_keyword?: number;
+      max_suggestions_per_keyword: number;
     } = {
       keywords: body.keywords,
       location: body.location || 'United States',
       language: body.language || 'en',
       include_serp: body.include_serp || false,
+      // Enhanced endpoint requires >= 5, so use 5 as minimum when 0 or undefined
+      // This ensures we always get enhanced features (search volume, clustering)
+      // Range: 5-150, default: 20 (per guide)
+      max_suggestions_per_keyword: body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5
+        ? body.max_suggestions_per_keyword
+        : 5, // Minimum required value for enhanced endpoint
     };
-    
-    // Only include max_suggestions_per_keyword for enhanced endpoint (>= 5)
-    // Range: 5-150, default: 20 (per guide)
-    if (useEnhanced) {
-      requestBody.max_suggestions_per_keyword = body.max_suggestions_per_keyword;
-    }
     
     const response = await fetchWithRetry(
       endpoint,
