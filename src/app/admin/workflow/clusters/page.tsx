@@ -725,7 +725,7 @@ export default function ClustersPage() {
                     <div className="flex items-center gap-2 mb-2">
                       <Sparkles className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                        {pillar.title}
+                        {pillar.primary_keyword || pillar.title}
                       </h3>
                       <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-semibold rounded">
                         PILLAR
@@ -735,6 +735,7 @@ export default function ClustersPage() {
                       {pillar.description || `Comprehensive guide covering ${pillar.primary_keyword}`}
                     </p>
                     <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                      <span><strong>Title:</strong> {pillar.title || pillar.primary_keyword}</span>
                       <span><strong>Primary Keyword:</strong> {pillar.primary_keyword}</span>
                       <span><strong>Target Words:</strong> {pillar.target_word_count.toLocaleString()}</span>
                       <span><strong>Linked Clusters:</strong> {pillar.cluster_articles.length}</span>
