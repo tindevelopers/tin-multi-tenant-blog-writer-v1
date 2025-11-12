@@ -19,7 +19,8 @@ import {
   Lightbulb,
   BookOpen,
   Settings,
-  ArrowRight
+  ArrowRight,
+  Target
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Alert from '@/components/ui/alert/Alert';
