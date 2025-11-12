@@ -97,7 +97,9 @@ export default function KeywordResearchPage() {
 
           if (session) {
             setWorkflowSession(session);
-            setSearchQuery(session.objective || '');
+            
+            // Only set niche from session (industry), not search query
+            // Search query should be empty or loaded from saved keyword research data
             setNiche(session.industry || '');
             
             // Load existing keyword collection if any
@@ -129,6 +131,16 @@ export default function KeywordResearchPage() {
               setKeywords(savedKeywords);
               setCollectionName(collection.name || '');
               generateClusters(savedKeywords);
+              
+              // If there's a saved search query in workflow_data, use it
+              const workflowData = session.workflow_data as Record<string, unknown> | null;
+              if (workflowData?.search_query && typeof workflowData.search_query === 'string') {
+                setSearchQuery(workflowData.search_query);
+              }
+            } else {
+              // No saved collection - search query should be empty
+              // Don't populate from objective as that's a different field
+              setSearchQuery('');
             }
           } else if (sessionError?.code === 'PGRST116') {
             // Session doesn't exist - clear localStorage
@@ -300,6 +312,28 @@ export default function KeywordResearchPage() {
 
       setKeywords(keywordList);
       generateClusters(keywordList);
+      
+      // Save search query to workflow_data for future reference
+      if (workflowSession?.session_id) {
+        try {
+          const supabase = createClient();
+          const workflowData = (workflowSession.workflow_data as Record<string, unknown>) || {};
+          
+          await supabase
+            .from('workflow_sessions')
+            .update({
+              workflow_data: {
+                ...workflowData,
+                search_query: searchQuery.trim(),
+              },
+              updated_at: new Date().toISOString(),
+            })
+            .eq('session_id', workflowSession.session_id);
+        } catch (saveError) {
+          // Non-critical error - just log it
+          console.warn('Failed to save search query to workflow_data:', saveError);
+        }
+      }
       
       // Show success message with total count
       const totalCount = keywordList.length;
