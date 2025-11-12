@@ -300,21 +300,22 @@ class KeywordResearchService {
 
       return await this.retryApiCall(async () => {
         let response: Response;
+        // Define requestBody outside try block so it's accessible in error handling
+        const requestBody: any = { 
+          keywords,
+          text: keywords.join(' '), // Provide context
+          location: location, // Add location parameter
+          language: 'en', // Default language
+          // Always use enhanced endpoint for search volume
+          // Set max_suggestions_per_keyword to 0 for basic analysis without suggestions
+          max_suggestions_per_keyword: maxSuggestionsPerKeyword || 0
+        };
+        
         try {
           // Use Next.js API route to avoid CORS issues
           const apiUrl = this.useApiRoutes 
             ? '/api/keywords/analyze'
             : `${this.baseURL}/api/v1/keywords/analyze`;
-          
-          const requestBody: any = { 
-            keywords,
-            text: keywords.join(' '), // Provide context
-            location: location, // Add location parameter
-            language: 'en', // Default language
-            // Always use enhanced endpoint for search volume
-            // Set max_suggestions_per_keyword to 0 for basic analysis without suggestions
-            max_suggestions_per_keyword: maxSuggestionsPerKeyword || 0
-          };
           
           response = await fetch(apiUrl, {
         method: 'POST',
