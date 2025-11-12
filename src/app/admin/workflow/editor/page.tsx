@@ -300,7 +300,7 @@ export default function EditorPage() {
         if (sessionId) {
           const workflowData = workflowSession?.workflow_data || {};
           const postId = (draftResult as any).post_id || (draftResult as any).id;
-          await supabase
+          const { error: workflowError } = await supabase
             .from('workflow_sessions')
             .update({
               current_step: 'editor',
@@ -312,9 +312,23 @@ export default function EditorPage() {
                   title: formData.title,
                   created_at: new Date().toISOString()
                 }
-              }
+              },
+              updated_at: new Date().toISOString()
             })
             .eq('session_id', sessionId);
+
+          if (workflowError) {
+            console.error('❌ Error updating workflow session:', workflowError);
+            // Don't throw - draft was saved successfully, workflow update is secondary
+          } else {
+            console.log('✅ Draft saved successfully:', {
+              postId,
+              title: formData.title,
+              sessionId,
+              savedToBlogPosts: true,
+              savedToWorkflowData: true
+            });
+          }
         }
 
         setSuccess('Draft saved successfully');

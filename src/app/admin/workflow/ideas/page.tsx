@@ -217,8 +217,15 @@ export default function ContentIdeasPage() {
         .eq('session_id', sessionId);
 
       if (updateError) {
+        console.error('❌ Error updating workflow session:', updateError);
         throw updateError;
       }
+
+      console.log('✅ Content ideas saved successfully:', {
+        ideaCount: savedIdeasList.length,
+        sessionId,
+        savedToWorkflowData: true
+      });
 
       // Show success modal
       setShowSuccessModal(true);

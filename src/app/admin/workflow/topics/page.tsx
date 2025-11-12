@@ -207,7 +207,7 @@ export default function TopicsPage() {
       const selectedTopicsList = topics.filter(t => selectedTopics.has(t.id));
       const updatedSavedTopics = [...savedTopics, ...selectedTopicsList];
 
-      await supabase
+      const { error: updateError } = await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'topics',
@@ -219,6 +219,17 @@ export default function TopicsPage() {
           updated_at: new Date().toISOString()
         })
         .eq('session_id', sessionId);
+
+      if (updateError) {
+        console.error('❌ Error updating workflow session:', updateError);
+        throw updateError;
+      }
+
+      console.log('✅ Topics saved successfully:', {
+        topicCount: updatedSavedTopics.length,
+        sessionId,
+        savedToWorkflowData: true
+      });
 
       setSavedTopics(updatedSavedTopics);
       setShowSaveModal(true);

@@ -166,7 +166,7 @@ export default function StrategyPage() {
         return;
       }
 
-      await supabase
+      const { error: updateError } = await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'strategy',
@@ -174,9 +174,22 @@ export default function StrategyPage() {
           workflow_data: {
             ...workflowSession.workflow_data,
             content_strategy: formData
-          }
+          },
+          updated_at: new Date().toISOString()
         })
         .eq('session_id', sessionId);
+
+      if (updateError) {
+        console.error('❌ Error updating workflow session:', updateError);
+        throw updateError;
+      }
+
+      console.log('✅ Content strategy saved successfully:', {
+        sessionId,
+        mainKeyword: formData.main_keyword,
+        contentType: formData.content_type,
+        savedToWorkflowData: true
+      });
 
       setSuccess('Content strategy saved successfully');
       setTimeout(() => setSuccess(null), 3000);

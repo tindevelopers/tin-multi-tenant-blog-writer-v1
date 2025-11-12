@@ -347,7 +347,7 @@ export default function ClustersPage() {
 
       // Update workflow session with clusters in workflow_data
       const workflowData = workflowSession.workflow_data || {};
-      await supabase
+      const { error: workflowError } = await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'clusters',
@@ -359,9 +359,22 @@ export default function ClustersPage() {
               keywords: c.keywords,
               cluster_metrics: c.cluster_metrics
             }))
-          }
+          },
+          updated_at: new Date().toISOString()
         })
         .eq('session_id', sessionId);
+
+      if (workflowError) {
+        console.error('❌ Error updating workflow session:', workflowError);
+        throw workflowError;
+      }
+
+      console.log('✅ Clusters saved successfully:', {
+        clusterCount: clusters.length,
+        sessionId,
+        savedToTable: true,
+        savedToWorkflowData: true
+      });
 
       setSuccess('Clusters saved successfully');
       setTimeout(() => setSuccess(null), 3000);
