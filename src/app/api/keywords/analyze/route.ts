@@ -173,6 +173,7 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     
+    // Handle response from both endpoints
     // Enhanced endpoint response format per FRONTEND_API_INTEGRATION_GUIDE.md:
     // - enhanced_analysis: Record<string, KeywordAnalysis>
     // - total_keywords: number
@@ -180,14 +181,16 @@ export async function POST(request: NextRequest) {
     // - suggested_keywords: string[]
     // - clusters: Array<{ parent_topic, keywords, cluster_score, category_type, keyword_count }>
     // - cluster_summary: { total_keywords, cluster_count, unclustered_count }
+    // Regular endpoint returns:
+    // - keyword_analysis: Record<string, KeywordAnalysis>
     
-    // Return full response including all enhanced fields
+    // Return full response including all fields
     // Map for backward compatibility (some code may still expect keyword_analysis)
     return NextResponse.json({
       ...data,
-      // Backward compatibility mapping
+      // Backward compatibility mapping - use enhanced_analysis if available, otherwise keyword_analysis
       keyword_analysis: data.enhanced_analysis || data.keyword_analysis || data,
-      // Enhanced endpoint fields
+      // Enhanced endpoint fields (may be undefined for regular endpoint)
       enhanced_analysis: data.enhanced_analysis,
       total_keywords: data.total_keywords,
       original_keywords: data.original_keywords || [],
