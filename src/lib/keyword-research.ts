@@ -197,6 +197,14 @@ class KeywordResearchService {
 
       const data = await response.json();
       
+      // Debug: Log API response structure to understand search_volume location
+      console.log('📊 API Response structure:', {
+        hasEnhancedAnalysis: !!data.enhanced_analysis,
+        hasKeywordAnalysis: !!data.keyword_analysis,
+        sampleKeyword: Object.keys(data.enhanced_analysis || data.keyword_analysis || {})[0],
+        sampleData: Object.values(data.enhanced_analysis || data.keyword_analysis || {})[0]
+      });
+      
       // Handle response structure
       const enhancedAnalysis = data.enhanced_analysis || data.keyword_analysis || data;
       
@@ -205,9 +213,29 @@ class KeywordResearchService {
       Object.entries(enhancedAnalysis).forEach(([keyword, kwData]: [string, any]) => {
         const wordCount = keyword.trim().split(/\s+/).length;
         if (wordCount > 1 || keyword.trim().length > 5) {
+          // Extract search_volume from various possible locations
+          // API might return it as search_volume, volume, monthly_searches, or in metadata
+          const searchVolume = kwData.search_volume 
+            ?? kwData.volume 
+            ?? kwData.monthly_searches 
+            ?? kwData.metadata?.search_volume 
+            ?? kwData.metadata?.volume
+            ?? null;
+          
+          // Debug: Log search volume extraction for first keyword
+          if (Object.keys(filteredAnalysis).length === 0) {
+            console.log('🔍 Search volume extraction for keyword:', keyword, {
+              'kwData.search_volume': kwData.search_volume,
+              'kwData.volume': kwData.volume,
+              'kwData.monthly_searches': kwData.monthly_searches,
+              'kwData.metadata': kwData.metadata,
+              extracted: searchVolume
+            });
+          }
+          
           filteredAnalysis[keyword] = {
             keyword: kwData.keyword || keyword,
-            search_volume: kwData.search_volume ?? null,
+            search_volume: searchVolume,
             difficulty: kwData.difficulty || 'medium',
             competition: kwData.competition ?? 0.5,
             cpc: kwData.cpc ?? null,

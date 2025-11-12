@@ -308,6 +308,17 @@ export default function KeywordResearchPage() {
       // Extract keywords from research results
       const keywordAnalysis = researchResults.keyword_analysis?.keyword_analysis || {};
       
+      // Debug: Log the structure of keyword analysis to understand search_volume location
+      const firstKeyword = Object.keys(keywordAnalysis)[0];
+      if (firstKeyword) {
+        console.log('🔍 Keyword analysis structure sample:', {
+          keyword: firstKeyword,
+          data: keywordAnalysis[firstKeyword],
+          hasSearchVolume: 'search_volume' in (keywordAnalysis[firstKeyword] || {}),
+          allKeys: Object.keys(keywordAnalysis[firstKeyword] || {})
+        });
+      }
+      
       // Filter out single-word keywords that don't make sense as standalone keywords
       // Keep only phrases (2+ words) or meaningful single words
       const filteredKeywordEntries = Object.entries(keywordAnalysis).filter(([keyword]) => {
@@ -318,22 +329,32 @@ export default function KeywordResearchPage() {
       
       console.log('📋 Filtered keywords (phrases preserved):', filteredKeywordEntries.map(([kw]) => kw));
       
-      const keywordList: KeywordWithMetrics[] = filteredKeywordEntries.map(([keyword, data]: [string, any]) => ({
-        keyword,
-        search_volume: data.search_volume ?? null, // Preserve null from API, don't convert to 0
-        difficulty: data.difficulty || 'medium',
-        competition: data.competition ?? 0.5,
-        cpc: data.cpc ?? null,
-        trend_score: data.trend_score ?? 0,
-        recommended: data.recommended ?? false,
-        reason: data.reason || '',
-        related_keywords: data.related_keywords || [],
-        long_tail_keywords: data.long_tail_keywords || [],
-        // Include clustering data from API
-        parent_topic: data.parent_topic,
-        cluster_score: data.cluster_score,
-        category_type: data.category_type
-      }));
+      const keywordList: KeywordWithMetrics[] = filteredKeywordEntries.map(([keyword, data]: [string, any]) => {
+        // Extract search_volume from various possible locations
+        const searchVolume = data?.search_volume 
+          ?? data?.volume 
+          ?? data?.monthly_searches 
+          ?? data?.metadata?.search_volume 
+          ?? data?.metadata?.volume
+          ?? null;
+        
+        return {
+          keyword,
+          search_volume: searchVolume, // Preserve null from API, don't convert to 0
+          difficulty: data?.difficulty || 'medium',
+          competition: data?.competition ?? 0.5,
+          cpc: data?.cpc ?? null,
+          trend_score: data?.trend_score ?? 0,
+          recommended: data?.recommended ?? false,
+          reason: data?.reason || '',
+          related_keywords: data?.related_keywords || [],
+          long_tail_keywords: data?.long_tail_keywords || [],
+          // Include clustering data from API
+          parent_topic: data?.parent_topic,
+          cluster_score: data?.cluster_score,
+          category_type: data?.category_type
+        };
+      });
 
       setKeywords(keywordList);
       generateClusters(keywordList);
