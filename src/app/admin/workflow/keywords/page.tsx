@@ -183,7 +183,7 @@ export default function KeywordResearchPage() {
 
     // Convert to cluster objects with metrics
     const clusterArray: ParentTopicCluster[] = Array.from(clusterMap.entries()).map(([topic, kws]) => {
-      const totalVolume = kws.reduce((sum, k) => sum + (k.search_volume || 0), 0);
+      const totalVolume = kws.reduce((sum, k) => sum + (k.search_volume ?? 0), 0);
       const avgDifficulty = kws.reduce((sum, k) => {
         const diff = k.difficulty === 'easy' ? 0.33 : k.difficulty === 'medium' ? 0.66 : 1.0;
         return sum + diff;
@@ -298,12 +298,12 @@ export default function KeywordResearchPage() {
       
       const keywordList: KeywordWithMetrics[] = filteredKeywordEntries.map(([keyword, data]: [string, any]) => ({
         keyword,
-        search_volume: data.search_volume || 0,
+        search_volume: data.search_volume ?? null, // Preserve null from API, don't convert to 0
         difficulty: data.difficulty || 'medium',
-        competition: data.competition || 0.5,
-        cpc: data.cpc || 0,
-        trend_score: data.trend_score || 0,
-        recommended: data.recommended || false,
+        competition: data.competition ?? 0.5,
+        cpc: data.cpc ?? null,
+        trend_score: data.trend_score ?? 0,
+        recommended: data.recommended ?? false,
         reason: data.reason || '',
         related_keywords: data.related_keywords || [],
         long_tail_keywords: data.long_tail_keywords || [],
@@ -499,23 +499,33 @@ export default function KeywordResearchPage() {
         console.log('✅ Created new collection:', result?.collection_id);
       }
 
-      // Verify the save was successful
-      if (!result) {
-        throw new Error('Collection save returned no data');
-      }
-
-      // Update workflow session
-      const { error: sessionError } = await supabase
+      // Also save keywords to workflow_data for easy access
+      const workflowData = workflowSession.workflow_data || {};
+      await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'keywords',
-          completed_steps: ['objective', 'keywords']
+          completed_steps: ['objective', 'keywords'],
+          workflow_data: {
+            ...workflowData,
+            saved_keywords: keywords.map(kw => ({
+              keyword: kw.keyword,
+              search_volume: kw.search_volume,
+              difficulty: kw.difficulty,
+              competition: kw.competition,
+              cpc: kw.cpc,
+              parent_topic: kw.parent_topic,
+              cluster_score: kw.cluster_score,
+              category_type: kw.category_type
+            })),
+            keyword_collection_id: result?.collection_id
+          }
         })
         .eq('session_id', sessionId);
 
-      if (sessionError) {
-        console.warn('Failed to update workflow session:', sessionError);
-        // Don't throw - collection was saved successfully
+      // Verify the save was successful
+      if (!result) {
+        throw new Error('Collection save returned no data');
       }
 
       // Verify the collection was saved by fetching it back
@@ -564,7 +574,7 @@ export default function KeywordResearchPage() {
       if (categoryTypeFilter !== 'all') {
         if (categoryTypeFilter !== kw.category_type) return false;
       }
-      if (minVolume > 0 && (kw.search_volume || 0) < minVolume) {
+      if (minVolume > 0 && (kw.search_volume ?? 0) < minVolume) {
         return false;
       }
       return true;
@@ -573,7 +583,7 @@ export default function KeywordResearchPage() {
       let comparison = 0;
       switch (sortBy) {
         case 'volume':
-          comparison = (a.search_volume || 0) - (b.search_volume || 0);
+          comparison = (a.search_volume ?? 0) - (b.search_volume ?? 0);
           break;
         case 'difficulty':
           const diffA = a.difficulty === 'easy' ? 0 : a.difficulty === 'medium' ? 1 : 2;
@@ -949,7 +959,9 @@ export default function KeywordResearchPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                      {kw.search_volume ? kw.search_volume.toLocaleString() : '-'}
+                      {kw.search_volume !== null && kw.search_volume !== undefined 
+                        ? kw.search_volume.toLocaleString() 
+                        : <span className="text-gray-400 italic">N/A</span>}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1104,7 +1116,7 @@ export default function KeywordResearchPage() {
                     key={kw.keyword}
                     className="px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-300"
                   >
-                    {kw.keyword} ({kw.search_volume?.toLocaleString() || 0})
+                    {kw.keyword} ({kw.search_volume !== null && kw.search_volume !== undefined ? kw.search_volume.toLocaleString() : 'N/A'})
                   </span>
                 ))}
                 {cluster.keywords.length > 10 && (

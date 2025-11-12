@@ -52,17 +52,21 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
-    // Support enhanced analysis with max_suggestions_per_keyword
-    // If max_suggestions_per_keyword is provided, use enhanced endpoint
-    const useEnhanced = body.max_suggestions_per_keyword && body.max_suggestions_per_keyword > 0;
-    const endpoint = useEnhanced 
-      ? `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`
-      : `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
+    // Always use enhanced endpoint to get search volume data
+    // Enhanced endpoint provides comprehensive keyword analysis including search_volume
+    const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
     
     // Ensure location is included (default to United States)
     const requestBody = {
-      ...body,
-      location: body.location || 'United States'
+      keywords: body.keywords || [],
+      location: body.location || 'United States',
+      language: body.language || 'en',
+      include_serp: body.include_serp || false,
+      // Set max_suggestions_per_keyword to 0 if not provided (for basic analysis)
+      // or use provided value (for comprehensive research with suggestions)
+      max_suggestions_per_keyword: body.max_suggestions_per_keyword || 0,
+      // Include any additional fields from body
+      ...(body.text && { text: body.text }),
     };
     
     const response = await fetchWithRetry(

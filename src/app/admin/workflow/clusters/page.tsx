@@ -345,12 +345,21 @@ export default function ClustersPage() {
 
       if (insertError) throw insertError;
 
-      // Update workflow session
+      // Update workflow session with clusters in workflow_data
+      const workflowData = workflowSession.workflow_data || {};
       await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'clusters',
-          completed_steps: ['objective', 'keywords', 'clusters']
+          completed_steps: ['objective', 'keywords', 'clusters'],
+          workflow_data: {
+            ...workflowData,
+            saved_clusters: clusters.map(c => ({
+              parent_topic: c.parent_topic,
+              keywords: c.keywords,
+              cluster_metrics: c.cluster_metrics
+            }))
+          }
         })
         .eq('session_id', sessionId);
 

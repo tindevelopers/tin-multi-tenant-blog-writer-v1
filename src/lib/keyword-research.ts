@@ -309,13 +309,12 @@ class KeywordResearchService {
           const requestBody: any = { 
             keywords,
             text: keywords.join(' '), // Provide context
-            location: location // Add location parameter
+            location: location, // Add location parameter
+            language: 'en', // Default language
+            // Always use enhanced endpoint for search volume
+            // Set max_suggestions_per_keyword to 0 for basic analysis without suggestions
+            max_suggestions_per_keyword: maxSuggestionsPerKeyword || 0
           };
-          
-          // Add max_suggestions_per_keyword if specified (for enhanced analysis)
-          if (maxSuggestionsPerKeyword > 0) {
-            requestBody.max_suggestions_per_keyword = maxSuggestionsPerKeyword;
-          }
           
           response = await fetch(apiUrl, {
         method: 'POST',
@@ -356,9 +355,19 @@ class KeywordResearchService {
         const wordCount = keyword.trim().split(/\s+/).length;
         // Keep phrases (2+ words) or single words that are meaningful (length > 5)
         if (wordCount > 1 || keyword.trim().length > 5) {
-            // Extract clustering data from enhanced analysis if available
+            // Extract all data from enhanced analysis including search_volume
             const keywordWithClustering: KeywordData = {
-              ...kwData,
+              keyword: kwData.keyword || keyword,
+              search_volume: kwData.search_volume ?? null, // Preserve null if API returns null
+              difficulty: kwData.difficulty || 'medium',
+              competition: kwData.competition ?? 0.5,
+              cpc: kwData.cpc ?? null,
+              trend_score: kwData.trend_score ?? 0,
+              recommended: kwData.recommended ?? false,
+              reason: kwData.reason || '',
+              related_keywords: kwData.related_keywords || [],
+              long_tail_keywords: kwData.long_tail_keywords || [],
+              // Clustering data from enhanced analysis
               parent_topic: kwData.parent_topic,
               cluster_score: kwData.cluster_score,
               category_type: kwData.category_type,

@@ -294,15 +294,25 @@ export default function EditorPage() {
           setSavedPostId(postId);
         }
 
-        // Update workflow session
+        // Update workflow session with draft reference
         const supabase = createClient();
         const sessionId = workflowSession?.session_id;
         if (sessionId) {
+          const workflowData = workflowSession?.workflow_data || {};
+          const postId = (draftResult as any).post_id || (draftResult as any).id;
           await supabase
             .from('workflow_sessions')
             .update({
               current_step: 'editor',
-              completed_steps: ['objective', 'keywords', 'clusters', 'ideas', 'topics', 'strategy', 'editor']
+              completed_steps: ['objective', 'keywords', 'clusters', 'ideas', 'topics', 'strategy', 'editor'],
+              workflow_data: {
+                ...workflowData,
+                saved_draft: {
+                  post_id: postId,
+                  title: formData.title,
+                  created_at: new Date().toISOString()
+                }
+              }
             })
             .eq('session_id', sessionId);
         }
