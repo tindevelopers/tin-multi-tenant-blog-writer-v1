@@ -105,8 +105,8 @@ export async function POST(request: NextRequest) {
       appendField('public_id', publicId);
       appendField('folder', 'test_connections');
       appendField('overwrite', 'true');
-      // Cloudinary accepts base64 data directly (without data URI prefix)
-      appendFile('file', testImageBase64, 'image/png');
+      // Cloudinary accepts base64 data as data URI in the file field
+      appendField('file', `data:image/png;base64,${testImageBase64}`);
       formDataParts.push(`--${boundary}--\r\n`);
       
       const formDataBody = Buffer.from(formDataParts.join(''), 'utf-8');
