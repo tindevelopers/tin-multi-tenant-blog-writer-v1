@@ -333,16 +333,35 @@ class KeywordResearchService {
         }
 
       if (!response.ok) {
-          // Try to get error details from response
+          // Clone response to read it multiple times if needed
           let errorMessage = `API returned ${response.status} ${response.statusText}`;
+          
           try {
-            const errorData = await response.json();
-            if (errorData.error || errorData.detail || errorData.message) {
-              errorMessage = errorData.error || errorData.detail || errorData.message;
+            // Try to get the response text first
+            const responseText = await response.text();
+            console.error(`❌ Keyword analysis API error response body:`, responseText);
+            
+            if (responseText) {
+              try {
+                // Try to parse as JSON
+                const errorData = JSON.parse(responseText);
+                if (errorData.error || errorData.detail || errorData.message) {
+                  errorMessage = String(errorData.error || errorData.detail || errorData.message);
+                } else {
+                  // If it's a JSON object but no standard error fields, stringify it
+                  errorMessage = JSON.stringify(errorData);
+                }
+              } catch {
+                // If not JSON, use the text directly
+                errorMessage = responseText;
+              }
             }
-          } catch {
-            // If JSON parsing fails, use status text
+          } catch (parseError) {
+            console.error(`❌ Failed to parse error response:`, parseError);
+            // Use default error message
           }
+          
+          console.error(`❌ Keyword analysis API error (${response.status}):`, errorMessage);
           throw new Error(errorMessage);
       }
 
