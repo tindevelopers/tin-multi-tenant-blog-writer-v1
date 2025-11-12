@@ -263,12 +263,17 @@ export default function ClustersPage() {
   }, []);
 
   // Generate initial clusters from keywords
+  // Use API-provided parent_topic if available, otherwise use full keyword phrase as title
   const generateInitialClusters = (keywords: any[]) => {
     const clusterMap = new Map<string, any[]>();
     
     keywords.forEach((kw: any) => {
       const keyword = typeof kw === 'string' ? kw : kw.keyword;
-      const parentTopic = extractParentTopic(keyword);
+      // Use API-provided parent_topic if available, otherwise use the full keyword phrase
+      // This ensures we preserve the full ranking phrase instead of parsing to single words
+      const parentTopic = (typeof kw === 'object' && kw.parent_topic) 
+        ? kw.parent_topic 
+        : keyword; // Use full keyword phrase as cluster title
       
       if (!clusterMap.has(parentTopic)) {
         clusterMap.set(parentTopic, []);
@@ -289,11 +294,16 @@ export default function ClustersPage() {
       }, 0) / kws.length;
       const avgCompetition = kws.reduce((sum: number, k: any) => sum + (k.competition || 0.5), 0) / kws.length;
       const clusterScore = calculateClusterScore(totalVolume, avgDifficulty, avgCompetition, kws.length);
+      
+      // Use the primary keyword (first keyword in cluster) as the title
+      // This ensures we show the full ranking phrase
+      const primaryKeyword = kws[0]?.keyword || topic;
+      const clusterTitle = primaryKeyword; // Use full keyword phrase as title
 
       return {
-        title: topic,
-        description: `Content cluster for ${topic}`,
-        primary_keyword: kws[0]?.keyword || topic,
+        title: clusterTitle, // Full keyword phrase, not parsed single word
+        description: `Content cluster for ${primaryKeyword}`,
+        primary_keyword: primaryKeyword,
         target_word_count: 2000,
         keywords: kws,
         related_clusters: [],
@@ -379,16 +389,20 @@ export default function ClustersPage() {
 
   // Create Cluster Article
   const handleCreateCluster = () => {
-    if (!clusterForm.title || !clusterForm.primary_keyword) {
+    // Use primary_keyword as title if title is empty, or use title if provided
+    const clusterTitle = clusterForm.title || clusterForm.primary_keyword;
+    const clusterPrimaryKeyword = clusterForm.primary_keyword || clusterForm.selectedKeywords[0] || '';
+    
+    if (!clusterTitle || !clusterPrimaryKeyword) {
       setError('Title and primary keyword are required');
       return;
     }
 
     const newCluster: ClusterArticle = {
       pillar_id: clusterForm.pillar_id || undefined,
-      title: clusterForm.title,
+      title: clusterTitle,
       description: clusterForm.description,
-      primary_keyword: clusterForm.primary_keyword,
+      primary_keyword: clusterPrimaryKeyword,
       target_word_count: clusterForm.target_word_count,
       keywords: clusterForm.selectedKeywords.map(kw => {
         const kwData = findKeywordData(kw);
@@ -791,7 +805,7 @@ export default function ClustersPage() {
                       <div className="flex items-center gap-2 mb-2">
                         <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                          {cluster.title}
+                          {cluster.primary_keyword || cluster.title}
                         </h3>
                       </div>
                       {linkedPillar && (
@@ -806,6 +820,7 @@ export default function ClustersPage() {
                         {cluster.description || `Article about ${cluster.primary_keyword}`}
                       </p>
                       <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
+                        <span><strong>Primary Keyword:</strong> {cluster.primary_keyword}</span>
                         <span><strong>Words:</strong> {cluster.target_word_count.toLocaleString()}</span>
                         <span><strong>Keywords:</strong> {cluster.keywords.length}</span>
                       </div>
@@ -848,8 +863,12 @@ export default function ClustersPage() {
                     <button
                       onClick={() => {
                         setEditingCluster(index.toString());
+                        // Pre-fill form with cluster data - use primary_keyword as title if title is just a single word
+                        const clusterTitle = cluster.title && cluster.title.split(' ').length > 1 
+                          ? cluster.title 
+                          : cluster.primary_keyword || cluster.title;
                         setClusterForm({
-                          title: cluster.title,
+                          title: clusterTitle,
                           description: cluster.description,
                           primary_keyword: cluster.primary_keyword,
                           target_word_count: cluster.target_word_count,
@@ -1074,15 +1093,43 @@ export default function ClustersPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Primary Keyword *
+              </label>
+              <input
+                type="text"
+                value={clusterForm.primary_keyword}
+                onChange={(e) => {
+                  const newKeyword = e.target.value;
+                  setClusterForm({ 
+                    ...clusterForm, 
+                    primary_keyword: newKeyword,
+                    // Auto-update title if it's empty or matches old keyword
+                    title: clusterForm.title === clusterForm.primary_keyword || !clusterForm.title
+                      ? newKeyword
+                      : clusterForm.title
+                  });
+                }}
+                placeholder="e.g., ultimate pet grooming services"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Use the full keyword phrase that ranks in search (e.g., "ultimate pet grooming services")
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Title *
               </label>
               <input
                 type="text"
                 value={clusterForm.title}
                 onChange={(e) => setClusterForm({ ...clusterForm, title: e.target.value })}
-                placeholder="e.g., How to Groom Dogs at Home"
+                placeholder={clusterForm.primary_keyword || "e.g., ultimate pet grooming services"}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Use the full keyword phrase as the title (e.g., "ultimate pet grooming services" not just "Ultimate")
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1091,20 +1138,8 @@ export default function ClustersPage() {
               <textarea
                 value={clusterForm.description}
                 onChange={(e) => setClusterForm({ ...clusterForm, description: e.target.value })}
-                placeholder="Brief description of this cluster article"
+                placeholder={clusterForm.primary_keyword ? `Article about ${clusterForm.primary_keyword}` : "Brief description of this cluster article"}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Primary Keyword *
-              </label>
-              <input
-                type="text"
-                value={clusterForm.primary_keyword}
-                onChange={(e) => setClusterForm({ ...clusterForm, primary_keyword: e.target.value })}
-                placeholder="e.g., dog grooming at home"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
             </div>
