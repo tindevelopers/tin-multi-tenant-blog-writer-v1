@@ -198,11 +198,11 @@ export default function EditorPage() {
         const content = result.content || result.html || JSON.stringify(result, null, 2);
         const title = result.title || formData.title || formData.topic;
         const excerpt = result.excerpt || result.description || '';
-        const featuredImage = result.featured_image;
+        const featuredImage = result.featured_image as { image_url?: string; alt_text?: string } | null | undefined;
 
         // If featured image exists, insert it into content after the first paragraph
         let finalContent = typeof content === 'string' ? content : JSON.stringify(content);
-        if (featuredImage && featuredImage.image_url) {
+        if (featuredImage && typeof featuredImage === 'object' && 'image_url' in featuredImage && featuredImage.image_url) {
           const imageHtml = `<figure class="featured-image"><img src="${featuredImage.image_url}" alt="${featuredImage.alt_text || title}" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" /></figure>`;
           
           // Try to insert after first paragraph or at the beginning
