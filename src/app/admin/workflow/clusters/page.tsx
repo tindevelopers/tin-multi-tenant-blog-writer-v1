@@ -954,15 +954,43 @@ export default function ClustersPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Primary Keyword *
+              </label>
+              <input
+                type="text"
+                value={pillarForm.primary_keyword}
+                onChange={(e) => {
+                  const newKeyword = e.target.value;
+                  setPillarForm({ 
+                    ...pillarForm, 
+                    primary_keyword: newKeyword,
+                    // Auto-update title if it's empty or matches old keyword
+                    title: pillarForm.title === pillarForm.primary_keyword || !pillarForm.title
+                      ? newKeyword
+                      : pillarForm.title
+                  });
+                }}
+                placeholder="e.g., pet grooming services"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Use the full keyword phrase that ranks in search (e.g., "pet grooming services")
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Title *
               </label>
               <input
                 type="text"
                 value={pillarForm.title}
                 onChange={(e) => setPillarForm({ ...pillarForm, title: e.target.value })}
-                placeholder="e.g., Complete Guide to Pet Grooming"
+                placeholder={pillarForm.primary_keyword ? `e.g., Complete Guide to ${pillarForm.primary_keyword}` : "e.g., Complete Guide to Pet Grooming"}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Use the full keyword phrase as the title (e.g., "pet grooming services" not just "Pet")
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -971,20 +999,8 @@ export default function ClustersPage() {
               <textarea
                 value={pillarForm.description}
                 onChange={(e) => setPillarForm({ ...pillarForm, description: e.target.value })}
-                placeholder="Brief description of what this pillar page will cover"
+                placeholder={pillarForm.primary_keyword ? `Comprehensive guide covering ${pillarForm.primary_keyword}` : "Brief description of what this pillar page will cover"}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Primary Keyword *
-              </label>
-              <input
-                type="text"
-                value={pillarForm.primary_keyword}
-                onChange={(e) => setPillarForm({ ...pillarForm, primary_keyword: e.target.value })}
-                placeholder="e.g., pet grooming services"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
             </div>
