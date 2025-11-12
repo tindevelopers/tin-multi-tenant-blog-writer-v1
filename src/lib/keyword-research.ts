@@ -301,13 +301,20 @@ class KeywordResearchService {
       return await this.retryApiCall(async () => {
         let response: Response;
         // Define requestBody outside try block so it's accessible in error handling
-        const requestBody: any = { 
+        // Per FRONTEND_API_INTEGRATION_GUIDE.md: enhanced endpoint doesn't need 'text' field
+        // 'text' is ignored if keywords are provided
+        const requestBody: {
+          keywords: string[];
+          location: string;
+          language: string;
+          max_suggestions_per_keyword: number;
+        } = { 
           keywords,
-          text: keywords.join(' '), // Provide context
           location: location, // Add location parameter
           language: 'en', // Default language
           // Always use enhanced endpoint for search volume
           // Set max_suggestions_per_keyword to 0 for basic analysis without suggestions
+          // Range: 5-150, default: 20 (per guide)
           max_suggestions_per_keyword: maxSuggestionsPerKeyword || 0
         };
         

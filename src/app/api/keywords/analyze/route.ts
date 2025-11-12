@@ -56,17 +56,24 @@ export async function POST(request: NextRequest) {
     // Enhanced endpoint provides comprehensive keyword analysis including search_volume
     const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
     
-    // Ensure location is included (default to United States)
-    const requestBody = {
+    // Enhanced endpoint request body - per FRONTEND_API_INTEGRATION_GUIDE.md
+    // Note: 'text' field is ignored if keywords are provided, so we don't include it
+    const requestBody: {
+      keywords: string[];
+      location?: string;
+      language?: string;
+      include_serp?: boolean;
+      max_suggestions_per_keyword?: number;
+    } = {
       keywords: body.keywords || [],
       location: body.location || 'United States',
       language: body.language || 'en',
       include_serp: body.include_serp || false,
-      // Set max_suggestions_per_keyword to 0 if not provided (for basic analysis)
-      // or use provided value (for comprehensive research with suggestions)
-      max_suggestions_per_keyword: body.max_suggestions_per_keyword || 0,
-      // Include any additional fields from body
-      ...(body.text && { text: body.text }),
+      // Set max_suggestions_per_keyword to 0 if not provided (for basic analysis without suggestions)
+      // Range: 5-150, default: 20 (per guide)
+      max_suggestions_per_keyword: body.max_suggestions_per_keyword !== undefined 
+        ? body.max_suggestions_per_keyword 
+        : 0,
     };
     
     const response = await fetchWithRetry(
