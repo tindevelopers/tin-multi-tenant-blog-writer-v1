@@ -250,7 +250,7 @@ class KeywordResearchService {
           };
         }
       });
-
+      
       // Process clusters
       let clusters: KeywordCluster[] = [];
       if (data.clusters && Array.isArray(data.clusters)) {
@@ -269,7 +269,7 @@ class KeywordResearchService {
       }
 
       console.log(`✅ Analysis complete: ${Object.keys(filteredAnalysis).length} keywords, ${clusters.length} clusters`);
-
+      
       return {
         keyword_analysis: filteredAnalysis,
         overall_score: this.calculateOverallScore(filteredAnalysis),
@@ -291,7 +291,7 @@ class KeywordResearchService {
       const apiUrl = this.useApiRoutes 
         ? '/api/keywords/extract'
         : `${this.baseURL}/api/v1/keywords/extract`;
-      
+
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,7 +323,7 @@ class KeywordResearchService {
       const apiUrl = this.useApiRoutes 
         ? '/api/keywords/suggest'
         : `${this.baseURL}/api/v1/keywords/suggest`;
-      
+    
       const allSuggestions: string[] = [];
       
       for (const keyword of keywords) {
@@ -352,7 +352,7 @@ class KeywordResearchService {
    * Perform comprehensive blog research - REBUILT
    */
   async performBlogResearch(
-    topic: string,
+    topic: string, 
     targetAudience: string = 'general',
     userId?: string,
     location: string = 'United States'

@@ -28,6 +28,11 @@ export function useKeywordDifficulty(): UseKeywordDifficultyResult {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        if (response.status === 404) {
+          setData(null);
+          setError(new Error('SERVICE_UNAVAILABLE'));
+          return;
+        }
         throw new Error(errorData.error || `HTTP ${response.status}`);
       }
 

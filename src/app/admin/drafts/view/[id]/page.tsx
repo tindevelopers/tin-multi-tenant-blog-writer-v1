@@ -170,13 +170,13 @@ export default function ViewDraftPage() {
           const imageUrl = featuredImageUrl || embeddedImageUrl;
           
           return imageUrl ? (
-            <div className="w-full h-64 md:h-96 bg-gray-200 dark:bg-gray-700 overflow-hidden">
-              <img 
+          <div className="w-full h-64 md:h-96 bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <img 
                 src={imageUrl} 
-                alt={draft.title}
-                className="w-full h-full object-cover"
-              />
-            </div>
+              alt={draft.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
           ) : null;
         })()}
         

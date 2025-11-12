@@ -165,88 +165,82 @@ export default function ClustersPage() {
 
         if (collectionError || !collectionData || collectionData.length === 0) {
           setError('No keyword collection found. Please save keywords first.');
-          setLoading(false);
-          return;
-        }
+            setLoading(false);
+            return;
+          }
 
         const collection = collectionData[0];
-        setKeywordCollection(collection);
-
+          setKeywordCollection(collection);
+          
         // Load existing clusters (convert to Topic Cluster Model)
-        const { data: existingClusters, error: clustersError } = await supabase
-          .from('keyword_clusters')
-          .select('*')
-          .eq('session_id', sessionId)
-          .order('created_at', { ascending: true });
+          const { data: existingClusters, error: clustersError } = await supabase
+            .from('keyword_clusters')
+            .select('*')
+            .eq('session_id', sessionId)
+            .order('created_at', { ascending: true });
 
-        if (clustersError && clustersError.code !== 'PGRST116') {
+          if (clustersError && clustersError.code !== 'PGRST116') {
           console.warn('Error loading clusters:', clustersError);
-        }
+          }
 
-        if (existingClusters && existingClusters.length > 0) {
+          if (existingClusters && existingClusters.length > 0) {
           // Convert existing clusters to Topic Cluster Model
           const pillars: PillarPage[] = [];
           const clusters: ClusterArticle[] = [];
           
           existingClusters.forEach((c: any) => {
-            // Extract cluster type from cluster_metrics or default
             const clusterMetrics = c.cluster_metrics || {};
             const clusterType = clusterMetrics.cluster_type || 'supporting';
-            const title = c.parent_topic || 'Untitled';
-            
+            const title = clusterMetrics.title || c.cluster_name || c.parent_topic || 'Untitled';
+            const primaryKeyword = clusterMetrics.primary_keyword || c.primary_keyword || title;
+            const keywords = Array.isArray(c.keywords) ? c.keywords : [];
+            const baseCluster = {
+              title,
+              description: clusterMetrics.description || c.description || '',
+              primary_keyword: primaryKeyword,
+              target_word_count: clusterMetrics.target_word_count || (clusterType === 'pillar' ? 3000 : 2000),
+              keywords,
+              metrics: {
+                total_volume: clusterMetrics.total_volume || 0,
+                avg_difficulty: clusterMetrics.avg_difficulty || 0.5,
+                avg_competition: clusterMetrics.avg_competition || 0.5,
+                cluster_score: clusterMetrics.cluster_score || 0,
+              },
+            };
+
             if (clusterType === 'pillar') {
               pillars.push({
                 pillar_id: c.cluster_id,
-                title: title,
-                description: clusterMetrics.description || '',
-                primary_keyword: clusterMetrics.primary_keyword || title,
-                target_word_count: clusterMetrics.target_word_count || 3000,
-                keywords: Array.isArray(c.keywords) ? c.keywords : [],
-                cluster_articles: clusterMetrics.cluster_articles || [],
+                ...baseCluster,
+                cluster_articles: clusterMetrics.linked_clusters || clusterMetrics.cluster_articles || [],
                 internal_links: clusterMetrics.internal_links || [],
-                metrics: {
-                  total_volume: clusterMetrics.total_volume || 0,
-                  avg_difficulty: clusterMetrics.avg_difficulty || 0.5,
-                  avg_competition: clusterMetrics.avg_competition || 0.5,
-                  cluster_score: clusterMetrics.cluster_score || 0
-                }
               });
             } else {
               clusters.push({
                 cluster_id: c.cluster_id,
-                pillar_id: clusterMetrics.pillar_id || null,
-                title: title,
-                description: clusterMetrics.description || '',
-                primary_keyword: clusterMetrics.primary_keyword || title,
-                target_word_count: clusterMetrics.target_word_count || 2000,
-                keywords: Array.isArray(c.keywords) ? c.keywords : [],
+                ...baseCluster,
+                pillar_id: clusterMetrics.pillar_id || c.pillar_id || null,
                 related_clusters: clusterMetrics.related_clusters || [],
-                metrics: {
-                  total_volume: clusterMetrics.total_volume || 0,
-                  avg_difficulty: clusterMetrics.avg_difficulty || 0.5,
-                  avg_competition: clusterMetrics.avg_competition || 0.5,
-                  cluster_score: clusterMetrics.cluster_score || 0
-                }
               });
             }
           });
           
           setTopicClusters({ pillar_pages: pillars, cluster_articles: clusters });
-        } else if (collection.keywords) {
+          } else if (collection.keywords) {
           // Generate initial clusters from keywords
-          let keywordsArray: any[] = [];
-          try {
-            keywordsArray = Array.isArray(collection.keywords) 
-              ? collection.keywords 
-              : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
-          } catch (parseError) {
+            let keywordsArray: any[] = [];
+            try {
+              keywordsArray = Array.isArray(collection.keywords) 
+                ? collection.keywords 
+                : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
+            } catch (parseError) {
             console.error('Error parsing keywords:', parseError);
             setError('Failed to parse keyword data.');
-            setLoading(false);
-            return;
-          }
-          
-          if (keywordsArray.length > 0) {
+              setLoading(false);
+              return;
+            }
+            
+            if (keywordsArray.length > 0) {
             // Auto-generate clusters (user can convert to pillars later)
             generateInitialClusters(keywordsArray);
           }
@@ -352,24 +346,35 @@ export default function ClustersPage() {
 
   // Create Pillar Page
   const handleCreatePillar = () => {
-    if (!pillarForm.title || !pillarForm.primary_keyword) {
+    const resolvedPrimaryKeyword = pillarForm.primary_keyword?.trim()
+      || pillarForm.selectedKeywords[0]
+      || pillarForm.title?.trim()
+      || '';
+    const resolvedTitle = pillarForm.title?.trim() || resolvedPrimaryKeyword;
+
+    if (!resolvedTitle || !resolvedPrimaryKeyword) {
       setError('Title and primary keyword are required');
       return;
     }
 
+    const selectedKeywordSet = pillarForm.selectedKeywords.length > 0
+      ? pillarForm.selectedKeywords
+      : [resolvedPrimaryKeyword];
+
+    const keywordsWithData = selectedKeywordSet.map(kw => {
+      const kwData = findKeywordData(kw);
+      return kwData || { keyword: kw, search_volume: 0, difficulty: 'medium', competition: 0.5 };
+    });
+
     const newPillar: PillarPage = {
-      title: pillarForm.title,
+      title: resolvedTitle,
       description: pillarForm.description,
-      primary_keyword: pillarForm.primary_keyword,
+      primary_keyword: resolvedPrimaryKeyword,
       target_word_count: pillarForm.target_word_count,
-      keywords: pillarForm.selectedKeywords.map(kw => {
-        // Find keyword data from collection
-        const kwData = findKeywordData(kw);
-        return kwData || { keyword: kw, search_volume: 0, difficulty: 'medium', competition: 0.5 };
-      }),
+      keywords: keywordsWithData,
       cluster_articles: [],
       internal_links: [],
-      metrics: calculatePillarMetrics(pillarForm.selectedKeywords)
+      metrics: calculatePillarMetrics(selectedKeywordSet)
     };
 
     setTopicClusters(prev => ({
@@ -389,27 +394,33 @@ export default function ClustersPage() {
 
   // Create Cluster Article
   const handleCreateCluster = () => {
-    // Use primary_keyword as title if title is empty, or use title if provided
-    const clusterTitle = clusterForm.title || clusterForm.primary_keyword;
-    const clusterPrimaryKeyword = clusterForm.primary_keyword || clusterForm.selectedKeywords[0] || '';
-    
-    if (!clusterTitle || !clusterPrimaryKeyword) {
+    const resolvedPrimaryKeyword = clusterForm.primary_keyword?.trim()
+      || clusterForm.selectedKeywords[0]
+      || clusterForm.title?.trim()
+      || '';
+    const resolvedTitle = clusterForm.title?.trim() || resolvedPrimaryKeyword;
+
+    if (!resolvedTitle || !resolvedPrimaryKeyword) {
       setError('Title and primary keyword are required');
       return;
     }
 
+    const selectedKeywordSet = clusterForm.selectedKeywords.length > 0
+      ? clusterForm.selectedKeywords
+      : [resolvedPrimaryKeyword];
+
     const newCluster: ClusterArticle = {
       pillar_id: clusterForm.pillar_id || undefined,
-      title: clusterTitle,
+      title: resolvedTitle,
       description: clusterForm.description,
-      primary_keyword: clusterPrimaryKeyword,
+      primary_keyword: resolvedPrimaryKeyword,
       target_word_count: clusterForm.target_word_count,
-      keywords: clusterForm.selectedKeywords.map(kw => {
+      keywords: selectedKeywordSet.map(kw => {
         const kwData = findKeywordData(kw);
         return kwData || { keyword: kw, search_volume: 0, difficulty: 'medium', competition: 0.5 };
       }),
       related_clusters: [],
-      metrics: calculateClusterMetrics(clusterForm.selectedKeywords)
+      metrics: calculateClusterMetrics(selectedKeywordSet)
     };
 
     setTopicClusters(prev => ({
@@ -514,53 +525,53 @@ export default function ClustersPage() {
       const collectionId = keywordCollection.collection_id;
 
       // Delete existing clusters
-      await supabase
+      const { error: deleteError } = await supabase
         .from('keyword_clusters')
         .delete()
         .eq('session_id', sessionId);
 
-          // Insert pillar pages
-          // Note: Using cluster_name for newer schema, parent_topic for older schema compatibility
-          const pillarsToInsert = topicClusters.pillar_pages.map((pillar, index) => ({
-            session_id: sessionId,
-            collection_id: collectionId,
-            org_id: workflowSession.org_id,
-            cluster_type: 'pillar',
-            cluster_name: pillar.title, // New schema
-            parent_topic: pillar.title, // Old schema compatibility
-            primary_keyword: pillar.primary_keyword,
-            description: pillar.description,
-            target_word_count: pillar.target_word_count,
-            keywords: pillar.keywords,
-            cluster_articles: pillar.cluster_articles,
-            internal_links: pillar.internal_links,
-            cluster_metrics: pillar.metrics,
-            keyword_count: pillar.keywords.length,
-            total_search_volume: pillar.metrics?.total_volume || 0,
-            avg_difficulty: pillar.metrics?.avg_difficulty ? Math.round(pillar.metrics.avg_difficulty * 100) : null,
-            authority_potential: pillar.metrics?.cluster_score ? Math.round(pillar.metrics.cluster_score) : null
-          }));
+      if (deleteError) {
+        throw deleteError;
+      }
 
-          // Insert cluster articles
-          const clustersToInsert = topicClusters.cluster_articles.map((cluster) => ({
-            session_id: sessionId,
-            collection_id: collectionId,
-            org_id: workflowSession.org_id,
-            cluster_type: 'supporting', // Use 'supporting' for cluster articles
-            cluster_name: cluster.title, // New schema
-            parent_topic: cluster.title, // Old schema compatibility
-            primary_keyword: cluster.primary_keyword,
+      const sanitizeKeywords = (keywords: any[]) =>
+        keywords.map((kw) => (typeof kw === 'string' ? { keyword: kw } : kw));
+
+      const buildClusterRecord = (cluster: PillarPage | ClusterArticle, type: 'pillar' | 'supporting') => {
+        const primaryKeyword = cluster.primary_keyword || cluster.title;
+        return {
+          session_id: sessionId,
+          collection_id: collectionId,
+          org_id: workflowSession.org_id,
+          parent_topic: primaryKeyword || cluster.title,
+          keywords: sanitizeKeywords(cluster.keywords),
+          cluster_metrics: {
+            ...(cluster.metrics || {}),
+            cluster_type: type,
+            title: cluster.title,
+            primary_keyword: primaryKeyword,
             description: cluster.description,
             target_word_count: cluster.target_word_count,
-            pillar_id: cluster.pillar_id || null,
-            keywords: cluster.keywords,
-            related_clusters: cluster.related_clusters,
-            cluster_metrics: cluster.metrics,
-            keyword_count: cluster.keywords.length,
-            total_search_volume: cluster.metrics?.total_volume || 0,
-            avg_difficulty: cluster.metrics?.avg_difficulty ? Math.round(cluster.metrics.avg_difficulty * 100) : null,
-            authority_potential: cluster.metrics?.cluster_score ? Math.round(cluster.metrics.cluster_score) : null
-          }));
+            pillar_id: type === 'pillar' ? null : (cluster as ClusterArticle).pillar_id || null,
+            linked_clusters: type === 'pillar' ? (cluster as PillarPage).cluster_articles || [] : [],
+            related_clusters: 'related_clusters' in cluster ? cluster.related_clusters || [] : [],
+            internal_links: 'internal_links' in cluster ? cluster.internal_links || [] : [],
+          },
+        };
+      };
+
+      const pillarsToInsert = topicClusters.pillar_pages.map((pillar) =>
+        buildClusterRecord(pillar, 'pillar')
+      );
+
+      const clustersToInsert = topicClusters.cluster_articles.map((cluster) =>
+        buildClusterRecord(cluster, 'supporting')
+      );
+
+      if (pillarsToInsert.length + clustersToInsert.length === 0) {
+        setError('No clusters to save');
+        return;
+      }
 
       const { error: insertError } = await supabase
         .from('keyword_clusters')
@@ -688,21 +699,21 @@ export default function ClustersPage() {
       {/* Action Buttons */}
       {keywordCollection && !loading && (
         <div className="flex gap-3 mb-6">
-          <button
+                      <button
             onClick={() => setShowCreatePillarModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-          >
+                      >
             <Sparkles className="w-4 h-4" />
             Create Pillar Page
-          </button>
-          <button
+                      </button>
+                      <button
             onClick={() => setShowCreateClusterModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-          >
+                      >
             <Plus className="w-4 h-4" />
             Create Cluster Article
-          </button>
-        </div>
+                      </button>
+                    </div>
       )}
 
       {/* Pillar Pages Section */}
@@ -740,14 +751,14 @@ export default function ClustersPage() {
                       <span><strong>Target Words:</strong> {pillar.target_word_count.toLocaleString()}</span>
                       <span><strong>Linked Clusters:</strong> {pillar.cluster_articles.length}</span>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Cluster Score</div>
-                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                </div>
+                <div className="text-right">
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Cluster Score</div>
+                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
                       {pillar.metrics?.cluster_score.toFixed(1) || '0.0'}
-                    </div>
                   </div>
                 </div>
+              </div>
 
                 {/* Keywords */}
                 <div className="flex flex-wrap gap-2 mb-4">
@@ -764,7 +775,7 @@ export default function ClustersPage() {
                       +{pillar.keywords.length - 10} more
                     </span>
                   )}
-                </div>
+                  </div>
 
                 {/* Difficulty Analysis */}
                 <div className="mt-4">
@@ -774,11 +785,11 @@ export default function ClustersPage() {
                     difficulty={pillar.metrics?.avg_difficulty ? pillar.metrics.avg_difficulty * 100 : undefined}
                     competition={pillar.metrics?.avg_competition}
                   />
+                  </div>
                 </div>
-              </div>
             ))}
-          </div>
-        </div>
+                  </div>
+                  </div>
       )}
 
       {/* Cluster Articles Section */}
@@ -789,7 +800,7 @@ export default function ClustersPage() {
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               Cluster Articles ({topicClusters.cluster_articles.length})
             </h2>
-          </div>
+                </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {topicClusters.cluster_articles.map((cluster, index) => {
               const linkedPillar = cluster.pillar_id 
@@ -808,14 +819,14 @@ export default function ClustersPage() {
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                           {cluster.primary_keyword || cluster.title}
                         </h3>
-                      </div>
+                  </div>
                       {linkedPillar && (
                         <div className="flex items-center gap-1 mb-2">
                           <LinkIcon className="w-3 h-3 text-purple-600 dark:text-purple-400" />
                           <span className="text-xs text-purple-600 dark:text-purple-400">
                             Linked to: {linkedPillar.title}
                           </span>
-                        </div>
+                  </div>
                       )}
                       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                         {cluster.description || `Article about ${cluster.primary_keyword}`}
@@ -824,37 +835,37 @@ export default function ClustersPage() {
                         <span><strong>Primary Keyword:</strong> {cluster.primary_keyword}</span>
                         <span><strong>Words:</strong> {cluster.target_word_count.toLocaleString()}</span>
                         <span><strong>Keywords:</strong> {cluster.keywords.length}</span>
-                      </div>
+                </div>
                     </div>
                     <div className="text-right">
                       <div className="text-xs text-gray-600 dark:text-gray-400">Score</div>
                       <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
                         {cluster.metrics?.cluster_score.toFixed(1) || '0.0'}
-                      </div>
-                    </div>
                   </div>
+                </div>
+              </div>
 
                   {/* Keywords */}
                   <div className="flex flex-wrap gap-1 mb-3">
                     {cluster.keywords.slice(0, 5).map((kw, kwIndex) => (
                       <span
-                        key={kwIndex}
+                    key={kwIndex}
                         className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-700 dark:text-gray-300"
-                      >
-                        {typeof kw === 'string' ? kw : kw.keyword}
-                      </span>
+                  >
+                      {typeof kw === 'string' ? kw : kw.keyword}
+                        </span>
                     ))}
                     {cluster.keywords.length > 5 && (
                       <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-400">
                         +{cluster.keywords.length - 5}
-                      </span>
+                    </span>
                     )}
                   </div>
 
                   {/* Actions */}
                   <div className="flex gap-2">
                     {!cluster.pillar_id && (
-                      <button
+                    <button
                         onClick={() => handleConvertToPillar(index)}
                         className="flex-1 px-3 py-1.5 text-xs bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded transition-colors"
                       >
@@ -894,10 +905,10 @@ export default function ClustersPage() {
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
-                </div>
+              </div>
               );
             })}
-          </div>
+            </div>
         </div>
       )}
 

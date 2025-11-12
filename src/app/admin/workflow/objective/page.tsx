@@ -284,7 +284,7 @@ export default function ObjectivePage() {
             {loading ? (
               <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
             ) : (
-              <Save className="w-4 h-4" />
+            <Save className="w-4 h-4" />
             )}
             {loading ? 'Saving...' : 'Save Progress'}
           </button>

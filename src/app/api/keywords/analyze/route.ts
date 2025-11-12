@@ -100,10 +100,10 @@ export async function POST(request: NextRequest) {
     let response = await fetchWithRetry(
       endpoint,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
         body: JSON.stringify(requestBody),
       }
     );

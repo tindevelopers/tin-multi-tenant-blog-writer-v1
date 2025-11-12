@@ -61,6 +61,14 @@ export function KeywordDifficultyAnalyzer({
     );
   }
 
+  if (error?.message === 'SERVICE_UNAVAILABLE') {
+    return (
+      <div className="text-sm text-gray-500 dark:text-gray-400">
+        Difficulty analysis is not available for this keyword yet.
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="flex items-center gap-2 text-red-600 dark:text-red-400">

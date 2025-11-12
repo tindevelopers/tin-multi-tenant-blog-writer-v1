@@ -131,9 +131,9 @@ export default function KeywordResearchPage() {
 
               // Only load saved keywords if they exist and are valid
               if (savedKeywords && savedKeywords.length > 0) {
-                setKeywords(savedKeywords);
-                setCollectionName(collection.name || '');
-                generateClusters(savedKeywords);
+              setKeywords(savedKeywords);
+              setCollectionName(collection.name || '');
+              generateClusters(savedKeywords);
               } else {
                 // Clear if collection exists but has no valid keywords
                 setKeywords([]);
@@ -339,7 +339,7 @@ export default function KeywordResearchPage() {
           ?? null;
         
         return {
-          keyword,
+        keyword,
           search_volume: searchVolume, // Preserve null from API, don't convert to 0
           difficulty: data?.difficulty || 'medium',
           competition: data?.competition ?? 0.5,

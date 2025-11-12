@@ -907,7 +907,7 @@ export default function IntegrationsManagementPage() {
                 onConfigure={() => {
                   if (existingIntegration) {
                     if (integration.type === 'webflow') {
-                      handleConfigureWebflow(existingIntegration);
+                    handleConfigureWebflow(existingIntegration);
                     } else {
                       window.location.href = `/admin/integrations/blog-writer?provider=${integration.type}`;
                     }
