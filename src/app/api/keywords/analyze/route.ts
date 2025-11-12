@@ -81,9 +81,26 @@ export async function POST(request: NextRequest) {
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
+      let errorMessage = `Blog Writer API error: ${response.status} ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        if (errorData.error || errorData.detail || errorData.message) {
+          errorMessage = errorData.error || errorData.detail || errorData.message;
+        }
+      } catch {
+        // If JSON parsing fails, try text
+        try {
+          const errorText = await response.text();
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        } catch {
+          // Use default error message
+        }
+      }
+      console.error(`❌ Blog Writer API error (${response.status}):`, errorMessage);
       return NextResponse.json(
-        { error: `Blog Writer API error: ${errorText}` },
+        { error: errorMessage },
         { status: response.status }
       );
     }

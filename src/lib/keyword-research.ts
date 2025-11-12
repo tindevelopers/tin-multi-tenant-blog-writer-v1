@@ -283,9 +283,9 @@ class KeywordResearchService {
   ): Promise<KeywordAnalysis> {
     console.log(`📊 Analyzing keywords for SEO potential (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
-    // Enforce API limit of 50 keywords per request
-    if (keywords.length > 50) {
-      throw new Error(`Cannot analyze more than 50 keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
+    // Enforce API limit of 30 keywords per request (reduced to avoid 422 errors)
+    if (keywords.length > 30) {
+      throw new Error(`Cannot analyze more than 30 keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
     }
     
     try {
