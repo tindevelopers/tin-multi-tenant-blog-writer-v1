@@ -87,6 +87,9 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
+    
+    // Return the full response including clustering data
+    // The response should include: extracted_keywords, keywords_with_topics, clusters, cluster_summary
     return NextResponse.json(data);
   } catch (error: unknown) {
     console.error('Error in keywords/extract:', error);

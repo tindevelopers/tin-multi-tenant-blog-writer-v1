@@ -26,6 +26,8 @@ import { useCloudRunStatus } from '@/hooks/useCloudRunStatus';
 interface KeywordWithMetrics extends KeywordData {
   keyword: string;
   parent_topic?: string;
+  cluster_score?: number;
+  category_type?: 'topic' | 'question' | 'action' | 'entity';
   selected?: boolean;
 }
 
@@ -36,6 +38,8 @@ interface ParentTopicCluster {
   avg_difficulty: number;
   avg_competition: number;
   cluster_score: number;
+  category_type?: 'topic' | 'question' | 'action' | 'entity';
+  keyword_count: number;
 }
 
 export default function KeywordResearchPage() {
@@ -60,6 +64,8 @@ export default function KeywordResearchPage() {
   const [viewMode, setViewMode] = useState<'keywords' | 'clusters'>('keywords');
   const [difficultyFilter, setDifficultyFilter] = useState<string>('all');
   const [intentFilter, setIntentFilter] = useState<string>('all');
+  const [parentTopicFilter, setParentTopicFilter] = useState<string>('all');
+  const [categoryTypeFilter, setCategoryTypeFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'volume' | 'difficulty' | 'competition' | 'keyword'>('volume');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [minVolume, setMinVolume] = useState<number>(0);
@@ -134,23 +140,28 @@ export default function KeywordResearchPage() {
   }, []);
 
   // Generate parent topic clusters from keywords
+  // Uses API-provided parent_topic if available, otherwise falls back to extraction
   const generateClusters = (keywordList: KeywordWithMetrics[]) => {
     if (keywordList.length === 0) {
       setClusters([]);
       return;
     }
 
-    // Group keywords by parent topic (simplified clustering)
+    // Group keywords by parent topic from API (or fallback to extraction)
     const clusterMap = new Map<string, KeywordWithMetrics[]>();
     
     keywordList.forEach(kw => {
-      // Extract parent topic from keyword (simplified - in production, use NLP)
-      const parentTopic = extractParentTopic(kw.keyword);
+      // Use API-provided parent_topic if available, otherwise extract
+      const parentTopic = kw.parent_topic || extractParentTopic(kw.keyword);
       
       if (!clusterMap.has(parentTopic)) {
         clusterMap.set(parentTopic, []);
       }
-      clusterMap.get(parentTopic)!.push({ ...kw, parent_topic: parentTopic });
+      // Ensure parent_topic is set on keyword
+      clusterMap.get(parentTopic)!.push({ 
+        ...kw, 
+        parent_topic: parentTopic 
+      });
     });
 
     // Convert to cluster objects with metrics
@@ -161,7 +172,15 @@ export default function KeywordResearchPage() {
         return sum + diff;
       }, 0) / kws.length;
       const avgCompetition = kws.reduce((sum, k) => sum + k.competition, 0) / kws.length;
-      const clusterScore = calculateClusterScore(totalVolume, avgDifficulty, avgCompetition, kws.length);
+      
+      // Use API-provided cluster_score if available, otherwise calculate
+      const apiClusterScore = kws[0]?.cluster_score;
+      const clusterScore = apiClusterScore !== undefined 
+        ? apiClusterScore 
+        : calculateClusterScore(totalVolume, avgDifficulty, avgCompetition, kws.length);
+      
+      // Get category_type from first keyword (they should all be the same for a cluster)
+      const categoryType = kws[0]?.category_type;
 
       return {
         parent_topic: topic,
@@ -169,28 +188,44 @@ export default function KeywordResearchPage() {
         total_volume: totalVolume,
         avg_difficulty: avgDifficulty,
         avg_competition: avgCompetition,
-        cluster_score: clusterScore
+        cluster_score: clusterScore,
+        category_type: categoryType,
+        keyword_count: kws.length
       };
     });
 
-    // Sort by cluster score
+    // Sort by cluster score (descending)
     clusterArray.sort((a, b) => b.cluster_score - a.cluster_score);
     setClusters(clusterArray);
   };
 
-  // Extract parent topic from keyword (simplified - use NLP in production)
+  // Extract parent topic from keyword (fallback - API should provide this)
   const extractParentTopic = (keyword: string): string => {
+    // This is a fallback - API should provide parent_topic
     // Remove common modifiers to find parent topic
     const words = keyword.toLowerCase().split(' ');
-    const modifiers = ['near', 'me', 'best', 'top', 'how', 'to', 'what', 'is', 'the', 'a', 'an'];
+    const modifiers = ['near', 'me', 'best', 'top', 'how', 'to', 'what', 'is', 'the', 'a', 'an', 'why', 'when', 'where'];
     const meaningfulWords = words.filter(w => !modifiers.includes(w) && w.length > 2);
     
     if (meaningfulWords.length > 0) {
-      // Return first meaningful word as parent topic (simplified)
-      return meaningfulWords[0].charAt(0).toUpperCase() + meaningfulWords[0].slice(1);
+      // Return first 2-3 meaningful words as parent topic
+      return meaningfulWords.slice(0, 2).map(w => 
+        w.charAt(0).toUpperCase() + w.slice(1)
+      ).join(' ');
     }
     
     return keyword;
+  };
+  
+  // Get category type icon/indicator
+  const getCategoryIcon = (categoryType?: string): string => {
+    switch (categoryType) {
+      case 'question': return '?';
+      case 'action': return '⚡';
+      case 'entity': return '🏢';
+      case 'topic': return '📁';
+      default: return '📝';
+    }
   };
 
   // Calculate cluster score (higher is better)
@@ -252,7 +287,11 @@ export default function KeywordResearchPage() {
         recommended: data.recommended || false,
         reason: data.reason || '',
         related_keywords: data.related_keywords || [],
-        long_tail_keywords: data.long_tail_keywords || []
+        long_tail_keywords: data.long_tail_keywords || [],
+        // Include clustering data from API
+        parent_topic: data.parent_topic,
+        cluster_score: data.cluster_score,
+        category_type: data.category_type
       }));
 
       setKeywords(keywordList);
@@ -471,6 +510,13 @@ export default function KeywordResearchPage() {
       if (difficultyFilter !== 'all') {
         if (difficultyFilter !== kw.difficulty) return false;
       }
+      if (parentTopicFilter !== 'all') {
+        const kwParentTopic = kw.parent_topic || extractParentTopic(kw.keyword);
+        if (parentTopicFilter !== kwParentTopic) return false;
+      }
+      if (categoryTypeFilter !== 'all') {
+        if (categoryTypeFilter !== kw.category_type) return false;
+      }
       if (minVolume > 0 && (kw.search_volume || 0) < minVolume) {
         return false;
       }
@@ -641,6 +687,29 @@ export default function KeywordResearchPage() {
             {viewMode === 'keywords' && (
               <>
                 <select
+                  value={parentTopicFilter}
+                  onChange={(e) => setParentTopicFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="all">All Topics</option>
+                  {Array.from(new Set(clusters.map(c => c.parent_topic))).map(topic => (
+                    <option key={topic} value={topic}>{topic}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={categoryTypeFilter}
+                  onChange={(e) => setCategoryTypeFilter(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="all">All Types</option>
+                  <option value="topic">Topic</option>
+                  <option value="question">Question</option>
+                  <option value="action">Action</option>
+                  <option value="entity">Entity</option>
+                </select>
+
+                <select
                   value={difficultyFilter}
                   onChange={(e) => setDifficultyFilter(e.target.value)}
                   className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
@@ -780,8 +849,22 @@ export default function KeywordResearchPage() {
                     <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                       ${kw.cpc?.toFixed(2) || '0.00'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                      {extractParentTopic(kw.keyword)}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {kw.category_type && (
+                          <span className="text-xs" title={kw.category_type}>
+                            {getCategoryIcon(kw.category_type)}
+                          </span>
+                        )}
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {kw.parent_topic || extractParentTopic(kw.keyword)}
+                        </span>
+                        {kw.cluster_score !== undefined && (
+                          <span className="text-xs text-gray-500 dark:text-gray-500">
+                            ({(kw.cluster_score * 100).toFixed(0)}%)
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -803,10 +886,20 @@ export default function KeywordResearchPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                     <Layers className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    {cluster.category_type && (
+                      <span className="text-lg" title={cluster.category_type}>
+                        {getCategoryIcon(cluster.category_type)}
+                      </span>
+                    )}
                     {cluster.parent_topic}
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {cluster.keywords.length} keywords
+                    {cluster.keyword_count || cluster.keywords.length} keywords
+                    {cluster.category_type && (
+                      <span className="ml-2 px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs">
+                        {cluster.category_type}
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="text-right">

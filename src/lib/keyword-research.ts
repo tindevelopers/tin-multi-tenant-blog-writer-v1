@@ -14,6 +14,10 @@ export interface KeywordData {
   reason: string;
   related_keywords: string[];
   long_tail_keywords: string[];
+  // New clustering fields from API
+  parent_topic?: string;
+  cluster_score?: number;
+  category_type?: 'topic' | 'question' | 'action' | 'entity';
 }
 
 export interface KeywordAnalysis {
@@ -31,6 +35,40 @@ export interface KeywordCluster {
   avg_difficulty: 'easy' | 'medium' | 'hard';
   avg_competition: number;
   cluster_score: number;
+  // New clustering fields from API
+  parent_topic?: string;
+  category_type?: 'topic' | 'question' | 'action' | 'entity';
+  keyword_count?: number;
+}
+
+// New interfaces for API response structure
+export interface KeywordWithTopic {
+  keyword: string;
+  parent_topic: string;
+  cluster_score: number;
+  category_type: 'topic' | 'question' | 'action' | 'entity';
+}
+
+export interface ClusterData {
+  parent_topic: string;
+  keywords: string[];
+  cluster_score: number;
+  category_type: 'topic' | 'question' | 'action' | 'entity';
+  keyword_count: number;
+}
+
+export interface ClusterSummary {
+  total_keywords: number;
+  cluster_count: number;
+  unclustered_count: number;
+}
+
+export interface KeywordExtractResponse {
+  extracted_keywords?: string[];
+  keywords?: string[]; // Fallback for old format
+  keywords_with_topics?: KeywordWithTopic[];
+  clusters?: ClusterData[];
+  cluster_summary?: ClusterSummary;
 }
 
 export interface TitleSuggestion {
@@ -190,10 +228,20 @@ class KeywordResearchService {
           throw new Error(`API returned ${response.status} ${response.statusText}`);
         }
 
-        const data = await response.json();
+        const data: KeywordExtractResponse = await response.json();
         console.log('✅ Keywords extracted via API');
         console.log('📋 Raw API response:', JSON.stringify(data, null, 2));
-        const keywords = data.keywords || [];
+        
+        // Use keywords_with_topics if available, otherwise fall back to extracted_keywords or keywords
+        let keywords: string[] = [];
+        if (data.keywords_with_topics && data.keywords_with_topics.length > 0) {
+          // Extract keywords from keywords_with_topics array
+          keywords = data.keywords_with_topics.map(kwt => kwt.keyword);
+        } else if (data.extracted_keywords && data.extracted_keywords.length > 0) {
+          keywords = data.extracted_keywords;
+        } else if (data.keywords && data.keywords.length > 0) {
+          keywords = data.keywords;
+        }
         
         // Ensure we're preserving phrases, not individual words
         // Filter out single-word keywords that are likely stop words or too generic
@@ -205,6 +253,11 @@ class KeywordResearchService {
         });
         
         console.log('📋 Filtered keywords (phrases preserved):', phraseKeywords);
+        console.log('📊 Clustering data available:', {
+          hasKeywordsWithTopics: !!data.keywords_with_topics,
+          clusterCount: data.clusters?.length || 0,
+          clusterSummary: data.cluster_summary
+        });
         return phraseKeywords;
       }, 8, 2000, 'Keyword extraction');
     } catch (error: unknown) {
@@ -268,33 +321,76 @@ class KeywordResearchService {
 
         const data = await response.json();
         
-        // Enhance the analysis with clustering
-        const keywordAnalysis = data.keyword_analysis || data;
+        // Check if this is the enhanced analysis format with clustering
+        const enhancedAnalysis = data.enhanced_analysis || data.keyword_analysis || data;
         
         // Filter out single-word keywords that don't make sense as standalone keywords
         // Keep only phrases (2+ words) or meaningful single words
         const filteredAnalysis: Record<string, KeywordData> = {};
-        Object.entries(keywordAnalysis).forEach(([keyword, data]: [string, any]) => {
+        Object.entries(enhancedAnalysis).forEach(([keyword, kwData]: [string, any]) => {
           const wordCount = keyword.trim().split(/\s+/).length;
           // Keep phrases (2+ words) or single words that are meaningful (length > 5)
           if (wordCount > 1 || keyword.trim().length > 5) {
-            filteredAnalysis[keyword] = data;
+            // Extract clustering data from enhanced analysis if available
+            const keywordWithClustering: KeywordData = {
+              ...kwData,
+              parent_topic: kwData.parent_topic,
+              cluster_score: kwData.cluster_score,
+              category_type: kwData.category_type,
+            };
+            filteredAnalysis[keyword] = keywordWithClustering;
           } else {
             console.log(`⚠️ Filtering out single-word keyword: "${keyword}"`);
           }
         });
         
-        const clusters = this.createKeywordClusters(filteredAnalysis);
+        // Use API-provided clusters if available, otherwise create clusters from analysis
+        let clusters: KeywordCluster[] = [];
+        if (data.clusters && Array.isArray(data.clusters) && data.clusters.length > 0) {
+          // Use API-provided clusters
+          clusters = data.clusters.map((cluster: ClusterData, index: number) => {
+            const clusterKeywords = cluster.keywords || [];
+            const clusterKeywordData = clusterKeywords
+              .map((kw: string) => filteredAnalysis[kw])
+              .filter(Boolean);
+            
+            const avgDifficulty = this.calculateAvgDifficulty(clusterKeywordData);
+            const avgCompetition = clusterKeywordData.reduce((sum: number, kd: KeywordData) => 
+              sum + (kd.competition || 0), 0) / (clusterKeywordData.length || 1);
+            
+            return {
+              id: `cluster-${index}`,
+              name: cluster.parent_topic,
+              keywords: clusterKeywords,
+              primary_keyword: clusterKeywords[0] || '',
+              avg_difficulty: avgDifficulty,
+              avg_competition: avgCompetition,
+              cluster_score: cluster.cluster_score || 0,
+              parent_topic: cluster.parent_topic,
+              category_type: cluster.category_type,
+              keyword_count: cluster.keyword_count || clusterKeywords.length,
+            };
+          });
+        } else {
+          // Fallback: create clusters from analysis
+          clusters = this.createKeywordClusters(filteredAnalysis);
+        }
         
         console.log('✅ Keywords analyzed via API');
         console.log('🔍 API response data structure:', data);
         console.log('🔍 Filtered keyword analysis (phrases only):', Object.keys(filteredAnalysis));
+        console.log('📊 Clustering data:', {
+          clusterCount: clusters.length,
+          clusterSummary: data.cluster_summary,
+          hasApiClusters: !!(data.clusters && data.clusters.length > 0)
+        });
         
         // Debug search volume data
         console.log('🔍 Search volume data check:', Object.entries(filteredAnalysis).map(([key, data]: [string, any]) => ({
           keyword: key,
           search_volume: data?.search_volume,
-          search_volume_type: typeof data?.search_volume
+          search_volume_type: typeof data?.search_volume,
+          parent_topic: data?.parent_topic
         })));
         
         return {
@@ -671,6 +767,25 @@ class KeywordResearchService {
       `${keyword} complete guide`,
       `best ${keyword} methods`,
     ].slice(0, 3);
+  }
+
+  /**
+   * Calculate average difficulty from keyword data array
+   */
+  private calculateAvgDifficulty(keywordData: KeywordData[]): 'easy' | 'medium' | 'hard' {
+    if (keywordData.length === 0) return 'medium';
+    
+    const difficultyScores = keywordData.map(kd => {
+      if (kd.difficulty === 'easy') return 0.33;
+      if (kd.difficulty === 'medium') return 0.66;
+      return 1.0;
+    });
+    
+    const avgScore = difficultyScores.reduce((sum, score) => sum + score, 0) / difficultyScores.length;
+    
+    if (avgScore < 0.5) return 'easy';
+    if (avgScore < 0.8) return 'medium';
+    return 'hard';
   }
 
   private createKeywordClusters(keywordAnalysis: Record<string, KeywordData>): KeywordCluster[] {
