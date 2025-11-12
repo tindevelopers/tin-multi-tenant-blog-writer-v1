@@ -491,7 +491,6 @@ export async function POST(request: NextRequest) {
               // Update featuredImage to use Cloudinary URL
               featuredImage.image_url = cloudinaryResult.secure_url;
               featuredImage.image_data = undefined;
-              featuredImage.alt_text = `Featured image for ${blogTitle}`;
             }
           }
         } catch (uploadError) {
