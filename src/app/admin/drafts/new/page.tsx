@@ -806,7 +806,7 @@ function NewDraftContent() {
           </div>
 
           {/* Internal Link Suggestions */}
-          {savedPostId && generatedContent?.content && (
+          {savedPostId && generatedContent?.content != null && String(generatedContent.content).trim() !== '' && (
             <InternalLinkSuggestions
               postId={savedPostId}
               content={String(generatedContent.content)}

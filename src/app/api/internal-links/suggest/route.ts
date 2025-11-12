@@ -68,12 +68,12 @@ export async function GET(request: NextRequest) {
 
     // Simple keyword-based matching (can be enhanced with NLP)
     const postContent = content || currentPost.content || '';
-    const contentWords = new Set(
+    const contentWords = new Set<string>(
       postContent
         .toLowerCase()
         .replace(/[^\w\s]/g, ' ')
         .split(/\s+/)
-        .filter(word => word.length > 3)
+        .filter((word: string) => word.length > 3)
     );
 
     // Score and rank potential links
@@ -83,11 +83,11 @@ export async function GET(request: NextRequest) {
         const postTitle = (post.title || '').toLowerCase();
         const postContent = (post.content || post.excerpt || '').toLowerCase();
         const postText = `${postTitle} ${postContent}`;
-        const postWords = new Set(
+        const postWords = new Set<string>(
           postText
             .replace(/[^\w\s]/g, ' ')
             .split(/\s+/)
-            .filter(word => word.length > 3)
+            .filter((word: string) => word.length > 3)
         );
 
         // Calculate similarity score
@@ -99,8 +99,8 @@ export async function GET(request: NextRequest) {
         });
 
         // Boost score if title words match
-        const titleWords = postTitle.split(/\s+/).filter(w => w.length > 3);
-        titleWords.forEach(word => {
+        const titleWords = postTitle.split(/\s+/).filter((w: string) => w.length > 3);
+        titleWords.forEach((word: string) => {
           if (contentWords.has(word)) {
             score += 2; // Title matches are more valuable
           }

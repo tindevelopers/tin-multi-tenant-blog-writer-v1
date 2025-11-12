@@ -173,7 +173,7 @@ export default function ContentPresetsManager({
     }
   };
 
-  const handleSelectPreset = (preset: ContentPreset) => {
+  const handleSelectPreset = (preset: ContentPreset | null) => {
     if (onPresetSelect) {
       onPresetSelect(preset);
     }

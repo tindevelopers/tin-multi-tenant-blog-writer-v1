@@ -26,21 +26,34 @@ export async function GET(request: NextRequest) {
     const presetId = searchParams.get('preset_id');
     const defaultOnly = searchParams.get('default') === 'true';
 
-    let query = supabase
-      .from('content_presets')
-      .select('*')
-      .eq('org_id', userProfile.org_id)
-      .eq('is_active', true);
-
+    let result;
     if (presetId) {
-      query = query.eq('preset_id', presetId).maybeSingle();
+      result = await supabase
+        .from('content_presets')
+        .select('*')
+        .eq('org_id', userProfile.org_id)
+        .eq('is_active', true)
+        .eq('preset_id', presetId)
+        .maybeSingle();
     } else if (defaultOnly) {
-      query = query.eq('is_default', true).maybeSingle();
+      result = await supabase
+        .from('content_presets')
+        .select('*')
+        .eq('org_id', userProfile.org_id)
+        .eq('is_active', true)
+        .eq('is_default', true)
+        .maybeSingle();
     } else {
-      query = query.order('is_default', { ascending: false }).order('created_at', { ascending: false });
+      result = await supabase
+        .from('content_presets')
+        .select('*')
+        .eq('org_id', userProfile.org_id)
+        .eq('is_active', true)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false });
     }
 
-    const { data: presets, error } = await query;
+    const { data: presets, error } = result;
 
     if (error) {
       console.error('Error fetching content presets:', error);
