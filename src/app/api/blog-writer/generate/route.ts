@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealth from '@/lib/cloud-run-health';
+import BlogImageGenerator, { type GeneratedImage } from '@/lib/image-generation';
+
+// Create server-side image generator (uses direct Cloud Run URL)
+const imageGenerator = new BlogImageGenerator(
+  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app',
+  process.env.BLOG_WRITER_API_KEY || '',
+  false // Don't use local route on server-side
+);
 
 export async function POST(request: NextRequest) {
   try {
@@ -277,6 +285,47 @@ export async function POST(request: NextRequest) {
       contentPreview: result.content?.substring(0, 100) || 'No content'
     });
     
+    // Generate featured image (non-blocking, but wait for it)
+    let featuredImage: GeneratedImage | null = null;
+    try {
+      console.log('🖼️ Starting featured image generation...');
+      const imageKeywords = Array.isArray(keywords) ? keywords : [];
+      const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
+      
+      // Generate image with timeout (don't block blog generation if it takes too long)
+      featuredImage = await Promise.race([
+        imageGenerator.generateFeaturedImage(
+          imageTopic,
+          imageKeywords,
+          {
+            style: 'photographic',
+            quality: 'high',
+            aspect_ratio: '16:9'
+          }
+        ),
+        new Promise<null>((resolve) => 
+          setTimeout(() => {
+            console.warn('⏱️ Image generation timeout - continuing without image');
+            resolve(null);
+          }, 30000) // 30 second timeout
+        )
+      ]);
+      
+      if (featuredImage) {
+        console.log('✅ Featured image generated successfully:', {
+          imageId: featuredImage.image_id,
+          width: featuredImage.width,
+          height: featuredImage.height,
+          hasUrl: !!featuredImage.image_url
+        });
+      } else {
+        console.warn('⚠️ Featured image generation returned null (non-critical)');
+      }
+    } catch (error) {
+      // Non-critical error - log but don't fail the blog generation
+      console.warn('⚠️ Featured image generation failed (non-critical):', error);
+    }
+    
     // Transform the response to match our expected format
     if (result.success && result.blog_post) {
       const transformedResult = {
@@ -292,11 +341,24 @@ export async function POST(request: NextRequest) {
         quality_scores: result.quality_scores || null,
         semantic_keywords: result.semantic_keywords || null,
         knowledge_graph: result.knowledge_graph || null,
+        // Include generated featured image if available
+        featured_image: featuredImage ? {
+          image_id: featuredImage.image_id,
+          image_url: featuredImage.image_url,
+          image_data: featuredImage.image_data,
+          width: featuredImage.width,
+          height: featuredImage.height,
+          format: featuredImage.format,
+          alt_text: `Featured image for ${result.blog_post.title || topic}`,
+          quality_score: featuredImage.quality_score,
+          safety_score: featuredImage.safety_score
+        } : null,
         metadata: {
           used_brand_voice: !!brandVoice,
           used_preset: !!contentPreset,
           endpoint_used: endpoint,
-          enhanced: shouldUseEnhanced
+          enhanced: shouldUseEnhanced,
+          image_generated: !!featuredImage
         }
       };
       
@@ -321,11 +383,24 @@ export async function POST(request: NextRequest) {
         readability_score: result.readability_score || 0,
         warnings: result.warnings || [],
         suggestions: result.suggestions || [],
+        // Include generated featured image if available
+        featured_image: featuredImage ? {
+          image_id: featuredImage.image_id,
+          image_url: featuredImage.image_url,
+          image_data: featuredImage.image_data,
+          width: featuredImage.width,
+          height: featuredImage.height,
+          format: featuredImage.format,
+          alt_text: `Featured image for ${result.title || topic}`,
+          quality_score: featuredImage.quality_score,
+          safety_score: featuredImage.safety_score
+        } : null,
         metadata: {
           used_brand_voice: !!brandVoice,
           used_preset: !!contentPreset,
           endpoint_used: endpoint,
-          enhanced: shouldUseEnhanced
+          enhanced: shouldUseEnhanced,
+          image_generated: !!featuredImage
         }
       };
       
