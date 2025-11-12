@@ -15,7 +15,7 @@ export interface CloudRunStatus {
   error: string | null;
 }
 
-const CHECK_INTERVAL = 30000; // Check every 30 seconds
+const CHECK_INTERVAL = 5 * 60 * 1000; // Check every 5 minutes to keep API alive
 const WAKEUP_RETRY_DELAY = 2000; // 2 seconds between wake-up attempts
 const MAX_WAKEUP_ATTEMPTS = 5; // More attempts for cold starts
 
@@ -128,8 +128,9 @@ export function useCloudRunStatus() {
     };
   }, [checkHealth]);
 
-  // Initial health check on mount
+  // Initial health check on mount - run immediately when page loads
   useEffect(() => {
+    console.log('🔍 Running initial API health check...');
     checkHealth();
   }, [checkHealth]);
 
