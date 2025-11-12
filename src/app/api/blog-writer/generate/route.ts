@@ -540,7 +540,6 @@ export async function POST(request: NextRequest) {
               if (cloudinaryResult) {
                 img.image_url = cloudinaryResult.secure_url;
                 img.image_data = undefined;
-                img.alt_text = `Image illustrating ${section.title}`;
                 
                 // Save to media_assets
                 await saveMediaAsset(
