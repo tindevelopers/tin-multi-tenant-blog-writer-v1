@@ -77,6 +77,11 @@ export async function POST(request: NextRequest) {
     
     // Request body - per FRONTEND_API_INTEGRATION_GUIDE.md
     // Note: 'text' field is ignored if keywords are provided, so we don't include it
+    // For optimal long-tail keyword research, default to 75 suggestions per keyword
+    // This ensures comprehensive coverage while maintaining good performance
+    // Range: 5-150, default: 75 (optimal for long-tail research)
+    const DEFAULT_MAX_SUGGESTIONS = 75; // Optimal for long-tail keyword discovery
+    
     const requestBody: {
       keywords: string[];
       location?: string;
@@ -89,10 +94,7 @@ export async function POST(request: NextRequest) {
       language: body.language || 'en',
       include_serp: body.include_serp || false,
       // Enhanced endpoint requires >= 5, so use 5 as minimum when 0 or undefined
-      // For optimal long-tail keyword research, default to 75 suggestions per keyword
-      // This ensures comprehensive coverage while maintaining good performance
-      // Range: 5-150, default: 75 (optimal for long-tail research)
-      const DEFAULT_MAX_SUGGESTIONS = 75; // Optimal for long-tail keyword discovery
+      // Default to 75 for optimal long-tail results
       max_suggestions_per_keyword: body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5
         ? Math.min(150, body.max_suggestions_per_keyword) // Cap at API maximum
         : DEFAULT_MAX_SUGGESTIONS, // Default to 75 for optimal long-tail results
