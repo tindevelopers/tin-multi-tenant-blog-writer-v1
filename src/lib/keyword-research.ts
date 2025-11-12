@@ -417,7 +417,7 @@ class KeywordResearchService {
   /**
    * Calculate overall score
    */
-  private calculateOverallScore(analysis: Record<string, KeywordData>): number {
+  calculateOverallScore(analysis: Record<string, KeywordData>): number {
     const keywords = Object.values(analysis);
     if (keywords.length === 0) return 0;
     
@@ -434,7 +434,7 @@ class KeywordResearchService {
   /**
    * Generate recommendations
    */
-  private generateRecommendations(analysis: Record<string, KeywordData>): string[] {
+  generateRecommendations(analysis: Record<string, KeywordData>): string[] {
     const recommendations: string[] = [];
     const keywords = Object.values(analysis);
     
@@ -454,7 +454,7 @@ class KeywordResearchService {
   /**
    * Generate title suggestions
    */
-  private generateTitleSuggestions(
+  generateTitleSuggestions(
     topic: string,
     analysis: KeywordAnalysis,
     targetAudience: string
@@ -477,7 +477,7 @@ class KeywordResearchService {
   /**
    * Generate content strategy
    */
-  private generateContentStrategy(
+  generateContentStrategy(
     analysis: KeywordAnalysis,
     targetAudience: string
   ): BlogResearchResults['content_strategy'] {
@@ -492,7 +492,7 @@ class KeywordResearchService {
   /**
    * Generate SEO insights
    */
-  private generateSEOInsights(analysis: KeywordAnalysis): BlogResearchResults['seo_insights'] {
+  generateSEOInsights(analysis: KeywordAnalysis): BlogResearchResults['seo_insights'] {
     const keywords = Object.keys(analysis.keyword_analysis);
     return {
       primary_keyword: keywords[0] || '',
