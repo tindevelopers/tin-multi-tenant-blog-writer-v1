@@ -71,7 +71,11 @@ export async function POST(request: NextRequest) {
     
     const requestBody: any = {
       keyword: keyword,
-      limit: limit
+      limit: limit,
+      include_search_volume: true, // Explicitly request search volume data
+      include_difficulty: true,
+      include_competition: true,
+      include_cpc: true
     };
     
     // Add location if provided (defaults to United States)

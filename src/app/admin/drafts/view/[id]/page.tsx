@@ -13,6 +13,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { Modal } from "@/components/ui/modal/index";
+import "./rich-preview.css";
 
 export default function ViewDraftPage() {
   const router = useRouter();
@@ -155,7 +156,7 @@ export default function ViewDraftPage() {
       </div>
 
       {/* Draft Content - Rich HTML Preview */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Website-like header with featured image if available */}
         {(() => {
           // Check for featured image in metadata or content
@@ -164,50 +165,40 @@ export default function ViewDraftPage() {
             : null;
           
           // Also check if image is embedded in content
-          const contentImageMatch = draft.content?.match(/<figure class="featured-image">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/);
-          const embeddedImageUrl = contentImageMatch ? contentImageMatch[1] : null;
+          const contentImageMatch = draft.content?.match(/<figure class="(blog-featured-image|featured-image)">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i);
+          const embeddedImageUrl = contentImageMatch ? contentImageMatch[2] : null;
           
-          const imageUrl = featuredImageUrl || embeddedImageUrl;
+          // Also check for any img tags with featured image patterns
+          const anyImageMatch = draft.content?.match(/<img[^>]+src="([^"]+)"[^>]*>/i);
+          const anyImageUrl = anyImageMatch ? anyImageMatch[1] : null;
+          
+          const imageUrl = featuredImageUrl || embeddedImageUrl || anyImageUrl;
           
           return imageUrl ? (
-          <div className="w-full h-64 md:h-96 bg-gray-200 dark:bg-gray-700 overflow-hidden">
+          <div className="w-full h-64 md:h-96 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 overflow-hidden relative">
             <img 
-                src={imageUrl} 
+              src={imageUrl} 
               alt={draft.title}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error('Image failed to load:', imageUrl);
+                e.currentTarget.style.display = 'none';
+              }}
             />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
           </div>
-          ) : null;
+          ) : (
+            <div className="w-full h-48 bg-gradient-to-br from-purple-100 via-blue-100 to-indigo-100 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 flex items-center justify-center">
+              <div className="text-center">
+                <DocumentTextIcon className="w-16 h-16 text-gray-400 dark:text-gray-600 mx-auto mb-2" />
+                <p className="text-gray-500 dark:text-gray-400 text-sm">No featured image</p>
+              </div>
+            </div>
+          );
         })()}
         
-        <article className="prose prose-lg dark:prose-invert max-w-none 
-          prose-headings:text-gray-900 dark:prose-headings:text-white prose-headings:font-bold
-          prose-h1:text-4xl prose-h1:mb-6 prose-h1:mt-8 prose-h1:leading-tight
-          prose-h2:text-3xl prose-h2:mb-4 prose-h2:mt-8 prose-h2:leading-tight
-          prose-h3:text-2xl prose-h3:mb-3 prose-h3:mt-6 prose-h3:leading-tight
-          prose-h4:text-xl prose-h4:mb-2 prose-h4:mt-4
-          prose-p:text-gray-700 dark:prose-p:text-gray-300 prose-p:leading-relaxed prose-p:mb-4 prose-p:text-base
-          prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline prose-a:font-medium
-          prose-strong:text-gray-900 dark:prose-strong:text-white prose-strong:font-bold
-          prose-ul:text-gray-700 dark:prose-ul:text-gray-300 prose-ul:my-4 prose-ul:pl-6
-          prose-ol:text-gray-700 dark:prose-ol:text-gray-300 prose-ol:my-4 prose-ol:pl-6
-          prose-li:text-gray-700 dark:prose-li:text-gray-300 prose-li:my-2 prose-li:leading-relaxed
-          prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-gray-600 dark:prose-blockquote:text-gray-400 prose-blockquote:my-6
-          prose-code:text-blue-600 dark:prose-code:text-blue-400 prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-mono
-          prose-pre:bg-gray-100 dark:prose-pre:bg-gray-900 prose-pre:rounded-lg prose-pre:p-4 prose-pre:overflow-x-auto prose-pre:my-6
-          prose-img:rounded-lg prose-img:shadow-xl prose-img:my-8 prose-img:w-full prose-img:h-auto prose-img:object-contain
-          prose-figure:my-8 prose-figure:mx-auto
-          prose-figcaption:text-sm prose-figcaption:text-gray-500 dark:prose-figcaption:text-gray-400 prose-figcaption:text-center prose-figcaption:mt-2
-          prose-hr:border-gray-300 dark:prose-hr:border-gray-700 prose-hr:my-8
-          prose-table:w-full prose-table:my-6 prose-table:border-collapse
-          prose-th:border prose-th:border-gray-300 dark:prose-th:border-gray-700 prose-th:bg-gray-50 dark:prose-th:bg-gray-800 prose-th:px-4 prose-th:py-2 prose-th:text-left prose-th:font-semibold
-          prose-td:border prose-td:border-gray-300 dark:prose-td:border-gray-700 prose-td:px-4 prose-td:py-2
-          prose-video:w-full prose-video:rounded-lg prose-video:my-8
-          prose-iframe:w-full prose-iframe:rounded-lg prose-iframe:my-8
-          [&>*]:max-w-none
-          p-6 lg:p-12">
+        <article className="blog-content p-6 lg:p-12">
           <div 
-            className="blog-content"
             dangerouslySetInnerHTML={{ 
               __html: draft.content 
                 ? (() => {

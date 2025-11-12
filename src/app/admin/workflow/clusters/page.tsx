@@ -331,12 +331,23 @@ export default function ClustersPage() {
     competition: number,
     keywordCount: number
   ): number => {
-    const volumeScore = Math.min(volume / 100000, 1) * 40;
+    // Handle zero/null volumes - use keyword diversity and difficulty instead
+    let volumeScore = 0;
+    if (volume > 0) {
+      volumeScore = Math.min(volume / 100000, 1) * 40;
+    } else {
+      // If no volume data, weight keyword count more heavily
+      volumeScore = Math.min(keywordCount / 10, 1) * 20;
+    }
+    
     const difficultyScore = (1 - difficulty) * 30;
     const competitionScore = (1 - competition) * 20;
     const countScore = Math.min(keywordCount / 20, 1) * 10;
     
-    return volumeScore + difficultyScore + competitionScore + countScore;
+    const totalScore = volumeScore + difficultyScore + competitionScore + countScore;
+    
+    // Round to 1 decimal place to avoid identical scores
+    return Math.round(totalScore * 10) / 10;
   };
 
   // Create Pillar Page

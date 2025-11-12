@@ -270,6 +270,7 @@ class BlogWriterAPI {
     preset?: string; // Legacy preset string
     preset_id?: string; // Content preset ID from database
     use_enhanced?: boolean; // Use enhanced endpoint
+    content_goal?: string; // Content goal: 'seo', 'engagement', 'conversions', 'brand_awareness'
   }): Promise<Record<string, unknown> | null> {
     try {
       console.log('🚀 Starting blog generation via local API route...');

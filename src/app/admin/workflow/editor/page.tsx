@@ -45,7 +45,8 @@ export default function EditorPage() {
     backlink_count: 5,
     quality_level: 'high', // Default to high quality
     preset: '', // Optional preset (legacy)
-    preset_id: '' // Content preset ID from database
+    preset_id: '', // Content preset ID from database
+    featuredImage: null as { image_url?: string; alt_text?: string; image_id?: string; width?: number; height?: number } | null
   });
 
   const [qualityLevels, setQualityLevels] = useState<Array<{ value: string; label: string; description?: string }>>([]);
@@ -88,6 +89,7 @@ export default function EditorPage() {
           if (session) {
             setWorkflowSession(session);
             const workflowData = session.workflow_data || {};
+            const contentGoal = workflowData.content_goal || 'seo';
             const contentStrategy = workflowData.content_strategy || {};
             setStrategy(contentStrategy);
 
@@ -180,6 +182,9 @@ export default function EditorPage() {
         ? formData.keywords.split(',').map(k => k.trim()).filter(k => k)
         : [];
 
+      // Get content goal from workflow session
+      const contentGoal = workflowSession?.workflow_data?.content_goal || 'seo';
+      
       const result = await blogWriterAPI.generateBlog({
         topic: formData.topic,
         keywords: keywords.length > 0 ? keywords : undefined,
@@ -191,39 +196,37 @@ export default function EditorPage() {
         preset: formData.preset || undefined,
         include_external_links: formData.include_external_links,
         include_backlinks: formData.include_backlinks,
-        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined
+        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined,
+        content_goal: contentGoal // Pass content goal to API
       });
 
       if (result && typeof result === 'object') {
         const content = result.content || result.html || JSON.stringify(result, null, 2);
         const title = result.title || formData.title || formData.topic;
         const excerpt = result.excerpt || result.description || '';
-        const featuredImage = result.featured_image as { image_url?: string; alt_text?: string } | null | undefined;
+        const featuredImage = result.featured_image as { image_url?: string; alt_text?: string; image_id?: string; width?: number; height?: number } | null | undefined;
 
-        // If featured image exists, insert it into content after the first paragraph
+        // Content is already enhanced with images embedded, use it directly
         let finalContent = typeof content === 'string' ? content : JSON.stringify(content);
+        
+        // Store featured image reference for saving
         if (featuredImage && typeof featuredImage === 'object' && 'image_url' in featuredImage && featuredImage.image_url) {
-          const imageHtml = `<figure class="featured-image"><img src="${featuredImage.image_url}" alt="${featuredImage.alt_text || title}" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" /></figure>`;
-          
-          // Try to insert after first paragraph or at the beginning
-          if (finalContent.includes('</p>')) {
-            // Replace only the first occurrence
-            finalContent = finalContent.replace('</p>', `</p>${imageHtml}`);
-          } else if (finalContent.includes('<p>')) {
-            // Replace only the first occurrence
-            finalContent = finalContent.replace('<p>', `${imageHtml}<p>`);
-          } else {
-            // If no paragraphs, prepend the image
-            finalContent = imageHtml + finalContent;
-          }
+          // Store featured image in formData for later use when saving
+          setFormData(prev => ({
+            ...prev,
+            content: finalContent, // Content already has images embedded from enhancer
+            title: typeof title === 'string' ? title : (title ? String(title) : prev.title),
+            excerpt: typeof excerpt === 'string' ? excerpt : (excerpt ? String(excerpt) : prev.excerpt),
+            featuredImage: featuredImage // Store for saving
+          }));
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            content: finalContent,
+            title: typeof title === 'string' ? title : (title ? String(title) : prev.title),
+            excerpt: typeof excerpt === 'string' ? excerpt : (excerpt ? String(excerpt) : prev.excerpt)
+          }));
         }
-
-        setFormData(prev => ({
-          ...prev,
-          content: finalContent,
-          title: typeof title === 'string' ? title : (title ? String(title) : prev.title),
-          excerpt: typeof excerpt === 'string' ? excerpt : (excerpt ? String(excerpt) : prev.excerpt)
-        }));
 
         setSuccess('Content generated successfully');
         setTimeout(() => setSuccess(null), 3000);
@@ -284,7 +287,8 @@ export default function EditorPage() {
           preset_id: formData.preset_id || null,
           brand_voice_used: !!brandVoice,
           quality_level: formData.quality_level
-        }
+        },
+        featured_image: formData.featuredImage
       });
 
       if (draftResult) {

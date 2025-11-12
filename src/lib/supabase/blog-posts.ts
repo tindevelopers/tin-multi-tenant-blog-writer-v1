@@ -10,6 +10,7 @@ export interface CreateDraftParams {
   excerpt?: string;
   seo_data?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  featured_image?: { image_url?: string; alt_text?: string; image_id?: string; width?: number; height?: number } | null;
   created_by?: string;
 }
 
@@ -41,6 +42,9 @@ class BlogPostsService {
           content: params.content,
           excerpt: params.excerpt,
           status: 'draft',
+          seo_data: params.seo_data,
+          metadata: params.metadata,
+          featured_image: params.featured_image,
         }),
       });
 

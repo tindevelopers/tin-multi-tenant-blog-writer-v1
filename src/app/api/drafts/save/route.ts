@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       status: body.status 
     });
     
-    const { title, content, excerpt, status = 'draft' } = body;
+    const { title, content, excerpt, status = 'draft', seo_data, metadata, featured_image } = body;
 
     if (!title || !content) {
       console.log('❌ Missing required fields:', { title: !!title, content: !!content });
@@ -27,6 +27,33 @@ export async function POST(request: NextRequest) {
 
     console.log('💾 Saving draft via API route:', title);
     console.log('📄 Content length:', content.length);
+
+    // Extract featured image from content if not provided
+    let featuredImageUrl = featured_image?.image_url || null;
+    if (!featuredImageUrl && content) {
+      // Try to extract from content HTML
+      const imageMatch = String(content).match(/<figure[^>]*class="[^"]*featured[^"]*"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i) ||
+                       String(content).match(/<img[^>]+class="[^"]*featured[^"]*"[^>]+src="([^"]+)"[^>]*>/i);
+      if (imageMatch) {
+        featuredImageUrl = imageMatch[1];
+        console.log('🖼️ Extracted featured image from content:', featuredImageUrl);
+      }
+    }
+
+    // Build metadata object
+    const finalMetadata: Record<string, unknown> = {
+      ...(metadata || {}),
+      ...(featuredImageUrl ? { featured_image: featuredImageUrl } : {}),
+      ...(featured_image ? { 
+        featured_image_data: {
+          image_id: featured_image.image_id,
+          image_url: featured_image.image_url,
+          alt_text: featured_image.alt_text,
+          width: featured_image.width,
+          height: featured_image.height
+        }
+      } : {})
+    };
 
     // Use service client for server-side operations
     console.log('🔧 Creating service client...');
@@ -45,6 +72,8 @@ export async function POST(request: NextRequest) {
       content,
       excerpt: excerpt || '',
       status: status as 'draft' | 'published' | 'scheduled' | 'archived',
+      seo_data: seo_data || {},
+      metadata: finalMetadata,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

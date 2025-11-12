@@ -1,39 +1,27 @@
-# How to Run the Workflow Tables Migration
+# How to Apply Content Goal Prompts Migration
 
-## 📍 Where to Run the Migration
+## Option 1: Using Supabase Dashboard (Recommended)
 
-You need to run the SQL migration in your **Supabase Dashboard** using the **SQL Editor**.
+1. **Open Supabase SQL Editor**:
+   - Go to your Supabase project dashboard
+   - Click on **"SQL Editor"** in the left sidebar
+   - Click **"New query"**
 
-## 🚀 Step-by-Step Instructions
+2. **Copy the Migration File**:
+   - Open the file: `supabase/migrations/20250120000002_add_content_goal_prompts.sql`
+   - Copy **ALL** contents (233 lines)
 
-### Option 1: Using Supabase Dashboard (Recommended)
-
-1. **Open Supabase Dashboard**
-   - Go to https://supabase.com/dashboard
-   - Sign in to your account
-   - Select your project (or create one if you don't have one)
-
-2. **Navigate to SQL Editor**
-   - In the left sidebar, click on **"SQL Editor"**
-   - Click **"New query"** button (top right)
-
-3. **Open the Migration File**
-   - Open the file: `supabase/migrations/20250116000000_add_workflow_tables.sql`
-   - Copy **ALL** the contents (Ctrl+A / Cmd+A, then Ctrl+C / Cmd+C)
-
-4. **Paste and Run**
-   - Paste the SQL into the Supabase SQL Editor
-   - Click the **"RUN"** button (or press Ctrl+Enter / Cmd+Enter)
+3. **Paste and Run**:
+   - Paste the SQL into the SQL Editor
+   - Click **"RUN"** (or press `Ctrl+Enter` / `Cmd+Enter`)
    - Wait for the success message ✅
 
-5. **Verify Tables Were Created**
+4. **Verify the Migration**:
    - Go to **"Table Editor"** in the left sidebar
-   - You should see these new tables:
-     - `workflow_sessions`
-     - `keyword_collections`
-     - `keyword_clusters`
+   - You should see a new table: `content_goal_prompts`
+   - Check that it has 4 rows (the default system prompts)
 
-### Option 2: Using Supabase CLI (Advanced)
+## Option 2: Using Supabase CLI (If Installed)
 
 If you have Supabase CLI installed:
 
@@ -44,58 +32,91 @@ cd /Users/foo/projects/adminpanel-template-blog-writer-next-js
 # Link to your Supabase project (if not already linked)
 supabase link --project-ref your-project-ref
 
-# Push the migration
+# Apply the migration
 supabase db push
 ```
 
-## 🔍 Verify Migration Success
+## Verification Steps
 
-After running the migration, verify:
+After applying the migration, verify:
 
-1. **Check Tables Exist**
-   - Go to Supabase Dashboard → Table Editor
-   - Look for: `workflow_sessions`, `keyword_collections`, `keyword_clusters`
+1. **Table Created**:
+   ```sql
+   SELECT COUNT(*) FROM content_goal_prompts;
+   ```
+   Should return: `4` (one for each content goal)
 
-2. **Check RLS Policies**
-   - Go to Supabase Dashboard → Authentication → Policies
-   - Verify policies exist for all three tables
+2. **Default Prompts Exist**:
+   ```sql
+   SELECT content_goal, prompt_title, is_system_default 
+   FROM content_goal_prompts 
+   ORDER BY content_goal;
+   ```
+   Should show:
+   - `brand_awareness` - Brand Awareness - Default
+   - `conversions` - Conversions - Default
+   - `engagement` - Engagement - Default
+   - `seo` - SEO & Rankings - Default
 
-3. **Test the Workflow**
-   - Navigate to `/admin/workflow/objective` in your app
-   - Create a new workflow session
-   - Verify it saves correctly
+3. **RLS Policies Active**:
+   ```sql
+   SELECT tablename, policyname 
+   FROM pg_policies 
+   WHERE tablename = 'content_goal_prompts';
+   ```
+   Should show 4 policies (SELECT, INSERT, UPDATE, DELETE)
 
-## ⚠️ Important Notes
+4. **Function Created**:
+   ```sql
+   SELECT proname FROM pg_proc WHERE proname = 'get_content_goal_prompt';
+   ```
+   Should return the function name
 
-- **Run this migration AFTER** you've already set up the base schema (`supabase/schema.sql`)
-- The migration uses `CREATE TABLE IF NOT EXISTS`, so it's safe to run multiple times
-- Make sure you're connected to the correct Supabase project
-- If you see errors, check that the `organizations` and `users` tables exist first
+## Troubleshooting
 
-## 🐛 Troubleshooting
-
-### Error: "relation 'organizations' does not exist"
-- **Solution**: Run `supabase/schema.sql` first to create the base tables
+### Error: "relation already exists"
+- The table might already exist. Check if you've run this migration before.
+- If you need to re-run, you can drop the table first (be careful!):
+  ```sql
+  DROP TABLE IF EXISTS content_goal_prompts CASCADE;
+  ```
+  Then re-run the migration.
 
 ### Error: "permission denied"
-- **Solution**: Make sure you're using the SQL Editor (not Table Editor) and have proper permissions
+- Make sure you're using the SQL Editor with proper permissions
+- Check that you're logged in as a project owner/admin
 
-### Error: "duplicate key value violates unique constraint"
-- **Solution**: This is normal if tables already exist. The migration uses `IF NOT EXISTS` so it's safe.
+### Error: "constraint violation"
+- The unique indexes might conflict with existing data
+- Check if there are duplicate prompts:
+  ```sql
+  SELECT content_goal, org_id, COUNT(*) 
+  FROM content_goal_prompts 
+  WHERE is_active = true 
+  GROUP BY content_goal, org_id 
+  HAVING COUNT(*) > 1;
+  ```
 
-## 📝 Quick Reference
+## Next Steps After Migration
 
-**File Location**: `supabase/migrations/20250116000000_add_workflow_tables.sql`
+1. **Access Admin Interface**:
+   - Navigate to `/admin/settings/content-prompts` in your app
+   - You should see all 4 content goals with their default prompts
 
-**Supabase Dashboard URL**: 
-- Your project: https://supabase.com/dashboard/project/YOUR_PROJECT_ID/sql/new
-- Or navigate: Dashboard → SQL Editor → New Query
+2. **Test Content Generation**:
+   - Create a workflow with a content goal selected
+   - Generate content
+   - Check console logs for: `📝 Adding content goal prompt to API request`
 
-**What It Creates**:
-- `workflow_sessions` table
-- `keyword_collections` table  
-- `keyword_clusters` table
-- Indexes for performance
-- RLS policies for security
-- Auto-update triggers
+3. **Customize Prompts** (Optional):
+   - Go to `/admin/settings/content-prompts`
+   - Click "Create Custom" for any content goal
+   - Edit the system prompt to match your needs
+   - Save
 
+## Migration File Location
+
+The migration file is located at:
+```
+supabase/migrations/20250120000002_add_content_goal_prompts.sql
+```

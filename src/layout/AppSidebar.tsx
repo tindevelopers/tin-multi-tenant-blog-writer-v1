@@ -19,7 +19,8 @@ import {
   CalendarDays, 
   Image as ImageIcon, 
   TrendingUp, 
-  Target 
+  Target,
+  Settings
 } from "lucide-react";
 
 type NavItem = {
@@ -86,6 +87,15 @@ const blogWriterItems: NavItem[] = [
         subItems: [
           { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, new: true },
           { name: "Media", path: "/admin/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
+        ]
+      },
+      { 
+        name: "Settings", 
+        icon: <Settings className="w-4 h-4" />,
+        isAccordionHeader: true,
+        new: true,
+        subItems: [
+          { name: "Content Prompts", path: "/admin/settings/content-prompts", icon: <Target className="w-4 h-4" />, new: true },
         ]
       },
       { 

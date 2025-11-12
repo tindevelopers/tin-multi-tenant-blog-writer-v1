@@ -25,6 +25,7 @@ export default function StrategyPage() {
   
   const [workflowSession, setWorkflowSession] = useState<any>(null);
   const [selectedTopics, setSelectedTopics] = useState<any[]>([]);
+  const [selectedTopicId, setSelectedTopicId] = useState<string>(''); // Track selected topic separately
   
   const [formData, setFormData] = useState({
     main_keyword: '',
@@ -70,11 +71,13 @@ export default function StrategyPage() {
               setSelectedTopics(topics);
               // Pre-populate form with topic data
               const firstTopic = topics[0];
+              const topicId = firstTopic.id || firstTopic.topic_id || topics.indexOf(firstTopic).toString();
+              setSelectedTopicId(topicId);
               setFormData({
-                main_keyword: firstTopic.target_keywords?.[0] || '',
-                secondary_keywords: firstTopic.target_keywords?.slice(1).join(', ') || '',
+                main_keyword: firstTopic.target_keywords?.[0] || firstTopic.main_keyword || '',
+                secondary_keywords: firstTopic.target_keywords?.slice(1).join(', ') || firstTopic.secondary_keywords || '',
                 content_type: firstTopic.content_type || 'blog_post',
-                target_audience: session.target_audience || '',
+                target_audience: session.target_audience || firstTopic.target_audience || '',
                 seo_recommendations: [],
                 content_calendar: []
               });
@@ -274,27 +277,34 @@ export default function StrategyPage() {
                   Select Saved Topic <span className="text-red-500">*</span>
                 </label>
                 <select
-                  value={formData.main_keyword}
+                  value={selectedTopicId}
                   onChange={(e) => {
-                    const selectedTopic = selectedTopics.find(t => t.title === e.target.value);
+                    const topicId = e.target.value;
+                    setSelectedTopicId(topicId);
+                    const selectedTopic = selectedTopics.find(t => 
+                      (t.id || t.topic_id || selectedTopics.indexOf(t).toString()) === topicId
+                    );
                     if (selectedTopic) {
                       setFormData({
                         ...formData,
-                        main_keyword: selectedTopic.target_keywords?.[0] || '',
-                        secondary_keywords: selectedTopic.target_keywords?.slice(1).join(', ') || '',
+                        main_keyword: selectedTopic.target_keywords?.[0] || selectedTopic.main_keyword || '',
+                        secondary_keywords: selectedTopic.target_keywords?.slice(1).join(', ') || selectedTopic.secondary_keywords || '',
                         content_type: selectedTopic.content_type || 'blog_post',
-                        target_audience: workflowSession?.target_audience || ''
+                        target_audience: selectedTopic.target_audience || workflowSession?.target_audience || ''
                       });
                     }
                   }}
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="">Select a saved topic...</option>
-                  {selectedTopics.map((topic, index) => (
-                    <option key={topic.id || index} value={topic.title}>
-                      {topic.title}
-                    </option>
-                  ))}
+                  {selectedTopics.map((topic, index) => {
+                    const topicId = topic.id || topic.topic_id || index.toString();
+                    return (
+                      <option key={topicId} value={topicId}>
+                        {topic.title || topic.topic_title || `Topic ${index + 1}`}
+                      </option>
+                    );
+                  })}
                 </select>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Choose from your saved topics to auto-populate the form
@@ -339,9 +349,12 @@ export default function StrategyPage() {
                   type="text"
                   value={formData.secondary_keywords}
                   onChange={(e) => setFormData({ ...formData, secondary_keywords: e.target.value })}
-                  placeholder="e.g., SEO, social media, content marketing"
+                  placeholder="e.g., SEO, social media, content marketing (comma-separated)"
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Enter keywords separated by commas. These will be used to enhance SEO and content relevance.
+                </p>
               </div>
 
               <div className="md:col-span-2">

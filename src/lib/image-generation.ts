@@ -101,13 +101,39 @@ class BlogImageGenerator {
       });
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(error.detail || error.error || `Image generation failed: ${response.statusText}`);
+        const errorText = await response.text();
+        let error: any;
+        try {
+          error = JSON.parse(errorText);
+        } catch {
+          error = { detail: errorText || response.statusText };
+        }
+        
+        const errorMessage = error.detail || error.error || error.message || `Image generation failed: ${response.statusText}`;
+        console.error('❌ Image generation API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage,
+          endpoint: endpoint,
+          hasApiKey: !!this.apiKey
+        });
+        throw new Error(errorMessage);
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log('✅ Image generation API response:', {
+        success: result.success,
+        imagesCount: result.images?.length || 0,
+        provider: result.provider,
+        hasError: !!result.error_message
+      });
+      return result;
     } catch (error) {
-      console.error('Image generation error:', error);
+      console.error('❌ Image generation error:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        endpoint: this.useLocalRoute ? '/api/images/generate' : `${this.apiUrl}/api/v1/images/generate`
+      });
       throw error;
     }
   }
