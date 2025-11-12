@@ -60,10 +60,12 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate batch size limit per guide (30 keywords max)
-    if (body.keywords.length > 30) {
+    // Validate optimal batch size for long-tail keyword research (20 keywords max)
+    // Reduced from 30 to improve performance and reduce timeout risk with higher suggestion counts
+    const OPTIMAL_BATCH_SIZE = 20;
+    if (body.keywords.length > OPTIMAL_BATCH_SIZE) {
       return NextResponse.json(
-        { error: `Cannot analyze more than 30 keywords at once. Received ${body.keywords.length} keywords. Please batch your requests.` },
+        { error: `Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once for optimal long-tail results. Received ${body.keywords.length} keywords. Please batch your requests.` },
         { status: 422 }
       );
     }
@@ -87,11 +89,13 @@ export async function POST(request: NextRequest) {
       language: body.language || 'en',
       include_serp: body.include_serp || false,
       // Enhanced endpoint requires >= 5, so use 5 as minimum when 0 or undefined
-      // This ensures we always get enhanced features (search volume, clustering)
-      // Range: 5-150, default: 20 (per guide)
+      // For optimal long-tail keyword research, default to 75 suggestions per keyword
+      // This ensures comprehensive coverage while maintaining good performance
+      // Range: 5-150, default: 75 (optimal for long-tail research)
+      const DEFAULT_MAX_SUGGESTIONS = 75; // Optimal for long-tail keyword discovery
       max_suggestions_per_keyword: body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5
-        ? body.max_suggestions_per_keyword
-        : 5, // Minimum required value for enhanced endpoint
+        ? Math.min(150, body.max_suggestions_per_keyword) // Cap at API maximum
+        : DEFAULT_MAX_SUGGESTIONS, // Default to 75 for optimal long-tail results
     };
     
     const response = await fetchWithRetry(

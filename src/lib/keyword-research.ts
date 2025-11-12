@@ -283,9 +283,11 @@ class KeywordResearchService {
   ): Promise<KeywordAnalysis> {
     console.log(`📊 Analyzing keywords for SEO potential (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
-    // Enforce API limit of 30 keywords per request (reduced to avoid 422 errors)
-    if (keywords.length > 30) {
-      throw new Error(`Cannot analyze more than 30 keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
+    // Enforce optimal batch size for long-tail keyword research (20 keywords per request)
+    // Reduced from 30 to improve performance and reduce timeout risk with higher suggestion counts
+    const OPTIMAL_BATCH_SIZE = 20;
+    if (keywords.length > OPTIMAL_BATCH_SIZE) {
+      throw new Error(`Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once for optimal long-tail results. Received ${keywords.length} keywords. Please batch your requests.`);
     }
     
     try {
