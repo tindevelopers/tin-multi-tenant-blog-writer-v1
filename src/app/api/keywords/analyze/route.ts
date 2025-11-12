@@ -52,6 +52,22 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     
+    // Validate required fields per FRONTEND_API_INTEGRATION_GUIDE.md
+    if (!body.keywords || !Array.isArray(body.keywords) || body.keywords.length === 0) {
+      return NextResponse.json(
+        { error: 'keywords array is required and must not be empty' },
+        { status: 422 }
+      );
+    }
+    
+    // Validate batch size limit per guide (30 keywords max)
+    if (body.keywords.length > 30) {
+      return NextResponse.json(
+        { error: `Cannot analyze more than 30 keywords at once. Received ${body.keywords.length} keywords. Please batch your requests.` },
+        { status: 422 }
+      );
+    }
+    
     // Always use enhanced endpoint to get search volume data
     // Enhanced endpoint provides comprehensive keyword analysis including search_volume
     const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
@@ -65,7 +81,7 @@ export async function POST(request: NextRequest) {
       include_serp?: boolean;
       max_suggestions_per_keyword?: number;
     } = {
-      keywords: body.keywords || [],
+      keywords: body.keywords,
       location: body.location || 'United States',
       language: body.language || 'en',
       include_serp: body.include_serp || false,
