@@ -224,7 +224,7 @@ function prependFeaturedImage(html: string, image: GeneratedImage): string {
 
   // Insert after first paragraph or at the beginning
   if (html.includes('</p>')) {
-    return html.replace('</p>', `</p>\n${imageHTML}`, 1);
+    return html.replace('</p>', `</p>\n${imageHTML}`);
   } else {
     return imageHTML + '\n' + html;
   }
