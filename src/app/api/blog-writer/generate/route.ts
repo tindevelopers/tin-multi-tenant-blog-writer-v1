@@ -446,24 +446,45 @@ export async function POST(request: NextRequest) {
     }
     
     // Add content goal prompt if available
+    // IMPORTANT: Ensure topic is always included in the prompt, even with content goal prompts
     if (contentGoalPrompt?.system_prompt) {
-      requestPayload.system_prompt = contentGoalPrompt.system_prompt;
+      // Combine content goal prompt with topic-specific instructions
+      // This ensures the AI knows what topic to write about
+      const topicSpecificInstruction = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
+      
+      // Combine system prompt with topic instruction
+      requestPayload.system_prompt = `${contentGoalPrompt.system_prompt}\n\n${topicSpecificInstruction}`;
       requestPayload.content_goal = content_goal;
       console.log('📝 Adding content goal prompt to API request:', {
         content_goal,
-        prompt_length: contentGoalPrompt.system_prompt.length,
-        has_user_template: !!contentGoalPrompt.user_prompt_template
+        prompt_length: requestPayload.system_prompt.length,
+        has_user_template: !!contentGoalPrompt.user_prompt_template,
+        topic_included: requestPayload.system_prompt.includes(topic)
       });
       
-      // Add user prompt template if available
+      // Add user prompt template if available (should include {topic} placeholder)
       if (contentGoalPrompt.user_prompt_template) {
-        requestPayload.user_prompt_template = contentGoalPrompt.user_prompt_template;
+        // Replace {topic} placeholder if present, otherwise append topic
+        const userTemplate = contentGoalPrompt.user_prompt_template.includes('{topic}')
+          ? contentGoalPrompt.user_prompt_template.replace(/{topic}/g, topic)
+          : `${contentGoalPrompt.user_prompt_template}\n\nTopic: ${topic}`;
+        requestPayload.user_prompt_template = userTemplate;
+      } else {
+        // If no user template, create one with the topic
+        requestPayload.user_prompt_template = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
       }
       
       // Add additional instructions if available
       if (contentGoalPrompt.instructions && Object.keys(contentGoalPrompt.instructions).length > 0) {
-        requestPayload.additional_instructions = contentGoalPrompt.instructions;
+        requestPayload.additional_instructions = {
+          ...contentGoalPrompt.instructions,
+          topic: topic,
+          keywords: keywordsArray,
+        };
       }
+    } else {
+      // Even without content goal prompt, ensure topic is in user prompt template
+      requestPayload.user_prompt_template = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
     }
     
     // Add web research and product research parameters if needed
@@ -531,7 +552,20 @@ export async function POST(request: NextRequest) {
       requestPayload.backlink_count = backlink_count;
     }
     
-    console.log('📤 Request payload:', requestPayload);
+    console.log('📤 Request payload:', JSON.stringify(requestPayload, null, 2));
+    console.log('📤 Key parameters being sent:', {
+      topic: requestPayload.topic,
+      keywords: requestPayload.keywords,
+      target_audience: requestPayload.target_audience,
+      tone: requestPayload.tone,
+      word_count: requestPayload.word_count,
+      quality_level: requestPayload.quality_level,
+      endpoint: endpoint,
+      has_custom_instructions: !!requestPayload.custom_instructions,
+      has_enhanced_insights: !!requestPayload.enhanced_keyword_insights,
+      has_content_goal: !!requestPayload.content_goal,
+      system_prompt_length: requestPayload.system_prompt?.length || 0,
+    });
     
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
@@ -561,8 +595,10 @@ export async function POST(request: NextRequest) {
       hasExcerpt: !!result.excerpt,
       hasBlogPost: !!result.blog_post,
       keys: Object.keys(result),
-      contentPreview: result.content?.substring(0, 100) || 'No content'
+      contentPreview: result.content?.substring(0, 200) || result.blog_post?.content?.substring(0, 200) || 'No content',
+      contentLength: result.content?.length || result.blog_post?.content?.length || 0,
     });
+    console.log('📄 Raw API response (first 500 chars):', JSON.stringify(result).substring(0, 500));
     
     // Extract content for processing
     const rawContent = result.blog_post?.content || result.blog_post?.body || result.content || '';
