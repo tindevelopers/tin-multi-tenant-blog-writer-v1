@@ -219,7 +219,6 @@ function prependFeaturedImage(html: string, image: GeneratedImage): string {
         class="blog-image blog-featured"
         loading="eager"
       />
-      ${image.alt_text ? `<figcaption class="blog-image-caption">${image.alt_text}</figcaption>` : ''}
     </figure>
   `;
 
@@ -258,7 +257,6 @@ function embedSectionImages(
           class="blog-image blog-section"
           loading="lazy"
         />
-        ${image.alt_text ? `<figcaption class="blog-image-caption">${image.alt_text}</figcaption>` : ''}
       </figure>
     `;
 
