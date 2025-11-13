@@ -580,6 +580,9 @@ export async function POST(request: NextRequest) {
         name: error.name
       } : { error: String(error) };
       
+      const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
+      const imageKeywords = Array.isArray(keywords) ? keywords : [];
+      
       console.error('❌ Image generation failed:', {
         ...errorDetails,
         topic: imageTopic,
