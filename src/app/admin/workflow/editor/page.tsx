@@ -879,29 +879,49 @@ export default function EditorPage() {
           </div>
         </div>
 
-        {/* Right Column - Content Preview */}
+        {/* Right Column - Content Editor */}
         <div className="space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              <Eye className="w-5 h-5" />
-              Content Preview
+              <FileText className="w-5 h-5" />
+              Content Editor
             </h2>
             
             {formData.content ? (
-              <div className="prose dark:prose-invert max-w-none">
-                <div 
-                  className="text-gray-900 dark:text-white leading-relaxed"
-                  dangerouslySetInnerHTML={{ 
-                    __html: formData.content.includes('<') 
-                      ? formData.content
-                      : formData.content.replace(/\n/g, '<br>')
-                  }}
-                />
-              </div>
+              <TipTapEditor
+                content={formData.content || ''}
+                onChange={(html) => setFormData({ ...formData, content: html })}
+                placeholder="Generated content will appear here. Edit it using the toolbar above..."
+                onImageUpload={async (file) => {
+                  try {
+                    const uploadFormData = new FormData();
+                    uploadFormData.append('file', file);
+
+                    const response = await fetch('/api/images/upload', {
+                      method: 'POST',
+                      body: uploadFormData,
+                    });
+
+                    if (!response.ok) {
+                      const error = await response.json();
+                      throw new Error(error.error || 'Upload failed');
+                    }
+
+                    const result = await response.json();
+                    return result.url;
+                  } catch (error) {
+                    console.error('Error uploading image:', error);
+                    throw error;
+                  }
+                }}
+                editable={true}
+                className="mt-2"
+              />
             ) : (
               <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p>Generated content will appear here</p>
+                <p className="text-sm mt-2">Click "Generate Content" to create your blog post</p>
               </div>
             )}
           </div>

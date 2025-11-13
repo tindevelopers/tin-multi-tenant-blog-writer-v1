@@ -246,17 +246,12 @@ export async function POST(request: NextRequest) {
     console.log('🌐 Calling external API:', `${API_BASE_URL}/api/v1/blog/generate`);
     console.log('🔑 API Key present:', !!API_KEY);
     
-    // Determine which endpoint to use
-    const shouldUseEnhanced = use_enhanced || 
-      quality_level === 'premium' || 
-      quality_level === 'enterprise' ||
-      (contentPreset && contentPreset.quality_level === 'premium');
+    // Always use enhanced endpoint for better content quality
+    // Enhanced endpoint supports custom instructions, quality features, and better topic handling
+    const shouldUseEnhanced = true; // Always use enhanced endpoint
+    const endpoint = '/api/v1/blog/generate-enhanced';
     
-    const endpoint = shouldUseEnhanced 
-      ? '/api/v1/blog/generate-enhanced'
-      : '/api/v1/blog/generate';
-    
-    console.log('🌐 Using endpoint:', endpoint, shouldUseEnhanced ? '(Enhanced)' : '(Standard)');
+    console.log('🌐 Using endpoint:', endpoint, '(Enhanced - Always Enabled)');
     
     // Auto-enable quality features for premium/enterprise quality levels
     const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise' || 
