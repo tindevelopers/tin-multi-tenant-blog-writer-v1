@@ -243,14 +243,13 @@ export async function POST(request: NextRequest) {
     const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
     
-    console.log('🌐 Calling external API:', `${API_BASE_URL}/api/v1/blog/generate`);
-    console.log('🔑 API Key present:', !!API_KEY);
-    
     // Always use enhanced endpoint for better content quality
     // Enhanced endpoint supports custom instructions, quality features, and better topic handling
     const shouldUseEnhanced = true; // Always use enhanced endpoint
     const endpoint = '/api/v1/blog/generate-enhanced';
     
+    console.log('🌐 Calling external API:', `${API_BASE_URL}${endpoint}`);
+    console.log('🔑 API Key present:', !!API_KEY);
     console.log('🌐 Using endpoint:', endpoint, '(Enhanced - Always Enabled)');
     
     // Auto-enable quality features for premium/enterprise quality levels
