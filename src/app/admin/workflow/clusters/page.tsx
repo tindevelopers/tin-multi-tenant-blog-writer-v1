@@ -198,13 +198,13 @@ export default function ClustersPage() {
             });
             
             // Check if collection keywords match cluster keywords
-            const collectionKeywordSet = new Set(
+            const collectionKeywordSet = new Set<string>(
               collectionKeywords.map((kw: any) => typeof kw === 'string' ? kw : kw.keyword)
             );
             
             // If keywords don't match, delete old clusters and regenerate
             const keywordsMatch = collectionKeywordSet.size === clusterKeywords.size &&
-              Array.from(collectionKeywordSet).every((kw: string) => clusterKeywords.has(kw));
+              Array.from(collectionKeywordSet).every((kw) => clusterKeywords.has(kw));
             
             if (!keywordsMatch) {
               console.log('🔄 Keywords changed, deleting old clusters and regenerating from current collection...');
