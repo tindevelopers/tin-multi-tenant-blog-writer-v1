@@ -253,7 +253,7 @@ function embedSectionImages(
       <figure class="blog-section-image">
         <img 
           src="${image.image_url}" 
-          alt="${image.alt_text || 'Blog image'}"
+          alt="Blog image"
           class="blog-image blog-section"
           loading="lazy"
         />
