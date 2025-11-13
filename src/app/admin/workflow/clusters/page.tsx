@@ -120,10 +120,30 @@ export default function ClustersPage() {
         setError(null);
 
         const supabase = createClient();
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
         
-        if (authError || !user) {
-          setError('Please log in to access workflow data.');
+        // Get user with better error handling
+        let user;
+        try {
+          const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+          if (authError) {
+            console.error('Auth error:', authError);
+            // If it's a refresh token error, try to handle it gracefully
+            if (authError.message?.includes('refresh') || authError.message?.includes('token')) {
+              setError('Your session has expired. Please refresh the page or log in again.');
+              setLoading(false);
+              return;
+            }
+            throw new Error(`Authentication error: ${authError.message}`);
+          }
+          if (!authUser) {
+            setError('Please log in to access workflow data.');
+            setLoading(false);
+            return;
+          }
+          user = authUser;
+        } catch (authErr: any) {
+          console.error('Error getting user:', authErr);
+          setError(`Authentication error: ${authErr.message || 'Please log in again.'}`);
           setLoading(false);
           return;
         }
@@ -135,15 +155,33 @@ export default function ClustersPage() {
           return;
         }
 
-        // Load workflow session
+        // Load workflow session with better error handling
         const { data: sessionData, error: sessionError } = await supabase
           .from('workflow_sessions')
           .select('*')
           .eq('session_id', sessionId)
           .maybeSingle();
 
-        if (sessionError || !sessionData) {
-          setError('Workflow session not found. Please start a new workflow.');
+        if (sessionError) {
+          console.error('Session load error:', sessionError);
+          // PGRST116 means no rows found, which is fine - session doesn't exist
+          if (sessionError.code === 'PGRST116') {
+            // Clear invalid session ID from localStorage
+            localStorage.removeItem('workflow_session_id');
+            setError('Workflow session not found. Please start a new workflow from the objective page.');
+            setLoading(false);
+            return;
+          }
+          // Other errors might be auth-related
+          setError(`Failed to load workflow session: ${sessionError.message || 'Unknown error'}. Please try refreshing the page.`);
+          setLoading(false);
+          return;
+        }
+
+        if (!sessionData) {
+          // Clear invalid session ID from localStorage
+          localStorage.removeItem('workflow_session_id');
+          setError('Workflow session not found. Please start a new workflow from the objective page.');
           setLoading(false);
           return;
         }
@@ -716,6 +754,32 @@ export default function ClustersPage() {
       {error && (
         <div className="mb-6">
           <Alert variant="error" title="Error" message={error} />
+          {(error.includes('Workflow session not found') || error.includes('No workflow session found')) && (
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => router.push('/admin/workflow/objective')}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Start New Workflow
+              </button>
+              <button
+                onClick={() => router.push('/admin/workflow/keywords')}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+              >
+                Go to Keyword Research
+              </button>
+            </div>
+          )}
+          {error.includes('session has expired') && (
+            <div className="mt-4">
+              <button
+                onClick={() => window.location.reload()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Refresh Page
+              </button>
+            </div>
+          )}
         </div>
       )}
       {success && (

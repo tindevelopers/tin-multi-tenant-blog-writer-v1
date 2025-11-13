@@ -465,17 +465,32 @@ export default function KeywordResearchPage() {
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
+      setShowSuccessModal(false); // Ensure modal is closed before starting
 
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user) {
-        setError('Please log in to save collections');
+      // Get user with better error handling
+      let user;
+      try {
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        if (authError) {
+          throw new Error(`Authentication error: ${authError.message}`);
+        }
+        if (!authUser) {
+          throw new Error('Please log in to save collections');
+        }
+        user = authUser;
+      } catch (authErr: any) {
+        const errorMsg = authErr.message || 'Please log in to save collections';
+        setError(errorMsg);
+        setLoading(false);
         return;
       }
 
       if (!workflowSession) {
         setError('Workflow session not found. Please start a new workflow.');
+        setLoading(false);
         return;
       }
 
@@ -487,13 +502,15 @@ export default function KeywordResearchPage() {
         .single();
 
       if (userError || !userProfile) {
-        setError('User organization not found');
+        setError(`User organization not found: ${userError?.message || 'Unknown error'}`);
+        setLoading(false);
         return;
       }
 
       const sessionId = workflowSession.session_id || localStorage.getItem('workflow_session_id');
       if (!sessionId) {
         setError('Workflow session ID not found');
+        setLoading(false);
         return;
       }
 
@@ -548,7 +565,7 @@ export default function KeywordResearchPage() {
         
         if (error) {
           console.error('❌ Update error:', error);
-          throw error;
+          throw new Error(`Failed to update collection: ${error.message || error.code || 'Unknown error'}`);
         }
         result = data;
         console.log('✅ Updated existing collection:', result?.collection_id);
@@ -561,7 +578,7 @@ export default function KeywordResearchPage() {
         
         if (error) {
           console.error('❌ Insert error:', error);
-          throw error;
+          throw new Error(`Failed to create collection: ${error.message || error.code || 'Unknown error'}`);
         }
         result = data;
         console.log('✅ Created new collection:', result?.collection_id);
@@ -569,7 +586,7 @@ export default function KeywordResearchPage() {
 
       // Also save keywords to workflow_data for easy access
       const workflowData = workflowSession.workflow_data || {};
-      await supabase
+      const { error: workflowUpdateError } = await supabase
         .from('workflow_sessions')
         .update({
           current_step: 'keywords',
@@ -590,6 +607,11 @@ export default function KeywordResearchPage() {
           }
         })
         .eq('session_id', sessionId);
+
+      if (workflowUpdateError) {
+        console.warn('⚠️ Failed to update workflow session:', workflowUpdateError);
+        // Don't throw - collection was saved successfully
+      }
 
       // Verify the save was successful
       if (!result) {
@@ -615,15 +637,22 @@ export default function KeywordResearchPage() {
 
       // Clear any previous errors
       setError(null);
+      setSuccess(`Collection "${name}" saved successfully!`);
       
       // Show success modal
       setShowSuccessModal(true);
-      console.log('✅ Success modal should be visible');
+      console.log('✅ Success modal should be visible, showSuccessModal:', true);
+      
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => {
+        setSuccess(null);
+      }, 5000);
     } catch (err: any) {
       console.error('❌ Error saving collection:', err);
-      const errorMessage = err.message || err.code || 'Failed to save keyword collection. Please check the console for details.';
+      const errorMessage = err.message || err.code || err.toString() || 'Failed to save keyword collection. Please check the console for details.';
       setError(errorMessage);
       setShowSuccessModal(false); // Ensure modal is closed on error
+      setSuccess(null);
     } finally {
       setLoading(false);
     }

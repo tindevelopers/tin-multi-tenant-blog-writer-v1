@@ -3,6 +3,39 @@
 import cloudRunHealth from './cloud-run-health';
 import keywordStorageService from './keyword-storage';
 
+// Enhanced endpoint types from FRONTEND_INTEGRATION_GUIDE.md v1.3.0
+export interface TrendsData {
+  trend_score: number;
+  is_trending: boolean;
+  related_topics: string[];
+  related_queries: string[];
+}
+
+export interface KeywordIdea {
+  keyword: string;
+  search_volume: number;
+  cpc?: number;
+  competition?: number;
+  difficulty?: string;
+}
+
+export interface RelevantPage {
+  url: string;
+  title: string;
+  rank_group: number;
+  word_count?: number;
+  structure?: Record<string, unknown>;
+}
+
+export interface SERPAISummary {
+  summary: string;
+  main_topics: string[];
+  missing_topics: string[];
+  common_questions: string[];
+  recommendations: string[];
+  content_depth?: string;
+}
+
 export interface KeywordData {
   keyword: string;
   search_volume?: number;
@@ -18,6 +51,13 @@ export interface KeywordData {
   parent_topic?: string;
   cluster_score?: number;
   category_type?: 'topic' | 'question' | 'action' | 'entity';
+  // Enhanced endpoint fields (v1.3.0)
+  trends_data?: TrendsData;
+  keyword_ideas?: KeywordIdea[];
+  relevant_pages?: RelevantPage[];
+  serp_ai_summary?: SERPAISummary;
+  ai_search_volume?: number;
+  ai_trend?: number;
 }
 
 export interface KeywordAnalysis {
@@ -135,11 +175,19 @@ class KeywordResearchService {
 
   /**
    * Analyze keywords - REBUILT with proper defaults and fallback
+   * Now supports enhanced endpoint features from v1.3.0
    */
   async analyzeKeywords(
     keywords: string[], 
     maxSuggestionsPerKeyword: number = 75, // Default to 75 for optimal long-tail results
-    location: string = 'United States'
+    location: string = 'United States',
+    options?: {
+      include_trends?: boolean;
+      include_keyword_ideas?: boolean;
+      include_relevant_pages?: boolean;
+      include_serp_ai_summary?: boolean;
+      competitor_domain?: string;
+    }
   ): Promise<KeywordAnalysis> {
     console.log(`📊 Analyzing keywords (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
@@ -158,13 +206,32 @@ class KeywordResearchService {
         ? '/api/keywords/analyze'
         : `${this.baseURL}/api/v1/keywords/enhanced`;
       
-      const requestBody = {
+      const requestBody: Record<string, unknown> = {
         keywords,
         location,
         language: 'en',
         include_serp: false,
         max_suggestions_per_keyword: finalMaxSuggestions
       };
+
+      // Add enhanced endpoint parameters if provided
+      if (options) {
+        if (options.include_trends !== undefined) {
+          requestBody.include_trends = options.include_trends;
+        }
+        if (options.include_keyword_ideas !== undefined) {
+          requestBody.include_keyword_ideas = options.include_keyword_ideas;
+        }
+        if (options.include_relevant_pages !== undefined) {
+          requestBody.include_relevant_pages = options.include_relevant_pages;
+        }
+        if (options.include_serp_ai_summary !== undefined) {
+          requestBody.include_serp_ai_summary = options.include_serp_ai_summary;
+        }
+        if (options.competitor_domain) {
+          requestBody.competitor_domain = options.competitor_domain;
+        }
+      }
 
       console.log(`📤 Sending request to ${apiUrl} with ${finalMaxSuggestions} suggestions per keyword`);
 
@@ -247,6 +314,13 @@ class KeywordResearchService {
             parent_topic: kwData.parent_topic,
             cluster_score: kwData.cluster_score,
             category_type: kwData.category_type,
+            // Enhanced endpoint fields (v1.3.0)
+            trends_data: kwData.trends_data,
+            keyword_ideas: kwData.keyword_ideas,
+            relevant_pages: kwData.relevant_pages,
+            serp_ai_summary: kwData.serp_ai_summary,
+            ai_search_volume: kwData.ai_search_volume,
+            ai_trend: kwData.ai_trend,
           };
         }
       });
@@ -350,12 +424,14 @@ class KeywordResearchService {
 
   /**
    * Perform comprehensive blog research - REBUILT
+   * Now supports enhanced endpoint features for better content quality
    */
   async performBlogResearch(
     topic: string, 
     targetAudience: string = 'general',
     userId?: string,
-    location: string = 'United States'
+    location: string = 'United States',
+    useEnhancedFeatures: boolean = true // Enable enhanced features by default
   ): Promise<BlogResearchResults> {
     console.log('🔬 Starting comprehensive blog research...');
     
@@ -382,11 +458,19 @@ class KeywordResearchService {
         
         const batches: KeywordAnalysis[] = [];
         
+        // Enhanced options for better content quality
+        const enhancedOptions = useEnhancedFeatures ? {
+          include_trends: true, // Google Trends for trending topics
+          include_keyword_ideas: true, // Keyword ideas for content expansion
+          include_relevant_pages: true, // Competitor analysis
+          include_serp_ai_summary: true, // AI-powered SERP summary
+        } : undefined;
+        
         for (let i = 0; i < allKeywords.length; i += BATCH_SIZE) {
           const batch = allKeywords.slice(i, i + BATCH_SIZE);
           console.log(`📊 Analyzing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allKeywords.length / BATCH_SIZE)} (${batch.length} keywords)...`);
           
-          const batchAnalysis = await this.analyzeKeywords(batch, MAX_SUGGESTIONS_PER_KEYWORD, location);
+          const batchAnalysis = await this.analyzeKeywords(batch, MAX_SUGGESTIONS_PER_KEYWORD, location, enhancedOptions);
           batches.push(batchAnalysis);
         }
         
@@ -417,7 +501,15 @@ class KeywordResearchService {
         
         console.log(`✅ Merged ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords`);
       } else {
-        keywordAnalysis = await this.analyzeKeywords(allKeywords, MAX_SUGGESTIONS_PER_KEYWORD, location);
+        // Enhanced options for better content quality
+        const enhancedOptions = useEnhancedFeatures ? {
+          include_trends: true,
+          include_keyword_ideas: true,
+          include_relevant_pages: true,
+          include_serp_ai_summary: true,
+        } : undefined;
+        
+        keywordAnalysis = await this.analyzeKeywords(allKeywords, MAX_SUGGESTIONS_PER_KEYWORD, location, enhancedOptions);
       }
 
       // Step 4: Generate title suggestions
@@ -520,15 +612,80 @@ class KeywordResearchService {
   }
 
   /**
-   * Generate SEO insights
+   * Generate SEO insights - Enhanced with v1.3.0 features
    */
   generateSEOInsights(analysis: KeywordAnalysis): BlogResearchResults['seo_insights'] {
     const keywords = Object.keys(analysis.keyword_analysis);
+    const primaryKeyword = keywords[0] || '';
+    const primaryKeywordData = analysis.keyword_analysis[primaryKeyword];
+    
+    // Use SERP AI Summary for content length recommendation if available
+    let contentLengthRecommendation = 2000; // Default
+    if (primaryKeywordData?.serp_ai_summary?.content_depth) {
+      const depth = primaryKeywordData.serp_ai_summary.content_depth;
+      if (depth === 'comprehensive') {
+        contentLengthRecommendation = 4000;
+      } else if (depth === 'detailed') {
+        contentLengthRecommendation = 3000;
+      } else if (depth === 'medium') {
+        contentLengthRecommendation = 2000;
+      } else {
+        contentLengthRecommendation = 1500;
+      }
+    }
+    
+    // Extract keyword ideas for secondary keywords
+    const keywordIdeas: string[] = [];
+    if (primaryKeywordData?.keyword_ideas) {
+      keywordIdeas.push(...primaryKeywordData.keyword_ideas
+        .slice(0, 10)
+        .map(idea => idea.keyword));
+    }
+    
+    // Combine with existing secondary keywords
+    const secondaryKeywords = [
+      ...keywords.slice(1, 10),
+      ...keywordIdeas
+    ].slice(0, 15); // Limit to 15 total
+    
     return {
-      primary_keyword: keywords[0] || '',
-      secondary_keywords: keywords.slice(1, 10),
-      content_length_recommendation: 2000,
+      primary_keyword: primaryKeyword,
+      secondary_keywords: secondaryKeywords,
+      content_length_recommendation: contentLengthRecommendation,
       internal_linking_opportunities: keywords.slice(0, 5)
+    };
+  }
+
+  /**
+   * Extract enhanced insights from keyword analysis for blog generation
+   * Uses v1.3.0 enhanced endpoint features
+   */
+  extractEnhancedInsights(analysis: KeywordAnalysis, primaryKeyword: string): {
+    trendsData?: TrendsData;
+    keywordIdeas?: KeywordIdea[];
+    serpAISummary?: SERPAISummary;
+    relevantPages?: RelevantPage[];
+    isTrending?: boolean;
+    mainTopics?: string[];
+    missingTopics?: string[];
+    commonQuestions?: string[];
+    recommendations?: string[];
+  } {
+    const keywordData = analysis.keyword_analysis[primaryKeyword];
+    if (!keywordData) {
+      return {};
+    }
+
+    return {
+      trendsData: keywordData.trends_data,
+      keywordIdeas: keywordData.keyword_ideas,
+      serpAISummary: keywordData.serp_ai_summary,
+      relevantPages: keywordData.relevant_pages,
+      isTrending: keywordData.trends_data?.is_trending || false,
+      mainTopics: keywordData.serp_ai_summary?.main_topics,
+      missingTopics: keywordData.serp_ai_summary?.missing_topics,
+      commonQuestions: keywordData.serp_ai_summary?.common_questions,
+      recommendations: keywordData.serp_ai_summary?.recommendations,
     };
   }
 }

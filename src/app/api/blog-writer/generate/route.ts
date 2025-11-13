@@ -265,6 +265,75 @@ export async function POST(request: NextRequest) {
       requiresProductResearch,
       keywords: keywordsArray
     });
+
+    // Perform enhanced keyword analysis if keywords are provided (v1.3.0)
+    let enhancedKeywordInsights: {
+      trendsData?: any;
+      serpAISummary?: any;
+      keywordIdeas?: any[];
+      isTrending?: boolean;
+      mainTopics?: string[];
+      missingTopics?: string[];
+      commonQuestions?: string[];
+      recommendations?: string[];
+    } = {};
+    
+    if (keywordsArray.length > 0 && shouldUseEnhanced) {
+      try {
+        console.log('🔬 Performing enhanced keyword analysis for blog generation...');
+        const primaryKeyword = keywordsArray[0] || topic;
+        
+        // Call the keywords analyze API route with enhanced features
+        const analyzeResponse = await fetch(`${request.nextUrl.origin}/api/keywords/analyze`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            keywords: [primaryKeyword],
+            location: body.location || 'United States',
+            language: 'en',
+            max_suggestions_per_keyword: 75,
+            include_trends: true,
+            include_keyword_ideas: true,
+            include_relevant_pages: true,
+            include_serp_ai_summary: true,
+          }),
+        });
+        
+        if (analyzeResponse.ok) {
+          const analyzeData = await analyzeResponse.json();
+          const enhancedAnalysis = analyzeData.enhanced_analysis || analyzeData.keyword_analysis || {};
+          const keywordData = enhancedAnalysis[primaryKeyword];
+          
+          if (keywordData) {
+            // Extract enhanced insights
+            enhancedKeywordInsights = {
+              trendsData: keywordData.trends_data,
+              serpAISummary: keywordData.serp_ai_summary,
+              keywordIdeas: keywordData.keyword_ideas,
+              isTrending: keywordData.trends_data?.is_trending || false,
+              mainTopics: keywordData.serp_ai_summary?.main_topics,
+              missingTopics: keywordData.serp_ai_summary?.missing_topics,
+              commonQuestions: keywordData.serp_ai_summary?.common_questions,
+              recommendations: keywordData.serp_ai_summary?.recommendations,
+            };
+            
+            console.log('✅ Enhanced keyword analysis complete:', {
+              isTrending: enhancedKeywordInsights.isTrending,
+              hasSERPSummary: !!enhancedKeywordInsights.serpAISummary,
+              mainTopicsCount: enhancedKeywordInsights.mainTopics?.length || 0,
+              keywordIdeasCount: enhancedKeywordInsights.keywordIdeas?.length || 0,
+            });
+          }
+        } else {
+          console.warn('⚠️ Enhanced keyword analysis API call failed (non-critical)');
+        }
+      } catch (error) {
+        console.warn('⚠️ Enhanced keyword analysis failed (non-critical):', error);
+        // Continue without enhanced insights - not critical for blog generation
+      }
+    }
     
     // Build request payload with optional external links parameters
     const requestPayload: Record<string, unknown> = {
@@ -278,6 +347,32 @@ export async function POST(request: NextRequest) {
       include_formatting: true,
       include_images: true, // Request API to include image placeholders
     };
+
+    // Add enhanced keyword insights if available (v1.3.0)
+    if (enhancedKeywordInsights.serpAISummary) {
+      requestPayload.enhanced_keyword_insights = {
+        // SERP AI Summary for content structure
+        main_topics: enhancedKeywordInsights.mainTopics || [],
+        missing_topics: enhancedKeywordInsights.missingTopics || [],
+        common_questions: enhancedKeywordInsights.commonQuestions || [],
+        recommendations: enhancedKeywordInsights.recommendations || [],
+        content_summary: enhancedKeywordInsights.serpAISummary.summary,
+        // Trends data for timely content
+        is_trending: enhancedKeywordInsights.isTrending || false,
+        trend_score: enhancedKeywordInsights.trendsData?.trend_score,
+        related_topics: enhancedKeywordInsights.trendsData?.related_topics || [],
+        // Keyword ideas for content expansion
+        keyword_ideas: enhancedKeywordInsights.keywordIdeas?.slice(0, 10).map(idea => idea.keyword) || [],
+      };
+      
+      console.log('📊 Adding enhanced keyword insights to blog generation:', {
+        mainTopicsCount: enhancedKeywordInsights.mainTopics?.length || 0,
+        missingTopicsCount: enhancedKeywordInsights.missingTopics?.length || 0,
+        questionsCount: enhancedKeywordInsights.commonQuestions?.length || 0,
+        isTrending: enhancedKeywordInsights.isTrending,
+        keywordIdeasCount: enhancedKeywordInsights.keywordIdeas?.length || 0,
+      });
+    }
     
     // Add content goal prompt if available
     if (contentGoalPrompt?.system_prompt) {

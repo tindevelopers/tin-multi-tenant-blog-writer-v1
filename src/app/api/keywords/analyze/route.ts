@@ -112,6 +112,12 @@ export async function POST(request: NextRequest) {
       include_serp?: boolean;
       max_suggestions_per_keyword: number;
       include_search_volume?: boolean; // Explicitly request search volume data
+      // Enhanced endpoint parameters (v1.3.0)
+      include_trends?: boolean;
+      include_keyword_ideas?: boolean;
+      include_relevant_pages?: boolean;
+      include_serp_ai_summary?: boolean;
+      competitor_domain?: string;
     } = {
       keywords: normalizedKeywords,
       location: body.location || 'United States',
@@ -119,6 +125,12 @@ export async function POST(request: NextRequest) {
       include_serp: body.include_serp || false,
       max_suggestions_per_keyword: maxSuggestions,
       include_search_volume: true, // Always request search volume for enhanced endpoint
+      // Forward enhanced endpoint parameters if provided
+      include_trends: body.include_trends,
+      include_keyword_ideas: body.include_keyword_ideas,
+      include_relevant_pages: body.include_relevant_pages,
+      include_serp_ai_summary: body.include_serp_ai_summary,
+      competitor_domain: body.competitor_domain,
     };
     
     // Try enhanced endpoint first
@@ -138,8 +150,17 @@ export async function POST(request: NextRequest) {
     if (response.status === 503) {
       console.log('⚠️ Enhanced endpoint unavailable, falling back to regular endpoint');
       endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
-      // Regular endpoint doesn't support max_suggestions_per_keyword or include_search_volume, remove them
-      const { max_suggestions_per_keyword, include_search_volume, ...regularRequestBody } = requestBody;
+      // Regular endpoint doesn't support enhanced features, remove them
+      const { 
+        max_suggestions_per_keyword, 
+        include_search_volume,
+        include_trends,
+        include_keyword_ideas,
+        include_relevant_pages,
+        include_serp_ai_summary,
+        competitor_domain,
+        ...regularRequestBody 
+      } = requestBody;
       // Add include_search_volume to regular endpoint if it supports it
       const regularRequestWithVolume = {
         ...regularRequestBody,

@@ -319,6 +319,70 @@ class BlogWriterAPI {
     }
   }
 
+  // ========== Enhanced Keyword Analysis (v1.3.0) ==========
+
+  /**
+   * Get LLM Responses for fact-checking and multi-model consensus
+   * 
+   * API v1.3.0+: POST /api/v1/keywords/llm-responses
+   * - Multi-model fact-checking (ChatGPT, Claude, Gemini, Perplexity)
+   * - Consensus calculation across models
+   * - Impact: 25-35% improvement in content accuracy
+   * 
+   * @param params LLM response parameters
+   * @param params.prompt The prompt/question to fact-check
+   * @param params.llms Array of LLMs to use: ['chatgpt', 'claude', 'gemini', 'perplexity']
+   * @param params.max_tokens Maximum tokens per response
+   * @returns Multi-model responses with consensus
+   */
+  async getLLMResponses(params: {
+    prompt: string;
+    llms?: string[]; // Default: ['chatgpt', 'claude', 'gemini']
+    max_tokens?: number; // Default: 500
+  }): Promise<{
+    prompt: string;
+    responses: Record<string, {
+      text: string;
+      tokens: number;
+      model: string;
+    }>;
+    consensus: string[];
+    differences: string[];
+    sources: string[];
+    confidence: Record<string, number>;
+  }> {
+    try {
+      console.log('🤖 Getting LLM responses for fact-checking:', {
+        prompt: params.prompt.substring(0, 100),
+        llms: params.llms || ['chatgpt', 'claude', 'gemini'],
+        max_tokens: params.max_tokens || 500
+      });
+
+      return await this.makeRequest<{
+        prompt: string;
+        responses: Record<string, {
+          text: string;
+          tokens: number;
+          model: string;
+        }>;
+        consensus: string[];
+        differences: string[];
+        sources: string[];
+        confidence: Record<string, number>;
+      }>('/api/v1/keywords/llm-responses', {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt: params.prompt,
+          llms: params.llms || ['chatgpt', 'claude', 'gemini'],
+          max_tokens: params.max_tokens || 500
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to get LLM responses:', error);
+      throw error;
+    }
+  }
+
   // ========== Integration API Methods ==========
 
   /**
@@ -460,6 +524,7 @@ export const {
   getQualityLevels,
   connectAndRecommend,
   getRecommendations,
+  getLLMResponses,
 } = blogWriterAPI;
 
 export default blogWriterAPI;
