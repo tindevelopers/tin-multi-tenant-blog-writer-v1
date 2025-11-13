@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       excerpt: excerpt || '',
       status: status as 'draft' | 'published' | 'scheduled' | 'archived',
       seo_data: seo_data || {},
-      metadata: finalMetadata,
+      metadata: finalMetadata as any,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
