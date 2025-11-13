@@ -921,7 +921,7 @@ export default function EditorPage() {
               <div className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
                 <p>Generated content will appear here</p>
-                <p className="text-sm mt-2">Click "Generate Content" to create your blog post</p>
+                <p className="text-sm mt-2">Click &quot;Generate Content&quot; to create your blog post</p>
               </div>
             )}
           </div>
