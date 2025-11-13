@@ -6,6 +6,7 @@ import BlogImageGenerator, { type GeneratedImage } from '@/lib/image-generation'
 import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload';
 import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
 import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
+import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 
 // Create server-side image generator (uses direct Cloud Run URL)
 const imageGenerator = new BlogImageGenerator(
@@ -13,6 +14,122 @@ const imageGenerator = new BlogImageGenerator(
   process.env.BLOG_WRITER_API_KEY || '',
   false // Don't use local route on server-side
 );
+
+/**
+ * Helper function to build the transformed blog generation response
+ * This centralizes response building to avoid duplication between response paths
+ */
+function buildBlogResponse(
+  result: any,
+  enhancedContent: string,
+  progressUpdates: ProgressUpdate[],
+  featuredImage: GeneratedImage | null,
+  sectionImages: Array<{ position: number; image: GeneratedImage }>,
+  options: {
+    topic: string;
+    brandVoice: any;
+    contentPreset: any;
+    endpoint: string;
+    shouldUseEnhanced: boolean;
+    requiresProductResearch: boolean;
+  }
+): EnhancedBlogResponse {
+  const { topic, brandVoice, contentPreset, endpoint, shouldUseEnhanced, requiresProductResearch } = options;
+  
+  // Determine title and excerpt from various possible sources
+  const title = result.blog_post?.title || result.title || result.meta_title || topic;
+  const excerpt = result.blog_post?.excerpt || result.blog_post?.summary || result.excerpt || result.meta_description || '';
+  
+  return {
+    // Core content fields
+    content: enhancedContent,
+    title,
+    excerpt,
+    
+    // Progress tracking
+    progress_updates: progressUpdates,
+    
+    // SEO and quality metrics
+    meta_title: result.meta_title || result.title || title,
+    meta_description: result.meta_description || result.excerpt || excerpt,
+    readability_score: result.readability_score || 0,
+    seo_score: result.seo_score || 0,
+    quality_score: result.quality_score ?? null,
+    quality_dimensions: result.quality_dimensions || {},
+    
+    // Stage results and costs
+    stage_results: result.stage_results || [],
+    total_tokens: result.total_tokens || 0,
+    total_cost: result.total_cost || 0,
+    generation_time: result.generation_time || 0,
+    
+    // Citations and sources
+    citations: result.citations || [],
+    
+    // Enhanced features data
+    semantic_keywords: result.semantic_keywords || [],
+    structured_data: result.structured_data || null,
+    knowledge_graph: result.knowledge_graph || null,
+    seo_metadata: result.seo_metadata || {},
+    content_metadata: result.content_metadata || {},
+    
+    // Warnings and status
+    warnings: result.warnings || [],
+    success: result.success !== false, // Default to true if not specified
+    
+    // Word count
+    word_count: result.word_count || 0,
+    
+    // Suggestions
+    suggestions: result.suggestions || [],
+    
+    // Quality scores (legacy)
+    quality_scores: result.quality_scores || null,
+    
+    // Include generated featured image if available
+    featured_image: featuredImage ? {
+      image_id: featuredImage.image_id,
+      image_url: featuredImage.image_url,
+      image_data: featuredImage.image_data,
+      width: featuredImage.width,
+      height: featuredImage.height,
+      format: featuredImage.format,
+      alt_text: `Featured image for ${title}`,
+      quality_score: featuredImage.quality_score,
+      safety_score: featuredImage.safety_score
+    } : null,
+    
+    // Metadata about the generation process
+    metadata: {
+      used_brand_voice: !!brandVoice,
+      used_preset: !!contentPreset,
+      endpoint_used: endpoint,
+      enhanced: shouldUseEnhanced,
+      image_generated: !!featuredImage,
+      section_images_generated: sectionImages.length,
+      content_enhanced: true,
+      content_format: 'rich_html',
+      product_research_requested: requiresProductResearch,
+      web_research_requested: requiresProductResearch,
+      has_progress_updates: progressUpdates.length > 0,
+      total_progress_stages: progressUpdates.length > 0 
+        ? progressUpdates[progressUpdates.length - 1].total_stages 
+        : null,
+    },
+    
+    // Image generation status
+    image_generation_status: {
+      featured_image: featuredImage ? 'success' : 'failed',
+      featured_image_url: featuredImage?.image_url || null,
+      section_images_count: sectionImages.length,
+      section_images: sectionImages.map(img => ({
+        position: img.position,
+        url: img.image.image_url || null,
+        status: img.image.image_url ? 'success' : 'failed'
+      }))
+    }
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -77,6 +194,7 @@ export async function POST(request: NextRequest) {
     
     let orgId: string;
     let userId: string;
+    let queueId: string | null = null;
     
     if (user) {
       // Get user's org_id
@@ -103,6 +221,52 @@ export async function POST(request: NextRequest) {
       userId = '00000000-0000-0000-0000-000000000002';
       orgId = '00000000-0000-0000-0000-000000000001';
       console.log('✅ Using service client with system user:', userId, 'Org:', orgId);
+    }
+    
+    // Create queue entry before generation starts
+    if (orgId && userId) {
+      try {
+        console.log('📋 Creating queue entry for blog generation...');
+        const { data: queueItem, error: queueError } = await supabase
+          .from('blog_generation_queue')
+          .insert({
+            org_id: orgId,
+            created_by: userId,
+            topic: topic,
+            keywords: keywordsArray,
+            target_audience: target_audience,
+            tone: tone,
+            word_count: word_count,
+            quality_level: quality_level,
+            custom_instructions: custom_instructions,
+            template_type: template_type,
+            priority: 5, // Default priority
+            status: 'generating',
+            progress_percentage: 0,
+            generation_started_at: new Date().toISOString(),
+            metadata: {
+              quality_level,
+              use_enhanced: shouldUseEnhanced,
+              endpoint: endpoint,
+              has_brand_voice: !!brandVoice,
+              has_content_preset: !!contentPreset,
+              content_goal: content_goal
+            }
+          })
+          .select('queue_id')
+          .single();
+        
+        if (queueError) {
+          console.warn('⚠️ Failed to create queue entry:', queueError);
+          // Continue without queue entry (non-blocking)
+        } else if (queueItem) {
+          queueId = queueItem.queue_id;
+          console.log('✅ Queue entry created:', queueId);
+        }
+      } catch (error) {
+        console.warn('⚠️ Error creating queue entry:', error);
+        // Continue without queue entry (non-blocking)
+      }
     }
     
     // Fetch brand voice settings for the organization
@@ -577,6 +741,23 @@ export async function POST(request: NextRequest) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ External API error:', response.status, errorText);
+      
+      // Update queue entry with error if queue exists
+      if (queueId) {
+        try {
+          await supabase
+            .from('blog_generation_queue')
+            .update({
+              status: 'failed',
+              generation_error: `API error ${response.status}: ${errorText.substring(0, 500)}`,
+              generation_completed_at: new Date().toISOString()
+            })
+            .eq('queue_id', queueId);
+        } catch (error) {
+          console.warn('⚠️ Failed to update queue entry with error:', error);
+        }
+      }
+      
       return NextResponse.json(
         { error: `External API error: ${response.status} ${errorText}` },
         { status: response.status }
@@ -595,6 +776,92 @@ export async function POST(request: NextRequest) {
       contentLength: result.content?.length || result.blog_post?.content?.length || 0,
     });
     console.log('📄 Raw API response (first 500 chars):', JSON.stringify(result).substring(0, 500));
+    
+    // Update queue entry with progress updates if queue exists
+    if (queueId) {
+      try {
+        // Extract progress updates from result
+        let progressUpdates: ProgressUpdate[] = [];
+        if (result.progress_updates && Array.isArray(result.progress_updates)) {
+          progressUpdates = result.progress_updates;
+        }
+        
+        const latestProgress = progressUpdates.length > 0 
+          ? progressUpdates[progressUpdates.length - 1] 
+          : null;
+        
+        const progressPercentage = latestProgress?.progress_percentage || 100;
+        const currentStage = latestProgress?.stage || 'finalization';
+        
+        // Update queue with progress
+        await supabase
+          .from('blog_generation_queue')
+          .update({
+            progress_percentage: progressPercentage,
+            current_stage: currentStage,
+            progress_updates: progressUpdates,
+            status: 'generated',
+            generation_completed_at: new Date().toISOString()
+          })
+          .eq('queue_id', queueId);
+        
+        console.log('✅ Queue entry updated with progress:', {
+          queue_id: queueId,
+          progress: progressPercentage,
+          stage: currentStage,
+          updates_count: progressUpdates.length
+        });
+      } catch (error) {
+        console.warn('⚠️ Failed to update queue entry:', error);
+        // Continue without queue update (non-blocking)
+      }
+    }
+    
+    // Extract progress updates from external API response
+    // Handle both new format (progress_updates array) and legacy format
+    let progressUpdates: ProgressUpdate[] = [];
+    
+    if (result.progress_updates && Array.isArray(result.progress_updates)) {
+      // New format: array of progress updates
+      progressUpdates = result.progress_updates;
+    } else if (result.progress) {
+      // Legacy format: single progress object (convert to array)
+      progressUpdates = [{
+        stage: result.progress.stage || 'unknown',
+        stage_number: result.progress.stage_number || 0,
+        total_stages: result.progress.total_stages || 12,
+        progress_percentage: result.progress.progress_percentage || 0,
+        status: result.progress.status || 'Processing',
+        details: result.progress.details,
+        metadata: result.progress.metadata || {},
+        timestamp: result.progress.timestamp || Date.now() / 1000
+      }];
+    } else {
+      // No progress data - create a synthetic update for completion
+      progressUpdates = [{
+        stage: 'finalization',
+        stage_number: 12,
+        total_stages: 12,
+        progress_percentage: 100,
+        status: 'Blog generation complete',
+        details: 'Content generated successfully',
+        metadata: {},
+        timestamp: Date.now() / 1000
+      }];
+    }
+    
+    // Log progress updates (only in development or when explicitly enabled)
+    if (process.env.NODE_ENV === 'development' || process.env.LOG_PROGRESS === 'true') {
+      console.log('📊 Progress updates received:', {
+        count: progressUpdates.length,
+        latestProgress: progressUpdates.length > 0 
+          ? progressUpdates[progressUpdates.length - 1].progress_percentage 
+          : 0,
+        latestStatus: progressUpdates.length > 0 
+          ? progressUpdates[progressUpdates.length - 1].status 
+          : 'No progress data'
+      });
+    }
     
     // Extract content for processing
     const rawContent = result.blog_post?.content || result.blog_post?.body || result.content || '';
@@ -811,116 +1078,99 @@ export async function POST(request: NextRequest) {
     });
     
     // Transform the response to match our expected format
+    // Use helper function to build response (avoids duplication)
+    const transformedResult = buildBlogResponse(
+      result,
+      enhancedContent,
+      progressUpdates,
+      featuredImage,
+      sectionImages,
+      {
+        topic,
+        brandVoice,
+        contentPreset,
+        endpoint,
+        shouldUseEnhanced,
+        requiresProductResearch
+      }
+    );
+    
+    // Verify progress updates structure
+    if (progressUpdates.length > 0) {
+      const latest = progressUpdates[progressUpdates.length - 1];
+      if (process.env.NODE_ENV === 'development' || process.env.LOG_PROGRESS === 'true') {
+        console.log('✅ Latest progress:', {
+          stage: latest.stage,
+          percentage: latest.progress_percentage,
+          status: latest.status
+        });
+      }
+    }
+    
+    // Ensure response includes progress_updates
+    if (!transformedResult.progress_updates) {
+      transformedResult.progress_updates = progressUpdates;
+    }
+    
+    console.log('📄 Transformed result:', {
+      contentLength: transformedResult.content.length,
+      title: transformedResult.title,
+      excerpt: transformedResult.excerpt,
+      wordCount: transformedResult.word_count,
+      seoScore: transformedResult.seo_score,
+      enhanced: shouldUseEnhanced,
+      productResearchRequested: requiresProductResearch,
+      imageGenerated: !!featuredImage,
+      sectionImagesCount: sectionImages.length,
+      progressUpdatesCount: transformedResult.progress_updates.length,
+      hasProgressUpdates: transformedResult.progress_updates.length > 0
+    });
+    
+    // Update queue entry with final results if queue exists
+    if (queueId && transformedResult) {
+      try {
+        const rawContent = result.blog_post?.content || result.content || transformedResult.content || '';
+        await supabase
+          .from('blog_generation_queue')
+          .update({
+            generated_content: rawContent,
+            generated_title: transformedResult.title,
+            generation_metadata: {
+              ...transformedResult.metadata,
+              seo_score: transformedResult.seo_score,
+              readability_score: transformedResult.readability_score,
+              quality_score: transformedResult.quality_score,
+              word_count: transformedResult.word_count,
+              total_cost: transformedResult.total_cost,
+              generation_time: transformedResult.generation_time
+            }
+          })
+          .eq('queue_id', queueId);
+        
+        console.log('✅ Queue entry updated with generated content');
+      } catch (error) {
+        console.warn('⚠️ Failed to update queue entry with content:', error);
+      }
+    }
+    
     if (result.success && result.blog_post) {
-      const transformedResult = {
-        content: enhancedContent, // Use enhanced rich HTML content
-        title: result.blog_post.title || '',
-        excerpt: result.blog_post.excerpt || result.blog_post.summary || '',
-        word_count: result.word_count || 0,
-        seo_score: result.seo_score || 0,
-        readability_score: result.readability_score || 0,
-        warnings: result.warnings || [],
-        suggestions: result.suggestions || [],
-        // Enhanced endpoint may return additional fields
-        quality_scores: result.quality_scores || null,
-        semantic_keywords: result.semantic_keywords || null,
-        knowledge_graph: result.knowledge_graph || null,
-        // Include generated featured image if available
-        featured_image: featuredImage ? {
-          image_id: featuredImage.image_id,
-          image_url: featuredImage.image_url,
-          image_data: featuredImage.image_data,
-          width: featuredImage.width,
-          height: featuredImage.height,
-          format: featuredImage.format,
-          alt_text: `Featured image for ${result.blog_post?.title || topic || 'blog post'}`,
-          quality_score: featuredImage.quality_score,
-          safety_score: featuredImage.safety_score
-        } : null,
-        metadata: {
-          used_brand_voice: !!brandVoice,
-          used_preset: !!contentPreset,
-          endpoint_used: endpoint,
-          enhanced: shouldUseEnhanced,
-          image_generated: !!featuredImage,
-          section_images_generated: sectionImages.length,
-          content_enhanced: true,
-          content_format: 'rich_html',
-          product_research_requested: requiresProductResearch,
-          web_research_requested: requiresProductResearch
-        },
-        image_generation_status: {
-          featured_image: featuredImage ? 'success' : 'failed',
-          featured_image_url: featuredImage?.image_url || null,
-          section_images_count: sectionImages.length,
-          section_images: sectionImages.map(img => ({
-            position: img.position,
-            url: img.image.image_url || null,
-            status: img.image.image_url ? 'success' : 'failed'
-          }))
-        }
-      };
-      
-      console.log('📄 Transformed result:', {
-        contentLength: transformedResult.content.length,
-        title: transformedResult.title,
-        excerpt: transformedResult.excerpt,
-        wordCount: transformedResult.word_count,
-        seoScore: transformedResult.seo_score,
-        enhanced: shouldUseEnhanced,
-        productResearchRequested: requiresProductResearch,
-        imageGenerated: !!featuredImage,
-        sectionImagesCount: sectionImages.length
-      });
-      
+      // Include queue_id in response if available
+      if (queueId) {
+        return NextResponse.json({
+          ...transformedResult,
+          queue_id: queueId
+        });
+      }
       return NextResponse.json(transformedResult);
     } else if (result.content || result.title) {
       // Handle non-standard response format
-      const transformedResult = {
-        content: enhancedContent, // Use enhanced rich HTML content
-        title: result.title || result.blog_post?.title || '',
-        excerpt: result.excerpt || result.summary || result.blog_post?.excerpt || '',
-        word_count: result.word_count || 0,
-        seo_score: result.seo_score || 0,
-        readability_score: result.readability_score || 0,
-        warnings: result.warnings || [],
-        suggestions: result.suggestions || [],
-        // Include generated featured image if available
-        featured_image: featuredImage ? {
-          image_id: featuredImage.image_id,
-          image_url: featuredImage.image_url,
-          image_data: featuredImage.image_data,
-          width: featuredImage.width,
-          height: featuredImage.height,
-          format: featuredImage.format,
-          alt_text: `Featured image for ${result.title || topic || 'blog post'}`,
-          quality_score: featuredImage.quality_score,
-          safety_score: featuredImage.safety_score
-        } : null,
-        metadata: {
-          used_brand_voice: !!brandVoice,
-          used_preset: !!contentPreset,
-          endpoint_used: endpoint,
-          enhanced: shouldUseEnhanced,
-          image_generated: !!featuredImage,
-          section_images_generated: sectionImages.length,
-          content_enhanced: true,
-          content_format: 'rich_html',
-          product_research_requested: requiresProductResearch,
-          web_research_requested: requiresProductResearch
-        },
-        image_generation_status: {
-          featured_image: featuredImage ? 'success' : 'failed',
-          featured_image_url: featuredImage?.image_url || null,
-          section_images_count: sectionImages.length,
-          section_images: sectionImages.map(img => ({
-            position: img.position,
-            url: img.image.image_url || null,
-            status: img.image.image_url ? 'success' : 'failed'
-          }))
-        }
-      };
-      
+      // Include queue_id in response if available
+      if (queueId) {
+        return NextResponse.json({
+          ...transformedResult,
+          queue_id: queueId
+        });
+      }
       return NextResponse.json(transformedResult);
     } else {
       console.error('❌ API returned unsuccessful result:', {
@@ -929,6 +1179,23 @@ export async function POST(request: NextRequest) {
         errorCode: result.error_code,
         keys: Object.keys(result)
       });
+      
+      // Update queue entry with error if queue exists
+      if (queueId) {
+        try {
+          await supabase
+            .from('blog_generation_queue')
+            .update({
+              status: 'failed',
+              generation_error: result.error_message || result.error || 'Blog generation failed',
+              generation_completed_at: new Date().toISOString()
+            })
+            .eq('queue_id', queueId);
+        } catch (error) {
+          console.warn('⚠️ Failed to update queue entry with error:', error);
+        }
+      }
+      
       return NextResponse.json(
         { error: result.error_message || result.error || 'Blog generation failed' },
         { status: 500 }
@@ -937,6 +1204,25 @@ export async function POST(request: NextRequest) {
     
   } catch (error) {
     console.error('❌ Error in blog generation API:', error);
+    
+    // Update queue entry with error if queue exists
+    // Note: queueId is declared in outer scope, so it's accessible here
+    if (queueId) {
+      try {
+        const supabase = await createClient();
+        await supabase
+          .from('blog_generation_queue')
+          .update({
+            status: 'failed',
+            generation_error: error instanceof Error ? error.message : 'Internal server error',
+            generation_completed_at: new Date().toISOString()
+          })
+          .eq('queue_id', queueId);
+      } catch (updateError) {
+        console.warn('⚠️ Failed to update queue entry with error:', updateError);
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

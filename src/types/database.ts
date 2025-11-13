@@ -52,7 +52,7 @@ export interface Database {
           full_name: string | null;
           phone: string | null;
           bio: string | null;
-          role: "owner" | "admin" | "editor" | "writer";
+          role: "system_admin" | "super_admin" | "admin" | "manager" | "editor" | "writer";
           permissions: Json;
           created_at: string;
           updated_at: string;
