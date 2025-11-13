@@ -168,16 +168,54 @@ export default function ClustersPage() {
           setKeywordCollection(collection);
           
         // Load existing clusters (convert to Topic Cluster Model)
+        // IMPORTANT: Filter by collection_id to ensure clusters match current keyword search
           const { data: existingClusters, error: clustersError } = await supabase
             .from('keyword_clusters')
             .select('*')
             .eq('session_id', sessionId)
+            .eq('collection_id', collection.collection_id) // Match current collection
             .order('created_at', { ascending: true });
 
           if (clustersError && clustersError.code !== 'PGRST116') {
           console.warn('Error loading clusters:', clustersError);
           }
 
+          // Always regenerate clusters from current keywords to ensure they match
+          // This ensures clusters are always in sync with the current keyword search
+          if (existingClusters && existingClusters.length > 0) {
+            // Check if clusters match current collection keywords
+            const collectionKeywords = Array.isArray(collection.keywords) 
+              ? collection.keywords 
+              : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
+            
+            // Extract keywords from clusters
+            const clusterKeywords = new Set<string>();
+            existingClusters.forEach((c: any) => {
+              const kws = Array.isArray(c.keywords) ? c.keywords : [];
+              kws.forEach((kw: any) => {
+                const keyword = typeof kw === 'string' ? kw : kw.keyword;
+                if (keyword) clusterKeywords.add(keyword);
+              });
+            });
+            
+            // Check if collection keywords match cluster keywords
+            const collectionKeywordSet = new Set(
+              collectionKeywords.map((kw: any) => typeof kw === 'string' ? kw : kw.keyword)
+            );
+            
+            // If keywords don't match, regenerate clusters from current collection
+            const keywordsMatch = collectionKeywordSet.size === clusterKeywords.size &&
+              Array.from(collectionKeywordSet).every(kw => clusterKeywords.has(kw));
+            
+            if (!keywordsMatch) {
+              console.log('🔄 Keywords changed, regenerating clusters from current collection...');
+              // Regenerate clusters from current keywords
+              generateInitialClusters(collectionKeywords);
+              setLoading(false);
+              return;
+            }
+          }
+          
           if (existingClusters && existingClusters.length > 0) {
           // Convert existing clusters to Topic Cluster Model
           const pillars: PillarPage[] = [];
@@ -530,11 +568,13 @@ export default function ClustersPage() {
       const sessionId = workflowSession.session_id;
       const collectionId = keywordCollection.collection_id;
 
-      // Delete existing clusters
+      // Delete existing clusters for this collection (not all clusters in session)
+      // This ensures we only delete clusters related to current keyword search
       const { error: deleteError } = await supabase
         .from('keyword_clusters')
         .delete()
-        .eq('session_id', sessionId);
+        .eq('session_id', sessionId)
+        .eq('collection_id', collectionId); // Only delete clusters for current collection
 
       if (deleteError) {
         throw deleteError;
@@ -764,6 +804,40 @@ export default function ClustersPage() {
                       {pillar.metrics?.cluster_score.toFixed(1) || '0.0'}
                   </div>
                 </div>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => {
+                    setEditingPillar(index.toString());
+                    setPillarForm({
+                      title: pillar.title,
+                      description: pillar.description,
+                      primary_keyword: pillar.primary_keyword,
+                      target_word_count: pillar.target_word_count,
+                      selectedKeywords: pillar.keywords.map(k => typeof k === 'string' ? k : k.keyword)
+                    });
+                    setShowCreatePillarModal(true);
+                  }}
+                  className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Are you sure you want to delete the pillar page "${pillar.title}"?`)) {
+                      setTopicClusters(prev => ({
+                        ...prev,
+                        pillar_pages: prev.pillar_pages.filter((_, i) => i !== index)
+                      }));
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 rounded transition-colors"
+                >
+                  <Trash2 className="w-3 h-3 inline mr-1" />
+                  Delete
+                </button>
               </div>
 
                 {/* Keywords */}
