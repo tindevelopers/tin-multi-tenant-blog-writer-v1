@@ -18,6 +18,7 @@ import BrandVoiceSettings from '@/components/blog-writer/BrandVoiceSettings';
 import ContentPresetsManager from '@/components/blog-writer/ContentPresetsManager';
 import InternalLinkSuggestions from '@/components/blog-writer/InternalLinkSuggestions';
 import Alert from '@/components/ui/alert/Alert';
+import TipTapEditor from '@/components/blog-writer/TipTapEditor';
 
 export default function EditorPage() {
   const router = useRouter();
