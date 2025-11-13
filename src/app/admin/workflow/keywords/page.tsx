@@ -440,8 +440,15 @@ export default function KeywordResearchPage() {
 
   // Save keyword collection
   const handleSaveCollection = async () => {
+    console.log('💾 handleSaveCollection called', {
+      keywordCount: keywords.length,
+      hasWorkflowSession: !!workflowSession,
+      cloudRunHealthy: cloudRunStatus.isHealthy
+    });
+
     if (keywords.length === 0) {
       setError('No keywords to save');
+      setLoading(false);
       return;
     }
 
@@ -449,6 +456,7 @@ export default function KeywordResearchPage() {
     if (!cloudRunStatus.isHealthy) {
       if (cloudRunStatus.isWakingUp) {
         setError('The API is starting up. Please wait a moment and try again.');
+        setLoading(false);
         return;
       }
       
@@ -458,6 +466,7 @@ export default function KeywordResearchPage() {
       
       if (!wakeStatus.isHealthy) {
         setError(wakeStatus.error || 'The API is still starting up. Please wait a moment and try again.');
+        setLoading(false);
         return;
       }
     }
@@ -639,9 +648,21 @@ export default function KeywordResearchPage() {
       setError(null);
       setSuccess(`Collection "${name}" saved successfully!`);
       
-      // Show success modal
+      console.log('✅ Collection save completed successfully:', {
+        collectionId: result?.collection_id,
+        name: name,
+        keywordCount: keywords.length,
+        sessionId: sessionId
+      });
+      
+      // Show success modal immediately
       setShowSuccessModal(true);
-      console.log('✅ Success modal should be visible, showSuccessModal:', true);
+      console.log('✅ Setting showSuccessModal to true');
+      
+      // Force a re-render check
+      setTimeout(() => {
+        console.log('✅ Modal state check - showSuccessModal should be:', showSuccessModal);
+      }, 100);
       
       // Auto-hide success message after 5 seconds
       setTimeout(() => {
@@ -774,10 +795,19 @@ export default function KeywordResearchPage() {
       {/* Alerts */}
       {error && (
         <div className="mb-6">
-          <Alert
+          <Alert 
             variant="error"
             title="Error"
             message={error}
+          />
+        </div>
+      )}
+      {success && (
+        <div className="mb-6">
+          <Alert 
+            variant="success" 
+            title="Success!" 
+            message={success}
           />
         </div>
       )}
@@ -1326,35 +1356,41 @@ export default function KeywordResearchPage() {
       )}
 
       {/* Success Modal */}
-      <Modal
-        isOpen={showSuccessModal}
-        onClose={() => {
-          console.log('Closing success modal');
-          setShowSuccessModal(false);
-        }}
-        className="max-w-md"
-        showCloseButton={true}
-      >
-        <div className="p-8">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
+      {showSuccessModal && (
+        <Modal
+          isOpen={showSuccessModal}
+          onClose={() => {
+            console.log('Closing success modal');
+            setShowSuccessModal(false);
+            setSuccess(null);
+          }}
+          className="max-w-md"
+          showCloseButton={true}
+        >
+          <div className="p-8">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle2 className="w-10 h-10 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+                Collection Saved Successfully!
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Your keyword collection has been saved and is ready to use in the next steps of your workflow.
+              </p>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setSuccess(null);
+                }}
+                className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Continue
+              </button>
             </div>
-            <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
-              Collection Saved Successfully!
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Your keyword collection has been saved and is ready to use in the next steps of your workflow.
-            </p>
-            <button
-              onClick={() => setShowSuccessModal(false)}
-              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
-            >
-              Continue
-            </button>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </div>
   );
 }
