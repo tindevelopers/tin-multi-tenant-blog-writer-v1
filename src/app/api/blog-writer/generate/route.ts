@@ -448,13 +448,14 @@ export async function POST(request: NextRequest) {
       const topicSpecificInstruction = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
       
       // Combine system prompt with topic instruction
-      requestPayload.system_prompt = `${contentGoalPrompt.system_prompt}\n\n${topicSpecificInstruction}`;
+      const systemPrompt = `${contentGoalPrompt.system_prompt}\n\n${topicSpecificInstruction}`;
+      requestPayload.system_prompt = systemPrompt;
       requestPayload.content_goal = content_goal;
       console.log('📝 Adding content goal prompt to API request:', {
         content_goal,
-        prompt_length: requestPayload.system_prompt.length,
+        prompt_length: systemPrompt.length,
         has_user_template: !!contentGoalPrompt.user_prompt_template,
-        topic_included: requestPayload.system_prompt.includes(topic)
+        topic_included: systemPrompt.includes(topic)
       });
       
       // Add user prompt template if available (should include {topic} placeholder)
