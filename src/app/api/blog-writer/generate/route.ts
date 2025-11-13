@@ -695,7 +695,7 @@ export async function POST(request: NextRequest) {
           width: featuredImage.width,
           height: featuredImage.height,
           format: featuredImage.format,
-          alt_text: featuredImage.alt_text || `Featured image for ${result.title || topic}`,
+          alt_text: `Featured image for ${result.title || topic || 'blog post'}`,
           quality_score: featuredImage.quality_score,
           safety_score: featuredImage.safety_score
         } : null,
