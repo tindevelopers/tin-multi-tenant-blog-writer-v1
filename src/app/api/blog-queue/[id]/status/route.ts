@@ -10,8 +10,9 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const supabase = await createClient(request);
     const { data: { user } } = await supabase.auth.getUser();
@@ -35,7 +36,7 @@ export async function GET(
     const { data: queueItem, error: queueError } = await supabase
       .from('blog_generation_queue')
       .select('queue_id, org_id, status, progress_percentage, current_stage')
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .eq('org_id', userProfile.org_id)
       .single();
 
@@ -57,7 +58,7 @@ export async function GET(
         // Send initial status
         send({
           type: 'connected',
-          queue_id: params.id,
+          queue_id: id,
           status: queueItem.status,
           progress_percentage: queueItem.progress_percentage,
           current_stage: queueItem.current_stage,
@@ -70,7 +71,7 @@ export async function GET(
             const { data: updatedItem, error } = await supabase
               .from('blog_generation_queue')
               .select('status, progress_percentage, current_stage, progress_updates, generation_error')
-              .eq('queue_id', params.id)
+              .eq('queue_id', id)
               .single();
 
             if (error) {
@@ -91,7 +92,7 @@ export async function GET(
 
               send({
                 type: 'status_update',
-                queue_id: params.id,
+                queue_id: id,
                 status: updatedItem.status,
                 progress_percentage: updatedItem.progress_percentage,
                 current_stage: updatedItem.current_stage,

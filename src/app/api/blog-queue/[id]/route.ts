@@ -8,8 +8,9 @@ import { canTransitionQueueStatus, transitionQueueStatus, type QueueStatus } fro
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const supabase = await createClient(request);
     const { data: { user } } = await supabase.auth.getUser();
@@ -44,7 +45,7 @@ export async function GET(
         approvals:blog_approvals(*, requested_by_user:users!blog_approvals_requested_by_fkey(user_id, email, full_name), reviewed_by_user:users!blog_approvals_reviewed_by_fkey(user_id, email, full_name)),
         publishing:blog_platform_publishing(*)
       `)
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .eq('org_id', userProfile.org_id)
       .single();
 
@@ -89,8 +90,9 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const supabase = await createClient(request);
     const { data: { user } } = await supabase.auth.getUser();
@@ -120,7 +122,7 @@ export async function PATCH(
     const { data: currentItem, error: fetchError } = await supabase
       .from('blog_generation_queue')
       .select('*')
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .eq('org_id', userProfile.org_id)
       .single();
 
@@ -202,7 +204,7 @@ export async function PATCH(
     const { data: updatedItem, error: updateError } = await supabase
       .from('blog_generation_queue')
       .update(updates)
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .select(`
         *,
         created_by_user:users!blog_generation_queue_created_by_fkey(user_id, email, full_name)
@@ -236,8 +238,9 @@ export async function PATCH(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const supabase = await createClient(request);
     const { data: { user } } = await supabase.auth.getUser();
@@ -267,7 +270,7 @@ export async function DELETE(
     const { data: currentItem, error: fetchError } = await supabase
       .from('blog_generation_queue')
       .select('*')
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .eq('org_id', userProfile.org_id)
       .single();
 
@@ -304,7 +307,7 @@ export async function DELETE(
         status: 'cancelled',
         updated_at: new Date().toISOString()
       })
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .select()
       .single();
 

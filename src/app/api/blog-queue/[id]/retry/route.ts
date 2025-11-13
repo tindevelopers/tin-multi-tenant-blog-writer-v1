@@ -8,8 +8,9 @@ import { canTransitionQueueStatus, type QueueStatus } from '@/lib/blog-queue-sta
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const supabase = await createClient(request);
     const { data: { user } } = await supabase.auth.getUser();
@@ -39,7 +40,7 @@ export async function POST(
     const { data: currentItem, error: fetchError } = await supabase
       .from('blog_generation_queue')
       .select('*')
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .eq('org_id', userProfile.org_id)
       .single();
 
@@ -81,7 +82,7 @@ export async function POST(
         generation_completed_at: null,
         updated_at: new Date().toISOString()
       })
-      .eq('queue_id', params.id)
+      .eq('queue_id', id)
       .select(`
         *,
         created_by_user:users!blog_generation_queue_created_by_fkey(user_id, email, full_name)

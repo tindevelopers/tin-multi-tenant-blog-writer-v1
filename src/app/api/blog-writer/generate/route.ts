@@ -188,6 +188,17 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Convert keywords to array format (needed for queue entry)
+    const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
+    
+    // Always use enhanced endpoint for better content quality
+    const shouldUseEnhanced = true; // Always use enhanced endpoint
+    const endpoint = '/api/v1/blog/generate-enhanced';
+    
+    // Initialize variables that will be used in queue entry
+    let brandVoice: any = null;
+    let contentPreset: any = null;
+    
     // Get authenticated user and org
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -270,7 +281,6 @@ export async function POST(request: NextRequest) {
     }
     
     // Fetch brand voice settings for the organization
-    let brandVoice: any = null;
     if (orgId) {
       const serviceSupabase = createServiceClient();
       const { data: brandSettings } = await serviceSupabase
@@ -336,7 +346,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Fetch content preset if preset_id is provided
-    let contentPreset: any = null;
+    // contentPreset already declared above for queue entry
     if (preset_id && orgId) {
       const serviceSupabase = createServiceClient();
       const { data: preset } = await serviceSupabase
@@ -407,11 +417,7 @@ export async function POST(request: NextRequest) {
     const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
     
-    // Always use enhanced endpoint for better content quality
-    // Enhanced endpoint supports custom instructions, quality features, and better topic handling
-    const shouldUseEnhanced = true; // Always use enhanced endpoint
-    const endpoint = '/api/v1/blog/generate-enhanced';
-    
+    // shouldUseEnhanced and endpoint already declared above for queue entry
     console.log('🌐 Calling external API:', `${API_BASE_URL}${endpoint}`);
     console.log('🔑 API Key present:', !!API_KEY);
     console.log('🌐 Using endpoint:', endpoint, '(Enhanced - Always Enabled)');
@@ -426,7 +432,7 @@ export async function POST(request: NextRequest) {
       : null;
     
     // Detect if topic requires product research (best, top, review, recommendation keywords)
-    const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
+    // keywordsArray already declared above for queue entry
     const topicLower = topic.toLowerCase();
     const requiresProductResearch = 
       topicLower.includes('best') ||
@@ -1209,8 +1215,8 @@ export async function POST(request: NextRequest) {
     // Note: queueId is declared in outer scope, so it's accessible here
     if (queueId) {
       try {
-        const supabase = await createClient();
-        await supabase
+        const errorSupabase = await createClient();
+        await errorSupabase
           .from('blog_generation_queue')
           .update({
             status: 'failed',
