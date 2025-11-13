@@ -549,6 +549,7 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('📤 Request payload:', JSON.stringify(requestPayload, null, 2));
+    const systemPromptForLog = typeof requestPayload.system_prompt === 'string' ? requestPayload.system_prompt : '';
     console.log('📤 Key parameters being sent:', {
       topic: requestPayload.topic,
       keywords: requestPayload.keywords,
@@ -560,7 +561,7 @@ export async function POST(request: NextRequest) {
       has_custom_instructions: !!requestPayload.custom_instructions,
       has_enhanced_insights: !!requestPayload.enhanced_keyword_insights,
       has_content_goal: !!requestPayload.content_goal,
-      system_prompt_length: requestPayload.system_prompt?.length || 0,
+      system_prompt_length: systemPromptForLog.length,
     });
     
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
