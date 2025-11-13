@@ -180,10 +180,9 @@ export default function ClustersPage() {
           console.warn('Error loading clusters:', clustersError);
           }
 
-          // Always regenerate clusters from current keywords to ensure they match
-          // This ensures clusters are always in sync with the current keyword search
+          // If clusters exist, verify they match current collection keywords
+          // If not, delete old clusters and regenerate from current keywords
           if (existingClusters && existingClusters.length > 0) {
-            // Check if clusters match current collection keywords
             const collectionKeywords = Array.isArray(collection.keywords) 
               ? collection.keywords 
               : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
@@ -203,19 +202,29 @@ export default function ClustersPage() {
               collectionKeywords.map((kw: any) => typeof kw === 'string' ? kw : kw.keyword)
             );
             
-            // If keywords don't match, regenerate clusters from current collection
+            // If keywords don't match, delete old clusters and regenerate
             const keywordsMatch = collectionKeywordSet.size === clusterKeywords.size &&
               Array.from(collectionKeywordSet).every(kw => clusterKeywords.has(kw));
             
             if (!keywordsMatch) {
-              console.log('🔄 Keywords changed, regenerating clusters from current collection...');
+              console.log('🔄 Keywords changed, deleting old clusters and regenerating from current collection...');
+              // Delete old clusters for this collection
+              await supabase
+                .from('keyword_clusters')
+                .delete()
+                .eq('session_id', sessionId)
+                .eq('collection_id', collection.collection_id);
+              
               // Regenerate clusters from current keywords
-              generateInitialClusters(collectionKeywords);
+              if (collectionKeywords.length > 0) {
+                generateInitialClusters(collectionKeywords);
+              }
               setLoading(false);
               return;
             }
           }
           
+          // Convert existing clusters to Topic Cluster Model (only if they match)
           if (existingClusters && existingClusters.length > 0) {
           // Convert existing clusters to Topic Cluster Model
           const pillars: PillarPage[] = [];
