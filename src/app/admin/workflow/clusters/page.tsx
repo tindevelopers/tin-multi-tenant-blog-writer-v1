@@ -834,8 +834,23 @@ export default function ClustersPage() {
                   Edit
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (confirm(`Are you sure you want to delete the pillar page "${pillar.title}"?`)) {
+                      // Delete from database if it has an ID
+                      if (pillar.pillar_id && workflowSession) {
+                        try {
+                          const supabase = createClient();
+                          await supabase
+                            .from('keyword_clusters')
+                            .delete()
+                            .eq('cluster_id', pillar.pillar_id)
+                            .eq('session_id', workflowSession.session_id);
+                        } catch (err) {
+                          console.error('Error deleting pillar from database:', err);
+                        }
+                      }
+                      
+                      // Remove from UI
                       setTopicClusters(prev => ({
                         ...prev,
                         pillar_pages: prev.pillar_pages.filter((_, i) => i !== index)
