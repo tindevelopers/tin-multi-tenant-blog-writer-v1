@@ -69,32 +69,53 @@ export async function POST(request: NextRequest) {
     // Request 150 keywords by default (can be overridden by limit in body)
     const limit = body.limit || 150;
     
-    const requestBody: any = {
-      keyword: keyword,
-      limit: limit,
-      include_search_volume: true, // Explicitly request search volume data
-      include_difficulty: true,
-      include_competition: true,
-      include_cpc: true
+    // Try enhanced endpoint first (returns search volume, CPC, difficulty, competition)
+    // If unavailable, fallback to suggest endpoint
+    let endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
+    let requestBody: any = {
+      keywords: [keyword], // Enhanced endpoint requires array
+      location: body.location || 'United States',
+      language: body.language || 'en',
+      include_search_volume: true,
+      max_suggestions_per_keyword: limit
     };
     
-    // Add location if provided (defaults to United States)
-    if (body.location) {
-      requestBody.location = body.location;
-    } else {
-      requestBody.location = 'United States'; // Default location
-    }
-    
-    const response = await fetchWithRetry(
-      `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`,
+    let response = await fetchWithRetry(
+      endpoint,
       {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(requestBody),
       }
     );
+
+    // If enhanced endpoint returns 503 (not available), fallback to suggest endpoint
+    if (response.status === 503) {
+      console.log('⚠️ Enhanced endpoint unavailable, falling back to suggest endpoint');
+      endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`;
+      requestBody = {
+        keyword: keyword,
+        limit: limit,
+        include_search_volume: true,
+        include_difficulty: true,
+        include_competition: true,
+        include_cpc: true,
+        location: body.location || 'United States'
+      };
+      
+      response = await fetchWithRetry(
+        endpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -106,8 +127,40 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     
-    // Return full response including new fields: suggestions_with_topics, total_suggestions, clusters, cluster_summary
-    // Map for backward compatibility
+    // Handle enhanced endpoint response format
+    if (data.enhanced_analysis) {
+      // Enhanced endpoint returns analysis for the keyword with metadata
+      const keywordAnalysis = data.enhanced_analysis[keyword];
+      
+      // Extract suggested keywords from related_keywords and long_tail_keywords
+      const suggestedKeywords = [
+        ...(keywordAnalysis?.related_keywords || []),
+        ...(keywordAnalysis?.long_tail_keywords || [])
+      ].slice(0, limit);
+      
+      // Map to expected format with metadata
+      const suggestionsWithMetadata = suggestedKeywords.map((kw: string) => ({
+        keyword: kw,
+        search_volume: null, // Will need separate analysis for each suggestion
+        difficulty: keywordAnalysis?.difficulty || null,
+        competition: keywordAnalysis?.competition || null,
+        cpc: keywordAnalysis?.cpc || null
+      }));
+      
+      return NextResponse.json({
+        suggestions: suggestionsWithMetadata,
+        suggestions_with_topics: data.suggestions_with_topics || [],
+        keyword_suggestions: suggestionsWithMetadata,
+        total_suggestions: suggestedKeywords.length,
+        clusters: data.clusters || [],
+        cluster_summary: data.cluster_summary || {},
+        // Include enhanced analysis data
+        enhanced_analysis: data.enhanced_analysis,
+        original_keyword_analysis: keywordAnalysis
+      });
+    }
+    
+    // Handle suggest endpoint response format (backward compatibility)
     return NextResponse.json({
       suggestions: data.keyword_suggestions || data.suggestions || [],
       suggestions_with_topics: data.suggestions_with_topics || [],
