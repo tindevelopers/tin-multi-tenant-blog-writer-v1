@@ -80,7 +80,19 @@ function NewDraftContent() {
     excerpt: "",
     include_external_links: true, // Default to true for better SEO
     include_backlinks: true, // Default to true
-    backlink_count: 5 // Default number of backlinks
+    backlink_count: 5, // Default number of backlinks
+    // Custom instructions and quality features (v1.3.0)
+    template_type: "expert_authority" as "expert_authority" | "how_to_guide" | "comparison" | "case_study" | "news_update" | "tutorial" | "listicle" | "review",
+    custom_instructions: "",
+    length: "medium" as "short" | "medium" | "long" | "very_long",
+    use_google_search: false,
+    use_fact_checking: false,
+    use_citations: false,
+    use_serp_optimization: false,
+    use_consensus_generation: false,
+    use_knowledge_graph: false,
+    use_semantic_keywords: false,
+    use_quality_scoring: false,
   });
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
@@ -114,6 +126,20 @@ function NewDraftContent() {
     { value: "conversational", label: "Conversational" },
     { value: "humorous", label: "Humorous" }
   ];
+
+  const templateTypes = [
+    { value: "expert_authority", label: "Expert Authority", description: "Position as domain expert" },
+    { value: "how_to_guide", label: "How-To Guide", description: "Step-by-step instructions" },
+    { value: "comparison", label: "Comparison", description: "Structured comparison format" },
+    { value: "case_study", label: "Case Study", description: "Real-world examples" },
+    { value: "news_update", label: "News Update", description: "Recent developments" },
+    { value: "tutorial", label: "Tutorial", description: "Learning objectives" },
+    { value: "listicle", label: "Listicle", description: "Numbered/bulleted format" },
+    { value: "review", label: "Review", description: "Comprehensive evaluation" }
+  ];
+
+  // Auto-enable quality features for premium/enterprise
+  const isPremiumQuality = formData.quality_level === 'premium' || formData.quality_level === 'enterprise';
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -250,7 +276,19 @@ function NewDraftContent() {
         quality_level: formData.quality_level,
         include_external_links: formData.include_external_links,
         include_backlinks: formData.include_backlinks,
-        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined
+        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined,
+        // Custom instructions and quality features (v1.3.0)
+        template_type: formData.template_type,
+        custom_instructions: formData.custom_instructions || undefined,
+        length: formData.length,
+        use_google_search: isPremiumQuality ? true : formData.use_google_search,
+        use_fact_checking: isPremiumQuality ? true : formData.use_fact_checking,
+        use_citations: isPremiumQuality ? true : formData.use_citations,
+        use_serp_optimization: isPremiumQuality ? true : formData.use_serp_optimization,
+        use_consensus_generation: isPremiumQuality ? true : formData.use_consensus_generation,
+        use_knowledge_graph: isPremiumQuality ? true : formData.use_knowledge_graph,
+        use_semantic_keywords: isPremiumQuality ? true : formData.use_semantic_keywords,
+        use_quality_scoring: isPremiumQuality ? true : formData.use_quality_scoring,
       });
 
       console.log('🔍 Generated result:', result);
@@ -640,9 +678,156 @@ function NewDraftContent() {
                 >
                   <option value="standard">Standard</option>
                   <option value="high">High</option>
-                  <option value="premium">Premium</option>
-                  <option value="enterprise">Enterprise</option>
+                  <option value="premium">Premium (Auto-enables all quality features)</option>
+                  <option value="enterprise">Enterprise (Auto-enables all quality features)</option>
                 </select>
+                {isPremiumQuality && (
+                  <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                    ✓ All quality features will be automatically enabled
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Template Type
+                </label>
+                <select
+                  name="template_type"
+                  value={formData.template_type}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  {templateTypes.map(template => (
+                    <option key={template.value} value={template.value}>
+                      {template.label} - {template.description}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Select the content structure template for your blog post
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Content Length
+                </label>
+                <select
+                  name="length"
+                  value={formData.length}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="short">Short (~500-1000 words)</option>
+                  <option value="medium">Medium (~1000-2000 words)</option>
+                  <option value="long">Long (~2000-3000 words)</option>
+                  <option value="very_long">Very Long (3000+ words)</option>
+                </select>
+              </div>
+
+              {!isPremiumQuality && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Quality Features (Optional)
+                  </h3>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                    Enable advanced features for better content quality. Premium/Enterprise quality enables all features automatically.
+                  </p>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_google_search}
+                        onChange={(e) => setFormData({ ...formData, use_google_search: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Google Search Research</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_fact_checking}
+                        onChange={(e) => setFormData({ ...formData, use_fact_checking: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Fact-Checking</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_citations}
+                        onChange={(e) => setFormData({ ...formData, use_citations: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Citations</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_serp_optimization}
+                        onChange={(e) => setFormData({ ...formData, use_serp_optimization: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">SERP Optimization</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_consensus_generation}
+                        onChange={(e) => setFormData({ ...formData, use_consensus_generation: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Consensus Generation (GPT-4o + Claude) - Best Quality
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_knowledge_graph}
+                        onChange={(e) => setFormData({ ...formData, use_knowledge_graph: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Knowledge Graph</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_semantic_keywords}
+                        onChange={(e) => setFormData({ ...formData, use_semantic_keywords: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Semantic Keywords</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_quality_scoring}
+                        onChange={(e) => setFormData({ ...formData, use_quality_scoring: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Quality Scoring</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Custom Instructions (Optional)
+                </label>
+                <textarea
+                  name="custom_instructions"
+                  value={formData.custom_instructions}
+                  onChange={handleInputChange}
+                  rows={6}
+                  placeholder="Add custom instructions for structure, linking, images, or quality requirements..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Leave empty to use default instructions. Premium quality uses default instructions automatically.
+                </p>
               </div>
             </div>
           </div>
