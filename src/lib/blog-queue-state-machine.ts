@@ -28,7 +28,8 @@ export type PlatformStatus =
   | 'publishing'
   | 'published'
   | 'failed'
-  | 'unpublished';
+  | 'unpublished'
+  | 'cancelled';
 
 export type ApprovalStatus =
   | 'pending'
@@ -67,7 +68,8 @@ const VALID_PLATFORM_TRANSITIONS: Record<PlatformStatus, PlatformStatus[]> = {
   publishing: ['published', 'failed'],
   published: ['unpublished'],
   failed: ['publishing', 'cancelled'], // Can retry
-  unpublished: []
+  unpublished: [],
+  cancelled: [] // Terminal state - no transitions
 };
 
 /**
@@ -270,6 +272,14 @@ export const PLATFORM_STATUS_METADATA: Record<PlatformStatus, StatusMetadata> = 
     color: '#6B7280',
     icon: '🔒',
     description: 'Unpublished from platform',
+    isTerminal: true,
+    canRetry: false
+  },
+  cancelled: {
+    label: 'Cancelled',
+    color: '#6B7280',
+    icon: '🚫',
+    description: 'Publishing cancelled',
     isTerminal: true,
     canRetry: false
   }
