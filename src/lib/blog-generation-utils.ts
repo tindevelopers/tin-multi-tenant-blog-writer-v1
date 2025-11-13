@@ -14,7 +14,8 @@ export type TemplateType =
   | 'listicle' 
   | 'review';
 
-export type ContentLength = 'short' | 'medium' | 'long' | 'very_long';
+export type ContentLength = 'short' | 'medium' | 'long' | 'very_long'; // UI type
+export type APIContentLength = 'short' | 'medium' | 'long' | 'extended'; // API type
 
 /**
  * Generate default custom instructions based on template type
@@ -145,7 +146,7 @@ TEMPLATE-SPECIFIC REQUIREMENTS (Review):
 }
 
 /**
- * Map word count to length category
+ * Map word count to length category (UI-friendly)
  */
 export function mapWordCountToLength(wordCount: number): ContentLength {
   if (wordCount >= 3000) {
@@ -157,6 +158,17 @@ export function mapWordCountToLength(wordCount: number): ContentLength {
   } else {
     return 'short';
   }
+}
+
+/**
+ * Convert UI length type to API length type
+ * API expects 'extended' instead of 'very_long'
+ */
+export function convertLengthToAPI(length: ContentLength): APIContentLength {
+  if (length === 'very_long') {
+    return 'extended';
+  }
+  return length as APIContentLength;
 }
 
 /**

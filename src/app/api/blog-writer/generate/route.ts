@@ -5,7 +5,7 @@ import cloudRunHealth from '@/lib/cloud-run-health';
 import BlogImageGenerator, { type GeneratedImage } from '@/lib/image-generation';
 import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload';
 import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
-import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength } from '@/lib/blog-generation-utils';
+import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
 
 // Create server-side image generator (uses direct Cloud Run URL)
 const imageGenerator = new BlogImageGenerator(
@@ -385,10 +385,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Add length preference (map word_count to length if not provided)
+    // Convert UI length ('very_long') to API length ('extended')
     if (length) {
-      requestPayload.length = length;
+      requestPayload.length = convertLengthToAPI(length);
     } else if (word_count) {
-      requestPayload.length = mapWordCountToLength(word_count);
+      requestPayload.length = convertLengthToAPI(mapWordCountToLength(word_count));
     }
 
     // Add quality features (enable automatically for premium, or use provided values)
