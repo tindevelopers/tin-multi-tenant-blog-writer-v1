@@ -304,6 +304,51 @@ export function getPlatformStatusMetadata(status: PlatformStatus): StatusMetadat
 }
 
 /**
+ * Approval status metadata for UI display
+ */
+export const APPROVAL_STATUS_METADATA: Record<ApprovalStatus, StatusMetadata> = {
+  pending: {
+    label: 'Pending',
+    color: '#F59E0B', // yellow
+    icon: '⏳',
+    description: 'Waiting for review',
+    isTerminal: false,
+    canRetry: false
+  },
+  approved: {
+    label: 'Approved',
+    color: '#10B981', // green
+    icon: '✅',
+    description: 'Approved and ready to publish',
+    isTerminal: true,
+    canRetry: false
+  },
+  rejected: {
+    label: 'Rejected',
+    color: '#EF4444', // red
+    icon: '❌',
+    description: 'Rejected - needs revision',
+    isTerminal: false,
+    canRetry: true
+  },
+  changes_requested: {
+    label: 'Changes Requested',
+    color: '#3B82F6', // blue
+    icon: '📝',
+    description: 'Changes requested - resubmit after edits',
+    isTerminal: false,
+    canRetry: true
+  }
+};
+
+/**
+ * Get status metadata for approval status
+ */
+export function getApprovalStatusMetadata(status: ApprovalStatus): StatusMetadata {
+  return APPROVAL_STATUS_METADATA[status];
+}
+
+/**
  * Get all valid next statuses for a queue status
  */
 export function getValidNextQueueStatuses(currentStatus: QueueStatus): QueueStatus[] {

@@ -9,6 +9,7 @@ import {
   XCircleIcon,
   ArrowPathIcon,
   XMarkIcon,
+  DocumentCheckIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueue } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
@@ -82,6 +83,27 @@ export default function QueueItemDetailPage() {
     }
   };
 
+  const handleRequestApproval = async () => {
+    try {
+      const response = await fetch("/api/blog-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          queue_id: queueId,
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to request approval");
+      }
+      await fetchQueueItem();
+      alert("Approval requested successfully");
+    } catch (err) {
+      console.error("Error requesting approval:", err);
+      alert(err instanceof Error ? err.message : "Failed to request approval");
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -127,6 +149,15 @@ export default function QueueItemDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {item.status === "generated" && (
+            <button
+              onClick={handleRequestApproval}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <DocumentCheckIcon className="w-5 h-5" />
+              Request Approval
+            </button>
+          )}
           {item.status === "failed" && (
             <button
               onClick={handleRetry}

@@ -21,7 +21,8 @@ import {
   TrendingUp, 
   Target,
   Settings,
-  ListOrdered
+  ListOrdered,
+  CheckCircle
 } from "lucide-react";
 
 type NavItem = {
@@ -76,6 +77,7 @@ const blogWriterItems: NavItem[] = [
         subItems: [
           { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
           { name: "Blog Queue", path: "/admin/blog-queue", icon: <ListOrdered className="w-4 h-4" />, new: true },
+          { name: "Approvals", path: "/admin/approvals", icon: <CheckCircle className="w-4 h-4" />, new: true },
           { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
           { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
           { name: "Workflows", path: "/admin/workflows", icon: <CalendarDays className="w-4 h-4" />, new: true },

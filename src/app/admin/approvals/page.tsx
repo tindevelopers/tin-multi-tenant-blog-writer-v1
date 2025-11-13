@@ -8,87 +8,88 @@ import {
   ClockIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ArrowPathIcon,
-  GlobeAltIcon,
-  ShoppingBagIcon,
-  DocumentTextIcon,
+  ExclamationCircleIcon,
+  EyeIcon,
+  UserIcon,
 } from "@heroicons/react/24/outline";
-import { BlogPlatformPublishing } from "@/types/blog-queue";
-import { getPlatformStatusMetadata, PlatformStatus } from "@/lib/blog-queue-state-machine";
+import { ApprovalStatus, getApprovalStatusMetadata } from "@/lib/blog-queue-state-machine";
+import { BlogApproval } from "@/types/blog-queue";
 
-interface PublishingFilters {
-  platform: "webflow" | "wordpress" | "shopify" | "all";
-  status: PlatformStatus | "all";
+interface ApprovalFilters {
+  status: ApprovalStatus | "all";
+  requestedBy: string;
+  reviewedBy: string;
   search: string;
 }
 
-export default function PublishingPage() {
+export default function ApprovalsPage() {
   const router = useRouter();
-  const [publishing, setPublishing] = useState<BlogPlatformPublishing[]>([]);
+  const [approvals, setApprovals] = useState<BlogApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<PublishingFilters>({
-    platform: "all",
+  const [filters, setFilters] = useState<ApprovalFilters>({
     status: "all",
+    requestedBy: "all",
+    reviewedBy: "all",
     search: "",
   });
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    fetchPublishing();
+    fetchApprovals();
   }, [filters]);
 
-  const fetchPublishing = async () => {
+  const fetchApprovals = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
       
-      if (filters.platform !== "all") {
-        params.append("platform", filters.platform);
-      }
       if (filters.status !== "all") {
         params.append("status", filters.status);
       }
+      if (filters.requestedBy !== "all") {
+        params.append("requested_by", filters.requestedBy);
+      }
+      if (filters.reviewedBy !== "all") {
+        params.append("reviewed_by", filters.reviewedBy);
+      }
+      if (filters.search) {
+        params.append("search", filters.search);
+      }
 
-      const response = await fetch(`/api/blog-publishing?${params.toString()}`);
+      const response = await fetch(`/api/blog-approvals?${params.toString()}`);
       if (!response.ok) {
-        throw new Error("Failed to fetch publishing records");
+        throw new Error("Failed to fetch approvals");
       }
       const data = await response.json();
-      setPublishing(data.items || []);
+      setApprovals(data.items || []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load publishing records");
-      console.error("Error fetching publishing:", err);
+      setError(err instanceof Error ? err.message : "Failed to load approvals");
+      console.error("Error fetching approvals:", err);
     } finally {
       setLoading(false);
     }
   };
 
   const stats = {
-    pending: publishing.filter((p) => p.status === "pending").length,
-    published: publishing.filter((p) => p.status === "published").length,
-    failed: publishing.filter((p) => p.status === "failed").length,
-    scheduled: publishing.filter((p) => p.status === "scheduled").length,
+    pending: approvals.filter((a) => a.status === "pending").length,
+    approved: approvals.filter((a) => a.status === "approved").length,
+    rejected: approvals.filter((a) => a.status === "rejected").length,
+    changesRequested: approvals.filter((a) => a.status === "changes_requested").length,
   };
 
-  const filteredPublishing = publishing.filter((pub) => {
+  const filteredApprovals = approvals.filter((approval) => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       const matchesSearch =
-        (pub.post?.title?.toLowerCase().includes(searchLower)) ||
-        (pub.queue?.topic?.toLowerCase().includes(searchLower)) ||
-        (pub.queue?.generated_title?.toLowerCase().includes(searchLower));
+        (approval.queue?.topic?.toLowerCase().includes(searchLower)) ||
+        (approval.queue?.generated_title?.toLowerCase().includes(searchLower)) ||
+        (approval.post?.title?.toLowerCase().includes(searchLower));
       if (!matchesSearch) return false;
     }
     return true;
   });
-
-  const platformIcons = {
-    webflow: GlobeAltIcon,
-    wordpress: DocumentTextIcon,
-    shopify: ShoppingBagIcon,
-  };
 
   return (
     <div className="p-6 space-y-6">
@@ -96,10 +97,10 @@ export default function PublishingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Publishing Dashboard
+            Approval Workflow
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Manage content publishing across platforms
+            Review and approve blog content
           </p>
         </div>
       </div>
@@ -113,22 +114,22 @@ export default function PublishingPage() {
           icon="⏳"
         />
         <StatCard
-          label="Published"
-          value={stats.published}
+          label="Approved"
+          value={stats.approved}
           color="green"
           icon="✅"
         />
         <StatCard
-          label="Failed"
-          value={stats.failed}
+          label="Rejected"
+          value={stats.rejected}
           color="red"
           icon="❌"
         />
         <StatCard
-          label="Scheduled"
-          value={stats.scheduled}
+          label="Changes Requested"
+          value={stats.changesRequested}
           color="blue"
-          icon="📅"
+          icon="📝"
         />
       </div>
 
@@ -138,7 +139,7 @@ export default function PublishingPage() {
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by title or topic..."
+            placeholder="Search by topic or title..."
             value={filters.search}
             onChange={(e) =>
               setFilters({ ...filters, search: e.target.value })
@@ -158,7 +159,7 @@ export default function PublishingPage() {
           Filters
         </button>
         <button
-          onClick={fetchPublishing}
+          onClick={fetchApprovals}
           className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         >
           <ClockIcon className="w-5 h-5" />
@@ -169,24 +170,7 @@ export default function PublishingPage() {
       {/* Filter Panel */}
       {showFilters && (
         <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Platform
-              </label>
-              <select
-                value={filters.platform}
-                onChange={(e) =>
-                  setFilters({ ...filters, platform: e.target.value as any })
-                }
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-              >
-                <option value="all">All Platforms</option>
-                <option value="webflow">Webflow</option>
-                <option value="wordpress">WordPress</option>
-                <option value="shopify">Shopify</option>
-              </select>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Status
@@ -194,16 +178,15 @@ export default function PublishingPage() {
               <select
                 value={filters.status}
                 onChange={(e) =>
-                  setFilters({ ...filters, status: e.target.value as PlatformStatus | "all" })
+                  setFilters({ ...filters, status: e.target.value as ApprovalStatus | "all" })
                 }
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               >
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
-                <option value="published">Published</option>
-                <option value="failed">Failed</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="changes_requested">Changes Requested</option>
               </select>
             </div>
           </div>
@@ -213,20 +196,20 @@ export default function PublishingPage() {
       {/* Error Message */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
-          <XCircleIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
+          <ExclamationCircleIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
           <p className="text-red-800 dark:text-red-200">{error}</p>
         </div>
       )}
 
-      {/* Publishing Table */}
+      {/* Approvals Table */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
         </div>
-      ) : filteredPublishing.length === 0 ? (
+      ) : filteredApprovals.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg">
           <p className="text-gray-500 dark:text-gray-400">
-            No publishing records found
+            No approvals found
           </p>
         </div>
       ) : (
@@ -238,16 +221,16 @@ export default function PublishingPage() {
                   Content
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Platform
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Published At
+                  Requested By
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  URL
+                  Requested At
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Reviewed By
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Actions
@@ -255,19 +238,11 @@ export default function PublishingPage() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredPublishing.map((pub) => (
-                <PublishingRow
-                  key={pub.publishing_id}
-                  publishing={pub}
-                  platformIcons={platformIcons}
-                  onRetry={async () => {
-                    const response = await fetch(`/api/blog-publishing/${pub.publishing_id}/retry`, {
-                      method: "POST",
-                    });
-                    if (response.ok) {
-                      fetchPublishing();
-                    }
-                  }}
+              {filteredApprovals.map((approval) => (
+                <ApprovalRow
+                  key={approval.approval_id}
+                  approval={approval}
+                  onView={() => router.push(`/admin/approvals/${approval.approval_id}`)}
                 />
               ))}
             </tbody>
@@ -311,24 +286,14 @@ function StatCard({
   );
 }
 
-function PublishingRow({
-  publishing,
-  platformIcons,
-  onRetry,
+function ApprovalRow({
+  approval,
+  onView,
 }: {
-  publishing: BlogPlatformPublishing;
-  platformIcons: Record<string, any>;
-  onRetry: () => void;
+  approval: BlogApproval;
+  onView: () => void;
 }) {
-  const statusMeta = getPlatformStatusMetadata(publishing.status);
-  const PlatformIcon = platformIcons[publishing.platform] || GlobeAltIcon;
-
-  const contentTitle =
-    publishing.post?.title ||
-    publishing.queue?.generated_title ||
-    publishing.queue?.topic ||
-    "Untitled";
-
+  const statusMeta = getApprovalStatusMetadata(approval.status);
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -339,61 +304,72 @@ function PublishingRow({
     });
   };
 
+  const contentTitle =
+    approval.queue?.generated_title ||
+    approval.queue?.topic ||
+    approval.post?.title ||
+    "Untitled";
+
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
       <td className="px-6 py-4 whitespace-nowrap">
-        <p className="text-sm font-medium text-gray-900 dark:text-white">
-          {contentTitle}
-        </p>
+        <div>
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
+            {contentTitle}
+          </p>
+          {approval.revision_number > 1 && (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Revision {approval.revision_number}
+            </p>
+          )}
+        </div>
+      </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <ApprovalStatusBadge status={approval.status} />
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center gap-2">
-          <PlatformIcon className="w-5 h-5 text-gray-400" />
-          <span className="text-sm text-gray-900 dark:text-white capitalize">
-            {publishing.platform}
+          <UserIcon className="w-4 h-4 text-gray-400" />
+          <span className="text-sm text-gray-900 dark:text-white">
+            {approval.requested_by_user?.full_name ||
+              approval.requested_by_user?.email ||
+              "Unknown"}
           </span>
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        <PlatformStatusBadge status={publishing.status} />
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <ClockIcon className="w-4 h-4" />
-          {formatDate(publishing.published_at || publishing.scheduled_at)}
+          {formatDate(approval.requested_at)}
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        {publishing.platform_url ? (
-          <a
-            href={publishing.platform_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
-          >
-            View
-          </a>
+        {approval.reviewed_by_user ? (
+          <div className="flex items-center gap-2">
+            <UserIcon className="w-4 h-4 text-gray-400" />
+            <span className="text-sm text-gray-900 dark:text-white">
+              {approval.reviewed_by_user.full_name ||
+                approval.reviewed_by_user.email}
+            </span>
+          </div>
         ) : (
-          <span className="text-sm text-gray-400">—</span>
+          <span className="text-sm text-gray-400">Not reviewed</span>
         )}
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        {publishing.status === "failed" && (
-          <button
-            onClick={onRetry}
-            className="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 flex items-center gap-1"
-          >
-            <ArrowPathIcon className="w-4 h-4" />
-            Retry
-          </button>
-        )}
+        <button
+          onClick={onView}
+          className="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
+        >
+          Review
+        </button>
       </td>
     </tr>
   );
 }
 
-function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
-  const meta = getPlatformStatusMetadata(status);
+function ApprovalStatusBadge({ status }: { status: ApprovalStatus }) {
+  const meta = getApprovalStatusMetadata(status);
   
   return (
     <span
@@ -408,3 +384,4 @@ function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
     </span>
   );
 }
+
