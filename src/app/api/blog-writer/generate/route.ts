@@ -132,6 +132,9 @@ function buildBlogResponse(
 }
 
 export async function POST(request: NextRequest) {
+  // Declare queueId outside try block so it's accessible in catch block
+  let queueId: string | null = null;
+  
   try {
     console.log('🚀 Blog generation API route called');
     
@@ -205,7 +208,7 @@ export async function POST(request: NextRequest) {
     
     let orgId: string;
     let userId: string;
-    let queueId: string | null = null;
+    // queueId already declared at function scope
     
     if (user) {
       // Get user's org_id
