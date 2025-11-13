@@ -1286,12 +1286,39 @@ export default function KeywordResearchPage() {
                 )}
               </button>
               <button
-                onClick={() => router.push('/admin/workflow/clusters')}
-                disabled={keywords.length === 0}
+                onClick={async () => {
+                  // Save collection first before navigating
+                  if (keywords.length > 0) {
+                    try {
+                      // Save collection first
+                      await handleSaveCollection();
+                      // Wait a moment for the save to complete and modal to show
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      // Navigate after successful save
+                      router.push('/admin/workflow/clusters');
+                    } catch (err: any) {
+                      console.error('❌ Error saving collection before navigation:', err);
+                      // Error is already set by handleSaveCollection
+                      // Don't navigate if save failed
+                    }
+                  } else {
+                    router.push('/admin/workflow/clusters');
+                  }
+                }}
+                disabled={keywords.length === 0 || loading}
                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium"
               >
-                Continue to Clustering
-                <ArrowRight className="w-4 h-4" />
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    Continue to Clustering
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </div>
