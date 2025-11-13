@@ -204,7 +204,7 @@ export default function ClustersPage() {
             
             // If keywords don't match, delete old clusters and regenerate
             const keywordsMatch = collectionKeywordSet.size === clusterKeywords.size &&
-              Array.from(collectionKeywordSet).every(kw => clusterKeywords.has(kw));
+              Array.from(collectionKeywordSet).every((kw: string) => clusterKeywords.has(kw));
             
             if (!keywordsMatch) {
               console.log('🔄 Keywords changed, deleting old clusters and regenerating from current collection...');
