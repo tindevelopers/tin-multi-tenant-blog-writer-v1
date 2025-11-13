@@ -5,6 +5,7 @@ import cloudRunHealth from '@/lib/cloud-run-health';
 import BlogImageGenerator, { type GeneratedImage } from '@/lib/image-generation';
 import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload';
 import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
+import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength } from '@/lib/blog-generation-utils';
 
 // Create server-side image generator (uses direct Cloud Run URL)
 const imageGenerator = new BlogImageGenerator(
@@ -32,7 +33,19 @@ export async function POST(request: NextRequest) {
       preset,
       preset_id,
       use_enhanced = false,
-      content_goal // Content goal from workflow (seo, engagement, conversions, brand_awareness)
+      content_goal, // Content goal from workflow (seo, engagement, conversions, brand_awareness)
+      // Custom instructions and quality features (v1.3.0)
+      custom_instructions,
+      template_type,
+      length,
+      use_google_search,
+      use_fact_checking,
+      use_citations,
+      use_serp_optimization,
+      use_consensus_generation,
+      use_knowledge_graph,
+      use_semantic_keywords,
+      use_quality_scoring,
     } = body;
     
     console.log('📝 Generation parameters:', {
@@ -245,6 +258,15 @@ export async function POST(request: NextRequest) {
     
     console.log('🌐 Using endpoint:', endpoint, shouldUseEnhanced ? '(Enhanced)' : '(Standard)');
     
+    // Auto-enable quality features for premium/enterprise quality levels
+    const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise' || 
+                             (contentPreset && (contentPreset.quality_level === 'premium' || contentPreset.quality_level === 'enterprise'));
+    
+    // Get default custom instructions for premium quality (per CLIENT_SIDE_PROMPT_GUIDE.md)
+    const defaultCustomInstructions = isPremiumQuality 
+      ? getDefaultCustomInstructions(template_type as any, true)
+      : null;
+    
     // Detect if topic requires product research (best, top, review, recommendation keywords)
     const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
     const topicLower = topic.toLowerCase();
@@ -347,6 +369,54 @@ export async function POST(request: NextRequest) {
       include_formatting: true,
       include_images: true, // Request API to include image placeholders
     };
+
+    // Add custom instructions (use provided or default for premium)
+    if (custom_instructions) {
+      requestPayload.custom_instructions = custom_instructions;
+      console.log('📝 Using provided custom instructions');
+    } else if (defaultCustomInstructions) {
+      requestPayload.custom_instructions = defaultCustomInstructions;
+      console.log('📝 Using default premium custom instructions');
+    }
+
+    // Add template type if provided
+    if (template_type) {
+      requestPayload.template_type = template_type;
+    }
+
+    // Add length preference (map word_count to length if not provided)
+    if (length) {
+      requestPayload.length = length;
+    } else if (word_count) {
+      requestPayload.length = mapWordCountToLength(word_count);
+    }
+
+    // Add quality features (enable automatically for premium, or use provided values)
+    const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
+    const recommendedQualityFeatures = getQualityFeaturesForLevel(effectiveQualityLevel);
+    
+    if (isPremiumQuality) {
+      // Auto-enable all quality features for premium/enterprise, but allow overrides
+      requestPayload.use_google_search = use_google_search !== undefined ? use_google_search : recommendedQualityFeatures.use_google_search;
+      requestPayload.use_fact_checking = use_fact_checking !== undefined ? use_fact_checking : recommendedQualityFeatures.use_fact_checking;
+      requestPayload.use_citations = use_citations !== undefined ? use_citations : recommendedQualityFeatures.use_citations;
+      requestPayload.use_serp_optimization = use_serp_optimization !== undefined ? use_serp_optimization : recommendedQualityFeatures.use_serp_optimization;
+      requestPayload.use_consensus_generation = use_consensus_generation !== undefined ? use_consensus_generation : recommendedQualityFeatures.use_consensus_generation; // Best quality: GPT-4o + Claude
+      requestPayload.use_knowledge_graph = use_knowledge_graph !== undefined ? use_knowledge_graph : recommendedQualityFeatures.use_knowledge_graph;
+      requestPayload.use_semantic_keywords = use_semantic_keywords !== undefined ? use_semantic_keywords : recommendedQualityFeatures.use_semantic_keywords;
+      requestPayload.use_quality_scoring = use_quality_scoring !== undefined ? use_quality_scoring : recommendedQualityFeatures.use_quality_scoring;
+      console.log('✨ Premium quality: Auto-enabled quality features', recommendedQualityFeatures);
+    } else {
+      // Use provided values or recommended defaults for quality level
+      requestPayload.use_google_search = use_google_search !== undefined ? use_google_search : recommendedQualityFeatures.use_google_search;
+      requestPayload.use_fact_checking = use_fact_checking !== undefined ? use_fact_checking : recommendedQualityFeatures.use_fact_checking;
+      requestPayload.use_citations = use_citations !== undefined ? use_citations : recommendedQualityFeatures.use_citations;
+      requestPayload.use_serp_optimization = use_serp_optimization !== undefined ? use_serp_optimization : recommendedQualityFeatures.use_serp_optimization;
+      requestPayload.use_consensus_generation = use_consensus_generation !== undefined ? use_consensus_generation : recommendedQualityFeatures.use_consensus_generation;
+      requestPayload.use_knowledge_graph = use_knowledge_graph !== undefined ? use_knowledge_graph : recommendedQualityFeatures.use_knowledge_graph;
+      requestPayload.use_semantic_keywords = use_semantic_keywords !== undefined ? use_semantic_keywords : recommendedQualityFeatures.use_semantic_keywords;
+      requestPayload.use_quality_scoring = use_quality_scoring !== undefined ? use_quality_scoring : recommendedQualityFeatures.use_quality_scoring;
+    }
 
     // Add enhanced keyword insights if available (v1.3.0)
     if (enhancedKeywordInsights.serpAISummary) {

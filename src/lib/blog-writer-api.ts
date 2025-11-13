@@ -257,6 +257,7 @@ class BlogWriterAPI {
   }
 
   // Blog generation API with Cloud Run health check
+  // Supports custom instructions and quality features per CLIENT_SIDE_PROMPT_GUIDE.md v1.3.0
   async generateBlog(params: {
     topic?: string;
     keywords?: string[];
@@ -271,6 +272,18 @@ class BlogWriterAPI {
     preset_id?: string; // Content preset ID from database
     use_enhanced?: boolean; // Use enhanced endpoint
     content_goal?: string; // Content goal: 'seo', 'engagement', 'conversions', 'brand_awareness'
+    // Custom instructions and quality features (v1.3.0)
+    custom_instructions?: string; // Custom prompt instructions for structure, linking, images, quality
+    template_type?: string; // Template type: 'expert_authority', 'how_to_guide', 'comparison', 'case_study', 'news_update', 'tutorial', 'listicle', 'review'
+    length?: 'short' | 'medium' | 'long' | 'very_long'; // Content length preference
+    use_google_search?: boolean; // Enable Google search for research
+    use_fact_checking?: boolean; // Enable fact-checking
+    use_citations?: boolean; // Include citations
+    use_serp_optimization?: boolean; // Optimize for SERP features
+    use_consensus_generation?: boolean; // Use GPT-4o + Claude consensus (best quality)
+    use_knowledge_graph?: boolean; // Use knowledge graph
+    use_semantic_keywords?: boolean; // Use semantic keywords
+    use_quality_scoring?: boolean; // Enable quality scoring
   }): Promise<Record<string, unknown> | null> {
     try {
       console.log('🚀 Starting blog generation via local API route...');
