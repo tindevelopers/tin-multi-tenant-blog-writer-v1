@@ -215,7 +215,7 @@ function prependFeaturedImage(html: string, image: GeneratedImage): string {
     <figure class="blog-featured-image">
       <img 
         src="${image.image_url}" 
-        alt="${image.alt_text || 'Featured image'}"
+        alt="Featured image"
         class="blog-image blog-featured"
         loading="eager"
       />
