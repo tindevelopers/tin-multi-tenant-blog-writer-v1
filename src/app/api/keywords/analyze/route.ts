@@ -60,12 +60,38 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Normalize keywords array: extract strings from objects if needed
+    // Frontend may send objects like {keyword: "text", search_volume: null, ...} or strings
+    const normalizedKeywords: string[] = body.keywords.map((kw: string | { keyword?: string; [key: string]: unknown }) => {
+      if (typeof kw === 'string') {
+        return kw;
+      }
+      if (typeof kw === 'object' && kw !== null && 'keyword' in kw && typeof kw.keyword === 'string') {
+        return kw.keyword;
+      }
+      // Fallback: try to stringify if it's an object with other properties
+      if (typeof kw === 'object' && kw !== null) {
+        const stringified = String(kw);
+        if (stringified !== '[object Object]') {
+          return stringified;
+        }
+      }
+      return String(kw);
+    }).filter((kw: string) => kw && kw.trim().length > 0); // Remove empty strings
+    
+    if (normalizedKeywords.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid keywords found after normalization. Keywords must be strings or objects with a "keyword" property.' },
+        { status: 422 }
+      );
+    }
+    
     // Validate optimal batch size for long-tail keyword research (20 keywords max)
     // Reduced from 30 to improve performance and reduce timeout risk with higher suggestion counts
     const OPTIMAL_BATCH_SIZE = 20;
-    if (body.keywords.length > OPTIMAL_BATCH_SIZE) {
+    if (normalizedKeywords.length > OPTIMAL_BATCH_SIZE) {
       return NextResponse.json(
-        { error: `Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once for optimal long-tail results. Received ${body.keywords.length} keywords. Please batch your requests.` },
+        { error: `Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once for optimal long-tail results. Received ${normalizedKeywords.length} keywords. Please batch your requests.` },
         { status: 422 }
       );
     }
@@ -87,7 +113,7 @@ export async function POST(request: NextRequest) {
       max_suggestions_per_keyword: number;
       include_search_volume?: boolean; // Explicitly request search volume data
     } = {
-      keywords: body.keywords,
+      keywords: normalizedKeywords,
       location: body.location || 'United States',
       language: body.language || 'en',
       include_serp: body.include_serp || false,
