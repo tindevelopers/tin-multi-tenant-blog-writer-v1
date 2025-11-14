@@ -435,6 +435,21 @@ export default function ClustersPage() {
     return Math.round(totalScore * 10) / 10;
   };
 
+  // Generate AI-powered description for pillar page
+  const generatePillarDescription = (primaryKeyword: string, selectedKeywords: string[]): string => {
+    if (!primaryKeyword) return '';
+    
+    const keywordCount = selectedKeywords.length || 1;
+    const allKeywords = selectedKeywords.length > 0 
+      ? selectedKeywords.slice(0, 5).join(', ')
+      : primaryKeyword;
+    
+    // Create a comprehensive description based on the keywords
+    const description = `Comprehensive pillar page covering ${primaryKeyword}. This authoritative guide explores ${keywordCount > 1 ? `key topics including ${allKeywords}` : 'essential aspects'}, providing in-depth insights, best practices, and actionable strategies. Designed as the central hub for this topic cluster, this pillar page establishes topical authority and serves as the foundation for supporting cluster articles.`;
+    
+    return description;
+  };
+
   // Create Pillar Page
   const handleCreatePillar = () => {
     const resolvedPrimaryKeyword = pillarForm.primary_keyword?.trim()
@@ -457,9 +472,13 @@ export default function ClustersPage() {
       return kwData || { keyword: kw, search_volume: 0, difficulty: 'medium', competition: 0.5 };
     });
 
+    // Auto-generate description if empty
+    const finalDescription = pillarForm.description?.trim() 
+      || generatePillarDescription(resolvedPrimaryKeyword, selectedKeywordSet);
+
     const newPillar: PillarPage = {
       title: resolvedTitle,
-      description: pillarForm.description,
+      description: finalDescription,
       primary_keyword: resolvedPrimaryKeyword,
       target_word_count: pillarForm.target_word_count,
       keywords: keywordsWithData,
@@ -672,8 +691,36 @@ export default function ClustersPage() {
 
       if (insertError) throw insertError;
 
-      // Update workflow session
+      // Update workflow session with topic cluster model and keywords for blog generation
       const workflowData = workflowSession.workflow_data || {};
+      
+      // Extract all keywords from pillar pages for blog generation
+      const allPillarKeywords = topicClusters.pillar_pages.flatMap(p => 
+        [p.primary_keyword, ...p.keywords.map(k => typeof k === 'string' ? k : k.keyword)]
+      );
+      const allClusterKeywords = topicClusters.cluster_articles.flatMap(c => 
+        [c.primary_keyword, ...c.keywords.map(k => typeof k === 'string' ? k : k.keyword)]
+      );
+      const allKeywords = [...new Set([...allPillarKeywords, ...allClusterKeywords])]; // Remove duplicates
+      
+      // Get primary keyword from first pillar page or first cluster
+      const primaryKeyword = topicClusters.pillar_pages[0]?.primary_keyword 
+        || topicClusters.cluster_articles[0]?.primary_keyword 
+        || allKeywords[0] 
+        || '';
+      
+      // Get secondary keywords (all other keywords)
+      const secondaryKeywords = allKeywords.filter(k => k !== primaryKeyword);
+      
+      // Update content strategy with keywords for blog generation
+      const contentStrategy = workflowData.content_strategy || {};
+      contentStrategy.main_keyword = primaryKeyword;
+      contentStrategy.secondary_keywords = secondaryKeywords.join(', ');
+      contentStrategy.pillar_keywords = topicClusters.pillar_pages.map(p => ({
+        primary: p.primary_keyword,
+        secondary: p.keywords.map(k => typeof k === 'string' ? k : k.keyword)
+      }));
+      
       await supabase
         .from('workflow_sessions')
         .update({
@@ -682,9 +729,22 @@ export default function ClustersPage() {
           workflow_data: {
             ...workflowData,
             topic_cluster_model: {
-              pillar_pages: topicClusters.pillar_pages,
-              cluster_articles: topicClusters.cluster_articles
-            }
+              pillar_pages: topicClusters.pillar_pages.map(p => ({
+                pillar_id: p.pillar_id,
+                title: p.title,
+                primary_keyword: p.primary_keyword,
+                description: p.description,
+                keywords: p.keywords.map(k => typeof k === 'string' ? k : k.keyword)
+              })),
+              cluster_articles: topicClusters.cluster_articles.map(c => ({
+                cluster_id: c.cluster_id,
+                title: c.title,
+                primary_keyword: c.primary_keyword,
+                description: c.description,
+                keywords: c.keywords.map(k => typeof k === 'string' ? k : k.keyword)
+              }))
+            },
+            content_strategy: contentStrategy
           },
           updated_at: new Date().toISOString()
         })
@@ -819,7 +879,19 @@ export default function ClustersPage() {
       {keywordCollection && !loading && (
         <div className="flex gap-3 mb-6">
                       <button
-            onClick={() => setShowCreatePillarModal(true)}
+            onClick={() => {
+              // Pre-populate form with first available keyword if available
+              const availableKeywords = getAvailableKeywords();
+              const firstKeyword = availableKeywords[0] || '';
+              setPillarForm({
+                title: firstKeyword,
+                description: firstKeyword ? generatePillarDescription(firstKeyword, []) : '',
+                primary_keyword: firstKeyword,
+                target_word_count: 3000,
+                selectedKeywords: []
+              });
+              setShowCreatePillarModal(true);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
                       >
             <Sparkles className="w-4 h-4" />
@@ -1140,14 +1212,19 @@ export default function ClustersPage() {
                 value={pillarForm.primary_keyword}
                 onChange={(e) => {
                   const newKeyword = e.target.value;
-                  setPillarForm({ 
+                  const updatedForm = { 
                     ...pillarForm, 
                     primary_keyword: newKeyword,
                     // Auto-update title if it's empty or matches old keyword
                     title: pillarForm.title === pillarForm.primary_keyword || !pillarForm.title
                       ? newKeyword
                       : pillarForm.title
-                  });
+                  };
+                  // Auto-generate description when primary keyword changes
+                  if (newKeyword && (!pillarForm.description || pillarForm.description === generatePillarDescription(pillarForm.primary_keyword, pillarForm.selectedKeywords))) {
+                    updatedForm.description = generatePillarDescription(newKeyword, updatedForm.selectedKeywords);
+                  }
+                  setPillarForm(updatedForm);
                 }}
                 placeholder="e.g., pet grooming services"
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
@@ -1178,10 +1255,31 @@ export default function ClustersPage() {
               <textarea
                 value={pillarForm.description}
                 onChange={(e) => setPillarForm({ ...pillarForm, description: e.target.value })}
-                placeholder={pillarForm.primary_keyword ? `Comprehensive guide covering ${pillarForm.primary_keyword}` : "Brief description of what this pillar page will cover"}
+                placeholder={pillarForm.primary_keyword 
+                  ? generatePillarDescription(pillarForm.primary_keyword, pillarForm.selectedKeywords)
+                  : "Brief description of what this pillar page will cover"}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
               />
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Description will be auto-generated based on your keywords
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const autoDescription = generatePillarDescription(
+                      pillarForm.primary_keyword || pillarForm.selectedKeywords[0] || '',
+                      pillarForm.selectedKeywords
+                    );
+                    setPillarForm({ ...pillarForm, description: autoDescription });
+                  }}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
+                  disabled={!pillarForm.primary_keyword && pillarForm.selectedKeywords.length === 0}
+                >
+                  Auto-generate
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -1210,11 +1308,16 @@ export default function ClustersPage() {
                       type="checkbox"
                       checked={pillarForm.selectedKeywords.includes(kw)}
                       onChange={(e) => {
-                        if (e.target.checked) {
-                          setPillarForm({ ...pillarForm, selectedKeywords: [...pillarForm.selectedKeywords, kw] });
-                        } else {
-                          setPillarForm({ ...pillarForm, selectedKeywords: pillarForm.selectedKeywords.filter(k => k !== kw) });
+                        const updatedKeywords = e.target.checked
+                          ? [...pillarForm.selectedKeywords, kw]
+                          : pillarForm.selectedKeywords.filter(k => k !== kw);
+                        
+                        const updatedForm = { ...pillarForm, selectedKeywords: updatedKeywords };
+                        // Auto-generate description when keywords change
+                        if (pillarForm.primary_keyword && (!pillarForm.description || pillarForm.description === generatePillarDescription(pillarForm.primary_keyword, pillarForm.selectedKeywords))) {
+                          updatedForm.description = generatePillarDescription(pillarForm.primary_keyword, updatedKeywords);
                         }
+                        setPillarForm(updatedForm);
                       }}
                       className="rounded"
                     />

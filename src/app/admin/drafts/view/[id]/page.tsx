@@ -427,7 +427,7 @@ export default function ViewDraftPage() {
                 Preview
               </h3>
               <div 
-                className="prose prose-lg max-w-none"
+                className="blog-content prose prose-lg max-w-none dark:prose-invert"
                 dangerouslySetInnerHTML={{ __html: generateWebflowHTML() }}
               />
             </div>
