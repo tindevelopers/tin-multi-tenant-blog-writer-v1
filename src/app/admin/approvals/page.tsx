@@ -6,10 +6,7 @@ import {
   MagnifyingGlassIcon,
   FunnelIcon,
   ClockIcon,
-  CheckCircleIcon,
-  XCircleIcon,
   ExclamationCircleIcon,
-  EyeIcon,
   UserIcon,
 } from "@heroicons/react/24/outline";
 import { ApprovalStatus, getApprovalStatusMetadata } from "@/lib/blog-queue-state-machine";

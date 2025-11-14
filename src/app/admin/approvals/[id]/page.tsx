@@ -7,9 +7,6 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   PencilIcon,
-  ClockIcon,
-  UserIcon,
-  ExclamationCircleIcon,
 } from "@heroicons/react/24/outline";
 import { BlogApproval } from "@/types/blog-queue";
 import { getApprovalStatusMetadata, ApprovalStatus } from "@/lib/blog-queue-state-machine";
@@ -159,7 +156,6 @@ export default function ApprovalReviewPage() {
     );
   }
 
-  const statusMeta = getApprovalStatusMetadata(approval.status);
   const content = approval.queue?.generated_content || approval.post?.content || "";
   const title = approval.queue?.generated_title || approval.queue?.topic || approval.post?.title || "Untitled";
 
@@ -368,7 +364,7 @@ function InfoItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatDate(dateString: string | null) {
+function formatDate(dateString: string | null | undefined) {
   if (!dateString) return "N/A";
   return new Date(dateString).toLocaleString("en-US", {
     month: "short",

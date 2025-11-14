@@ -13,7 +13,7 @@ import {
   ExclamationCircleIcon,
 } from "@heroicons/react/24/outline";
 import { QueueStatus, getQueueStatusMetadata } from "@/lib/blog-queue-state-machine";
-import { BlogGenerationQueue } from "@/types/blog-queue";
+import { BlogGenerationQueueItem } from "@/types/blog-queue";
 
 interface QueueFilters {
   status: QueueStatus | "all";
@@ -24,7 +24,7 @@ interface QueueFilters {
 
 export default function BlogQueuePage() {
   const router = useRouter();
-  const [queueItems, setQueueItems] = useState<BlogGenerationQueue[]>([]);
+  const [queueItems, setQueueItems] = useState<BlogGenerationQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<QueueFilters>({
@@ -389,7 +389,7 @@ function QueueItemRow({
   onCancel,
   onRetry,
 }: {
-  item: BlogGenerationQueue;
+  item: BlogGenerationQueueItem;
   onView: () => void;
   onCancel: () => void;
   onRetry: () => void;

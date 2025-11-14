@@ -111,6 +111,19 @@ export interface BlogApproval {
     email: string;
     full_name?: string | null;
   };
+  queue?: {
+    queue_id: string;
+    topic: string;
+    generated_title?: string | null;
+    generated_content?: string | null;
+    status: string;
+  };
+  post?: {
+    post_id: string;
+    title: string;
+    content?: string | null;
+    status: string;
+  };
 }
 
 // ============================================
@@ -139,6 +152,25 @@ export interface BlogPlatformPublishing {
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+  
+  // Relations (when fetched with joins)
+  post?: {
+    post_id: string;
+    title: string;
+    content?: string | null;
+    status: string;
+  };
+  queue?: {
+    queue_id: string;
+    topic: string;
+    generated_title?: string | null;
+    status: string;
+  };
+  published_by_user?: {
+    user_id: string;
+    email: string;
+    full_name?: string | null;
+  };
 }
 
 // ============================================

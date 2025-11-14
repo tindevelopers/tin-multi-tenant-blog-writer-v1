@@ -1,182 +1,130 @@
 #!/usr/bin/env node
 
 /**
- * Test script for /api/v1/keywords/enhanced endpoint
+ * Test script for the enhanced blog writer endpoint
+ * Usage: node test-enhanced-endpoint.js [local|production]
  */
 
-const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
-  'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+const fs = require('fs');
+const path = require('path');
 
-const testKeyword = process.argv[2] || 'best blow dryers';
+// Read the test JSON file
+const testDataPath = path.join(__dirname, 'test-enhanced-endpoint.json');
+const testData = JSON.parse(fs.readFileSync(testDataPath, 'utf8'));
 
-async function testEnhancedEndpoint() {
-  console.log('🧪 Testing Blog Writer API Enhanced Keywords Endpoint\n');
-  console.log(`API URL: ${BLOG_WRITER_API_URL}`);
-  console.log(`Test Keyword: "${testKeyword}"\n`);
-  console.log('─'.repeat(60));
+// Determine environment
+const environment = process.argv[2] || 'local';
+const baseUrl = environment === 'production' 
+  ? 'https://your-production-url.vercel.app'
+  : 'http://localhost:3000';
 
-  // Test different request formats
-  const testCases = [
-    {
-      name: 'Test 1: Keywords array with search volume',
-      body: {
-        keywords: [testKeyword],
-        location: 'United States',
-        language: 'en',
-        include_search_volume: true,
-        max_suggestions_per_keyword: 10
-      }
-    },
-    {
-      name: 'Test 2: Keywords array without search volume flag',
-      body: {
-        keywords: [testKeyword],
-        location: 'United States',
-        language: 'en',
-        max_suggestions_per_keyword: 10
-      }
-    },
-    {
-      name: 'Test 3: Single keyword string',
-      body: {
-        keyword: testKeyword,
-        location: 'United States',
-        language: 'en',
-        include_search_volume: true
-      }
-    },
-    {
-      name: 'Test 4: Multiple keywords',
-      body: {
-        keywords: [testKeyword, 'dog grooming tools'],
-        location: 'United States',
-        language: 'en',
-        include_search_volume: true,
-        max_suggestions_per_keyword: 5
-      }
+const endpoint = `${baseUrl}/api/blog-writer/generate`;
+
+console.log('🧪 Testing Enhanced Blog Writer Endpoint');
+console.log('==========================================');
+console.log(`Environment: ${environment}`);
+console.log(`Endpoint: ${endpoint}`);
+console.log(`Topic: ${testData.topic}`);
+console.log(`Keywords: ${testData.keywords.join(', ')}`);
+console.log(`Quality Level: ${testData.quality_level}`);
+console.log('');
+
+// Note: This requires authentication
+// You'll need to provide a valid session token
+async function testEndpoint() {
+  try {
+    console.log('📤 Sending request...');
+    console.log('Request payload:');
+    console.log(JSON.stringify(testData, null, 2));
+    console.log('');
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Note: In a real scenario, you'd need to include authentication
+        // 'Authorization': 'Bearer YOUR_TOKEN',
+        // 'Cookie': 'your-session-cookie'
+      },
+      body: JSON.stringify(testData),
+    });
+
+    console.log(`📥 Response Status: ${response.status} ${response.statusText}`);
+    console.log('');
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('❌ Error Response:');
+      console.log(errorText);
+      return;
     }
-  ];
 
-  for (const testCase of testCases) {
-    console.log(`\n${testCase.name}`);
-    console.log('─'.repeat(60));
-    console.log('Request Body:');
-    console.log(JSON.stringify(testCase.body, null, 2));
+    const result = await response.json();
     
-    try {
-      const startTime = Date.now();
-      const response = await fetch(`${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(testCase.body),
+    console.log('✅ Success Response:');
+    console.log('===================');
+    console.log(`Title: ${result.title || 'N/A'}`);
+    console.log(`Word Count: ${result.word_count || 'N/A'}`);
+    console.log(`SEO Score: ${result.seo_score || 'N/A'}`);
+    console.log(`Readability Score: ${result.readability_score || 'N/A'}`);
+    console.log(`Total Cost: $${result.total_cost || 0}`);
+    console.log(`Total Tokens: ${result.total_tokens || 0}`);
+    console.log(`Generation Time: ${result.generation_time || 0}s`);
+    console.log('');
+
+    if (result.progress_updates && result.progress_updates.length > 0) {
+      console.log('📊 Progress Updates:');
+      result.progress_updates.forEach((update, idx) => {
+        console.log(`  ${idx + 1}. ${update.stage} (${update.progress_percentage}%)`);
+        if (update.details) {
+          console.log(`     ${update.details}`);
+        }
       });
-
-      const responseTime = Date.now() - startTime;
-      console.log(`\n⏱️  Response Time: ${responseTime}ms`);
-      console.log(`📊 Status: ${response.status} ${response.statusText}`);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.log('\n❌ Error Response:');
-        try {
-          const errorJson = JSON.parse(errorText);
-          console.log(JSON.stringify(errorJson, null, 2));
-        } catch {
-          console.log(errorText);
-        }
-        continue;
-      }
-
-      const data = await response.json();
-      
-      console.log('\n✅ Response Structure:');
-      console.log('Top-level keys:', Object.keys(data));
-      
-      // Check for different possible response formats
-      if (data.enhanced_analysis) {
-        console.log('\n📊 Enhanced Analysis Found:');
-        const analysisKeys = Object.keys(data.enhanced_analysis);
-        console.log(`   Number of keywords analyzed: ${analysisKeys.length}`);
-        
-        if (analysisKeys.length > 0) {
-          const firstKey = analysisKeys[0];
-          const firstAnalysis = data.enhanced_analysis[firstKey];
-          console.log(`\n   First keyword analysis (${firstKey}):`);
-          console.log('   Fields:', Object.keys(firstAnalysis));
-          
-          // Check for search volume
-          if (firstAnalysis.search_volume !== undefined) {
-            console.log(`   ✓ Search Volume: ${firstAnalysis.search_volume}`);
-          } else {
-            console.log(`   ✗ Search Volume: MISSING`);
-          }
-          
-          // Check for CPC
-          if (firstAnalysis.cpc !== undefined || firstAnalysis.cost_per_click !== undefined) {
-            console.log(`   ✓ CPC: $${firstAnalysis.cpc || firstAnalysis.cost_per_click}`);
-          } else {
-            console.log(`   ✗ CPC: MISSING`);
-          }
-          
-          // Check for difficulty
-          if (firstAnalysis.difficulty !== undefined || firstAnalysis.keyword_difficulty !== undefined) {
-            console.log(`   ✓ Difficulty: ${firstAnalysis.difficulty || firstAnalysis.keyword_difficulty}`);
-          } else {
-            console.log(`   ✗ Difficulty: MISSING`);
-          }
-          
-          // Check for competition
-          if (firstAnalysis.competition !== undefined || firstAnalysis.competition_level !== undefined) {
-            console.log(`   ✓ Competition: ${firstAnalysis.competition || firstAnalysis.competition_level}`);
-          } else {
-            console.log(`   ✗ Competition: MISSING`);
-          }
-          
-          // Show full first analysis object
-          console.log('\n   Full analysis object:');
-          console.log(JSON.stringify(firstAnalysis, null, 2).substring(0, 500));
-        }
-      }
-      
-      if (data.suggested_keywords) {
-        console.log(`\n📝 Suggested Keywords: ${data.suggested_keywords.length}`);
-        if (data.suggested_keywords.length > 0) {
-          console.log('   First 5:', data.suggested_keywords.slice(0, 5));
-        }
-      }
-      
-      if (data.clusters) {
-        console.log(`\n🔗 Clusters: ${data.clusters.length}`);
-        if (data.clusters.length > 0) {
-          console.log('   First cluster:', JSON.stringify(data.clusters[0], null, 2).substring(0, 300));
-        }
-      }
-      
-      // Show full response (truncated)
-      console.log('\n📄 Full Response (first 1500 chars):');
-      const responseStr = JSON.stringify(data, null, 2);
-      console.log(responseStr.substring(0, 1500));
-      if (responseStr.length > 1500) {
-        console.log(`\n... (truncated, total length: ${responseStr.length} chars)`);
-      }
-      
-      // If we got a successful response, break (no need to test other formats)
-      if (response.ok) {
-        console.log('\n✅ SUCCESS! This request format works.');
-        break;
-      }
-      
-    } catch (error) {
-      console.error('\n❌ Error:', error.message);
-      if (error.stack) {
-        console.error('Stack:', error.stack.split('\n').slice(0, 3).join('\n'));
-      }
+      console.log('');
     }
-    
-    console.log('\n' + '='.repeat(60));
+
+    if (result.citations && result.citations.length > 0) {
+      console.log(`📚 Citations: ${result.citations.length} found`);
+      result.citations.slice(0, 3).forEach((citation, idx) => {
+        console.log(`  ${idx + 1}. ${citation.title || citation.url}`);
+      });
+      console.log('');
+    }
+
+    if (result.semantic_keywords && result.semantic_keywords.length > 0) {
+      console.log(`🔑 Semantic Keywords: ${result.semantic_keywords.length} found`);
+      console.log(`  ${result.semantic_keywords.slice(0, 5).join(', ')}`);
+      console.log('');
+    }
+
+    if (result.warnings && result.warnings.length > 0) {
+      console.log('⚠️  Warnings:');
+      result.warnings.forEach((warning, idx) => {
+        console.log(`  ${idx + 1}. ${warning}`);
+      });
+      console.log('');
+    }
+
+    // Save full response to file
+    const outputPath = path.join(__dirname, 'test-enhanced-endpoint-result.json');
+    fs.writeFileSync(outputPath, JSON.stringify(result, null, 2));
+    console.log(`💾 Full response saved to: ${outputPath}`);
+
+    // Save content preview
+    if (result.content) {
+      const contentPreview = result.content.substring(0, 500);
+      console.log('');
+      console.log('📝 Content Preview (first 500 chars):');
+      console.log('=====================================');
+      console.log(contentPreview);
+      console.log('...');
+    }
+
+  } catch (error) {
+    console.error('❌ Test failed:', error.message);
+    console.error(error.stack);
   }
 }
 
-testEnhancedEndpoint();
+// Run the test
+testEndpoint();

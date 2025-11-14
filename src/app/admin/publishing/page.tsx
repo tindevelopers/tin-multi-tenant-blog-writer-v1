@@ -6,7 +6,6 @@ import {
   MagnifyingGlassIcon,
   FunnelIcon,
   ClockIcon,
-  CheckCircleIcon,
   XCircleIcon,
   ArrowPathIcon,
   GlobeAltIcon,
@@ -329,7 +328,7 @@ function PublishingRow({
     publishing.queue?.topic ||
     "Untitled";
 
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "N/A";
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",

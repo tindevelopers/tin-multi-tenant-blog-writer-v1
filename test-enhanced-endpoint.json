@@ -1,0 +1,26 @@
+{
+  "topic": "Best Pet Grooming Services in California",
+  "keywords": [
+    "pet grooming",
+    "dog grooming",
+    "cat grooming",
+    "mobile pet grooming",
+    "professional pet grooming"
+  ],
+  "target_audience": "Pet Parents",
+  "tone": "professional",
+  "word_count": 2000,
+  "quality_level": "premium",
+  "template_type": "how_to_guide",
+  "length": "medium",
+  "custom_instructions": "Focus on practical tips and local recommendations. Include safety considerations and cost information.",
+  "use_google_search": true,
+  "use_fact_checking": true,
+  "use_citations": true,
+  "use_serp_optimization": true,
+  "use_consensus_generation": true,
+  "use_knowledge_graph": true,
+  "use_semantic_keywords": true,
+  "use_quality_scoring": true
+}
+

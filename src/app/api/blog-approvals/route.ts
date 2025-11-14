@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
     // Get the latest approval to determine revision number
     const { data: previousApprovals } = await supabase
       .from("blog_approvals")
-      .select("revision_number")
+      .select("approval_id, revision_number")
       .eq("org_id", userProfile.org_id)
       .or(
         queue_id

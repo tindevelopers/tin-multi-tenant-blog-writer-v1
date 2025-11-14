@@ -1,0 +1,29 @@
+{
+  "topic": "Benefits of AI in the Pet Care Business",
+  "keywords": [
+    "AI in pet care",
+    "artificial intelligence veterinary",
+    "pet care technology",
+    "AI pet health monitoring",
+    "smart pet care solutions",
+    "veterinary AI applications",
+    "pet care automation",
+    "AI-powered pet services"
+  ],
+  "target_audience": "Pet Care Business Owners and Veterinarians",
+  "tone": "professional",
+  "word_count": 2500,
+  "quality_level": "premium",
+  "template_type": "expert_authority",
+  "length": "long",
+  "custom_instructions": "Focus on practical business benefits, real-world applications, and ROI. Include specific examples of AI technologies being used in pet care. Address both the business advantages and how it improves pet health outcomes. Include statistics and case studies where possible.",
+  "use_google_search": true,
+  "use_fact_checking": true,
+  "use_citations": true,
+  "use_serp_optimization": true,
+  "use_consensus_generation": true,
+  "use_knowledge_graph": true,
+  "use_semantic_keywords": true,
+  "use_quality_scoring": true
+}
+

@@ -11,7 +11,7 @@ import {
   XMarkIcon,
   DocumentCheckIcon,
 } from "@heroicons/react/24/outline";
-import { BlogGenerationQueue } from "@/types/blog-queue";
+import { BlogGenerationQueueItem } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 
@@ -20,7 +20,7 @@ export default function QueueItemDetailPage() {
   const params = useParams();
   const queueId = params.id as string;
   
-  const [item, setItem] = useState<BlogGenerationQueue | null>(null);
+  const [item, setItem] = useState<BlogGenerationQueueItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
