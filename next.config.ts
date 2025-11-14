@@ -1,10 +1,20 @@
 import type { NextConfig } from "next";
 import path from "path";
 
-// Bundle analyzer
-const withBundleAnalyzer = require('@next/bundle-analyzer')({
-  enabled: process.env.ANALYZE === 'true',
-});
+// Bundle analyzer - use dynamic import for CommonJS module
+let withBundleAnalyzer: (config: NextConfig) => NextConfig = (config) => config;
+
+if (process.env.ANALYZE === 'true') {
+  try {
+    const bundleAnalyzer = require('@next/bundle-analyzer');
+    withBundleAnalyzer = bundleAnalyzer({
+      enabled: true,
+    });
+  } catch (error) {
+    // Bundle analyzer not available, continue without it
+    console.warn('Bundle analyzer not available, continuing without it');
+  }
+}
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
