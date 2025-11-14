@@ -312,6 +312,126 @@ class BlogWriterAPI {
     }
   }
 
+  // Content Analysis API
+  async analyzeContent(params: {
+    content: string;
+    topic?: string;
+    keywords?: string[];
+    target_audience?: string;
+  }): Promise<{
+    readability_score: number;
+    seo_score: number;
+    quality_score: number;
+    keyword_density: Record<string, number>;
+    missing_keywords: string[];
+    recommendations: string[];
+    word_count: number;
+    reading_time_minutes: number;
+    headings_count: number;
+    links_count: number;
+    images_count: number;
+  }> {
+    try {
+      console.log('📊 Analyzing content...');
+      const response = await fetch('/api/blog-writer/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Analysis failed: ${response.status} ${errorData.error || response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Failed to analyze content:', error);
+      throw error;
+    }
+  }
+
+  // Content Optimization API
+  async optimizeContent(params: {
+    content: string;
+    topic: string;
+    keywords: string[];
+    optimization_goals?: string[]; // ['seo', 'readability', 'keywords']
+  }): Promise<{
+    optimized_content: string;
+    changes_made: Array<{
+      type: string;
+      description: string;
+      location: string;
+    }>;
+    before_scores: { readability: number; seo: number };
+    after_scores: { readability: number; seo: number };
+    improvements: string[];
+  }> {
+    try {
+      console.log('✨ Optimizing content...');
+      const response = await fetch('/api/blog-writer/optimize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Optimization failed: ${response.status} ${errorData.error || response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Failed to optimize content:', error);
+      throw error;
+    }
+  }
+
+  // Topic Recommendations API
+  async recommendTopics(params: {
+    keywords?: string[];
+    industry?: string;
+    existing_topics?: string[];
+    target_audience?: string;
+    count?: number; // Default: 10, Max: 50
+  }): Promise<{
+    topics: Array<{
+      title: string;
+      description: string;
+      keywords: string[];
+      search_volume: number;
+      difficulty: string;
+      content_angle: string;
+      estimated_traffic: number;
+    }>;
+  }> {
+    try {
+      console.log('💡 Getting topic recommendations...');
+      const response = await fetch('/api/blog-writer/topics/recommend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Topic recommendation failed: ${response.status} ${errorData.error || response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('❌ Failed to get topic recommendations:', error);
+      throw error;
+    }
+  }
+
   // Get available presets
   async getPresets(): Promise<Record<string, unknown>[]> {
     try {

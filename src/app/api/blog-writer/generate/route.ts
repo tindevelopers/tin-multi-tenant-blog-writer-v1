@@ -166,6 +166,19 @@ export async function POST(request: NextRequest) {
       use_knowledge_graph,
       use_semantic_keywords,
       use_quality_scoring,
+      // Product research features
+      include_product_research,
+      include_brands,
+      include_models,
+      include_prices,
+      include_features,
+      include_reviews,
+      include_pros_cons,
+      include_product_table,
+      include_comparison_section,
+      include_buying_guide,
+      include_faq_section,
+      research_depth,
     } = body;
     
     console.log('📝 Generation parameters:', {
@@ -655,24 +668,33 @@ export async function POST(request: NextRequest) {
       requestPayload.user_prompt_template = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
     }
     
-    // Add web research and product research parameters if needed
-    if (requiresProductResearch) {
+    // Add web research and product research parameters
+    // Use explicit parameters if provided, otherwise auto-detect
+    const shouldIncludeProductResearch = include_product_research !== undefined 
+      ? include_product_research 
+      : requiresProductResearch;
+    
+    if (shouldIncludeProductResearch) {
       console.log('📊 Adding product research parameters...');
       requestPayload.include_web_research = true;
-      requestPayload.research_depth = 'comprehensive';
       requestPayload.include_product_research = true;
-      requestPayload.include_brands = true;
-      requestPayload.include_models = true;
-      requestPayload.include_prices = true;
-      requestPayload.include_features = true;
-      requestPayload.include_specifications = true;
-      requestPayload.include_reviews = true;
-      requestPayload.include_pros_cons = true;
+      
+      // Use provided values or defaults
+      requestPayload.research_depth = research_depth || 'comprehensive';
+      requestPayload.include_brands = include_brands !== undefined ? include_brands : true;
+      requestPayload.include_models = include_models !== undefined ? include_models : true;
+      requestPayload.include_prices = include_prices !== undefined ? include_prices : true;
+      requestPayload.include_features = include_features !== undefined ? include_features : true;
+      requestPayload.include_specifications = true; // Always include specifications
+      requestPayload.include_reviews = include_reviews !== undefined ? include_reviews : true;
+      requestPayload.include_pros_cons = include_pros_cons !== undefined ? include_pros_cons : true;
+      
+      // Content structure options
       requestPayload.content_structure = {
-        include_product_table: true,
-        include_comparison_section: true,
-        include_buying_guide: true,
-        include_faq_section: true
+        include_product_table: include_product_table !== undefined ? include_product_table : true,
+        include_comparison_section: include_comparison_section !== undefined ? include_comparison_section : true,
+        include_buying_guide: include_buying_guide !== undefined ? include_buying_guide : true,
+        include_faq_section: include_faq_section !== undefined ? include_faq_section : true
       };
     }
     

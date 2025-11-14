@@ -63,6 +63,19 @@ export default function EditorPage() {
     use_knowledge_graph: false,
     use_semantic_keywords: false,
     use_quality_scoring: false,
+    // Product research features
+    include_product_research: false,
+    include_brands: true,
+    include_models: true,
+    include_prices: true,
+    include_features: true,
+    include_reviews: true,
+    include_pros_cons: true,
+    include_product_table: true,
+    include_comparison_section: true,
+    include_buying_guide: true,
+    include_faq_section: true,
+    research_depth: 'comprehensive' as 'basic' | 'standard' | 'comprehensive',
   });
 
   const [qualityLevels, setQualityLevels] = useState<Array<{ value: string; label: string; description?: string }>>([]);
@@ -245,6 +258,19 @@ export default function EditorPage() {
         use_knowledge_graph: isPremiumQuality ? true : formData.use_knowledge_graph,
         use_semantic_keywords: isPremiumQuality ? true : formData.use_semantic_keywords,
         use_quality_scoring: isPremiumQuality ? true : formData.use_quality_scoring,
+        // Product research features
+        include_product_research: formData.include_product_research,
+        include_brands: formData.include_product_research ? formData.include_brands : undefined,
+        include_models: formData.include_product_research ? formData.include_models : undefined,
+        include_prices: formData.include_product_research ? formData.include_prices : undefined,
+        include_features: formData.include_product_research ? formData.include_features : undefined,
+        include_reviews: formData.include_product_research ? formData.include_reviews : undefined,
+        include_pros_cons: formData.include_product_research ? formData.include_pros_cons : undefined,
+        include_product_table: formData.include_product_research ? formData.include_product_table : undefined,
+        include_comparison_section: formData.include_product_research ? formData.include_comparison_section : undefined,
+        include_buying_guide: formData.include_product_research ? formData.include_buying_guide : undefined,
+        include_faq_section: formData.include_product_research ? formData.include_faq_section : undefined,
+        research_depth: formData.include_product_research ? formData.research_depth : undefined,
       });
 
       // Capture queue_id if present
@@ -857,6 +883,137 @@ export default function EditorPage() {
                   </div>
                 </div>
               )}
+
+              {/* Product Research Features */}
+              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Product Research Features
+                  </h3>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.include_product_research}
+                      onChange={(e) => setFormData({ ...formData, include_product_research: e.target.checked })}
+                      className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                    />
+                    <span className="text-xs text-gray-700 dark:text-gray-300">Enable Product Research</span>
+                  </label>
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                  Automatically enabled for topics with "best", "top", "review", or "compare" keywords. Enable manually for product-focused content.
+                </p>
+                {formData.include_product_research && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Research Depth
+                      </label>
+                      <select
+                        value={formData.research_depth}
+                        onChange={(e) => setFormData({ ...formData, research_depth: e.target.value as 'basic' | 'standard' | 'comprehensive' })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                      >
+                        <option value="basic">Basic</option>
+                        <option value="standard">Standard</option>
+                        <option value="comprehensive">Comprehensive (Recommended)</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_brands}
+                          onChange={(e) => setFormData({ ...formData, include_brands: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Brands</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_models}
+                          onChange={(e) => setFormData({ ...formData, include_models: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Models</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_prices}
+                          onChange={(e) => setFormData({ ...formData, include_prices: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Prices</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_features}
+                          onChange={(e) => setFormData({ ...formData, include_features: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Features</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_reviews}
+                          onChange={(e) => setFormData({ ...formData, include_reviews: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Reviews</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_pros_cons}
+                          onChange={(e) => setFormData({ ...formData, include_pros_cons: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Pros/Cons</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_product_table}
+                          onChange={(e) => setFormData({ ...formData, include_product_table: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Product Table</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_comparison_section}
+                          onChange={(e) => setFormData({ ...formData, include_comparison_section: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Comparison</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_buying_guide}
+                          onChange={(e) => setFormData({ ...formData, include_buying_guide: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">Buying Guide</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.include_faq_section}
+                          onChange={(e) => setFormData({ ...formData, include_faq_section: e.target.checked })}
+                          className="w-4 h-4 text-orange-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">FAQ Section</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Custom Instructions */}
               <div>

@@ -1,0 +1,190 @@
+/**
+ * SEO Metadata Editor Component
+ * 
+ * Allows editing of SEO metadata and structured data
+ */
+
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { 
+  GlobeAltIcon,
+  DocumentTextIcon,
+  CheckCircleIcon
+} from '@heroicons/react/24/outline';
+
+interface SEOMetadata {
+  og_title?: string;
+  og_description?: string;
+  og_image?: string;
+  twitter_card?: string;
+  canonical_url?: string;
+  [key: string]: string | undefined;
+}
+
+interface StructuredData {
+  '@context'?: string;
+  '@type'?: string;
+  [key: string]: any;
+}
+
+interface SEOMetadataEditorProps {
+  initialMetadata?: SEOMetadata;
+  initialStructuredData?: StructuredData;
+  onSave?: (metadata: SEOMetadata, structuredData: StructuredData) => void;
+  className?: string;
+}
+
+export function SEOMetadataEditor({
+  initialMetadata = {},
+  initialStructuredData = {},
+  onSave,
+  className = ''
+}: SEOMetadataEditorProps) {
+  const [metadata, setMetadata] = useState<SEOMetadata>(initialMetadata);
+  const [structuredData, setStructuredData] = useState<StructuredData>(initialStructuredData);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setMetadata(initialMetadata);
+    setStructuredData(initialStructuredData);
+  }, [initialMetadata, initialStructuredData]);
+
+  const handleSave = () => {
+    if (onSave) {
+      onSave(metadata, structuredData);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  };
+
+  const updateMetadata = (key: string, value: string) => {
+    setMetadata(prev => ({ ...prev, [key]: value }));
+  };
+
+  return (
+    <div className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 ${className}`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <GlobeAltIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+            SEO Metadata
+          </h3>
+        </div>
+        {onSave && (
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            {saved ? (
+              <>
+                <CheckCircleIcon className="w-4 h-4" />
+                Saved
+              </>
+            ) : (
+              'Save'
+            )}
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {/* Open Graph Metadata */}
+        <div>
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            Open Graph
+          </h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                OG Title
+              </label>
+              <input
+                type="text"
+                value={metadata.og_title || ''}
+                onChange={(e) => updateMetadata('og_title', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="Open Graph title"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                OG Description
+              </label>
+              <textarea
+                value={metadata.og_description || ''}
+                onChange={(e) => updateMetadata('og_description', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="Open Graph description"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                OG Image URL
+              </label>
+              <input
+                type="url"
+                value={metadata.og_image || ''}
+                onChange={(e) => updateMetadata('og_image', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="https://example.com/image.jpg"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Twitter Card */}
+        <div>
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            Twitter Card
+          </h4>
+          <div>
+            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+              Twitter Card Type
+            </label>
+            <select
+              value={metadata.twitter_card || 'summary_large_image'}
+              onChange={(e) => updateMetadata('twitter_card', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+            >
+              <option value="summary">Summary</option>
+              <option value="summary_large_image">Summary Large Image</option>
+              <option value="app">App</option>
+              <option value="player">Player</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Canonical URL */}
+        <div>
+          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+            Canonical URL
+          </label>
+          <input
+            type="url"
+            value={metadata.canonical_url || ''}
+            onChange={(e) => updateMetadata('canonical_url', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+            placeholder="https://example.com/canonical-url"
+          />
+        </div>
+
+        {/* Structured Data Preview */}
+        {structuredData && Object.keys(structuredData).length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+              Structured Data
+            </h4>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+              <pre className="text-xs text-gray-700 dark:text-gray-300 overflow-x-auto">
+                {JSON.stringify(structuredData, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+

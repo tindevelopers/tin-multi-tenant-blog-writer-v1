@@ -2,15 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Target, ArrowRight, Save } from 'lucide-react';
+import { Target, ArrowRight, Save, Lightbulb } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Alert from '@/components/ui/alert/Alert';
+import { useTopicRecommendations } from '@/hooks/useTopicRecommendations';
 
 export default function ObjectivePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [showTopicRecommendations, setShowTopicRecommendations] = useState(false);
+  
+  const { topics, loading: topicsLoading, error: topicsError, recommendTopics } = useTopicRecommendations();
   
   const [formData, setFormData] = useState({
     objective: '',
@@ -151,6 +155,21 @@ export default function ObjectivePage() {
     router.push('/admin/workflow/keywords');
   };
 
+  const handleGetTopicRecommendations = async () => {
+    if (!formData.industry && !formData.objective) {
+      setError('Please fill in industry or objective to get topic recommendations');
+      return;
+    }
+
+    setShowTopicRecommendations(true);
+    await recommendTopics({
+      industry: formData.industry || undefined,
+      target_audience: formData.target_audience || undefined,
+      keywords: formData.objective ? [formData.objective] : undefined,
+      count: 10
+    });
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
@@ -271,6 +290,94 @@ export default function ObjectivePage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Topic Recommendations */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Topic Recommendations
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Get AI-powered topic suggestions based on your objective and industry
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleGetTopicRecommendations}
+                disabled={topicsLoading || !formData.industry && !formData.objective}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium disabled:cursor-not-allowed"
+              >
+                {topicsLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Lightbulb className="w-4 h-4" />
+                    Get Recommendations
+                  </>
+                )}
+              </button>
+            </div>
+
+            {topicsError && (
+              <div className="mb-4">
+                <Alert
+                  variant="error"
+                  title="Error"
+                  message={topicsError.message || 'Failed to load topic recommendations'}
+                />
+              </div>
+            )}
+
+            {showTopicRecommendations && topics && topics.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Recommended Topics ({topics.length})
+                </h4>
+                <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
+                  {topics.map((topic, index) => (
+                    <div
+                      key={index}
+                      className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setFormData({ ...formData, objective: topic.title });
+                        setShowTopicRecommendations(false);
+                      }}
+                    >
+                      <h5 className="font-medium text-gray-900 dark:text-white mb-1">
+                        {topic.title}
+                      </h5>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                        {topic.description}
+                      </p>
+                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                        <span>Volume: {topic.search_volume?.toLocaleString() || 'N/A'}</span>
+                        <span>Difficulty: {topic.difficulty || 'N/A'}</span>
+                        {topic.estimated_traffic && (
+                          <span>Traffic: {topic.estimated_traffic.toLocaleString()}</span>
+                        )}
+                      </div>
+                      {topic.keywords && topic.keywords.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {topic.keywords.slice(0, 5).map((keyword, kwIndex) => (
+                            <span
+                              key={kwIndex}
+                              className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded text-xs"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
