@@ -1,5 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/utils/logger";
+import { parseJsonBody, validateRequiredFields, handleApiError } from "@/lib/api-utils";
 
 /**
  * API endpoint to assign system_admin role to a user
@@ -8,9 +10,10 @@ import { NextResponse } from "next/server";
  * Usage: POST /api/admin/assign-system-admin
  * Body: { "email": "systemadmin@tin.info" }
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { email, secret } = await request.json();
+    const body = await parseJsonBody<{ email: string; secret?: string }>(request);
+    const { email, secret } = body;
 
     // Simple secret check (in production, use proper authentication)
     if (secret !== process.env.ADMIN_SETUP_SECRET) {
@@ -51,7 +54,10 @@ export async function POST(request: Request) {
         .single();
 
       if (orgError) {
-        console.error("Error creating organization:", orgError);
+        logger.logError(new Error('Failed to create organization'), {
+          context: 'assign-system-admin',
+          error: orgError,
+        });
         return NextResponse.json(
           { error: "Failed to create organization", details: orgError.message },
           { status: 500 }
@@ -74,7 +80,10 @@ export async function POST(request: Request) {
       .single();
 
     if (userError) {
-      console.error("Error updating user:", userError);
+      logger.logError(new Error('Failed to update user role'), {
+        context: 'assign-system-admin',
+        error: userError,
+      });
       return NextResponse.json(
         { error: "Failed to update user role", details: userError.message },
         { status: 500 }
@@ -107,11 +116,10 @@ export async function POST(request: Request) {
       permissions: permissions || [],
     });
   } catch (error: unknown) {
-    console.error("Error in assign-system-admin:", error);
-    return NextResponse.json(
-      { error: "Internal server error", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'assign-system-admin',
+    });
+    return handleApiError(error);
   }
 }
 

@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { logger } from "@/utils/logger";
+import { parseJsonBody, validateRequiredFields, handleApiError } from "@/lib/api-utils";
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, fullName, orgName } = await request.json();
-
-    if (!email || !password || !fullName || !orgName) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
+    const body = await parseJsonBody<{
+      email: string;
+      password: string;
+      fullName: string;
+      orgName: string;
+    }>(request);
+    
+    validateRequiredFields(body, ['email', 'password', 'fullName', 'orgName']);
+    
+    const { email, password, fullName, orgName } = body;
 
     const supabase = await createClient();
     const supabaseAdmin = createServiceClient();
@@ -76,11 +80,10 @@ export async function POST(request: NextRequest) {
       { error: "Failed to create user" },
       { status: 500 }
     );
-      } catch (error: unknown) {
-    console.error("Signup error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "An error occurred during signup" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown signup error'), {
+      context: 'signup',
+    });
+    return handleApiError(error);
   }
 }
