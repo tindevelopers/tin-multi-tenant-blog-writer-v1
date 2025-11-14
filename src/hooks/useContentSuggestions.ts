@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import contentSuggestionService, { ContentSuggestion, ContentCluster } from '@/lib/content-suggestions';
+import { logger } from '@/utils/logger';
 
 export interface UseContentSuggestionsReturn {
   suggestions: ContentSuggestion[];
@@ -29,9 +30,7 @@ export function useContentSuggestions(): UseContentSuggestionsReturn {
     setError(null);
     
     try {
-      console.log('🎯 Generating content suggestions...');
-      console.log('📊 Research results received:', researchResults);
-      console.log('👥 Target audience:', targetAudience);
+      logger.debug('Generating content suggestions', { targetAudience });
       
       // Generate content suggestions from research results
       const newSuggestions = await contentSuggestionService.generateContentSuggestions(
@@ -39,24 +38,21 @@ export function useContentSuggestions(): UseContentSuggestionsReturn {
         targetAudience
       );
       
-      console.log('📝 Generated suggestions:', newSuggestions);
+      logger.debug('Generated suggestions', { count: newSuggestions.length });
       
       // Generate content clusters
       const newClusters = contentSuggestionService.generateContentClusters(newSuggestions);
       
-      console.log('🗂️ Generated clusters:', newClusters);
+      logger.debug('Generated clusters', { count: newClusters.length });
       
       setSuggestions(newSuggestions);
       setClusters(newClusters);
       
-      console.log(`✅ Generated ${newSuggestions.length} suggestions in ${newClusters.length} clusters`);
+      logger.info(`Generated ${newSuggestions.length} suggestions in ${newClusters.length} clusters`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate content suggestions';
       setError(errorMessage);
-      console.error('❌ Error generating content suggestions:', err);
-      console.error('❌ Error details:', {
-        message: err instanceof Error ? err.message : 'Unknown error',
-        stack: err instanceof Error ? err.stack : undefined,
+      logger.logError(err instanceof Error ? err : new Error(errorMessage), {
         researchResults,
         targetAudience
       });

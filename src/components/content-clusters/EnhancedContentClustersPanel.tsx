@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { logger } from '@/utils/logger';
 import { 
   Layers, 
   Plus, 
@@ -33,7 +34,7 @@ interface EnhancedContentClustersPanelProps {
   industry?: string;
 }
 
-export default function EnhancedContentClustersPanel({
+function EnhancedContentClustersPanel({
   researchResults,
   onClustersGenerated,
   onSuggestionSelect,
@@ -67,21 +68,9 @@ export default function EnhancedContentClustersPanel({
     loadUserClusters();
   }, [loadUserClusters]);
 
-  // Auto-generate clusters when research results are available
-  useEffect(() => {
-    if (researchResults && !currentClusters && !loading) {
-      console.log('🔬 Research results available, generating clusters...', {
-        keywords: researchResults.keyword_analysis.cluster_groups.length,
-        titles: researchResults.title_suggestions.length
-      });
-      
-      handleGenerateClusters();
-    }
-  }, [researchResults, currentClusters, loading]);
-
-  const handleGenerateClusters = async () => {
+  const handleGenerateClusters = useCallback(async () => {
     if (!researchResults) {
-      console.error('No research results available');
+      logger.warn('No research results available');
       return;
     }
 
@@ -477,7 +466,7 @@ export default function EnhancedContentClustersPanel({
           {/* Articles Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {(() => {
-              console.log('🔍 Rendering articles grid:', {
+              logger.debug('Rendering articles grid', {
                 totalArticles: articles.length,
                 filteredArticles: filteredArticles.length,
                 selectedClusterId,
@@ -532,18 +521,16 @@ export default function EnhancedContentClustersPanel({
                   </span>
                   <button
                     onClick={() => {
-                      console.log('🔍 Generate button clicked for article:', {
-                        article,
+                      logger.debug('Generate button clicked for article', {
+                        articleId: article.id,
                         articleTitle: article.title,
-                        onSuggestionSelect: !!onSuggestionSelect,
-                        onSuggestionSelectType: typeof onSuggestionSelect
+                        hasOnSuggestionSelect: !!onSuggestionSelect
                       });
                       
                       if (onSuggestionSelect) {
-                        console.log('✅ Calling onSuggestionSelect with article');
                         onSuggestionSelect(article);
                       } else {
-                        console.error('❌ onSuggestionSelect is not available');
+                        logger.warn('onSuggestionSelect is not available', { articleId: article.id });
                       }
                     }}
                     className="inline-flex items-center gap-1 px-3 py-1 text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
@@ -570,3 +557,5 @@ export default function EnhancedContentClustersPanel({
     </div>
   );
 }
+
+export default React.memo(EnhancedContentClustersPanel);

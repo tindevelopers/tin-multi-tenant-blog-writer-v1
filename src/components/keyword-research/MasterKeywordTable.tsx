@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import Checkbox from '@/components/form/input/Checkbox';
 import Badge from '@/components/ui/badge/Badge';
@@ -20,7 +20,7 @@ interface MasterKeywordTableProps {
 type SortField = 'keyword' | 'search_volume' | 'keyword_difficulty' | 'easy_win_score' | 'high_value_score';
 type SortDirection = 'asc' | 'desc';
 
-export function MasterKeywordTable({
+function MasterKeywordTable({
   keywords,
   selectedKeywords,
   onToggleKeyword,
@@ -34,14 +34,14 @@ export function MasterKeywordTable({
   const [competitionFilter, setCompetitionFilter] = useState<'ALL' | 'LOW' | 'MEDIUM' | 'HIGH'>('ALL');
   const [viewMode, setViewMode] = useState<'all' | 'easy-wins' | 'high-value'>('all');
 
-  const handleSort = (field: SortField) => {
+  const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
       setSortDirection('desc');
     }
-  };
+  }, [sortField, sortDirection]);
 
   const filteredAndSortedKeywords = useMemo(() => {
     let filtered = [...keywords];
@@ -371,3 +371,7 @@ export function MasterKeywordTable({
     </div>
   );
 }
+
+const MemoizedMasterKeywordTable = React.memo(MasterKeywordTable);
+export default MemoizedMasterKeywordTable;
+export { MasterKeywordTable };

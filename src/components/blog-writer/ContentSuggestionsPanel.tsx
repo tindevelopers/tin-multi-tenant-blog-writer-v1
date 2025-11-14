@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   LightBulbIcon, 
   DocumentTextIcon,
@@ -16,6 +16,7 @@ import { useContentSuggestions } from '@/hooks/useContentSuggestions';
 import { useGenerateBlog } from '@/hooks/useBlogWriterAPI';
 import { useBlogPostMutations } from '@/hooks/useBlogPosts';
 import type { ContentSuggestion, ContentCluster } from '@/lib/content-suggestions';
+import { logger } from '@/utils/logger';
 
 interface ContentSuggestionsPanelProps {
   researchResults: any;
@@ -32,9 +33,11 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
   onBlogGenerated,
   onDraftSaved,
 }) => {
-  console.log('🎯 ContentSuggestionsPanel received researchResults:', researchResults);
-  console.log('🔍 Research results type:', typeof researchResults);
-  console.log('🔍 Research results keys:', researchResults ? Object.keys(researchResults) : 'null');
+  logger.debug('ContentSuggestionsPanel received researchResults', { 
+    hasResults: !!researchResults,
+    resultKeys: researchResults ? Object.keys(researchResults) : null 
+  });
+  
   const [selectedSuggestion, setSelectedSuggestion] = useState<ContentSuggestion | null>(null);
   const [showClusters, setShowClusters] = useState(false);
   
@@ -51,32 +54,32 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
   const { generateBlog, loading: generatingBlog } = useGenerateBlog();
   const { createDraft, loading: savingDraft } = useBlogPostMutations();
 
-  // Auto-generate suggestions when research results are available
-  useEffect(() => {
-    if (researchResults && suggestions.length === 0) {
-      console.log('🔄 Auto-generating suggestions from research results...');
-      handleGenerateSuggestions();
-    }
-  }, [researchResults, suggestions.length]);
-
-  const handleGenerateSuggestions = async () => {
+  const handleGenerateSuggestions = useCallback(async () => {
     if (!researchResults) {
-      console.error('❌ No research results available');
+      logger.warn('No research results available');
       return;
     }
     
-    console.log('🎯 Generating suggestions from research results:', researchResults);
+    logger.debug('Generating suggestions from research results', { researchResults });
     await generateSuggestions(researchResults, targetAudience);
-  };
+  }, [researchResults, targetAudience, generateSuggestions]);
 
-  const handleSuggestionSelect = (suggestion: ContentSuggestion) => {
+  // Auto-generate suggestions when research results are available
+  useEffect(() => {
+    if (researchResults && suggestions.length === 0) {
+      logger.debug('Auto-generating suggestions from research results');
+      handleGenerateSuggestions();
+    }
+  }, [researchResults, suggestions.length, handleGenerateSuggestions]);
+
+  const handleSuggestionSelect = useCallback((suggestion: ContentSuggestion) => {
     setSelectedSuggestion(suggestion);
     onSuggestionSelect?.(suggestion);
-  };
+  }, [onSuggestionSelect]);
 
-  const handleGenerateBlog = async (suggestion: ContentSuggestion) => {
+  const handleGenerateBlog = useCallback(async (suggestion: ContentSuggestion) => {
     try {
-      console.log('🚀 Generating blog for suggestion:', suggestion.title);
+      logger.info('Generating blog for suggestion', { title: suggestion.title });
       
       const blogContent = await generateBlog({
         topic: suggestion.title,
@@ -87,97 +90,48 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
       });
 
       if (blogContent) {
-        console.log('📝 Blog content generated, saving as draft...');
-        console.log('🔍 Blog content structure:', blogContent);
-        console.log('🔍 Blog content keys:', Object.keys(blogContent));
-        console.log('🔍 Blog content type:', typeof blogContent);
-        console.log('🔍 Blog content stringified:', JSON.stringify(blogContent, null, 2));
+        logger.debug('Blog content generated', { 
+          keys: Object.keys(blogContent),
+          type: typeof blogContent 
+        });
         
         // Extract content properly from the API response
         let content = '';
         let excerpt = '';
         
         // Try different possible content fields
-        console.log('🔍 Checking content fields...');
-        console.log('🔍 blogContent.content:', typeof blogContent.content, blogContent.content);
-        console.log('🔍 blogContent.response:', typeof blogContent.response, blogContent.response);
-        console.log('🔍 blogContent.text:', typeof blogContent.text, blogContent.text);
-        console.log('🔍 blogContent.article:', typeof blogContent.article, blogContent.article);
-        console.log('🔍 blogContent.body:', typeof blogContent.body, blogContent.body);
-        console.log('🔍 blogContent.data:', typeof blogContent.data, blogContent.data);
-        console.log('🔍 blogContent.result:', typeof blogContent.result, blogContent.result);
-        console.log('🔍 blogContent.blog:', typeof blogContent.blog, blogContent.blog);
-        console.log('🔍 blogContent.post:', typeof blogContent.post, blogContent.post);
-        console.log('🔍 blogContent.html:', typeof blogContent.html, blogContent.html);
-        console.log('🔍 blogContent.markdown:', typeof blogContent.markdown, blogContent.markdown);
+        const contentFields = ['content', 'response', 'text', 'article', 'body', 'data', 'result', 'blog', 'post', 'html', 'markdown'];
+        for (const field of contentFields) {
+          if (typeof blogContent[field] === 'string') {
+            content = blogContent[field];
+            logger.debug(`Using blogContent.${field}`);
+            break;
+          }
+        }
         
-        if (typeof blogContent.content === 'string') {
-          content = blogContent.content;
-          console.log('✅ Using blogContent.content');
-        } else if (typeof blogContent.response === 'string') {
-          content = blogContent.response;
-          console.log('✅ Using blogContent.response');
-        } else if (typeof blogContent.text === 'string') {
-          content = blogContent.text;
-          console.log('✅ Using blogContent.text');
-        } else if (typeof blogContent.article === 'string') {
-          content = blogContent.article;
-          console.log('✅ Using blogContent.article');
-        } else if (typeof blogContent.body === 'string') {
-          content = blogContent.body;
-          console.log('✅ Using blogContent.body');
-        } else if (typeof blogContent.data === 'string') {
-          content = blogContent.data;
-          console.log('✅ Using blogContent.data');
-        } else if (typeof blogContent.result === 'string') {
-          content = blogContent.result;
-          console.log('✅ Using blogContent.result');
-        } else if (typeof blogContent.blog === 'string') {
-          content = blogContent.blog;
-          console.log('✅ Using blogContent.blog');
-        } else if (typeof blogContent.post === 'string') {
-          content = blogContent.post;
-          console.log('✅ Using blogContent.post');
-        } else if (typeof blogContent.html === 'string') {
-          content = blogContent.html;
-          console.log('✅ Using blogContent.html');
-        } else if (typeof blogContent.markdown === 'string') {
-          content = blogContent.markdown;
-          console.log('✅ Using blogContent.markdown');
-        } else {
-          // If no direct content field, try to extract from nested objects
-          console.log('🔍 No direct content field found, checking nested structure...');
-          
-          // Check if any of the fields contain nested objects with content
+        // If no direct content field, try to extract from nested objects
+        if (!content) {
+          logger.debug('No direct content field found, checking nested structure');
           const nestedFields = ['data', 'result', 'response', 'content'];
           for (const field of nestedFields) {
             if (blogContent[field] && typeof blogContent[field] === 'object') {
-              console.log(`🔍 Checking nested field: ${field}`, blogContent[field]);
               const nested = blogContent[field] as any;
-              if (typeof nested.content === 'string') {
-                content = nested.content;
-                console.log(`✅ Using nested.${field}.content`);
-                break;
-              } else if (typeof nested.text === 'string') {
-                content = nested.text;
-                console.log(`✅ Using nested.${field}.text`);
-                break;
-              } else if (typeof nested.body === 'string') {
-                content = nested.body;
-                console.log(`✅ Using nested.${field}.body`);
-                break;
-              } else if (typeof nested.article === 'string') {
-                content = nested.article;
-                console.log(`✅ Using nested.${field}.article`);
-                break;
+              const nestedContentFields = ['content', 'text', 'body', 'article'];
+              for (const nestedField of nestedContentFields) {
+                if (typeof nested[nestedField] === 'string') {
+                  content = nested[nestedField];
+                  logger.debug(`Using nested.${field}.${nestedField}`);
+                  break;
+                }
               }
+              if (content) break;
             }
           }
           
           // If still no content found, use JSON fallback
           if (!content) {
             content = JSON.stringify(blogContent, null, 2);
-            console.log('⚠️ Using JSON.stringify fallback');
+            logger.warn('Using JSON.stringify fallback for content extraction');
           }
         }
         
@@ -192,9 +146,10 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
           excerpt = suggestion.content_angle || '';
         }
         
-        console.log('🔍 Extracted content length:', content.length);
-        console.log('🔍 Extracted excerpt length:', excerpt.length);
-        console.log('🔍 Content preview (first 200 chars):', content.substring(0, 200));
+        logger.debug('Content extracted', { 
+          contentLength: content.length,
+          excerptLength: excerpt.length 
+        });
         
         // Prepare the content data to pass back to parent
         const processedContent = {
@@ -223,17 +178,19 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
         };
 
         // Pass the content back to parent instead of saving directly
-        console.log('📝 Passing content back to parent component...');
+        logger.debug('Passing content back to parent component');
         onBlogGenerated?.(processedContent);
         
         // Show success message
         alert(`✅ Blog content has been generated! You can now review and save it as a draft.`);
       } else {
-        console.error('❌ No blog content generated');
+        logger.error('No blog content generated');
         alert('❌ Failed to generate blog content. Please try again.');
       }
     } catch (error) {
-      console.error('❌ Error generating blog:', error);
+      logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+        suggestion: suggestion.title
+      });
       alert(`❌ Error generating blog: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -310,8 +267,7 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
           {process.env.NODE_ENV === 'development' && (
             <button
               onClick={() => {
-                console.log('🧪 Test button clicked - Research results:', researchResults);
-                console.log('🧪 Target audience:', targetAudience);
+                logger.debug('Test button clicked', { researchResults, targetAudience });
                 handleGenerateSuggestions();
               }}
               className="flex items-center px-3 py-1 text-xs bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
@@ -510,4 +466,4 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
   );
 };
 
-export default ContentSuggestionsPanel;
+export default React.memo(ContentSuggestionsPanel);

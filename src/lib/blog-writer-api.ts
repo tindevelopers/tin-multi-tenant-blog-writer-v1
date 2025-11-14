@@ -4,6 +4,7 @@
  */
 
 import cloudRunHealth from './cloud-run-health';
+import { logger } from '@/utils/logger';
 
 const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
 const API_KEY = process.env.BLOG_WRITER_API_KEY; // Optional for open API
@@ -79,8 +80,7 @@ class BlogWriterAPI {
       ...options.headers,
     };
 
-    console.log(`🌐 Making request to: ${url}`);
-    console.log('📤 Request options:', { method: options.method || 'GET', headers, body: options.body });
+    logger.debug('Making API request', { url, method: options.method || 'GET' });
 
     for (let attempt = 1; attempt <= this.retryAttempts; attempt++) {
       try {
@@ -91,20 +91,30 @@ class BlogWriterAPI {
           signal: AbortSignal.timeout(10000), // 10 second timeout
         });
 
-        console.log(`📡 Response status: ${response.status} ${response.statusText}`);
-        console.log('📥 Response headers:', Object.fromEntries(response.headers.entries()));
+        logger.debug('API response received', { 
+          status: response.status, 
+          statusText: response.statusText 
+        });
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('❌ Error response body:', errorText);
+          logger.error('API error response', { 
+            status: response.status, 
+            statusText: response.statusText,
+            body: errorText 
+          });
           throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
         }
 
         const result = await response.json();
-        console.log('✅ Response data:', result);
+        logger.debug('API request successful', { endpoint });
         return result;
       } catch (error) {
-        console.error(`❌ API request attempt ${attempt} failed:`, error);
+        logger.warn(`API request attempt ${attempt} failed`, { 
+          attempt, 
+          endpoint,
+          error: error instanceof Error ? error.message : String(error)
+        });
         
         if (attempt === this.retryAttempts) {
           throw new Error(`API request failed after ${this.retryAttempts} attempts: ${error}`);
@@ -123,7 +133,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<BlogPost[]>('/posts');
     } catch (error) {
-      console.error('Failed to fetch posts:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch posts'), {
+        endpoint: '/posts'
+      });
       return [];
     }
   }
@@ -132,7 +144,10 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<BlogPost>(`/posts/${id}`);
     } catch (error) {
-      console.error(`Failed to fetch post ${id}:`, error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch post'), {
+        endpoint: `/posts/${id}`,
+        postId: id
+      });
       return null;
     }
   }
@@ -144,7 +159,10 @@ class BlogWriterAPI {
         body: JSON.stringify(post),
       });
     } catch (error) {
-      console.error('Failed to create post:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to create post'), {
+        endpoint: '/posts',
+        method: 'POST'
+      });
       return null;
     }
   }
@@ -156,7 +174,11 @@ class BlogWriterAPI {
         body: JSON.stringify(post),
       });
     } catch (error) {
-      console.error(`Failed to update post ${id}:`, error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to update post'), {
+        endpoint: `/posts/${id}`,
+        method: 'PUT',
+        postId: id
+      });
       return null;
     }
   }
@@ -168,7 +190,11 @@ class BlogWriterAPI {
       });
       return true;
     } catch (error) {
-      console.error(`Failed to delete post ${id}:`, error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to delete post'), {
+        endpoint: `/posts/${id}`,
+        method: 'DELETE',
+        postId: id
+      });
       return false;
     }
   }
@@ -190,7 +216,9 @@ class BlogWriterAPI {
         scheduledPosts: 0, // Not available in current API
       };
     } catch (error) {
-      console.error('Failed to fetch metrics:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch metrics'), {
+        endpoint: '/api/v1/metrics'
+      });
       return null;
     }
   }
@@ -200,7 +228,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<CalendarEvent[]>('/calendar/events');
     } catch (error) {
-      console.error('Failed to fetch calendar events:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch calendar events'), {
+        endpoint: '/calendar/events'
+      });
       return [];
     }
   }
@@ -210,7 +240,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<RecentActivity[]>('/activities/recent');
     } catch (error) {
-      console.error('Failed to fetch recent activities:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch recent activities'), {
+        endpoint: '/activities/recent'
+      });
       return [];
     }
   }
@@ -220,7 +252,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<BlogPost[]>('/schedule/upcoming');
     } catch (error) {
-      console.error('Failed to fetch scheduled posts:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch scheduled posts'), {
+        endpoint: '/schedule/upcoming'
+      });
       return [];
     }
   }
@@ -230,7 +264,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<BlogPost[]>('/drafts');
     } catch (error) {
-      console.error('Failed to fetch drafts:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch drafts'), {
+        endpoint: '/drafts'
+      });
       return [];
     }
   }
@@ -241,7 +277,9 @@ class BlogWriterAPI {
       const response = await this.makeRequest<{status: string}>('/health');
       return response.status === 'healthy';
     } catch (error) {
-      console.error('API health check failed:', error);
+      logger.logError(error instanceof Error ? error : new Error('API health check failed'), {
+        endpoint: '/health'
+      });
       return false;
     }
   }
@@ -251,7 +289,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<Record<string, unknown>>('/health');
     } catch (error) {
-      console.error('Failed to get detailed health:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to get detailed health'), {
+        endpoint: '/health'
+      });
       return null;
     }
   }
@@ -299,8 +339,7 @@ class BlogWriterAPI {
     use_quality_scoring?: boolean; // Enable quality scoring
   }): Promise<Record<string, unknown> | null> {
     try {
-      console.log('🚀 Starting blog generation via local API route...');
-      console.log('🚀 Generating blog with params:', params);
+      logger.debug('Starting blog generation via local API route', { params });
       
       // Use local API route instead of external API to avoid CORS issues
       const response = await fetch('/api/blog-writer/generate', {
@@ -317,10 +356,13 @@ class BlogWriterAPI {
       }
       
       const result = await response.json();
-      console.log('✅ Blog generation result:', result);
+      logger.debug('Blog generation successful', { hasResult: !!result });
       return result;
     } catch (error) {
-      console.error('❌ Failed to generate blog:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to generate blog'), {
+        endpoint: '/api/blog-writer/generate',
+        params
+      });
       return null;
     }
   }
@@ -345,7 +387,7 @@ class BlogWriterAPI {
     images_count: number;
   }> {
     try {
-      console.log('📊 Analyzing content...');
+      logger.debug('Analyzing content', { topic: params.topic });
       const response = await fetch('/api/blog-writer/analyze', {
         method: 'POST',
         headers: {
@@ -361,7 +403,9 @@ class BlogWriterAPI {
 
       return await response.json();
     } catch (error) {
-      console.error('❌ Failed to analyze content:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to analyze content'), {
+        endpoint: '/api/blog-writer/analyze'
+      });
       throw error;
     }
   }
@@ -384,7 +428,7 @@ class BlogWriterAPI {
     improvements: string[];
   }> {
     try {
-      console.log('✨ Optimizing content...');
+      logger.debug('Optimizing content', { topic: params.topic });
       const response = await fetch('/api/blog-writer/optimize', {
         method: 'POST',
         headers: {
@@ -400,7 +444,9 @@ class BlogWriterAPI {
 
       return await response.json();
     } catch (error) {
-      console.error('❌ Failed to optimize content:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to optimize content'), {
+        endpoint: '/api/blog-writer/optimize'
+      });
       throw error;
     }
   }
@@ -424,7 +470,7 @@ class BlogWriterAPI {
     }>;
   }> {
     try {
-      console.log('💡 Getting topic recommendations...');
+      logger.debug('Getting topic recommendations', { count: params.count });
       const response = await fetch('/api/blog-writer/topics/recommend', {
         method: 'POST',
         headers: {
@@ -440,7 +486,9 @@ class BlogWriterAPI {
 
       return await response.json();
     } catch (error) {
-      console.error('❌ Failed to get topic recommendations:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to get topic recommendations'), {
+        endpoint: '/api/blog-writer/topics/recommend'
+      });
       throw error;
     }
   }
@@ -450,7 +498,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<Record<string, unknown>[]>('/api/v1/abstraction/presets');
     } catch (error) {
-      console.error('Failed to fetch presets:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch presets'), {
+        endpoint: '/api/v1/abstraction/presets'
+      });
       return [];
     }
   }
@@ -460,7 +510,9 @@ class BlogWriterAPI {
     try {
       return await this.makeRequest<Record<string, unknown>[]>('/api/v1/abstraction/quality-levels');
     } catch (error) {
-      console.error('Failed to fetch quality levels:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to fetch quality levels'), {
+        endpoint: '/api/v1/abstraction/quality-levels'
+      });
       return [];
     }
   }
@@ -498,8 +550,8 @@ class BlogWriterAPI {
     confidence: Record<string, number>;
   }> {
     try {
-      console.log('🤖 Getting LLM responses for fact-checking:', {
-        prompt: params.prompt.substring(0, 100),
+      logger.debug('Getting LLM responses for fact-checking', {
+        promptLength: params.prompt.length,
         llms: params.llms || ['chatgpt', 'claude', 'gemini'],
         max_tokens: params.max_tokens || 500
       });
@@ -524,7 +576,9 @@ class BlogWriterAPI {
         }),
       });
     } catch (error) {
-      console.error('Failed to get LLM responses:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to get LLM responses'), {
+        endpoint: '/api/v1/keywords/llm-responses'
+      });
       throw error;
     }
   }
@@ -566,7 +620,7 @@ class BlogWriterAPI {
     notes?: string;
   }> {
     try {
-      console.log('🔌 Connecting to integration and getting recommendations:', {
+      logger.debug('Connecting to integration and getting recommendations', {
         provider: params.provider,
         keyword_count: params.keywords.length,
         has_tenant_id: !!params.tenant_id,
@@ -595,7 +649,10 @@ class BlogWriterAPI {
         }),
       });
     } catch (error) {
-      console.error('Failed to connect and get recommendations:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to connect and get recommendations'), {
+        endpoint: '/api/v1/integrations/connect-and-recommend',
+        provider: params.provider
+      });
       throw error;
     }
   }
@@ -624,7 +681,7 @@ class BlogWriterAPI {
     notes?: string;
   }> {
     try {
-      console.log('📊 Getting recommendations for:', params.provider);
+      logger.debug('Getting recommendations', { provider: params.provider });
       return await this.makeRequest<{
         provider: string;
         tenant_id?: string;
@@ -642,7 +699,10 @@ class BlogWriterAPI {
         body: JSON.stringify(params),
       });
     } catch (error) {
-      console.error('Failed to get recommendations:', error);
+      logger.logError(error instanceof Error ? error : new Error('Failed to get recommendations'), {
+        endpoint: '/api/v1/integrations/recommend',
+        provider: params.provider
+      });
       throw error;
     }
   }
