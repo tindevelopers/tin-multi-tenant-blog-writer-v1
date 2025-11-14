@@ -156,36 +156,96 @@ export async function saveMediaAsset(
   metadata?: Record<string, unknown>
 ): Promise<string | null> {
   try {
+    // Validate required fields
+    if (!orgId) {
+      console.error('❌ saveMediaAsset: orgId is required');
+      return null;
+    }
+    
+    if (!cloudinaryResult || !cloudinaryResult.secure_url) {
+      console.error('❌ saveMediaAsset: Invalid cloudinaryResult or missing secure_url');
+      return null;
+    }
+
+    console.log('💾 Saving media asset to database:', {
+      orgId,
+      userId,
+      fileName,
+      url: cloudinaryResult.secure_url.substring(0, 50) + '...',
+      format: cloudinaryResult.format,
+      size: cloudinaryResult.bytes
+    });
+
     const supabase = createServiceClient();
+    
+    // Check if service role key is configured
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('❌ SUPABASE_SERVICE_ROLE_KEY is not configured. Cannot save to database.');
+      return null;
+    }
+
+    const insertData = {
+      org_id: orgId,
+      uploaded_by: userId,
+      file_name: fileName,
+      file_url: cloudinaryResult.secure_url,
+      file_type: cloudinaryResult.format || 'image/png',
+      file_size: cloudinaryResult.bytes || 0,
+      provider: 'cloudinary' as const,
+      metadata: {
+        public_id: cloudinaryResult.public_id,
+        width: cloudinaryResult.width,
+        height: cloudinaryResult.height,
+        resource_type: cloudinaryResult.resource_type || 'image',
+        ...metadata,
+      },
+    };
+
+    console.log('💾 Inserting media asset with data:', {
+      ...insertData,
+      metadata: insertData.metadata,
+      file_url: insertData.file_url.substring(0, 50) + '...'
+    });
+
     const { data, error } = await supabase
       .from('media_assets')
-      .insert({
-        org_id: orgId,
-        uploaded_by: userId,
-        file_name: fileName,
-        file_url: cloudinaryResult.secure_url,
-        file_type: cloudinaryResult.format,
-        file_size: cloudinaryResult.bytes,
-        provider: 'cloudinary',
-        metadata: {
-          public_id: cloudinaryResult.public_id,
-          width: cloudinaryResult.width,
-          height: cloudinaryResult.height,
-          resource_type: cloudinaryResult.resource_type,
-          ...metadata,
-        },
-      })
+      .insert(insertData)
       .select('asset_id')
       .single();
 
     if (error) {
-      console.error('Error saving media asset:', error);
+      console.error('❌ Error saving media asset to database:', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        insertData: {
+          ...insertData,
+          file_url: insertData.file_url.substring(0, 50) + '...'
+        }
+      });
       return null;
     }
 
+    if (!data || !data.asset_id) {
+      console.error('❌ No asset_id returned from insert');
+      return null;
+    }
+
+    console.log('✅ Media asset saved successfully:', {
+      asset_id: data.asset_id,
+      file_name: fileName,
+      org_id: orgId
+    });
+
     return data.asset_id;
   } catch (error) {
-    console.error('Error saving media asset:', error);
+    console.error('❌ Exception saving media asset:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      orgId,
+      fileName
+    });
     return null;
   }
 }

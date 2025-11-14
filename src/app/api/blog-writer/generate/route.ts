@@ -965,6 +965,8 @@ export async function POST(request: NextRequest) {
               // Update featuredImage to use Cloudinary URL
               featuredImage.image_url = cloudinaryResult.secure_url;
               featuredImage.image_data = undefined;
+            } else {
+              console.warn('⚠️ Featured image uploaded to Cloudinary but failed to save to database');
             }
           }
         } catch (uploadError) {
@@ -1016,7 +1018,7 @@ export async function POST(request: NextRequest) {
                 img.image_data = undefined;
                 
                 // Save to media_assets
-                await saveMediaAsset(
+                const sectionAssetId = await saveMediaAsset(
                   orgId,
                   userId || null,
                   cloudinaryResult,
@@ -1029,6 +1031,12 @@ export async function POST(request: NextRequest) {
                     image_type: 'section'
                   }
                 );
+
+                if (sectionAssetId) {
+                  console.log(`✅ Section image ${i + 1} saved to media_assets:`, sectionAssetId);
+                } else {
+                  console.warn(`⚠️ Section image ${i + 1} uploaded to Cloudinary but failed to save to database`);
+                }
 
                 sectionImages.push({
                   position: section.wordPosition,
