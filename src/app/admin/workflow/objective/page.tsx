@@ -14,7 +14,8 @@ export default function ObjectivePage() {
   const [saved, setSaved] = useState(false);
   const [showTopicRecommendations, setShowTopicRecommendations] = useState(false);
   
-  const { topics, loading: topicsLoading, error: topicsError, recommendTopics } = useTopicRecommendations();
+  const { result: topicsResult, loading: topicsLoading, error: topicsError, recommend: recommendTopics } = useTopicRecommendations();
+  const topics = topicsResult?.topics || [];
   
   const [formData, setFormData] = useState({
     objective: '',
@@ -328,7 +329,7 @@ export default function ObjectivePage() {
                 <Alert
                   variant="error"
                   title="Error"
-                  message={topicsError.message || 'Failed to load topic recommendations'}
+                  message={typeof topicsError === 'string' ? topicsError : 'Failed to load topic recommendations'}
                 />
               </div>
             )}

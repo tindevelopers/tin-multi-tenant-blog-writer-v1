@@ -279,6 +279,19 @@ class BlogWriterAPI {
     use_google_search?: boolean; // Enable Google search for research
     use_fact_checking?: boolean; // Enable fact-checking
     use_citations?: boolean; // Include citations
+    // Product research features
+    include_product_research?: boolean;
+    include_brands?: boolean;
+    include_models?: boolean;
+    include_prices?: boolean;
+    include_features?: boolean;
+    include_reviews?: boolean;
+    include_pros_cons?: boolean;
+    include_product_table?: boolean;
+    include_comparison_section?: boolean;
+    include_buying_guide?: boolean;
+    include_faq_section?: boolean;
+    research_depth?: 'basic' | 'standard' | 'comprehensive';
     use_serp_optimization?: boolean; // Optimize for SERP features
     use_consensus_generation?: boolean; // Use GPT-4o + Claude consensus (best quality)
     use_knowledge_graph?: boolean; // Use knowledge graph

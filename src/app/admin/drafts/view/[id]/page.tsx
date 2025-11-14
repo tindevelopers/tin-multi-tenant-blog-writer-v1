@@ -45,8 +45,14 @@ export default function ViewDraftPage() {
     if (metadata?.content_metadata) {
       return metadata.content_metadata as ContentMetadata;
     }
-    if (draft?.content) {
-      return extractContentMetadata(draft.content);
+    if (draft?.content && typeof window !== 'undefined') {
+      // Only extract on client side (DOMParser requires browser)
+      try {
+        return extractContentMetadata(draft.content);
+      } catch (error) {
+        console.error('Failed to extract content metadata:', error);
+        return null;
+      }
     }
     return null;
   }, [metadata, draft?.content]);

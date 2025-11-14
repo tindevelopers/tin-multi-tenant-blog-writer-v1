@@ -211,3 +211,99 @@ export function getSectionImages(contentMetadata: ContentMetadata | null | undef
   return contentMetadata.images.filter(img => img.type === 'section');
 }
 
+/**
+ * Extract content metadata from HTML content
+ */
+export function extractContentMetadata(htmlContent: string): ContentMetadata {
+  const headings: HeadingMetadata[] = [];
+  const images: ImageMetadata[] = [];
+  const links: LinkMetadata[] = [];
+  const code_blocks: CodeBlockMetadata[] = [];
+
+  // Create a temporary DOM element to parse HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+
+  // Extract headings
+  const headingElements = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  headingElements.forEach((heading, index) => {
+    const level = parseInt(heading.tagName.charAt(1));
+    const text = heading.textContent || '';
+    const id = heading.id || `heading-${index}`;
+    
+    headings.push({
+      level,
+      text: text.trim(),
+      id
+    });
+  });
+
+  // Extract images
+  const imageElements = doc.querySelectorAll('img');
+  imageElements.forEach((img, index) => {
+    const url = img.getAttribute('src') || '';
+    const alt = img.getAttribute('alt') || '';
+    const isFeatured = img.closest('figure.featured-image') !== null || 
+                       img.classList.contains('featured-image') ||
+                       index === 0; // First image is featured by default
+    
+    if (url) {
+      images.push({
+        url,
+        alt: alt.trim() || `Image ${index + 1}`,
+        type: isFeatured ? 'featured' : 'section'
+      });
+    }
+  });
+
+  // Extract links
+  const linkElements = doc.querySelectorAll('a[href]');
+  linkElements.forEach((link) => {
+    const url = link.getAttribute('href') || '';
+    const text = link.textContent || '';
+    // Check if link is internal (relative paths, anchors, or same domain)
+    const isInternal = url.startsWith('/') || 
+                       url.startsWith('#') || 
+                       !url.includes('://') ||
+                       (typeof window !== 'undefined' && url.includes(window.location.hostname));
+    
+    if (url) {
+      links.push({
+        url,
+        text: text.trim() || url,
+        type: isInternal ? 'internal' : 'external'
+      });
+    }
+  });
+
+  // Extract code blocks
+  const codeElements = doc.querySelectorAll('pre code, code');
+  codeElements.forEach((code) => {
+    const language = code.className.replace('language-', '') || 'text';
+    const codeText = code.textContent || '';
+    
+    if (codeText.trim()) {
+      code_blocks.push({
+        language,
+        code: codeText
+      });
+    }
+  });
+
+  // Calculate word count (approximate)
+  const textContent = doc.body.textContent || '';
+  const word_count = textContent.split(/\s+/).filter(word => word.length > 0).length;
+
+  // Calculate reading time (average 200 words per minute)
+  const reading_time_minutes = Math.ceil(word_count / 200);
+
+  return {
+    headings,
+    images,
+    links,
+    code_blocks,
+    word_count,
+    reading_time_minutes
+  };
+}
+

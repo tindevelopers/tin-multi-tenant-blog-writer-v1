@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import cloudRunHealth from '@/lib/cloud-run-health';
+import cloudRunHealthManager from '@/lib/cloud-run-health';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
   'https://blog-writer-api-dev-kq42l26tuq-ew.a.run.app';
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check Cloud Run health
-    const healthStatus = await cloudRunHealth();
+    const healthStatus = await cloudRunHealthManager.checkHealth();
     if (!healthStatus.isHealthy) {
       return NextResponse.json(
         { error: healthStatus.error || 'API service is unavailable' },

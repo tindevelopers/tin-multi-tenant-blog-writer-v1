@@ -901,7 +901,7 @@ export default function EditorPage() {
                   </label>
                 </div>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
-                  Automatically enabled for topics with "best", "top", "review", or "compare" keywords. Enable manually for product-focused content.
+                  Automatically enabled for topics with &quot;best&quot;, &quot;top&quot;, &quot;review&quot;, or &quot;compare&quot; keywords. Enable manually for product-focused content.
                 </p>
                 {formData.include_product_research && (
                   <div className="space-y-3">
