@@ -83,7 +83,7 @@ function EnhancedContentClustersPanel({
     };
 
     await generateClustersFromResearch(request);
-  };
+  }, [researchResults, targetAudience, industry, generateClustersFromResearch]);
 
   const handleSaveClusters = async () => {
     const result = await saveEnhancedClusters();

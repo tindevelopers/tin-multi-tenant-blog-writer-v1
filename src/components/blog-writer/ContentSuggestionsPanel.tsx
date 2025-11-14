@@ -193,7 +193,7 @@ const ContentSuggestionsPanel: React.FC<ContentSuggestionsPanelProps> = ({
       });
       alert(`❌ Error generating blog: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
+  }, [generateBlog, onBlogGenerated, researchResults]);
 
   const getTypeIcon = (type: string) => {
     switch (type) {
