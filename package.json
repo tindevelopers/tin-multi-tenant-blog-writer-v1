@@ -61,6 +61,7 @@
   "dependencies": {
     "@heroicons/react": "^2.1.0",
     "@popperjs/core": "^2.11.8",
+    "@sentry/nextjs": "^10.25.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.75.0",
     "@svgr/webpack": "^8.1.0",
