@@ -17,6 +17,9 @@ import { useBlogPostMutations } from '@/hooks/useBlogPosts';
 import BrandVoiceSettings from '@/components/blog-writer/BrandVoiceSettings';
 import ContentPresetsManager from '@/components/blog-writer/ContentPresetsManager';
 import InternalLinkSuggestions from '@/components/blog-writer/InternalLinkSuggestions';
+import WorkflowStatusIndicator from '@/components/blog-writer/WorkflowStatusIndicator';
+import QuickActionsMenu from '@/components/blog-writer/QuickActionsMenu';
+import PlatformSelector from '@/components/blog-writer/PlatformSelector';
 import Alert from '@/components/ui/alert/Alert';
 import TipTapEditor from '@/components/blog-writer/TipTapEditor';
 
@@ -68,6 +71,11 @@ export default function EditorPage() {
   const [brandVoice, setBrandVoice] = useState<any>(null);
   const [selectedPreset, setSelectedPreset] = useState<any>(null);
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
+  const [queueId, setQueueId] = useState<string | null>(null);
+  const [queueStatus, setQueueStatus] = useState<string | null>(null);
+  const [approvalId, setApprovalId] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
+  const [showPlatformSelector, setShowPlatformSelector] = useState(false);
 
   const tones = [
     { value: 'professional', label: 'Professional' },
@@ -239,6 +247,18 @@ export default function EditorPage() {
         use_quality_scoring: isPremiumQuality ? true : formData.use_quality_scoring,
       });
 
+      // Capture queue_id if present
+      if (result && typeof result === 'object' && (result as any).queue_id) {
+        const capturedQueueId = (result as any).queue_id;
+        setQueueId(capturedQueueId);
+        setQueueStatus("generating");
+        console.log('✅ Queue ID captured:', capturedQueueId);
+        
+        // Show success message with link to queue
+        setSuccess(`Blog generation started! View progress in the queue dashboard.`);
+        setTimeout(() => setSuccess(null), 5000);
+      }
+
       if (result && typeof result === 'object') {
         const content = result.content || result.html || JSON.stringify(result, null, 2);
         const title = result.title || formData.title || formData.topic;
@@ -277,6 +297,71 @@ export default function EditorPage() {
       setError(err.message || 'Failed to generate content');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleRequestApproval = async () => {
+    if (!queueId && !savedPostId) {
+      setError("Please generate or save the blog first");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/blog-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          queue_id: queueId || null,
+          post_id: savedPostId || null,
+          review_notes: "",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to request approval");
+      }
+
+      const data = await response.json();
+      setApprovalId(data.approval_id);
+      setApprovalStatus("pending");
+      setSuccess("Approval requested successfully!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error) {
+      console.error("Error requesting approval:", error);
+      setError("Failed to request approval. Please try again.");
+    }
+  };
+
+  const handlePublish = async (platforms: string[]) => {
+    if (!savedPostId && !queueId) {
+      setError("Please save the blog first");
+      return;
+    }
+
+    try {
+      for (const platform of platforms) {
+        const response = await fetch("/api/blog-publishing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            post_id: savedPostId || null,
+            queue_id: queueId || null,
+            platform,
+            scheduled_at: null,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to publish to ${platform}`);
+        }
+      }
+
+      setSuccess(`Successfully queued for publishing to: ${platforms.join(", ")}`);
+      setTimeout(() => setSuccess(null), 5000);
+      setShowPlatformSelector(false);
+    } catch (error) {
+      console.error("Error publishing:", error);
+      setError("Failed to publish. Please try again.");
     }
   };
 
@@ -398,14 +483,36 @@ export default function EditorPage() {
           <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
             <FileText className="w-6 h-6 text-green-600 dark:text-green-400" />
           </div>
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               AI Content Editor
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
               Generate and edit high-quality blog content with AI assistance
             </p>
+            {/* Workflow Status Indicator */}
+            {(queueId || approvalId) && (
+              <div className="mt-3">
+                <WorkflowStatusIndicator
+                  queueId={queueId}
+                  queueStatus={queueStatus as any}
+                  approvalId={approvalId}
+                  approvalStatus={approvalStatus as any}
+                />
+              </div>
+            )}
           </div>
+          {/* Quick Actions Menu */}
+          {(queueId || approvalId || savedPostId) && (
+            <QuickActionsMenu
+              queueId={queueId}
+              approvalId={approvalId}
+              postId={savedPostId}
+              status={queueStatus || undefined}
+              onRequestApproval={handleRequestApproval}
+              onPublish={() => setShowPlatformSelector(true)}
+            />
+          )}
         </div>
       </div>
 
@@ -962,6 +1069,14 @@ export default function EditorPage() {
           Back to Strategy
         </button>
       </div>
+
+      {/* Platform Selector Modal */}
+      {showPlatformSelector && (
+        <PlatformSelector
+          onSelect={handlePublish}
+          onCancel={() => setShowPlatformSelector(false)}
+        />
+      )}
     </div>
   );
 }

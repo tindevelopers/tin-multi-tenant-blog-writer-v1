@@ -10,6 +10,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { BlogApproval } from "@/types/blog-queue";
 import { getApprovalStatusMetadata, ApprovalStatus } from "@/lib/blog-queue-state-machine";
+import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 
 export default function ApprovalReviewPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function ApprovalReviewPage() {
   const [approval, setApproval] = useState<BlogApproval | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showPlatformSelector, setShowPlatformSelector] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [reviewNotes, setReviewNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
@@ -131,6 +133,36 @@ export default function ApprovalReviewPage() {
       console.error("Error requesting changes:", err);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handlePublish = async (platforms: string[]) => {
+    if (!approval) return;
+
+    try {
+      for (const platform of platforms) {
+        const response = await fetch("/api/blog-publishing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            post_id: approval.post_id || null,
+            queue_id: approval.queue_id || null,
+            platform,
+            scheduled_at: null,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to publish to ${platform}`);
+        }
+      }
+
+      alert(`Successfully queued for publishing to: ${platforms.join(", ")}`);
+      setShowPlatformSelector(false);
+      router.push("/admin/publishing");
+    } catch (error) {
+      console.error("Error publishing:", error);
+      setError("Failed to publish. Please try again.");
     }
   };
 
@@ -321,6 +353,25 @@ export default function ApprovalReviewPage() {
         </div>
       )}
 
+      {/* Publish Actions */}
+      {approval.status === "approved" && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Publishing
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            This blog has been approved and is ready to publish.
+          </p>
+          <button
+            onClick={() => setShowPlatformSelector(true)}
+            className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <PencilIcon className="w-5 h-5" />
+            Publish to Platform
+          </button>
+        </div>
+      )}
+
       {/* Revision History */}
       {approval.revision_number > 1 && (
         <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-6">
@@ -331,6 +382,14 @@ export default function ApprovalReviewPage() {
             This is revision {approval.revision_number}. Previous revisions can be viewed in the approval history.
           </p>
         </div>
+      )}
+
+      {/* Platform Selector Modal */}
+      {showPlatformSelector && (
+        <PlatformSelector
+          onSelect={handlePublish}
+          onCancel={() => setShowPlatformSelector(false)}
+        />
       )}
     </div>
   );

@@ -16,8 +16,12 @@ import EnhancedContentClustersPanel from "@/components/content-clusters/Enhanced
 import BrandVoiceSettings from "@/components/blog-writer/BrandVoiceSettings";
 import ContentPresetsManager from "@/components/blog-writer/ContentPresetsManager";
 import InternalLinkSuggestions from "@/components/blog-writer/InternalLinkSuggestions";
+import WorkflowStatusIndicator from "@/components/blog-writer/WorkflowStatusIndicator";
+import QuickActionsMenu from "@/components/blog-writer/QuickActionsMenu";
+import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
+import Alert from "@/components/ui/alert/Alert";
 
 function NewDraftContent() {
   const router = useRouter();
@@ -98,6 +102,11 @@ function NewDraftContent() {
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
+  const [queueId, setQueueId] = useState<string | null>(null);
+  const [queueStatus, setQueueStatus] = useState<string | null>(null);
+  const [approvalId, setApprovalId] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
+  const [showPlatformSelector, setShowPlatformSelector] = useState(false);
   const [brandVoice, setBrandVoice] = useState<any>(null);
   const [selectedPreset, setSelectedPreset] = useState<any>(null);
   
@@ -293,6 +302,17 @@ function NewDraftContent() {
 
       console.log('🔍 Generated result:', result);
 
+      // Capture queue_id if present
+      if (result && (result as any).queue_id) {
+        const capturedQueueId = (result as any).queue_id;
+        setQueueId(capturedQueueId);
+        setQueueStatus("generating");
+        console.log('✅ Queue ID captured:', capturedQueueId);
+        
+        // Show success message with link to queue
+        alert(`Blog generation started! View progress in the queue dashboard. Queue ID: ${capturedQueueId}`);
+      }
+
       if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
         setGeneratedContent(result);
         
@@ -324,6 +344,69 @@ function NewDraftContent() {
       alert("Error generating content. Please check your connection and try again.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRequestApproval = async () => {
+    if (!queueId && !savedPostId) {
+      alert("Please generate or save the blog first");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/blog-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          queue_id: queueId || null,
+          post_id: savedPostId || null,
+          review_notes: "",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to request approval");
+      }
+
+      const data = await response.json();
+      setApprovalId(data.approval_id);
+      setApprovalStatus("pending");
+      alert("Approval requested successfully!");
+    } catch (error) {
+      console.error("Error requesting approval:", error);
+      alert("Failed to request approval. Please try again.");
+    }
+  };
+
+  const handlePublish = async (platforms: string[]) => {
+    if (!savedPostId && !queueId) {
+      alert("Please save the blog first");
+      return;
+    }
+
+    try {
+      for (const platform of platforms) {
+        const response = await fetch("/api/blog-publishing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            post_id: savedPostId || null,
+            queue_id: queueId || null,
+            platform,
+            scheduled_at: null,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to publish to ${platform}`);
+        }
+      }
+
+      alert(`Successfully queued for publishing to: ${platforms.join(", ")}`);
+      setShowPlatformSelector(false);
+    } catch (error) {
+      console.error("Error publishing:", error);
+      alert("Failed to publish. Please try again.");
     }
   };
 
@@ -413,8 +496,30 @@ function NewDraftContent() {
             <p className="text-gray-600 dark:text-gray-400 mt-2">
               Use AI to generate content or start from scratch
             </p>
+            {/* Workflow Status Indicator */}
+            {(queueId || approvalId) && (
+              <div className="mt-3">
+                <WorkflowStatusIndicator
+                  queueId={queueId}
+                  queueStatus={queueStatus as any}
+                  approvalId={approvalId}
+                  approvalStatus={approvalStatus as any}
+                />
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-2">
+            {/* Quick Actions Menu */}
+            {(queueId || approvalId || savedPostId) && (
+              <QuickActionsMenu
+                queueId={queueId}
+                approvalId={approvalId}
+                postId={savedPostId}
+                status={queueStatus || undefined}
+                onRequestApproval={handleRequestApproval}
+                onPublish={() => setShowPlatformSelector(true)}
+              />
+            )}
             {researchResults && (
               <button
                 onClick={() => setShowContentSuggestions(!showContentSuggestions)}
@@ -1015,6 +1120,14 @@ function NewDraftContent() {
           </div>
         </div>
       </div>
+
+      {/* Platform Selector Modal */}
+      {showPlatformSelector && (
+        <PlatformSelector
+          onSelect={handlePublish}
+          onCancel={() => setShowPlatformSelector(false)}
+        />
+      )}
     </div>
   );
 }
