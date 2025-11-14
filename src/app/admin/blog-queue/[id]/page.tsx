@@ -126,7 +126,7 @@ export default function QueueItemDetailPage() {
     );
   }
 
-  const statusMeta = getQueueStatusMetadata(item.status);
+  const statusMeta = getQueueStatusMetadata(item?.status);
 
   return (
     <div className="p-6 space-y-6">
@@ -335,8 +335,17 @@ export default function QueueItemDetailPage() {
   );
 }
 
-function StatusBadge({ status }: { status: QueueStatus }) {
+function StatusBadge({ status }: { status: QueueStatus | string | null | undefined }) {
   const meta = getQueueStatusMetadata(status);
+  
+  if (!meta) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+        <span>❓</span>
+        Unknown
+      </span>
+    );
+  }
   
   return (
     <span

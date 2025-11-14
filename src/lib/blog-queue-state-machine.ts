@@ -292,15 +292,61 @@ export const PLATFORM_STATUS_METADATA: Record<PlatformStatus, StatusMetadata> = 
 /**
  * Get status metadata for queue status
  */
-export function getQueueStatusMetadata(status: QueueStatus): StatusMetadata {
-  return QUEUE_STATUS_METADATA[status];
+export function getQueueStatusMetadata(status: QueueStatus | string | null | undefined): StatusMetadata {
+  if (!status || typeof status !== 'string') {
+    return {
+      label: 'Unknown',
+      color: '#6B7280',
+      icon: '❓',
+      description: 'Status unknown',
+      isTerminal: false,
+      canRetry: false
+    };
+  }
+  
+  const metadata = QUEUE_STATUS_METADATA[status as QueueStatus];
+  if (!metadata) {
+    return {
+      label: status.charAt(0).toUpperCase() + status.slice(1),
+      color: '#6B7280',
+      icon: '❓',
+      description: `Status: ${status}`,
+      isTerminal: false,
+      canRetry: false
+    };
+  }
+  
+  return metadata;
 }
 
 /**
  * Get status metadata for platform status
  */
-export function getPlatformStatusMetadata(status: PlatformStatus): StatusMetadata {
-  return PLATFORM_STATUS_METADATA[status];
+export function getPlatformStatusMetadata(status: PlatformStatus | string | null | undefined): StatusMetadata {
+  if (!status || typeof status !== 'string') {
+    return {
+      label: 'Unknown',
+      color: '#6B7280',
+      icon: '❓',
+      description: 'Status unknown',
+      isTerminal: false,
+      canRetry: false
+    };
+  }
+  
+  const metadata = PLATFORM_STATUS_METADATA[status as PlatformStatus];
+  if (!metadata) {
+    return {
+      label: status.charAt(0).toUpperCase() + status.slice(1),
+      color: '#6B7280',
+      icon: '❓',
+      description: `Status: ${status}`,
+      isTerminal: false,
+      canRetry: false
+    };
+  }
+  
+  return metadata;
 }
 
 /**
@@ -344,8 +390,31 @@ export const APPROVAL_STATUS_METADATA: Record<ApprovalStatus, StatusMetadata> = 
 /**
  * Get status metadata for approval status
  */
-export function getApprovalStatusMetadata(status: ApprovalStatus): StatusMetadata {
-  return APPROVAL_STATUS_METADATA[status];
+export function getApprovalStatusMetadata(status: ApprovalStatus | string | null | undefined): StatusMetadata {
+  if (!status || typeof status !== 'string') {
+    return {
+      label: 'Unknown',
+      color: '#6B7280',
+      icon: '❓',
+      description: 'Status unknown',
+      isTerminal: false,
+      canRetry: false
+    };
+  }
+  
+  const metadata = APPROVAL_STATUS_METADATA[status as ApprovalStatus];
+  if (!metadata) {
+    return {
+      label: status.charAt(0).toUpperCase() + status.slice(1),
+      color: '#6B7280',
+      icon: '❓',
+      description: `Status: ${status}`,
+      isTerminal: false,
+      canRetry: false
+    };
+  }
+  
+  return metadata;
 }
 
 /**
