@@ -257,6 +257,15 @@ export default function KeywordResearchPage() {
 
       const data = await response.json();
       
+      console.log('🔍 API Response:', {
+        hasEnhancedAnalysis: !!data.enhanced_analysis,
+        enhancedAnalysisKeys: data.enhanced_analysis ? Object.keys(data.enhanced_analysis) : [],
+        hasClusters: !!data.clusters,
+        clusterCount: data.clusters?.length || 0,
+        location: data.location,
+        fullData: data,
+      });
+      
       // Extract enhanced analysis
       const analysis = data.enhanced_analysis || {};
       setEnhancedAnalysis(analysis);
@@ -269,6 +278,37 @@ export default function KeywordResearchPage() {
       // Extract saved search ID
       if (data.saved_search_id) {
         setSavedSearchId(data.saved_search_id);
+      }
+
+      // Check if we have any data
+      if (Object.keys(analysis).length === 0) {
+        console.warn('⚠️ No enhanced_analysis data in response');
+        // Try to extract from keyword_analysis if available
+        if (data.keyword_analysis?.keyword_analysis) {
+          console.log('📋 Found keyword_analysis, converting...');
+          const keywordAnalysis = data.keyword_analysis.keyword_analysis;
+          const convertedAnalysis: EnhancedAnalysis = {};
+          Object.entries(keywordAnalysis).forEach(([keyword, metrics]: [string, any]) => {
+            convertedAnalysis[keyword] = {
+              search_volume: metrics.search_volume,
+              difficulty: metrics.difficulty,
+              competition: metrics.competition,
+              cpc: metrics.cpc,
+              trend_score: metrics.trend_score,
+              recommended: metrics.recommended,
+              reason: metrics.reason,
+              related_keywords: metrics.related_keywords,
+              long_tail_keywords: metrics.long_tail_keywords,
+              parent_topic: metrics.parent_topic,
+              cluster_score: metrics.cluster_score,
+            };
+          });
+          Object.assign(analysis, convertedAnalysis);
+          setEnhancedAnalysis(analysis);
+        } else {
+          setError('No keyword data returned from API. Please try a different search query.');
+          return;
+        }
       }
 
       // Convert enhanced analysis to keyword list
@@ -305,6 +345,15 @@ export default function KeywordResearchPage() {
         generateClusters(keywordList);
       }
 
+      console.log('📊 Processed keywords:', {
+        count: keywordList.length,
+        sample: keywordList.slice(0, 3).map(k => ({
+          keyword: k.keyword,
+          volume: k.search_volume,
+          difficulty: k.difficulty,
+        })),
+      });
+
       setKeywords(keywordList);
       
       // Save search query to workflow_data
@@ -334,8 +383,27 @@ export default function KeywordResearchPage() {
       setSuccess(`Found ${keywordList.length} keywords`);
       setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
-      console.error('Error searching keywords:', err);
-      setError(err.message || 'Failed to search keywords');
+      console.error('❌ Error searching keywords:', {
+        error: err,
+        message: err.message,
+        stack: err.stack,
+        name: err.name,
+      });
+      
+      // Provide more detailed error message
+      let errorMessage = 'Failed to search keywords';
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err?.error) {
+        errorMessage = String(err.error);
+      }
+      
+      setError(errorMessage);
+      setKeywords([]);
+      setClusters([]);
+      setEnhancedAnalysis({});
     } finally {
       setSearching(false);
     }
