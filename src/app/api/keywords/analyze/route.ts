@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { parseJsonBody } from '@/lib/api-utils';
+import { createClient } from '@/lib/supabase/server';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
   'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
@@ -64,6 +65,13 @@ export async function POST(request: NextRequest) {
       include_relevant_pages?: boolean;
       include_serp_ai_summary?: boolean;
       competitor_domain?: string;
+      // New fields for search persistence
+      search_query?: string;
+      search_type?: 'how_to' | 'listicle' | 'product' | 'brand' | 'comparison' | 'qa' | 'evergreen' | 'seasonal' | 'general';
+      niche?: string;
+      search_mode?: 'keywords' | 'matching_terms' | 'related_terms' | 'questions' | 'ads_ppc';
+      save_search?: boolean;
+      filters?: Record<string, unknown>;
     }>(request);
     
     // Validate required fields per FRONTEND_API_INTEGRATION_GUIDE.md
@@ -270,6 +278,88 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     
+    // Save search to database if save_search is true (default) and user is authenticated
+    let savedSearchId: string | null = null;
+    const shouldSaveSearch = body.save_search !== false; // Default to true
+    
+    if (shouldSaveSearch) {
+      try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user) {
+          // Calculate aggregate metrics from response
+          const enhancedAnalysis = data.enhanced_analysis || data.keyword_analysis || {};
+          const keywordEntries = Object.entries(enhancedAnalysis);
+          const keywordCount = keywordEntries.length;
+          
+          let totalSearchVolume = 0;
+          let difficultySum = 0;
+          let competitionSum = 0;
+          let difficultyCount = 0;
+          let competitionCount = 0;
+          
+          keywordEntries.forEach(([_, kwData]: [string, any]) => {
+            if (kwData.search_volume) {
+              totalSearchVolume += Number(kwData.search_volume) || 0;
+            }
+            if (kwData.difficulty) {
+              // Convert difficulty to numeric for averaging
+              const diffMap: Record<string, number> = { easy: 1, medium: 2, hard: 3 };
+              difficultySum += diffMap[kwData.difficulty] || 2;
+              difficultyCount++;
+            }
+            if (kwData.competition !== undefined && kwData.competition !== null) {
+              competitionSum += Number(kwData.competition) || 0;
+              competitionCount++;
+            }
+          });
+          
+          const avgDifficulty = difficultyCount > 0 
+            ? (difficultySum / difficultyCount <= 1.5 ? 'easy' : difficultySum / difficultyCount <= 2.5 ? 'medium' : 'hard')
+            : null;
+          const avgCompetition = competitionCount > 0 ? competitionSum / competitionCount : null;
+          
+          // Extract primary keyword from search query or first keyword
+          const searchQuery = body.search_query || normalizedKeywords[0] || '';
+          
+          const { data: savedSession, error: saveError } = await supabase
+            .from('keyword_research_sessions')
+            .insert({
+              user_id: user.id,
+              topic: searchQuery,
+              search_query: searchQuery,
+              location: body.location || 'United States',
+              language: body.language || 'en',
+              search_type: body.search_type || 'general',
+              niche: body.niche || null,
+              search_mode: body.search_mode || 'keywords',
+              save_search: shouldSaveSearch,
+              filters: body.filters || {},
+              research_results: data,
+              full_api_response: data,
+              keyword_count: keywordCount,
+              total_search_volume: totalSearchVolume,
+              avg_difficulty: avgDifficulty,
+              avg_competition: avgCompetition ? Number(avgCompetition.toFixed(2)) : null,
+            })
+            .select('id')
+            .single();
+          
+          if (saveError) {
+            logger.warn('Failed to save keyword search to database', { error: saveError });
+            // Don't fail the request if save fails
+          } else if (savedSession) {
+            savedSearchId = savedSession.id;
+            logger.debug('✅ Saved keyword search to database', { searchId: savedSearchId });
+          }
+        }
+      } catch (saveError) {
+        logger.warn('Error saving keyword search', { error: saveError });
+        // Don't fail the request if save fails
+      }
+    }
+    
     // Handle response from both endpoints
     // Enhanced endpoint response format per FRONTEND_API_INTEGRATION_GUIDE.md:
     // - enhanced_analysis: Record<string, KeywordAnalysis>
@@ -293,7 +383,9 @@ export async function POST(request: NextRequest) {
       original_keywords: data.original_keywords || [],
       suggested_keywords: data.suggested_keywords || [],
       clusters: data.clusters || [],
-      cluster_summary: data.cluster_summary || null
+      cluster_summary: data.cluster_summary || null,
+      // Include saved search ID if search was saved
+      saved_search_id: savedSearchId
     });
   } catch (error: unknown) {
     logger.logError(error instanceof Error ? error : new Error('Unknown error'), {

@@ -39,27 +39,50 @@ function NewDraftContent() {
     });
   }, []);
 
-  // Handle URL parameters from content clusters page
+  // Map search_type to template_type
+  const mapSearchTypeToTemplate = (searchType: string | null): "expert_authority" | "how_to_guide" | "comparison" | "case_study" | "news_update" | "tutorial" | "listicle" | "review" => {
+    const mapping: Record<string, "expert_authority" | "how_to_guide" | "comparison" | "case_study" | "news_update" | "tutorial" | "listicle" | "review"> = {
+      'how_to': 'how_to_guide',
+      'product': 'comparison',
+      'comparison': 'comparison',
+      'listicle': 'listicle',
+      'qa': 'tutorial',
+      'brand': 'expert_authority',
+      'evergreen': 'expert_authority',
+      'seasonal': 'news_update',
+      'general': 'expert_authority',
+    };
+    return mapping[searchType || ''] || 'expert_authority';
+  };
+
+  // Handle URL parameters from content clusters page and keyword research
   useEffect(() => {
     if (searchParams) {
       const title = searchParams.get('title');
       const topic = searchParams.get('topic');
       const keywords = searchParams.get('keywords');
+      const keyword = searchParams.get('keyword'); // From keyword research
+      const search_type = searchParams.get('search_type'); // From keyword research
+      const niche = searchParams.get('niche'); // From keyword research
       const target_audience = searchParams.get('target_audience');
       const word_count = searchParams.get('word_count');
 
-      if (title || topic || keywords || target_audience || word_count) {
+      if (title || topic || keywords || keyword || target_audience || word_count || search_type) {
         console.log('🔍 URL parameters detected, populating form:', {
-          title, topic, keywords, target_audience, word_count
+          title, topic, keywords, keyword, search_type, niche, target_audience, word_count
         });
+
+        // Map search_type to template_type if provided
+        const templateType = search_type ? mapSearchTypeToTemplate(search_type) : formData.template_type;
 
         setFormData(prev => ({
           ...prev,
-          title: title || prev.title,
-          topic: topic || prev.topic,
-          keywords: keywords || prev.keywords,
-          target_audience: target_audience || prev.target_audience,
-          word_count: word_count ? parseInt(word_count) : prev.word_count
+          title: title || keyword || prev.title, // Use keyword if title not provided
+          topic: topic || keyword || prev.topic, // Use keyword as topic if not provided
+          keywords: keywords || keyword || prev.keywords, // Use keyword if keywords not provided
+          target_audience: target_audience || niche || prev.target_audience, // Use niche as target_audience
+          word_count: word_count ? parseInt(word_count) : prev.word_count,
+          template_type: templateType, // Set template based on search_type
         }));
 
         // Skip research panel since we already have the data
