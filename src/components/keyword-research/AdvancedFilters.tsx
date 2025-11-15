@@ -6,7 +6,7 @@ import { Filter, X, Plus, Trash2 } from 'lucide-react';
 export interface FilterCondition {
   field: string;
   operator: 'equals' | 'contains' | 'greater_than' | 'less_than' | 'between' | 'in';
-  value: string | number | [number, number];
+  value: string | number | [number, number] | string[];
 }
 
 interface AdvancedFiltersProps {
