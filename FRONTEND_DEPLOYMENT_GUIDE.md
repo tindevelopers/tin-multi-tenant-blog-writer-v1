@@ -1,7 +1,7 @@
 # Frontend Deployment Guide
 
-**Version**: 1.3.0  
-**Last Updated**: 2025-11-14  
+**Version**: 1.3.2  
+**Last Updated**: 2025-11-15  
 **API Base URL**: `https://blog-writer-api-dev-kq42l26tuq-ew.a.run.app`
 
 ---
@@ -782,7 +782,49 @@ function renderImages(images: ImageMetadata[]) {
 
 ---
 
-## Support & Resources
+## Changelog
+
+### Version 1.3.2 (2025-11-15)
+
+**New Features:**
+- ✅ **Interlinking Algorithm**: Intelligent keyword matching to existing content
+- ✅ **Interlink Opportunities**: Specific URLs, anchor text, and relevance scores
+- ✅ **New Endpoint**: `/api/v1/integrations/connect-and-recommend-v2` with full opportunities
+- ✅ **Enhanced Legacy Endpoint**: `/api/v1/integrations/connect-and-recommend` now uses interlinking analyzer
+
+**Technical Changes:**
+- Added `InterlinkingAnalyzer` class with keyword matching and relevance scoring
+- Added structure validation for existing content
+- Enhanced integration endpoints with interlinking support
+- Added `python-dateutil` dependency for date parsing
+
+**No Breaking Changes:**
+- All existing endpoints continue to work
+- Legacy endpoint enhanced, not replaced
+- Backward compatible
+
+### Version 1.3.1 (2025-11-15)
+
+**Quality Improvements:**
+- ✅ **Fixed Title Generation**: Titles are now always valid strings (no more "**" placeholders)
+- ✅ **Enforced H2 Structure**: Minimum 3 H2 sections guaranteed, automatic structure validation
+- ✅ **Content Length Enforcement**: "Long" content now produces 2000+ words (was ~500)
+- ✅ **Automatic Internal Linking**: 3-5 internal links automatically generated and inserted
+- ✅ **Image Generation Ready**: STABILITY_AI_API_KEY configured, images automatically inserted
+
+**Technical Changes:**
+- Added title validation and fallback logic
+- Added content structure validation (`_validate_and_fix_content_structure`)
+- Added automatic internal link generation (`_generate_and_insert_internal_links`)
+- Enhanced prompts with critical length requirements
+- Improved image provider initialization with better validation
+
+**No Breaking Changes:**
+- API response structure unchanged
+- All existing frontend code continues to work
+- Improvements are automatic and transparent
+
+### Version 1.3.0 (2025-11-14) & Resources
 
 - **API Documentation**: `/docs` (Swagger UI)
 - **Health Check**: `/health`

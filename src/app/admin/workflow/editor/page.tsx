@@ -23,6 +23,11 @@ import QuickActionsMenu from '@/components/blog-writer/QuickActionsMenu';
 import PlatformSelector from '@/components/blog-writer/PlatformSelector';
 import Alert from '@/components/ui/alert/Alert';
 import TipTapEditor from '@/components/blog-writer/TipTapEditor';
+import { InternalLinksDisplay } from '@/components/blog-writer/InternalLinksDisplay';
+import { GeneratedImagesDisplay } from '@/components/blog-writer/GeneratedImagesDisplay';
+import { ContentStructureDisplay } from '@/components/blog-writer/ContentStructureDisplay';
+import { InterlinkingRecommendations } from '@/components/integrations/InterlinkingRecommendations';
+import type { EnhancedBlogResponse } from '@/types/blog-generation';
 
 export default function EditorPage() {
   const router = useRouter();
@@ -137,6 +142,9 @@ export default function EditorPage() {
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [showPlatformSelector, setShowPlatformSelector] = useState(false);
+  const [generationResult, setGenerationResult] = useState<EnhancedBlogResponse | null>(null);
+  const [selectedIntegrationId, setSelectedIntegrationId] = useState<string | null>(null);
+  const [orgId, setOrgId] = useState<string | undefined>(undefined);
 
   const tones = [
     { value: 'professional', label: 'Professional' },
@@ -171,6 +179,17 @@ export default function EditorPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           setUserId(user.id);
+          
+          // Get user's org_id
+          const { data: userProfile } = await supabase
+            .from('users')
+            .select('org_id')
+            .eq('user_id', user.id)
+            .single();
+          
+          if (userProfile?.org_id) {
+            setOrgId(userProfile.org_id);
+          }
         }
 
         const sessionId = localStorage.getItem('workflow_session_id');
@@ -358,12 +377,17 @@ export default function EditorPage() {
             featuredImage: featuredImage // Store for saving
           }));
         } else {
-          setFormData(prev => ({
-            ...prev,
-            content: finalContent,
-            title: typeof title === 'string' ? title : (title ? String(title) : prev.title),
-            excerpt: typeof excerpt === 'string' ? excerpt : (excerpt ? String(excerpt) : prev.excerpt)
-          }));
+        setFormData(prev => ({
+          ...prev,
+          content: finalContent,
+          title: typeof title === 'string' ? title : (title ? String(title) : prev.title),
+          excerpt: typeof excerpt === 'string' ? excerpt : (excerpt ? String(excerpt) : prev.excerpt)
+        }));
+        }
+
+        // Store full result for v1.3.1 feature displays
+        if (result && typeof result === 'object') {
+          setGenerationResult(result as EnhancedBlogResponse);
         }
 
         setSuccess('Content generated successfully');
@@ -1253,6 +1277,42 @@ export default function EditorPage() {
               </div>
             )}
           </div>
+
+          {/* v1.3.1 Feature Displays - Content Structure */}
+          {generationResult?.content && (
+            <ContentStructureDisplay 
+              content={generationResult.content}
+              content_metadata={generationResult.content_metadata}
+            />
+          )}
+
+          {/* v1.3.1 Feature Displays - Internal Links */}
+          {generationResult?.internal_links && generationResult.internal_links.length > 0 && (
+            <InternalLinksDisplay 
+              internal_links={generationResult.internal_links}
+            />
+          )}
+
+          {/* v1.3.1 Feature Displays - Generated Images */}
+          {(generationResult?.featured_image || (generationResult?.generated_images && generationResult.generated_images.length > 0)) && (
+            <GeneratedImagesDisplay 
+              featured_image={generationResult.featured_image}
+              generated_images={generationResult.generated_images}
+            />
+          )}
+
+          {/* Interlinking Recommendations (if integration selected) */}
+          {selectedIntegrationId && formData.keywords && orgId && (
+            <InterlinkingRecommendations
+              orgId={orgId}
+              integrationId={selectedIntegrationId}
+              keywords={formData.keywords.split(',').map(k => k.trim()).filter(k => k)}
+              onOpportunitySelect={(opportunity) => {
+                console.log('Selected interlinking opportunity:', opportunity);
+                // Could insert link into content at cursor position
+              }}
+            />
+          )}
 
           {/* Internal Link Suggestions */}
           {savedPostId && formData.content && (

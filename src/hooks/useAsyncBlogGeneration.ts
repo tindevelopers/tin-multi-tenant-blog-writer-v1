@@ -28,7 +28,7 @@ export interface BlogGenerationRequest {
   topic: string;
   keywords?: string[];
   tone?: 'professional' | 'casual' | 'friendly' | 'authoritative' | 'conversational' | 'technical' | 'creative';
-  length?: 'short' | 'medium' | 'long' | 'very_long';
+  length?: 'short' | 'medium' | 'long' | 'extended' | 'very_long';
   use_google_search?: boolean;
   use_fact_checking?: boolean;
   use_citations?: boolean;

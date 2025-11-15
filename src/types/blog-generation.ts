@@ -69,6 +69,19 @@ export interface EnhancedBlogResponse {
   // Quality scores (legacy)
   quality_scores?: any;
   
+  // v1.3.1: Internal links (3-5 automatically generated)
+  internal_links?: Array<{
+    anchor_text: string;
+    url: string;
+  }>;
+  
+  // v1.3.1: Generated images
+  generated_images?: Array<{
+    type: 'featured' | 'section' | 'product';
+    image_url: string;
+    alt_text: string;
+  }>;
+  
   // Featured image
   featured_image?: {
     image_id: string;

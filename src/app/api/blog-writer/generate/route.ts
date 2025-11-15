@@ -92,7 +92,9 @@ function buildBlogResponse(
 ): EnhancedBlogResponse {
   const { topic, brandVoice, contentPreset, endpoint, shouldUseEnhanced, requiresProductResearch } = options;
   
-  // Determine title and excerpt from various possible sources
+  // v1.3.1: Title is guaranteed to be a valid string (never "**")
+  // Fallback chain: blog_post.title → title → meta_title → topic
+  // All fallbacks ensure a valid string is always returned
   const title = result.blog_post?.title || result.title || result.meta_title || topic;
   const excerpt = result.blog_post?.excerpt || result.blog_post?.summary || result.excerpt || result.meta_description || '';
   
@@ -141,6 +143,23 @@ function buildBlogResponse(
     
     // Quality scores (legacy)
     quality_scores: result.quality_scores || null,
+    
+    // v1.3.1: Internal links (3-5 automatically generated)
+    internal_links: result.internal_links || [],
+    
+    // v1.3.1: Generated images (featured + section images)
+    generated_images: [
+      ...(featuredImage ? [{
+        type: 'featured' as const,
+        image_url: featuredImage.image_url,
+        alt_text: `Featured image for ${title}`
+      }] : []),
+      ...sectionImages.map(img => ({
+        type: 'section' as const,
+        image_url: img.image.image_url,
+        alt_text: img.image.alt_text || `Section image`
+      }))
+    ],
     
     // Include generated featured image if available
     featured_image: featuredImage ? {

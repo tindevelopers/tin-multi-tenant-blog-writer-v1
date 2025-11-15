@@ -22,6 +22,10 @@
  */
 
 import React from 'react';
+import { getWordCountMessage } from '@/lib/word-count-expectations';
+import { InternalLinksDisplay } from './InternalLinksDisplay';
+import { GeneratedImagesDisplay } from './GeneratedImagesDisplay';
+import { ContentStructureDisplay } from './ContentStructureDisplay';
 
 export interface BlogGenerationProgressProps {
   status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed' | null;
@@ -31,6 +35,7 @@ export interface BlogGenerationProgressProps {
   error?: string | null;
   result?: any | null;
   className?: string;
+  contentLength?: 'short' | 'medium' | 'long' | 'extended' | 'very_long';
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -57,6 +62,7 @@ export function BlogGenerationProgress({
   error,
   result,
   className = '',
+  contentLength,
 }: BlogGenerationProgressProps) {
   // Format estimated time
   const formatTime = (seconds: number | null): string => {
@@ -114,22 +120,55 @@ export function BlogGenerationProgress({
 
   // Show completed state
   if (status === 'completed' && result) {
+    const wordCount = result.content_metadata?.word_count || result.word_count || 0;
+    const wordCountMessage = getWordCountMessage(wordCount, contentLength);
+    
     return (
-      <div className={`bg-green-50 border border-green-200 rounded-lg p-4 ${className}`}>
-        <div className="flex items-center mb-2">
-          <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-          <h3 className="text-green-800 font-semibold">Blog Generated Successfully!</h3>
+      <div className={`space-y-4 ${className}`}>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 dark:bg-green-900/20 dark:border-green-800">
+          <div className="flex items-center mb-2">
+            <svg className="w-5 h-5 text-green-600 dark:text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <h3 className="text-green-800 dark:text-green-200 font-semibold">Blog Generated Successfully!</h3>
+          </div>
+          <div className="mt-4">
+            <h4 className="font-semibold text-gray-800 dark:text-gray-200">{result.title}</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              {wordCountMessage} • 
+              SEO Score: {result.seo_score?.toFixed(1) || 'N/A'} • 
+              Quality: {result.quality_score?.toFixed(1) || 'N/A'}
+              {result.internal_links && result.internal_links.length > 0 && (
+                <> • {result.internal_links.length} internal links</>
+              )}
+              {result.generated_images && result.generated_images.length > 0 && (
+                <> • {result.generated_images.length} images</>
+              )}
+              {result.featured_image && (
+                <> • Featured image</>
+              )}
+            </p>
+          </div>
         </div>
-        <div className="mt-4">
-          <h4 className="font-semibold text-gray-800">{result.title}</h4>
-          <p className="text-sm text-gray-600 mt-1">
-            {result.content_metadata?.word_count || result.word_count || 0} words • 
-            SEO Score: {result.seo_score?.toFixed(1) || 'N/A'} • 
-            Quality: {result.quality_score?.toFixed(1) || 'N/A'}
-          </p>
-        </div>
+        
+        {/* v1.3.1 Feature Displays */}
+        {result.content && (
+          <ContentStructureDisplay 
+            content={result.content}
+            content_metadata={result.content_metadata}
+          />
+        )}
+        
+        {result.internal_links && result.internal_links.length > 0 && (
+          <InternalLinksDisplay internal_links={result.internal_links} />
+        )}
+        
+        {(result.featured_image || (result.generated_images && result.generated_images.length > 0)) && (
+          <GeneratedImagesDisplay 
+            featured_image={result.featured_image}
+            generated_images={result.generated_images}
+          />
+        )}
       </div>
     );
   }

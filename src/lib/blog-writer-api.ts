@@ -823,6 +823,70 @@ class BlogWriterAPI {
       throw error;
     }
   }
+
+  /**
+   * Get interlinking recommendations for an integration
+   * 
+   * Uses local API route that retrieves structure from Supabase
+   * and calls backend API with structure included
+   * 
+   * @param orgId Organization ID
+   * @param integrationId Integration ID
+   * @param keywords Array of keywords for analysis
+   * @returns Interlinking recommendations
+   */
+  async getInterlinkingRecommendations(
+    orgId: string,
+    integrationId: string,
+    keywords: string[]
+  ): Promise<{
+    recommended_interlinks: number;
+    per_keyword: Array<{
+      keyword: string;
+      suggested_interlinks: number;
+      interlink_opportunities: Array<{
+        target_url: string;
+        target_title: string;
+        anchor_text: string;
+        relevance_score: number;
+      }>;
+    }>;
+  }> {
+    try {
+      logger.debug('Getting interlinking recommendations', {
+        orgId,
+        integrationId,
+        keyword_count: keywords.length
+      });
+      
+      const response = await fetch(`/api/integrations/${integrationId}/recommendations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ keywords }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
+      }
+      
+      const result = await response.json();
+      logger.debug('Interlinking recommendations retrieved', { 
+        integrationId,
+        recommended_interlinks: result.recommended_interlinks 
+      });
+      return result;
+    } catch (error) {
+      logger.logError(error instanceof Error ? error : new Error('Failed to get interlinking recommendations'), {
+        endpoint: `/api/integrations/${integrationId}/recommendations`,
+        orgId,
+        integrationId
+      });
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance
@@ -850,6 +914,7 @@ export const {
   connectAndRecommend,
   getRecommendations,
   getLLMResponses,
+  getInterlinkingRecommendations,
 } = blogWriterAPI;
 
 export default blogWriterAPI;
