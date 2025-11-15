@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/utils/logger';
+import { parseJsonBody, handleApiError } from '@/lib/api-utils';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
   'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
@@ -25,7 +27,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       
       // If it's a 503 (Service Unavailable), retry
       if (response.status === 503 && attempt < retries) {
-        console.log(`⚠️ Cloud Run returned 503, retrying (${attempt}/${retries})...`);
+        logger.debug(`⚠️ Cloud Run returned 503, retrying (${attempt}/${retries})...`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
         continue;
       }
@@ -36,7 +38,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       const isNetworkError = error instanceof TypeError;
       
       if ((isTimeout || isNetworkError) && attempt < retries) {
-        console.log(`⚠️ Network error, retrying (${attempt}/${retries})...`);
+        logger.debug(`⚠️ Network error, retrying (${attempt}/${retries})...`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
         continue;
       }
@@ -50,7 +52,13 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await parseJsonBody<{
+      keyword?: string;
+      keywords?: string[];
+      limit?: number;
+      location?: string;
+      language?: string;
+    }>(request);
     
     // Cloud Run API expects 'keyword' (singular), not 'keywords' (array)
     // If keywords array is provided, use the first one
@@ -72,7 +80,13 @@ export async function POST(request: NextRequest) {
     // Try enhanced endpoint first (returns search volume, CPC, difficulty, competition)
     // If unavailable, fallback to suggest endpoint
     let endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
-    let requestBody: any = {
+    let requestBody: {
+      keywords: string[];
+      location: string;
+      language: string;
+      include_search_volume: boolean;
+      max_suggestions_per_keyword: number;
+    } = {
       keywords: [keyword], // Enhanced endpoint requires array
       location: body.location || 'United States',
       language: body.language || 'en',
@@ -93,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     // If enhanced endpoint returns 503 (not available), fallback to suggest endpoint
     if (response.status === 503) {
-      console.log('⚠️ Enhanced endpoint unavailable, falling back to suggest endpoint');
+      logger.debug('⚠️ Enhanced endpoint unavailable, falling back to suggest endpoint');
       endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`;
       requestBody = {
         keyword: keyword,
@@ -103,7 +117,7 @@ export async function POST(request: NextRequest) {
         include_competition: true,
         include_cpc: true,
         location: body.location || 'United States'
-      };
+      } as unknown as typeof requestBody;
       
       response = await fetchWithRetry(
         endpoint,
@@ -139,13 +153,16 @@ export async function POST(request: NextRequest) {
       ].slice(0, limit);
       
       // Map to expected format with metadata
-      const suggestionsWithMetadata = suggestedKeywords.map((kw: string) => ({
-        keyword: kw,
-        search_volume: null, // Will need separate analysis for each suggestion
-        difficulty: keywordAnalysis?.difficulty || null,
-        competition: keywordAnalysis?.competition || null,
-        cpc: keywordAnalysis?.cpc || null
-      }));
+      const suggestionsWithMetadata = suggestedKeywords.map((kw: string | { keyword?: string; [key: string]: unknown }) => {
+        const keywordText = typeof kw === 'string' ? kw : (kw.keyword || String(kw));
+        return {
+          keyword: keywordText,
+          search_volume: null, // Will need separate analysis for each suggestion
+          difficulty: keywordAnalysis?.difficulty || null,
+          competition: keywordAnalysis?.competition || null,
+          cpc: keywordAnalysis?.cpc || null
+        };
+      });
       
       return NextResponse.json({
         suggestions: suggestionsWithMetadata,
@@ -170,12 +187,10 @@ export async function POST(request: NextRequest) {
       cluster_summary: data.cluster_summary || {}
     });
   } catch (error: unknown) {
-    console.error('Error in keywords/suggest:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json(
-      { error: `Failed to fetch keyword suggestions: ${errorMessage}` },
-      { status: 500 }
-    );
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'keywords-suggest',
+    });
+    return handleApiError(error);
   }
 }
 

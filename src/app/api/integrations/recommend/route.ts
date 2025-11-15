@@ -10,17 +10,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { blogWriterAPI } from '@/lib/blog-writer-api';
+import { logger } from '@/utils/logger';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('🚀 POST /api/integrations/recommend');
+    logger.debug('🚀 POST /api/integrations/recommend');
 
     const supabase = await createClient(request);
     
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      console.error('❌ Unauthorized:', userError);
+      logger.error('❌ Unauthorized:', userError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError || !userProfile) {
-      console.error('❌ User profile not found:', profileError);
+      logger.error('❌ User profile not found:', profileError);
       return NextResponse.json(
         { error: 'User organization not found' },
         { status: 404 }
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`📊 Getting recommendations for ${provider} with ${keywords.length} keywords`);
+    logger.debug(`📊 Getting recommendations for ${provider} with ${keywords.length} keywords`);
 
     // Call Blog Writer API
     const result = await blogWriterAPI.getRecommendations({
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
       keywords,
     });
 
-    console.log('✅ Recommendations received:', {
+    logger.debug('✅ Recommendations received:', {
       recommended_backlinks: result.recommended_backlinks,
       recommended_interlinks: result.recommended_interlinks,
       per_keyword_count: result.per_keyword?.length || 0,
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ Error in recommend:', error);
+    logger.error('❌ Error in recommend:', error);
     return NextResponse.json(
       {
         error: error.message || 'Failed to get recommendations',

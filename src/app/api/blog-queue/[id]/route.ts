@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { canTransitionQueueStatus, transitionQueueStatus, type QueueStatus } from '@/lib/blog-queue-state-machine';
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/blog-queue/[id]
@@ -56,7 +57,7 @@ export async function GET(
           { status: 404 }
         );
       }
-      console.error('Error fetching queue item:', error);
+      logger.error('Error fetching queue item:', error);
       return NextResponse.json(
         { error: 'Failed to fetch queue item', details: error.message },
         { status: 500 }
@@ -65,7 +66,7 @@ export async function GET(
 
     return NextResponse.json({ queue_item: queueItem });
   } catch (error) {
-    console.error('Error in GET /api/blog-queue/[id]:', error);
+    logger.error('Error in GET /api/blog-queue/[id]:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -212,7 +213,7 @@ export async function PATCH(
       .single();
 
     if (updateError) {
-      console.error('Error updating queue item:', updateError);
+      logger.error('Error updating queue item:', updateError);
       return NextResponse.json(
         { error: 'Failed to update queue item', details: updateError.message },
         { status: 500 }
@@ -224,7 +225,7 @@ export async function PATCH(
       queue_item: updatedItem
     });
   } catch (error) {
-    console.error('Error in PATCH /api/blog-queue/[id]:', error);
+    logger.error('Error in PATCH /api/blog-queue/[id]:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -312,7 +313,7 @@ export async function DELETE(
       .single();
 
     if (updateError) {
-      console.error('Error cancelling queue item:', updateError);
+      logger.error('Error cancelling queue item:', updateError);
       return NextResponse.json(
         { error: 'Failed to cancel queue item', details: updateError.message },
         { status: 500 }
@@ -325,7 +326,7 @@ export async function DELETE(
       queue_item: updatedItem
     });
   } catch (error) {
-    console.error('Error in DELETE /api/blog-queue/[id]:', error);
+    logger.error('Error in DELETE /api/blog-queue/[id]:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

@@ -6,6 +6,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
       status: 'All systems operational'
     });
   } catch (error) {
-    console.error('Error in test endpoint:', error);
+    logger.error('Error in test endpoint:', error);
     return NextResponse.json(
       { 
         success: false,

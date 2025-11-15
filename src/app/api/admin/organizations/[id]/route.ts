@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/admin/organizations/[id]
@@ -70,7 +71,7 @@ export async function GET(
       data: org,
     });
   } catch (error) {
-    console.error("Error fetching organization:", error);
+    logger.error("Error fetching organization:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch organization" },
       { status: 500 }
@@ -161,7 +162,7 @@ export async function PUT(
       data: updatedOrg,
     });
   } catch (error) {
-    console.error("Error updating organization:", error);
+    logger.error("Error updating organization:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to update organization" },
       { status: 500 }
@@ -252,7 +253,7 @@ export async function DELETE(
       message: "Organization deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting organization:", error);
+    logger.error("Error deleting organization:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to delete organization" },
       { status: 500 }

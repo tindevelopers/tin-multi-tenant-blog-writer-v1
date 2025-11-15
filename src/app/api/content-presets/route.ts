@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
 
 // GET - Get content presets for organization
 export async function GET(request: NextRequest) {
@@ -56,13 +57,13 @@ export async function GET(request: NextRequest) {
     const { data: presets, error } = result;
 
     if (error) {
-      console.error('Error fetching content presets:', error);
+      logger.error('Error fetching content presets:', error);
       return NextResponse.json({ error: 'Failed to fetch content presets' }, { status: 500 });
     }
 
     return NextResponse.json({ presets });
   } catch (error) {
-    console.error('Error in GET /api/content-presets:', error);
+    logger.error('Error in GET /api/content-presets:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (error) {
-        console.error('Error updating content preset:', error);
+        logger.error('Error updating content preset:', error);
         return NextResponse.json({ error: 'Failed to update content preset' }, { status: 500 });
       }
       result = data;
@@ -170,7 +171,7 @@ export async function POST(request: NextRequest) {
             { status: 409 }
           );
         }
-        console.error('Error creating content preset:', error);
+        logger.error('Error creating content preset:', error);
         return NextResponse.json({ error: 'Failed to create content preset' }, { status: 500 });
       }
       result = data;
@@ -178,7 +179,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ preset: result });
   } catch (error) {
-    console.error('Error in POST /api/content-presets:', error);
+    logger.error('Error in POST /api/content-presets:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -223,13 +224,13 @@ export async function DELETE(request: NextRequest) {
       .eq('org_id', userProfile.org_id);
 
     if (error) {
-      console.error('Error deleting content preset:', error);
+      logger.error('Error deleting content preset:', error);
       return NextResponse.json({ error: 'Failed to delete content preset' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error in DELETE /api/content-presets:', error);
+    logger.error('Error in DELETE /api/content-presets:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

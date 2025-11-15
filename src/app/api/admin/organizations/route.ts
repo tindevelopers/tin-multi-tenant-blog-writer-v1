@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/admin/organizations
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       data: organizations,
     });
   } catch (error) {
-    console.error("Error fetching organizations:", error);
+    logger.error("Error fetching organizations:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to fetch organizations" },
       { status: 500 }
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
       data: newOrg,
     });
   } catch (error) {
-    console.error("Error creating organization:", error);
+    logger.error("Error creating organization:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create organization" },
       { status: 500 }

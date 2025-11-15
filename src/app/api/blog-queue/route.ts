@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { canTransitionQueueStatus, type QueueStatus } from '@/lib/blog-queue-state-machine';
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/blog-queue
@@ -74,7 +75,7 @@ export async function GET(request: NextRequest) {
     const { data: queueItems, error } = await query;
 
     if (error) {
-      console.error('Error fetching queue items:', error);
+      logger.error('Error fetching queue items:', error);
       return NextResponse.json(
         { error: 'Failed to fetch queue items', details: error.message },
         { status: 500 }
@@ -106,7 +107,7 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error in GET /api/blog-queue:', error);
+    logger.error('Error in GET /api/blog-queue:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (insertError) {
-      console.error('Error creating queue item:', insertError);
+      logger.error('Error creating queue item:', insertError);
       return NextResponse.json(
         { error: 'Failed to create queue item', details: insertError.message },
         { status: 500 }
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
       queue_item: queueItem
     }, { status: 201 });
   } catch (error) {
-    console.error('Error in POST /api/blog-queue:', error);
+    logger.error('Error in POST /api/blog-queue:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

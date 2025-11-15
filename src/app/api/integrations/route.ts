@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import type { IntegrationType, ConnectionConfig, FieldMapping } from '@/lib/integrations/types';
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/integrations
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error fetching integrations:', error);
+    logger.error('Error fetching integrations:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to fetch integrations' },
       { status: 500 }
@@ -123,7 +124,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Error creating integration:', error);
+    logger.error('Error creating integration:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to create integration' },
       { status: 500 }

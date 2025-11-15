@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
 
 /**
  * Test Cloudinary connection
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
           });
         } catch (deleteError) {
           // Non-critical - test image deletion failed but upload succeeded
-          console.warn('Failed to delete test image:', deleteError);
+          logger.warn('Failed to delete test image:', deleteError);
         }
         
         return NextResponse.json({
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
         );
       }
     } catch (testError) {
-      console.error('Cloudinary test error:', testError);
+      logger.error('Cloudinary test error:', testError);
       return NextResponse.json(
         { 
           error: 'Failed to connect to Cloudinary',
@@ -169,7 +170,7 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    console.error('Error testing Cloudinary:', error);
+    logger.error('Error testing Cloudinary:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }

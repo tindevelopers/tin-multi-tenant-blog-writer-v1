@@ -32,8 +32,37 @@ export default function EditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  const [workflowSession, setWorkflowSession] = useState<any>(null);
-  const [strategy, setStrategy] = useState<any>(null);
+  interface WorkflowSession {
+    session_id?: string;
+    target_audience?: string;
+    workflow_data?: {
+      content_goal?: string;
+      content_strategy?: {
+        main_keyword?: string;
+        secondary_keywords?: string;
+        target_audience?: string;
+      };
+      selected_topics?: Array<{
+        id?: string;
+        title: string;
+        target_keywords?: string[];
+        word_count_estimate?: number;
+        [key: string]: unknown;
+      }>;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  }
+
+  interface ContentStrategy {
+    main_keyword?: string;
+    secondary_keywords?: string;
+    target_audience?: string;
+    [key: string]: unknown;
+  }
+
+  const [workflowSession, setWorkflowSession] = useState<WorkflowSession | null>(null);
+  const [strategy, setStrategy] = useState<ContentStrategy | null>(null);
   const [userId, setUserId] = useState<string | undefined>(undefined);
   
   const [formData, setFormData] = useState({
@@ -82,8 +111,23 @@ export default function EditorPage() {
   const [qualityLevels, setQualityLevels] = useState<Array<{ value: string; label: string; description?: string }>>([]);
   const [presets, setPresets] = useState<Array<{ value: string; label: string; description?: string }>>([]);
   const [loadingOptions, setLoadingOptions] = useState(false);
-  const [brandVoice, setBrandVoice] = useState<any>(null);
-  const [selectedPreset, setSelectedPreset] = useState<any>(null);
+  interface BrandVoice {
+    id?: string;
+    name?: string;
+    tone?: string;
+    style?: string;
+    [key: string]: unknown;
+  }
+
+  interface ContentPreset {
+    id?: string;
+    name?: string;
+    description?: string;
+    [key: string]: unknown;
+  }
+
+  const [brandVoice, setBrandVoice] = useState<BrandVoice | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<ContentPreset | null>(null);
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
   const [queueId, setQueueId] = useState<string | null>(null);
   const [queueStatus, setQueueStatus] = useState<string | null>(null);
@@ -111,7 +155,10 @@ export default function EditorPage() {
   ];
 
   // Auto-enable quality features for premium/enterprise
-  const isPremiumQuality = formData.quality_level === 'premium' || formData.quality_level === 'enterprise';
+  const isPremiumQuality = useMemo(() => 
+    formData.quality_level === 'premium' || formData.quality_level === 'enterprise',
+    [formData.quality_level]
+  );
 
   // Load workflow session and strategy
   useEffect(() => {
@@ -219,7 +266,7 @@ export default function EditorPage() {
   }, []);
 
   // Generate content
-  const handleGenerateContent = async () => {
+  const handleGenerateContent = useCallback(async () => {
     if (!formData.topic) {
       setError('Please enter a topic');
       return;
@@ -321,17 +368,17 @@ export default function EditorPage() {
       } else {
         setError('Failed to generate content. Please try again.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.logError(err instanceof Error ? err : new Error('Unknown error'), {
         context: 'generate-content',
       });
-      setError(err.message || 'Failed to generate content');
+      setError(err instanceof Error ? err.message : 'Failed to generate content');
     } finally {
       setGenerating(false);
     }
-  };
+  }, [formData, workflowSession, isPremiumQuality]);
 
-  const handleRequestApproval = async () => {
+  const handleRequestApproval = useCallback(async () => {
     if (!queueId && !savedPostId) {
       setError("Please generate or save the blog first");
       return;
@@ -363,9 +410,9 @@ export default function EditorPage() {
       });
       setError("Failed to request approval. Please try again.");
     }
-  };
+  }, [queueId, savedPostId]);
 
-  const handlePublish = async (platforms: string[]) => {
+  const handlePublish = useCallback(async (platforms: string[]) => {
     if (!savedPostId && !queueId) {
       setError("Please save the blog first");
       return;
@@ -398,10 +445,10 @@ export default function EditorPage() {
       });
       setError("Failed to publish. Please try again.");
     }
-  };
+  }, [savedPostId, queueId]);
 
   // Save as draft
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = useCallback(async () => {
     if (!formData.title || !formData.content) {
       setError('Please provide a title and content');
       return;
@@ -462,7 +509,7 @@ export default function EditorPage() {
         const sessionId = workflowSession?.session_id;
         if (sessionId) {
           const workflowData = workflowSession?.workflow_data || {};
-          const postId = (draftResult as any).post_id || (draftResult as any).id;
+          const postId = (draftResult as { post_id?: string; id?: string }).post_id || (draftResult as { post_id?: string; id?: string }).id;
           const { error: workflowError } = await supabase
             .from('workflow_sessions')
             .update({
@@ -511,7 +558,7 @@ export default function EditorPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [formData, userId, workflowSession]);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -593,7 +640,7 @@ export default function EditorPage() {
                   onChange={(e) => {
                     const workflowData = workflowSession?.workflow_data || {};
                     const savedTopics = workflowData.selected_topics || [];
-                    const selectedTopic = savedTopics.find((t: any) => t.title === e.target.value);
+                    const selectedTopic = savedTopics.find((t: { title: string; target_keywords?: string[]; word_count_estimate?: number; [key: string]: unknown }) => t.title === e.target.value);
                     if (selectedTopic) {
                       setFormData({
                         ...formData,
@@ -608,7 +655,7 @@ export default function EditorPage() {
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="">Select a saved topic...</option>
-                  {(workflowSession?.workflow_data?.selected_topics || []).map((topic: any, index: number) => (
+                  {(workflowSession?.workflow_data?.selected_topics || []).map((topic: { id?: string; title: string; [key: string]: unknown }, index: number) => (
                     <option key={topic.id || index} value={topic.title}>
                       {topic.title}
                     </option>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ApprovalStatus } from "@/lib/blog-queue-state-machine";
 import { canTransitionApprovalStatus } from "@/lib/blog-queue-state-machine";
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/blog-approvals/[id]
@@ -45,7 +46,7 @@ export async function GET(
       .single();
 
     if (error) {
-      console.error("Error fetching approval:", error);
+      logger.error("Error fetching approval:", error);
       return NextResponse.json(
         { error: "Approval not found" },
         { status: 404 }
@@ -54,7 +55,7 @@ export async function GET(
 
     return NextResponse.json(approval);
   } catch (error) {
-    console.error("Error in GET /api/blog-approvals/[id]:", error);
+    logger.error("Error in GET /api/blog-approvals/[id]:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -163,7 +164,7 @@ export async function PATCH(
       .single();
 
     if (updateError) {
-      console.error("Error updating approval:", updateError);
+      logger.error("Error updating approval:", updateError);
       return NextResponse.json(
         { error: "Failed to update approval" },
         { status: 500 }
@@ -192,7 +193,7 @@ export async function PATCH(
 
     return NextResponse.json(updatedApproval);
   } catch (error) {
-    console.error("Error in PATCH /api/blog-approvals/[id]:", error);
+    logger.error("Error in PATCH /api/blog-approvals/[id]:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

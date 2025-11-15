@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/utils/logger';
+import { handleApiError } from '@/lib/api-utils';
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('📝 Fetching drafts via API route');
+    logger.debug('Fetching drafts via API route');
     
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status') || 'draft';
@@ -14,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Use default system organization
     const orgId = '00000000-0000-0000-0000-000000000001';
     
-    console.log('🔍 Fetching posts for org:', orgId, 'status:', status);
+    logger.debug('Fetching posts', { orgId, status });
     
     let query = supabase
       .from('blog_posts')
@@ -30,22 +32,21 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     
     if (error) {
-      console.error('❌ Database error:', error);
+      logger.error('Database error fetching drafts', { error: error.message });
       return NextResponse.json(
         { error: 'Failed to fetch posts', details: error.message },
         { status: 500 }
       );
     }
     
-    console.log('✅ Fetched posts successfully:', data?.length || 0, 'posts');
+    logger.debug('Fetched posts successfully', { count: data?.length || 0 });
     return NextResponse.json({ success: true, data: data || [] });
     
-  } catch (error) {
-    console.error('❌ Error in drafts list API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'drafts-list',
+    });
+    return handleApiError(error);
   }
 }
 

@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
+import { logger } from '@/utils/logger';
 
 /**
  * POST /api/integrations/[id]/sync
@@ -50,7 +51,7 @@ export async function POST(
     const integration = await dbAdapter.getIntegration(id, userProfile.org_id);
     
     if (!integration) {
-      console.error(`[Sync] Integration ${id} not found for org ${userProfile.org_id}`);
+      logger.error(`[Sync] Integration ${id} not found for org ${userProfile.org_id}`);
       return NextResponse.json({ 
         error: 'Integration not found or does not belong to your organization' 
       }, { status: 404 });
@@ -58,7 +59,7 @@ export async function POST(
     
     // Verify integration belongs to user's organization
     if (integration.org_id !== userProfile.org_id) {
-      console.error(`[Sync] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
+      logger.error(`[Sync] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
       return NextResponse.json({ 
         error: 'Integration does not belong to your organization' 
       }, { status: 403 });
@@ -123,7 +124,7 @@ export async function POST(
     }
 
   } catch (error) {
-    console.error('Error syncing integration:', error);
+    logger.error('Error syncing integration:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to sync integration' },
       { status: 500 }

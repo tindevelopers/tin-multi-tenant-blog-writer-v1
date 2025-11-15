@@ -7,6 +7,7 @@ import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload'
 import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
 import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
+import { logger } from '@/utils/logger';
 
 // Create server-side image generator (uses direct Cloud Run URL)
 const imageGenerator = new BlogImageGenerator(
@@ -19,16 +20,71 @@ const imageGenerator = new BlogImageGenerator(
  * Helper function to build the transformed blog generation response
  * This centralizes response building to avoid duplication between response paths
  */
+interface BlogGenerationResult {
+  blog_post?: {
+    title?: string;
+    excerpt?: string;
+    summary?: string;
+  };
+  title?: string;
+  excerpt?: string;
+  meta_title?: string;
+  meta_description?: string;
+  readability_score?: number;
+  seo_score?: number;
+  quality_score?: number | null;
+  quality_dimensions?: Record<string, number>;
+  stage_results?: Array<{
+    stage: string;
+    provider: string;
+    tokens: number;
+    cost: number;
+  }>;
+  total_tokens?: number;
+  total_cost?: number;
+  generation_time?: number;
+  citations?: Array<{
+    text: string;
+    url: string;
+    title: string;
+  }>;
+  semantic_keywords?: string[];
+  structured_data?: Record<string, unknown> | null;
+  knowledge_graph?: Record<string, unknown> | null;
+  seo_metadata?: Record<string, unknown>;
+  content_metadata?: Record<string, unknown>;
+  warnings?: string[];
+  success?: boolean;
+  word_count?: number;
+  suggestions?: string[];
+  quality_scores?: unknown;
+}
+
+interface BrandVoice {
+  id?: string;
+  name?: string;
+  tone?: string;
+  style?: string;
+  [key: string]: unknown;
+}
+
+interface ContentPreset {
+  id?: string;
+  name?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
 function buildBlogResponse(
-  result: any,
+  result: BlogGenerationResult,
   enhancedContent: string,
   progressUpdates: ProgressUpdate[],
   featuredImage: GeneratedImage | null,
   sectionImages: Array<{ position: number; image: GeneratedImage }>,
   options: {
     topic: string;
-    brandVoice: any;
-    contentPreset: any;
+    brandVoice: BrandVoice | null;
+    contentPreset: ContentPreset | null;
     endpoint: string;
     shouldUseEnhanced: boolean;
     requiresProductResearch: boolean;
@@ -136,7 +192,7 @@ export async function POST(request: NextRequest) {
   let queueId: string | null = null;
   
   try {
-    console.log('🚀 Blog generation API route called');
+    logger.debug('🚀 Blog generation API route called');
     
     // Parse request body
     const body = await request.json();
@@ -181,7 +237,7 @@ export async function POST(request: NextRequest) {
       research_depth,
     } = body;
     
-    console.log('📝 Generation parameters:', {
+    logger.debug('📝 Generation parameters:', {
       topic,
       keywords,
       target_audience,
@@ -212,8 +268,8 @@ export async function POST(request: NextRequest) {
     const endpoint = '/api/v1/blog/generate-enhanced';
     
     // Initialize variables that will be used in queue entry
-    let brandVoice: any = null;
-    let contentPreset: any = null;
+    let brandVoice: BrandVoice | null = null;
+    let contentPreset: ContentPreset | null = null;
     
     // Get authenticated user and org
     const supabase = await createClient();
@@ -236,24 +292,24 @@ export async function POST(request: NextRequest) {
         const serviceSupabase = createServiceClient();
         userId = '00000000-0000-0000-0000-000000000002';
         orgId = '00000000-0000-0000-0000-000000000001';
-        console.log('⚠️ User org not found, using system defaults');
+        logger.debug('⚠️ User org not found, using system defaults');
       } else {
         userId = user.id;
         orgId = userProfile.org_id;
-        console.log('✅ Using authenticated user:', userId, 'Org:', orgId);
+        logger.debug('✅ Using authenticated user:', userId, 'Org:', orgId);
       }
     } else {
       // Use service client with default system values
       const serviceSupabase = createServiceClient();
       userId = '00000000-0000-0000-0000-000000000002';
       orgId = '00000000-0000-0000-0000-000000000001';
-      console.log('✅ Using service client with system user:', userId, 'Org:', orgId);
+      logger.debug('✅ Using service client with system user:', userId, 'Org:', orgId);
     }
     
     // Create queue entry before generation starts
     if (orgId && userId) {
       try {
-        console.log('📋 Creating queue entry for blog generation...');
+        logger.debug('📋 Creating queue entry for blog generation...');
         const { data: queueItem, error: queueError } = await supabase
           .from('blog_generation_queue')
           .insert({
@@ -284,14 +340,14 @@ export async function POST(request: NextRequest) {
           .single();
         
         if (queueError) {
-          console.warn('⚠️ Failed to create queue entry:', queueError);
+          logger.warn('⚠️ Failed to create queue entry:', queueError);
           // Continue without queue entry (non-blocking)
         } else if (queueItem) {
           queueId = queueItem.queue_id;
-          console.log('✅ Queue entry created:', queueId);
+          logger.debug('✅ Queue entry created:', queueId);
         }
       } catch (error) {
-        console.warn('⚠️ Error creating queue entry:', error);
+        logger.warn('⚠️ Error creating queue entry:', error);
         // Continue without queue entry (non-blocking)
       }
     }
@@ -310,7 +366,7 @@ export async function POST(request: NextRequest) {
       
       if (brandSettings) {
         brandVoice = brandSettings;
-        console.log('🎨 Found brand voice settings:', {
+        logger.debug('🎨 Found brand voice settings:', {
           tone: brandSettings.tone,
           hasGuidelines: !!brandSettings.style_guidelines,
           vocabularyCount: Array.isArray(brandSettings.vocabulary) ? brandSettings.vocabulary.length : 0
@@ -337,7 +393,7 @@ export async function POST(request: NextRequest) {
         
         if (orgPrompt) {
           contentGoalPrompt = orgPrompt;
-          console.log('📝 Found org-specific content goal prompt for:', content_goal);
+          logger.debug('📝 Found org-specific content goal prompt for:', content_goal);
         } else {
           // Get system default
           const { data: systemPrompt } = await serviceSupabase
@@ -352,11 +408,11 @@ export async function POST(request: NextRequest) {
           
           if (systemPrompt) {
             contentGoalPrompt = systemPrompt;
-            console.log('📝 Found system default content goal prompt for:', content_goal);
+            logger.debug('📝 Found system default content goal prompt for:', content_goal);
           }
         }
       } catch (error) {
-        console.warn('⚠️ Failed to fetch content goal prompt:', error);
+        logger.warn('⚠️ Failed to fetch content goal prompt:', error);
         // Continue without prompt - not critical
       }
     }
@@ -375,7 +431,7 @@ export async function POST(request: NextRequest) {
       
       if (preset) {
         contentPreset = preset;
-        console.log('📋 Found content preset:', {
+        logger.debug('📋 Found content preset:', {
           name: preset.name,
           format: preset.content_format,
           wordCount: preset.word_count,
@@ -395,16 +451,16 @@ export async function POST(request: NextRequest) {
       
       if (defaultPreset) {
         contentPreset = defaultPreset;
-        console.log('📋 Using default content preset:', defaultPreset.name);
+        logger.debug('📋 Using default content preset:', defaultPreset.name);
       }
     }
     
     // First, ensure Cloud Run is awake and healthy
-    console.log('🌅 Checking Cloud Run health...');
+    logger.debug('🌅 Checking Cloud Run health...');
     const healthStatus = await cloudRunHealth.wakeUpAndWait();
     
     if (!healthStatus.isHealthy) {
-      console.error('❌ Cloud Run is not healthy:', healthStatus.error);
+      logger.error('❌ Cloud Run is not healthy:', healthStatus.error);
       
       // Provide a cleaner error message
       let errorMessage = 'Cloud Run service is not available';
@@ -427,16 +483,16 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    console.log('✅ Cloud Run is healthy, proceeding with blog generation...');
+    logger.debug('✅ Cloud Run is healthy, proceeding with blog generation...');
     
     // Call the external blog writer API
     const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
     
     // shouldUseEnhanced and endpoint already declared above for queue entry
-    console.log('🌐 Calling external API:', `${API_BASE_URL}${endpoint}`);
-    console.log('🔑 API Key present:', !!API_KEY);
-    console.log('🌐 Using endpoint:', endpoint, '(Enhanced - Always Enabled)');
+    logger.debug('🌐 Calling external API:', `${API_BASE_URL}${endpoint}`);
+    logger.debug('🔑 API Key present:', !!API_KEY);
+    logger.debug('🌐 Using endpoint:', endpoint, '(Enhanced - Always Enabled)');
     
     // Auto-enable quality features for premium/enterprise quality levels
     const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise' || 
@@ -462,27 +518,34 @@ export async function POST(request: NextRequest) {
         return kw.includes('best') || kw.includes('top') || kw.includes('review');
       });
     
-    console.log('🔍 Product research detection:', {
+    logger.debug('🔍 Product research detection:', {
       topic,
       requiresProductResearch,
       keywords: keywordsArray
     });
 
     // Perform enhanced keyword analysis if keywords are provided (v1.3.0)
-    let enhancedKeywordInsights: {
-      trendsData?: any;
-      serpAISummary?: any;
-      keywordIdeas?: any[];
+    interface EnhancedKeywordInsights {
+      trendsData?: Record<string, unknown>;
+      serpAISummary?: Record<string, unknown>;
+      keywordIdeas?: Array<{
+        keyword: string;
+        search_volume?: number;
+        difficulty?: number;
+        [key: string]: unknown;
+      }>;
       isTrending?: boolean;
       mainTopics?: string[];
       missingTopics?: string[];
       commonQuestions?: string[];
       recommendations?: string[];
-    } = {};
+    }
+    
+    let enhancedKeywordInsights: EnhancedKeywordInsights = {};
     
     if (keywordsArray.length > 0 && shouldUseEnhanced) {
       try {
-        console.log('🔬 Performing enhanced keyword analysis for blog generation...');
+        logger.debug('🔬 Performing enhanced keyword analysis for blog generation...');
         const primaryKeyword = keywordsArray[0] || topic;
         
         // Call the keywords analyze API route with enhanced features
@@ -521,7 +584,7 @@ export async function POST(request: NextRequest) {
               recommendations: keywordData.serp_ai_summary?.recommendations,
             };
             
-            console.log('✅ Enhanced keyword analysis complete:', {
+            logger.debug('✅ Enhanced keyword analysis complete:', {
               isTrending: enhancedKeywordInsights.isTrending,
               hasSERPSummary: !!enhancedKeywordInsights.serpAISummary,
               mainTopicsCount: enhancedKeywordInsights.mainTopics?.length || 0,
@@ -529,10 +592,10 @@ export async function POST(request: NextRequest) {
             });
           }
         } else {
-          console.warn('⚠️ Enhanced keyword analysis API call failed (non-critical)');
+          logger.warn('⚠️ Enhanced keyword analysis API call failed (non-critical)');
         }
       } catch (error) {
-        console.warn('⚠️ Enhanced keyword analysis failed (non-critical):', error);
+        logger.warn('⚠️ Enhanced keyword analysis failed (non-critical):', error);
         // Continue without enhanced insights - not critical for blog generation
       }
     }
@@ -553,10 +616,10 @@ export async function POST(request: NextRequest) {
     // Add custom instructions (use provided or default for premium)
     if (custom_instructions) {
       requestPayload.custom_instructions = custom_instructions;
-      console.log('📝 Using provided custom instructions');
+      logger.debug('📝 Using provided custom instructions');
     } else if (defaultCustomInstructions) {
       requestPayload.custom_instructions = defaultCustomInstructions;
-      console.log('📝 Using default premium custom instructions');
+      logger.debug('📝 Using default premium custom instructions');
     }
 
     // Add template type if provided
@@ -586,7 +649,7 @@ export async function POST(request: NextRequest) {
       requestPayload.use_knowledge_graph = use_knowledge_graph !== undefined ? use_knowledge_graph : recommendedQualityFeatures.use_knowledge_graph;
       requestPayload.use_semantic_keywords = use_semantic_keywords !== undefined ? use_semantic_keywords : recommendedQualityFeatures.use_semantic_keywords;
       requestPayload.use_quality_scoring = use_quality_scoring !== undefined ? use_quality_scoring : recommendedQualityFeatures.use_quality_scoring;
-      console.log('✨ Premium quality: Auto-enabled quality features', recommendedQualityFeatures);
+      logger.debug('✨ Premium quality: Auto-enabled quality features', recommendedQualityFeatures);
     } else {
       // Use provided values or recommended defaults for quality level
       requestPayload.use_google_search = use_google_search !== undefined ? use_google_search : recommendedQualityFeatures.use_google_search;
@@ -616,7 +679,7 @@ export async function POST(request: NextRequest) {
         keyword_ideas: enhancedKeywordInsights.keywordIdeas?.slice(0, 10).map(idea => idea.keyword) || [],
       };
       
-      console.log('📊 Adding enhanced keyword insights to blog generation:', {
+      logger.debug('📊 Adding enhanced keyword insights to blog generation:', {
         mainTopicsCount: enhancedKeywordInsights.mainTopics?.length || 0,
         missingTopicsCount: enhancedKeywordInsights.missingTopics?.length || 0,
         questionsCount: enhancedKeywordInsights.commonQuestions?.length || 0,
@@ -636,7 +699,7 @@ export async function POST(request: NextRequest) {
       const systemPrompt = `${contentGoalPrompt.system_prompt}\n\n${topicSpecificInstruction}`;
       requestPayload.system_prompt = systemPrompt;
       requestPayload.content_goal = content_goal;
-      console.log('📝 Adding content goal prompt to API request:', {
+      logger.debug('📝 Adding content goal prompt to API request:', {
         content_goal,
         prompt_length: systemPrompt.length,
         has_user_template: !!contentGoalPrompt.user_prompt_template,
@@ -675,7 +738,7 @@ export async function POST(request: NextRequest) {
       : requiresProductResearch;
     
     if (shouldIncludeProductResearch) {
-      console.log('📊 Adding product research parameters...');
+      logger.debug('📊 Adding product research parameters...');
       requestPayload.include_web_research = true;
       requestPayload.include_product_research = true;
       
@@ -742,9 +805,9 @@ export async function POST(request: NextRequest) {
       requestPayload.backlink_count = backlink_count;
     }
     
-    console.log('📤 Request payload:', JSON.stringify(requestPayload, null, 2));
+    logger.debug('📤 Request payload:', JSON.stringify(requestPayload, null, 2));
     const systemPromptForLog = typeof requestPayload.system_prompt === 'string' ? requestPayload.system_prompt : '';
-    console.log('📤 Key parameters being sent:', {
+    logger.debug('📤 Key parameters being sent:', {
       topic: requestPayload.topic,
       keywords: requestPayload.keywords,
       target_audience: requestPayload.target_audience,
@@ -767,11 +830,11 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(requestPayload),
     });
     
-    console.log('📥 External API response status:', response.status);
+    logger.debug('📥 External API response status:', response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ External API error:', response.status, errorText);
+      logger.error('❌ External API error:', response.status, errorText);
       
       // Update queue entry with error if queue exists
       if (queueId) {
@@ -785,7 +848,7 @@ export async function POST(request: NextRequest) {
             })
             .eq('queue_id', queueId);
         } catch (error) {
-          console.warn('⚠️ Failed to update queue entry with error:', error);
+          logger.warn('⚠️ Failed to update queue entry with error:', error);
         }
       }
       
@@ -796,8 +859,8 @@ export async function POST(request: NextRequest) {
     }
     
     const result = await response.json();
-    console.log('✅ Blog generated successfully from external API');
-    console.log('📄 Full API response structure:', {
+    logger.debug('✅ Blog generated successfully from external API');
+    logger.debug('📄 Full API response structure:', {
       hasContent: !!result.content,
       hasTitle: !!result.title,
       hasExcerpt: !!result.excerpt,
@@ -806,7 +869,7 @@ export async function POST(request: NextRequest) {
       contentPreview: result.content?.substring(0, 200) || result.blog_post?.content?.substring(0, 200) || 'No content',
       contentLength: result.content?.length || result.blog_post?.content?.length || 0,
     });
-    console.log('📄 Raw API response (first 500 chars):', JSON.stringify(result).substring(0, 500));
+    logger.debug('📄 Raw API response (first 500 chars):', JSON.stringify(result).substring(0, 500));
     
     // Update queue entry with progress updates if queue exists
     if (queueId) {
@@ -836,14 +899,14 @@ export async function POST(request: NextRequest) {
           })
           .eq('queue_id', queueId);
         
-        console.log('✅ Queue entry updated with progress:', {
+        logger.debug('✅ Queue entry updated with progress:', {
           queue_id: queueId,
           progress: progressPercentage,
           stage: currentStage,
           updates_count: progressUpdates.length
         });
       } catch (error) {
-        console.warn('⚠️ Failed to update queue entry:', error);
+        logger.warn('⚠️ Failed to update queue entry:', error);
         // Continue without queue update (non-blocking)
       }
     }
@@ -883,7 +946,7 @@ export async function POST(request: NextRequest) {
     
     // Log progress updates (only in development or when explicitly enabled)
     if (process.env.NODE_ENV === 'development' || process.env.LOG_PROGRESS === 'true') {
-      console.log('📊 Progress updates received:', {
+      logger.debug('📊 Progress updates received:', {
         count: progressUpdates.length,
         latestProgress: progressUpdates.length > 0 
           ? progressUpdates[progressUpdates.length - 1].progress_percentage 
@@ -902,7 +965,7 @@ export async function POST(request: NextRequest) {
     let featuredImage: GeneratedImage | null = null;
     const sectionImages: Array<{ position: number; image: GeneratedImage }> = [];
     try {
-      console.log('🖼️ Starting featured image generation...');
+      logger.debug('🖼️ Starting featured image generation...');
       const imageKeywords = Array.isArray(keywords) ? keywords : [];
       const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
       
@@ -919,14 +982,14 @@ export async function POST(request: NextRequest) {
         ),
         new Promise<null>((resolve) => 
           setTimeout(() => {
-            console.warn('⏱️ Image generation timeout - continuing without image');
+            logger.warn('⏱️ Image generation timeout - continuing without image');
             resolve(null);
           }, 30000) // 30 second timeout
         )
       ]);
       
       if (featuredImage) {
-        console.log('✅ Featured image generated successfully:', {
+        logger.debug('✅ Featured image generated successfully:', {
           imageId: featuredImage.image_id,
           width: featuredImage.width,
           height: featuredImage.height,
@@ -934,14 +997,14 @@ export async function POST(request: NextRequest) {
           imageUrl: featuredImage.image_url?.substring(0, 100) || 'No URL'
         });
       } else {
-        console.error('❌ Featured image generation failed or returned null');
-        console.error('   Topic:', imageTopic);
-        console.error('   Keywords:', imageKeywords);
-        console.error('   This may indicate:');
-        console.error('   1. Stability AI API not configured');
-        console.error('   2. Image generation endpoint not working');
-        console.error('   3. Timeout (30 seconds exceeded)');
-        console.error('   4. API returned error');
+        logger.error('❌ Featured image generation failed or returned null');
+        logger.error('   Topic:', imageTopic);
+        logger.error('   Keywords:', imageKeywords);
+        logger.error('   This may indicate:');
+        logger.error('   1. Stability AI API not configured');
+        logger.error('   2. Image generation endpoint not working');
+        logger.error('   3. Timeout (30 seconds exceeded)');
+        logger.error('   4. API returned error');
       }
 
       // Upload to Cloudinary if org has credentials configured
@@ -950,7 +1013,7 @@ export async function POST(request: NextRequest) {
           const imageFileName = `blog-featured-${Date.now()}.${featuredImage.format || 'png'}`;
           const folder = `blog-images/${orgId}`;
           
-          console.log('☁️ Uploading featured image to Cloudinary...');
+          logger.debug('☁️ Uploading featured image to Cloudinary...');
           const cloudinaryResult = await uploadViaBlogWriterAPI(
             featuredImage.image_url || '',
             featuredImage.image_data || null,
@@ -960,7 +1023,7 @@ export async function POST(request: NextRequest) {
           );
 
           if (cloudinaryResult) {
-            console.log('✅ Featured image uploaded to Cloudinary:', {
+            logger.debug('✅ Featured image uploaded to Cloudinary:', {
               publicId: cloudinaryResult.public_id,
               secureUrl: cloudinaryResult.secure_url
             });
@@ -983,22 +1046,22 @@ export async function POST(request: NextRequest) {
             );
 
             if (assetId) {
-              console.log('✅ Featured image saved to media_assets:', assetId);
+              logger.debug('✅ Featured image saved to media_assets:', assetId);
               // Update featuredImage to use Cloudinary URL
               featuredImage.image_url = cloudinaryResult.secure_url;
               featuredImage.image_data = undefined;
             } else {
-              console.warn('⚠️ Featured image uploaded to Cloudinary but failed to save to database');
+              logger.warn('⚠️ Featured image uploaded to Cloudinary but failed to save to database');
             }
           }
         } catch (uploadError) {
-          console.warn('⚠️ Cloudinary upload error (non-critical):', uploadError);
+          logger.warn('⚠️ Cloudinary upload error (non-critical):', uploadError);
         }
       }
 
       // Generate section images for better visual engagement
       try {
-        console.log('🖼️ Generating section images...');
+        logger.debug('🖼️ Generating section images...');
         const sections = extractSections(rawContent);
         const imageKeywords = Array.isArray(keywords) ? keywords : [];
         
@@ -1055,9 +1118,9 @@ export async function POST(request: NextRequest) {
                 );
 
                 if (sectionAssetId) {
-                  console.log(`✅ Section image ${i + 1} saved to media_assets:`, sectionAssetId);
+                  logger.debug(`✅ Section image ${i + 1} saved to media_assets:`, sectionAssetId);
                 } else {
-                  console.warn(`⚠️ Section image ${i + 1} uploaded to Cloudinary but failed to save to database`);
+                  logger.warn(`⚠️ Section image ${i + 1} uploaded to Cloudinary but failed to save to database`);
                 }
 
                 sectionImages.push({
@@ -1065,16 +1128,16 @@ export async function POST(request: NextRequest) {
                   image: img
                 });
                 
-                console.log(`✅ Section image ${i + 1} generated and uploaded`);
+                logger.debug(`✅ Section image ${i + 1} generated and uploaded`);
               }
             }
           } catch (sectionImageError) {
-            console.warn(`⚠️ Failed to generate section image ${i + 1}:`, sectionImageError);
+            logger.warn(`⚠️ Failed to generate section image ${i + 1}:`, sectionImageError);
             // Continue with other sections
           }
         }
       } catch (error) {
-        console.warn('⚠️ Section image generation failed (non-critical):', error);
+        logger.warn('⚠️ Section image generation failed (non-critical):', error);
       }
     } catch (error) {
       // Log detailed error information
@@ -1087,7 +1150,7 @@ export async function POST(request: NextRequest) {
       const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
       const imageKeywords = Array.isArray(keywords) ? keywords : [];
       
-      console.error('❌ Image generation failed:', {
+      logger.error('❌ Image generation failed:', {
         ...errorDetails,
         topic: imageTopic,
         keywords: imageKeywords,
@@ -1095,11 +1158,11 @@ export async function POST(request: NextRequest) {
       });
       
       // Don't fail blog generation, but log the error for debugging
-      console.warn('⚠️ Continuing blog generation without images');
+      logger.warn('⚠️ Continuing blog generation without images');
     }
     
     // Enhance content to rich HTML with images embedded
-    console.log('✨ Enhancing content to rich HTML...');
+    logger.debug('✨ Enhancing content to rich HTML...');
     const enhancedContent = enhanceContentToRichHTML(rawContent, {
       featuredImage,
       sectionImages,
@@ -1108,7 +1171,7 @@ export async function POST(request: NextRequest) {
       addStructure: true
     });
     
-    console.log('📊 Content enhancement:', {
+    logger.debug('📊 Content enhancement:', {
       originalLength: rawContent.length,
       enhancedLength: enhancedContent.length,
       hasFeaturedImage: !!featuredImage,
@@ -1138,7 +1201,7 @@ export async function POST(request: NextRequest) {
     if (progressUpdates.length > 0) {
       const latest = progressUpdates[progressUpdates.length - 1];
       if (process.env.NODE_ENV === 'development' || process.env.LOG_PROGRESS === 'true') {
-        console.log('✅ Latest progress:', {
+        logger.debug('✅ Latest progress:', {
           stage: latest.stage,
           percentage: latest.progress_percentage,
           status: latest.status
@@ -1151,7 +1214,7 @@ export async function POST(request: NextRequest) {
       transformedResult.progress_updates = progressUpdates;
     }
     
-    console.log('📄 Transformed result:', {
+    logger.debug('📄 Transformed result:', {
       contentLength: transformedResult.content.length,
       title: transformedResult.title,
       excerpt: transformedResult.excerpt,
@@ -1186,9 +1249,9 @@ export async function POST(request: NextRequest) {
           })
           .eq('queue_id', queueId);
         
-        console.log('✅ Queue entry updated with generated content');
+        logger.debug('✅ Queue entry updated with generated content');
       } catch (error) {
-        console.warn('⚠️ Failed to update queue entry with content:', error);
+        logger.warn('⚠️ Failed to update queue entry with content:', error);
       }
     }
     
@@ -1212,7 +1275,7 @@ export async function POST(request: NextRequest) {
       }
       return NextResponse.json(transformedResult);
     } else {
-      console.error('❌ API returned unsuccessful result:', {
+      logger.error('❌ API returned unsuccessful result:', {
         success: result.success,
         errorMessage: result.error_message || result.error,
         errorCode: result.error_code,
@@ -1231,7 +1294,7 @@ export async function POST(request: NextRequest) {
             })
             .eq('queue_id', queueId);
         } catch (error) {
-          console.warn('⚠️ Failed to update queue entry with error:', error);
+          logger.warn('⚠️ Failed to update queue entry with error:', error);
         }
       }
       
@@ -1242,7 +1305,7 @@ export async function POST(request: NextRequest) {
     }
     
   } catch (error) {
-    console.error('❌ Error in blog generation API:', error);
+    logger.error('❌ Error in blog generation API:', error);
     
     // Update queue entry with error if queue exists
     // Note: queueId is declared in outer scope, so it's accessible here
@@ -1258,7 +1321,7 @@ export async function POST(request: NextRequest) {
           })
           .eq('queue_id', queueId);
       } catch (updateError) {
-        console.warn('⚠️ Failed to update queue entry with error:', updateError);
+        logger.warn('⚠️ Failed to update queue entry with error:', updateError);
       }
     }
     

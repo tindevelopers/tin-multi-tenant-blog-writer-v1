@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ApprovalStatus } from "@/lib/blog-queue-state-machine";
 import { canTransitionApprovalStatus } from "@/lib/blog-queue-state-machine";
+import { logger } from '@/utils/logger';
 
 /**
  * POST /api/blog-approvals/[id]/request-changes
@@ -95,7 +96,7 @@ export async function POST(
 
     return NextResponse.json(updatedApproval);
   } catch (error) {
-    console.error("Error in POST /api/blog-approvals/[id]/request-changes:", error);
+    logger.error("Error in POST /api/blog-approvals/[id]/request-changes:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

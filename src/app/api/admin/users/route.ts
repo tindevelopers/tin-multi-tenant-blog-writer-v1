@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { logger } from '@/utils/logger';
 
 /**
  * POST /api/admin/users
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (signUpError || !authData.user) {
-      console.error("Error creating auth user:", signUpError);
+      logger.error("Error creating auth user:", signUpError);
       return NextResponse.json(
         { error: `Failed to create user: ${signUpError?.message || "Unknown error"}` },
         { status: 500 }
@@ -141,11 +142,11 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       // If profile creation fails, try to clean up auth user
-      console.error("Error creating user profile:", profileError);
+      logger.error("Error creating user profile:", profileError);
       try {
         await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       } catch (cleanupError) {
-        console.error("Error cleaning up auth user:", cleanupError);
+        logger.error("Error cleaning up auth user:", cleanupError);
       }
       return NextResponse.json(
         { error: `Failed to create user profile: ${profileError.message}` },
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error creating user:", error);
+    logger.error("Error creating user:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to create user" },
       { status: 500 }

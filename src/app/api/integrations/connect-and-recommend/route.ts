@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { blogWriterAPI } from '@/lib/blog-writer-api';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
+import { logger } from '@/utils/logger';
 
 // Helper to get client IP address
 function getClientIp(request: NextRequest): string | undefined {
@@ -28,14 +29,14 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    console.log('🚀 POST /api/integrations/connect-and-recommend');
+    logger.debug('🚀 POST /api/integrations/connect-and-recommend');
 
     const supabase = await createClient(request);
     
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      console.error('❌ Unauthorized:', userError);
+      logger.error('❌ Unauthorized:', userError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError || !userProfile) {
-      console.error('❌ User profile not found:', profileError);
+      logger.error('❌ User profile not found:', profileError);
       return NextResponse.json(
         { error: 'User organization not found' },
         { status: 404 }
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
     // Check admin permissions - allow system_admin, super_admin, admin, and manager
     const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
     if (!allowedRoles.includes(userProfile.role)) {
-      console.error('❌ Insufficient permissions:', userProfile.role);
+      logger.error('❌ Insufficient permissions:', userProfile.role);
       return NextResponse.json(
         { error: 'Insufficient permissions. Admin, Manager, or higher role required.' },
         { status: 403 }
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`📝 Connecting to ${provider} with ${keywordArray.length} keywords`);
+    logger.debug(`📝 Connecting to ${provider} with ${keywordArray.length} keywords`);
 
     // Update log: validating credentials
     if (logId) {
@@ -157,7 +158,7 @@ export async function POST(request: NextRequest) {
 
       const apiDuration = Date.now() - apiStartTime;
 
-      console.log('✅ Blog Writer API response:', {
+      logger.debug('✅ Blog Writer API response:', {
         saved_integration: apiResult.saved_integration,
         recommended_backlinks: apiResult.recommended_backlinks,
         recommended_interlinks: apiResult.recommended_interlinks,
@@ -183,7 +184,7 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
       const apiDuration = Date.now() - apiStartTime;
 
-      console.error('❌ Blog Writer API error:', error);
+      logger.error('❌ Blog Writer API error:', error);
 
       // Update log: API error
       if (logId) {
@@ -217,7 +218,7 @@ export async function POST(request: NextRequest) {
     }
 
     const totalDuration = Date.now() - startTime;
-    console.log(`✅ Connection completed in ${totalDuration}ms`);
+    logger.debug(`✅ Connection completed in ${totalDuration}ms`);
 
     // Return success response
     return NextResponse.json({
@@ -229,7 +230,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error: any) {
-    console.error('❌ Error in connect-and-recommend:', error);
+    logger.error('❌ Error in connect-and-recommend:', error);
 
     // Update log: failed
     if (logId) {

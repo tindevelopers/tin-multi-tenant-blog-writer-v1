@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logger } from '@/utils/logger';
 
 /**
  * POST /api/blog-publishing/[id]/retry
@@ -73,7 +74,7 @@ export async function POST(
       .single();
 
     if (updateError) {
-      console.error("Error retrying publishing:", updateError);
+      logger.error("Error retrying publishing:", updateError);
       return NextResponse.json(
         { error: "Failed to retry publishing" },
         { status: 500 }
@@ -84,7 +85,7 @@ export async function POST(
 
     return NextResponse.json(updatedPublishing);
   } catch (error) {
-    console.error("Error in POST /api/blog-publishing/[id]/retry:", error);
+    logger.error("Error in POST /api/blog-publishing/[id]/retry:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

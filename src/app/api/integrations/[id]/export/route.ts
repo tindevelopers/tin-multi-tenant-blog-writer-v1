@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/integrations/[id]/export
@@ -49,7 +50,7 @@ export async function GET(
     const integration = await dbAdapter.getIntegration(id, userProfile.org_id);
     
     if (!integration) {
-      console.error(`[Export] Integration ${id} not found for org ${userProfile.org_id}`);
+      logger.error(`[Export] Integration ${id} not found for org ${userProfile.org_id}`);
       return NextResponse.json({ 
         error: 'Integration not found or does not belong to your organization' 
       }, { status: 404 });
@@ -57,7 +58,7 @@ export async function GET(
     
     // Verify integration belongs to user's organization
     if (integration.org_id !== userProfile.org_id) {
-      console.error(`[Export] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
+      logger.error(`[Export] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
       return NextResponse.json({ 
         error: 'Integration does not belong to your organization' 
       }, { status: 403 });
@@ -98,7 +99,7 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error exporting integration:', error);
+    logger.error('Error exporting integration:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to export integration' },
       { status: 500 }

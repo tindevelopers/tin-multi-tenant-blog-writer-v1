@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/server';
 import { WebflowOAuth } from '@/lib/integrations/oauth/webflow-oauth';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
 import { createServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/utils/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      console.error('❌ Unauthorized:', userError);
+      logger.error('❌ Unauthorized:', userError);
       return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (profileError || !userProfile) {
-      console.error('❌ User profile not found:', profileError);
+      logger.error('❌ User profile not found:', profileError);
       return NextResponse.json(
         { error: 'User organization not found' },
         { status: 404 }
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
     const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin}/api/integrations/oauth/webflow/callback`;
 
     if (!clientId || !clientSecret) {
-      console.error('❌ Webflow OAuth credentials not configured');
+      logger.error('❌ Webflow OAuth credentials not configured');
       return NextResponse.json(
         { error: 'Webflow OAuth not configured. Please contact administrator.' },
         { status: 500 }
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
       });
 
     if (stateError) {
-      console.error('❌ Failed to store OAuth state:', stateError);
+      logger.error('❌ Failed to store OAuth state:', stateError);
       return NextResponse.json(
         { error: 'Failed to initialize OAuth flow' },
         { status: 500 }
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(authUrl);
 
   } catch (error: any) {
-    console.error('❌ Error in Webflow OAuth authorize:', error);
+    logger.error('❌ Error in Webflow OAuth authorize:', error);
     return NextResponse.json(
       {
         error: error.message || 'Failed to initiate OAuth flow',

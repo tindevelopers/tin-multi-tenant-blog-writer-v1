@@ -13,6 +13,7 @@ import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environme
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
 import { autoDetectWebflowSiteId } from '@/lib/integrations/webflow-api';
 import type { IntegrationType, ConnectionConfig, IntegrationStatus } from '@/lib/integrations/types';
+import { logger } from '@/utils/logger';
 
 // Helper to get client IP address
 function getClientIp(request: NextRequest): string | undefined {
@@ -26,14 +27,14 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    console.log('🔑 POST /api/integrations/connect-api-key');
+    logger.debug('🔑 POST /api/integrations/connect-api-key');
 
     const supabase = await createClient(request);
     
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      console.error('❌ Unauthorized:', userError);
+      logger.error('❌ Unauthorized:', userError);
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (profileError || !userProfile) {
-      console.error('❌ User profile not found:', profileError);
+      logger.error('❌ User profile not found:', profileError);
       return NextResponse.json(
         { error: 'User organization not found' },
         { status: 404 }
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     // Check admin permissions
     const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
     if (!allowedRoles.includes(userProfile.role)) {
-      console.error('❌ Insufficient permissions:', userProfile.role);
+      logger.error('❌ Insufficient permissions:', userProfile.role);
       return NextResponse.json(
         { error: 'Insufficient permissions. Admin, Manager, or higher role required.' },
         { status: 403 }
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`📝 Connecting to ${provider} via API key`);
+    logger.debug(`📝 Connecting to ${provider} via API key`);
 
     // Update log: validating credentials
     if (logId) {
@@ -126,7 +127,7 @@ export async function POST(request: NextRequest) {
     // Webflow-specific: Auto-detect Site ID if not provided
     if (provider === 'webflow' && connection.api_key && !connection.site_id) {
       try {
-        console.log('🔍 Auto-detecting Webflow Site ID...');
+        logger.debug('🔍 Auto-detecting Webflow Site ID...');
         const siteId = await autoDetectWebflowSiteId(
           connection.api_key as string,
           connection.collection_id as string | undefined
@@ -134,12 +135,12 @@ export async function POST(request: NextRequest) {
         
         if (siteId) {
           connection.site_id = siteId;
-          console.log(`✅ Auto-detected Site ID: ${siteId}`);
+          logger.debug(`✅ Auto-detected Site ID: ${siteId}`);
         } else {
-          console.warn('⚠️ Could not auto-detect Site ID - user may need to provide it manually');
+          logger.warn('⚠️ Could not auto-detect Site ID - user may need to provide it manually');
         }
       } catch (error: any) {
-        console.error('❌ Error auto-detecting Site ID:', error);
+        logger.error('❌ Error auto-detecting Site ID:', error);
         // Don't fail the connection - site_id is optional, user can provide it later
       }
     }
@@ -305,7 +306,7 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (error: any) {
-      console.error('❌ Database error:', error);
+      logger.error('❌ Database error:', error);
       
       if (logId) {
         await integrationLogger.updateLog(logId, {
@@ -319,7 +320,7 @@ export async function POST(request: NextRequest) {
     }
 
     const totalDuration = Date.now() - startTime;
-    console.log(`✅ API key connection completed in ${totalDuration}ms`);
+    logger.debug(`✅ API key connection completed in ${totalDuration}ms`);
 
     // Return success response (without exposing credentials)
     const { connection: _, ...integrationWithoutCredentials } = integration;
@@ -335,7 +336,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error: any) {
-    console.error('❌ Error in connect-api-key:', error);
+    logger.error('❌ Error in connect-api-key:', error);
 
     // Update log: failed
     if (logId) {

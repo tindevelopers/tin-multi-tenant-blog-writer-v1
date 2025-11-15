@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/utils/logger';
+import { parseJsonBody, handleApiError } from '@/lib/api-utils';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
   'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
@@ -25,7 +27,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       
       // If it's a 503 (Service Unavailable), retry
       if (response.status === 503 && attempt < retries) {
-        console.log(`⚠️ Cloud Run returned 503, retrying (${attempt}/${retries})...`);
+        logger.debug(`⚠️ Cloud Run returned 503, retrying (${attempt}/${retries})...`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
         continue;
       }
@@ -36,7 +38,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       const isNetworkError = error instanceof TypeError;
       
       if ((isTimeout || isNetworkError) && attempt < retries) {
-        console.log(`⚠️ Network error, retrying (${attempt}/${retries})...`);
+        logger.debug(`⚠️ Network error, retrying (${attempt}/${retries})...`);
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
         continue;
       }
@@ -50,7 +52,10 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await parseJsonBody<{
+      text?: string;
+      content?: string;
+    }>(request);
     
     // Cloud Run API expects 'content' field, not 'text'
     // Also requires at least 100 characters
@@ -92,12 +97,10 @@ export async function POST(request: NextRequest) {
     // The response should include: extracted_keywords, keywords_with_topics, clusters, cluster_summary
     return NextResponse.json(data);
   } catch (error: unknown) {
-    console.error('Error in keywords/extract:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json(
-      { error: `Failed to extract keywords: ${errorMessage}` },
-      { status: 500 }
-    );
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'keywords-extract',
+    });
+    return handleApiError(error);
   }
 }
 

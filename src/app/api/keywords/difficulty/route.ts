@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/utils/logger';
+import { parseJsonBody, validateRequiredFields, handleApiError } from '@/lib/api-utils';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
   'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
@@ -35,12 +37,14 @@ export interface KeywordDifficultyResponse {
 
 export async function POST(request: NextRequest) {
   try {
-    const body: KeywordDifficultyRequest = await request.json();
+    const body = await parseJsonBody<KeywordDifficultyRequest>(request);
     
     // Validate required fields
-    if (!body.keyword || typeof body.keyword !== 'string' || body.keyword.trim().length === 0) {
+    validateRequiredFields(body, ['keyword']);
+    
+    if (typeof body.keyword !== 'string' || body.keyword.trim().length === 0) {
       return NextResponse.json(
-        { error: 'keyword is required and must be a non-empty string' },
+        { error: 'keyword must be a non-empty string' },
         { status: 422 }
       );
     }
@@ -76,7 +80,10 @@ export async function POST(request: NextRequest) {
         if (text) errorMessage = text;
       }
 
-      console.error(`❌ Keyword difficulty API error (${response.status}):`, errorMessage);
+      logger.error('Keyword difficulty API error', {
+        status: response.status,
+        error: errorMessage,
+      });
       
       return NextResponse.json(
         { error: errorMessage },
@@ -88,12 +95,10 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json(data);
   } catch (error: unknown) {
-    console.error('Error in keywords/difficulty:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json(
-      { error: `Failed to analyze keyword difficulty: ${errorMessage}` },
-      { status: 500 }
-    );
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'keywords-difficulty',
+    });
+    return handleApiError(error);
   }
 }
 

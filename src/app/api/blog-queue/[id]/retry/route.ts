@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { canTransitionQueueStatus, type QueueStatus } from '@/lib/blog-queue-state-machine';
+import { logger } from '@/utils/logger';
 
 /**
  * POST /api/blog-queue/[id]/retry
@@ -90,7 +91,7 @@ export async function POST(
       .single();
 
     if (updateError) {
-      console.error('Error retrying queue item:', updateError);
+      logger.error('Error retrying queue item:', updateError);
       return NextResponse.json(
         { error: 'Failed to retry queue item', details: updateError.message },
         { status: 500 }
@@ -105,7 +106,7 @@ export async function POST(
       queue_item: updatedItem
     });
   } catch (error) {
-    console.error('Error in POST /api/blog-queue/[id]/retry:', error);
+    logger.error('Error in POST /api/blog-queue/[id]/retry:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }

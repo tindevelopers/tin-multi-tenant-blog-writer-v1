@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
 
 // GET - Suggest internal links for a post based on content and existing links
 export async function GET(request: NextRequest) {
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
       .limit(50); // Get more posts for better matching
 
     if (postsError) {
-      console.error('Error fetching available posts:', postsError);
+      logger.error('Error fetching available posts:', postsError);
       return NextResponse.json({ error: 'Failed to fetch available posts' }, { status: 500 });
     }
 
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ suggestions });
   } catch (error) {
-    console.error('Error in GET /api/internal-links/suggest:', error);
+    logger.error('Error in GET /api/internal-links/suggest:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { PlatformStatus, canTransitionPlatformStatus } from "@/lib/blog-queue-state-machine";
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/blog-publishing/[id]
@@ -43,7 +44,7 @@ export async function GET(
       .single();
 
     if (error) {
-      console.error("Error fetching publishing:", error);
+      logger.error("Error fetching publishing:", error);
       return NextResponse.json(
         { error: "Publishing record not found" },
         { status: 404 }
@@ -52,7 +53,7 @@ export async function GET(
 
     return NextResponse.json(publishing);
   } catch (error) {
-    console.error("Error in GET /api/blog-publishing/[id]:", error);
+    logger.error("Error in GET /api/blog-publishing/[id]:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -163,7 +164,7 @@ export async function PATCH(
       .single();
 
     if (updateError) {
-      console.error("Error updating publishing record:", updateError);
+      logger.error("Error updating publishing record:", updateError);
       return NextResponse.json(
         { error: "Failed to update publishing record" },
         { status: 500 }
@@ -172,7 +173,7 @@ export async function PATCH(
 
     return NextResponse.json(updatedPublishing);
   } catch (error) {
-    console.error("Error in PATCH /api/blog-publishing/[id]:", error);
+    logger.error("Error in PATCH /api/blog-publishing/[id]:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -243,7 +244,7 @@ export async function DELETE(
       .single();
 
     if (updateError) {
-      console.error("Error cancelling publishing:", updateError);
+      logger.error("Error cancelling publishing:", updateError);
       return NextResponse.json(
         { error: "Failed to cancel publishing" },
         { status: 500 }
@@ -252,7 +253,7 @@ export async function DELETE(
 
     return NextResponse.json(updatedPublishing);
   } catch (error) {
-    console.error("Error in DELETE /api/blog-publishing/[id]:", error);
+    logger.error("Error in DELETE /api/blog-publishing/[id]:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

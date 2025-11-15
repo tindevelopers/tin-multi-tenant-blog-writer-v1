@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
 
 /**
  * GET /api/blog-queue/[id]/status
@@ -113,7 +114,7 @@ export async function GET(
               }
             }
           } catch (error) {
-            console.error('Error polling queue status:', error);
+            logger.error('Error polling queue status:', error);
             send({
               type: 'error',
               message: error instanceof Error ? error.message : 'Unknown error',
@@ -150,7 +151,7 @@ export async function GET(
       }
     });
   } catch (error) {
-    console.error('Error in SSE endpoint:', error);
+    logger.error('Error in SSE endpoint:', error);
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 

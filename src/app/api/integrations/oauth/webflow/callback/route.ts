@@ -14,6 +14,7 @@ import { integrationLogger } from '@/lib/integrations/logging/integration-logger
 import { createServiceClient } from '@/lib/supabase/service';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import type { ConnectionConfig } from '@/lib/integrations/types';
+import { logger } from '@/utils/logger';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
-      console.error('❌ Unauthorized:', userError);
+      logger.error('❌ Unauthorized:', userError);
       return NextResponse.redirect(
         new URL('/auth/login?redirect=' + encodeURIComponent(request.url), request.url)
       );
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (profileError || !userProfile) {
-      console.error('❌ User profile not found:', profileError);
+      logger.error('❌ User profile not found:', profileError);
       return NextResponse.redirect(
         new URL('/admin/integrations/blog-writer?error=user_not_found', request.url)
       );
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (stateError || !oauthState) {
-      console.error('❌ Invalid or expired OAuth state:', stateError);
+      logger.error('❌ Invalid or expired OAuth state:', stateError);
       await integrationLogger.log({
         org_id: userProfile.org_id,
         user_id: user.id,
@@ -244,7 +245,7 @@ export async function GET(request: NextRequest) {
           }
         }
       } catch (dbError: any) {
-        console.error('❌ Database error storing OAuth tokens:', dbError);
+        logger.error('❌ Database error storing OAuth tokens:', dbError);
         
         if (logId) {
           await integrationLogger.updateLog(logId, {
@@ -287,7 +288,7 @@ export async function GET(request: NextRequest) {
     }
 
   } catch (error: any) {
-    console.error('❌ Error in Webflow OAuth callback:', error);
+    logger.error('❌ Error in Webflow OAuth callback:', error);
     return NextResponse.redirect(
       new URL(`/admin/integrations/blog-writer?error=oauth_callback_error&error_description=${encodeURIComponent(error.message)}`, request.url)
     );

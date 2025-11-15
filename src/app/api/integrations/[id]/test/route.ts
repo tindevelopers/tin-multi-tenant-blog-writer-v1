@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import { integrationLogger } from '@/lib/integrations/logging/integration-logger';
 import { testWebflowConnection, autoDetectWebflowSiteId } from '@/lib/integrations/webflow-api';
+import { logger } from '@/utils/logger';
 
 /**
  * POST /api/integrations/[id]/test
@@ -87,7 +88,7 @@ export async function POST(
         // Auto-detect site_id if not provided
         let siteId = connection.site_id;
         if (!siteId) {
-          console.log('🔍 Auto-detecting Webflow Site ID for connection test...');
+          logger.debug('🔍 Auto-detecting Webflow Site ID for connection test...');
           siteId = await autoDetectWebflowSiteId(
             apiKey as string,
             connection.collection_id as string | undefined
@@ -101,7 +102,7 @@ export async function POST(
               { connection: updatedConnection as any },
               userProfile.org_id
             );
-            console.log(`✅ Auto-detected and saved Site ID: ${siteId}`);
+            logger.debug(`✅ Auto-detected and saved Site ID: ${siteId}`);
           }
         }
 
@@ -230,7 +231,7 @@ export async function POST(
     });
 
   } catch (error) {
-    console.error('Error testing integration:', error);
+    logger.error('Error testing integration:', error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to test integration' },
       { status: 500 }
