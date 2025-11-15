@@ -194,8 +194,8 @@ export function AdvancedFilters({
                           updateFilter(index, {
                             value: [
                               Number(e.target.value),
-                              Array.isArray(filter.value) ? filter.value[1] : Number(e.target.value),
-                            ],
+                              Array.isArray(filter.value) ? Number(filter.value[1]) : Number(e.target.value),
+                            ] as [number, number],
                           })
                         }
                         className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -207,9 +207,9 @@ export function AdvancedFilters({
                         onChange={(e) =>
                           updateFilter(index, {
                             value: [
-                              Array.isArray(filter.value) ? filter.value[0] : 0,
+                              Array.isArray(filter.value) ? Number(filter.value[0]) : 0,
                               Number(e.target.value),
-                            ],
+                            ] as [number, number],
                           })
                         }
                         className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
