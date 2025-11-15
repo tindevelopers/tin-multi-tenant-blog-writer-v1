@@ -8,8 +8,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import {
 import { logger } from '@/utils/logger';
+import {
   CheckCircleIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
