@@ -58,6 +58,16 @@ interface BlogGenerationResult {
   word_count?: number;
   suggestions?: string[];
   quality_scores?: unknown;
+  // v1.3.2: Internal links and generated images
+  internal_links?: Array<{
+    anchor_text: string;
+    url: string;
+  }>;
+  generated_images?: Array<{
+    type: string;
+    image_url: string;
+    alt_text: string;
+  }>;
 }
 
 interface BrandVoice {
