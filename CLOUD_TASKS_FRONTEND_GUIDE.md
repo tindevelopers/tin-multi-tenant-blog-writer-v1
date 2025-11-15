@@ -187,76 +187,44 @@ interface JobStatusResponse {
 - `quality_scoring`
 - `finalization`
 
+## Production-Ready Frontend Code
+
+**✅ Complete implementation files available in `frontend-examples/` directory**
+
+We've created production-ready code that you can copy directly into your frontend project:
+
+- **`useAsyncBlogGeneration.ts`** - React hook with automatic polling
+- **`BlogGenerationProgress.tsx`** - Progress UI component
+- **`blogPollingUtility.ts`** - Framework-agnostic utility (works with React, Vue, Angular, vanilla JS)
+- **`README.md`** - Complete documentation and examples
+
+**See the `frontend-examples/` directory for all files.**
+
 ## React Hook Example
 
+**✅ Production-ready code available in `frontend-examples/useAsyncBlogGeneration.ts`**
+
+A complete React hook with automatic polling, progress tracking, error handling, and cleanup:
+
 ```typescript
-import { useState, useEffect } from 'react';
+import { useAsyncBlogGeneration } from './frontend-examples/useAsyncBlogGeneration';
+import { BlogGenerationProgress } from './frontend-examples/BlogGenerationProgress';
 
-interface UseAsyncBlogGeneration {
-  jobId: string | null;
-  status: string | null;
-  progress: number;
-  result: any | null;
-  error: string | null;
-  createJob: (request: any) => Promise<void>;
-}
-
-export function useAsyncBlogGeneration(): UseAsyncBlogGeneration {
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<any | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const createJob = async (request: any) => {
-    try {
-      const response = await fetch('/api/v1/blog/generate-enhanced?async_mode=true', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
-      
-      const data = await response.json();
-      setJobId(data.job_id);
-      setStatus(data.status);
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  useEffect(() => {
-    if (!jobId) return;
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const response = await fetch(`/api/v1/blog/jobs/${jobId}`);
-        const data = await response.json();
-        
-        setStatus(data.status);
-        setProgress(data.progress_percentage);
-        
-        if (data.status === 'completed') {
-          setResult(data.result);
-          clearInterval(pollInterval);
-        } else if (data.status === 'failed') {
-          setError(data.error_message);
-          clearInterval(pollInterval);
-        }
-      } catch (err: any) {
-        setError(err.message);
-        clearInterval(pollInterval);
-      }
-    }, 5000); // Poll every 5 seconds
-
-    return () => clearInterval(pollInterval);
-  }, [jobId]);
-
-  return { jobId, status, progress, result, error, createJob };
-}
-
-// Usage:
 function BlogGenerator() {
-  const { jobId, status, progress, result, error, createJob } = useAsyncBlogGeneration();
+  const {
+    jobId,
+    status,
+    progress,
+    currentStage,
+    estimatedTimeRemaining,
+    result,
+    error,
+    createJob,
+  } = useAsyncBlogGeneration({
+    onProgress: (status) => console.log(`${status.progress_percentage}%`),
+    onComplete: (result) => console.log('Completed:', result.title),
+    onError: (error) => console.error('Error:', error),
+  });
 
   const handleGenerate = async () => {
     await createJob({
@@ -272,26 +240,22 @@ function BlogGenerator() {
         <button onClick={handleGenerate}>Generate Blog</button>
       )}
       
-      {jobId && status !== 'completed' && (
-        <div>
-          <p>Status: {status}</p>
-          <progress value={progress} max={100} />
-          <p>{progress}% complete</p>
-        </div>
+      {jobId && (
+        <BlogGenerationProgress
+          status={status}
+          progress={progress}
+          currentStage={currentStage}
+          estimatedTimeRemaining={estimatedTimeRemaining}
+          error={error}
+          result={result}
+        />
       )}
-      
-      {result && (
-        <div>
-          <h1>{result.title}</h1>
-          <div dangerouslySetInnerHTML={{ __html: result.content }} />
-        </div>
-      )}
-      
-      {error && <p>Error: {error}</p>}
     </div>
   );
 }
 ```
+
+**See `frontend-examples/` directory for complete implementation.**
 
 ## Error Handling
 
@@ -437,6 +401,17 @@ For issues or questions:
 2. Check job status: `GET /api/v1/blog/jobs/{job_id}`
 3. Review error message in failed job response
 
+## Files for Frontend Team
+
+**See `FRONTEND_TEAM_FILES.md` for a complete list of files to copy to your frontend project.**
+
+### Quick File List:
+- ✅ `frontend-examples/useAsyncBlogGeneration.ts` - React hook
+- ✅ `frontend-examples/BlogGenerationProgress.tsx` - Progress UI component
+- ✅ `frontend-examples/blogPollingUtility.ts` - Framework-agnostic utility
+- ✅ `frontend-examples/README.md` - Quick start guide
+- ✅ `CLOUD_TASKS_FRONTEND_GUIDE.md` - This file (complete API reference)
+
 ## Changelog
 
 ### Version 1.3.0 (2025-11-15)
@@ -444,4 +419,5 @@ For issues or questions:
 - ✅ Added job status endpoint
 - ✅ Added progress tracking
 - ✅ Added worker endpoint for Cloud Tasks
+- ✅ Added production-ready frontend code examples
 

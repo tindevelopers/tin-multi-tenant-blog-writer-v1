@@ -194,6 +194,10 @@ export async function POST(request: NextRequest) {
   try {
     logger.debug('🚀 Blog generation API route called');
     
+    // Check for async_mode query parameter
+    const searchParams = request.nextUrl.searchParams;
+    const asyncMode = searchParams.get('async_mode') === 'true';
+    
     // Parse request body
     const body = await request.json();
     const { 
@@ -819,9 +823,15 @@ export async function POST(request: NextRequest) {
       has_enhanced_insights: !!requestPayload.enhanced_keyword_insights,
       has_content_goal: !!requestPayload.content_goal,
       system_prompt_length: systemPromptForLog.length,
+      async_mode: asyncMode,
     });
     
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    // Add async_mode query parameter if requested
+    const apiUrl = asyncMode 
+      ? `${API_BASE_URL}${endpoint}?async_mode=true`
+      : `${API_BASE_URL}${endpoint}`;
+    
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -859,6 +869,41 @@ export async function POST(request: NextRequest) {
     }
     
     const result = await response.json();
+    
+    // Handle async mode response (returns job_id instead of blog content)
+    if (asyncMode && result.job_id) {
+      logger.debug('✅ Async job created successfully', { job_id: result.job_id });
+      
+      // Update queue entry with job_id if queue exists
+      if (queueId) {
+        try {
+          await supabase
+            .from('blog_generation_queue')
+            .update({
+              status: 'queued',
+              metadata: {
+                backend_job_id: result.job_id,
+                estimated_completion_time: result.estimated_completion_time || null,
+                async_mode: true
+              },
+              generation_started_at: new Date().toISOString()
+            })
+            .eq('queue_id', queueId);
+        } catch (error) {
+          logger.warn('⚠️ Failed to update queue entry with job_id:', error);
+        }
+      }
+      
+      // Return async job response
+      return NextResponse.json({
+        job_id: result.job_id,
+        status: result.status || 'queued',
+        message: result.message || 'Blog generation job created',
+        estimated_completion_time: result.estimated_completion_time,
+        queue_id: queueId // Include our internal queue_id for tracking
+      });
+    }
+    
     logger.debug('✅ Blog generated successfully from external API');
     logger.debug('📄 Full API response structure:', {
       hasContent: !!result.content,

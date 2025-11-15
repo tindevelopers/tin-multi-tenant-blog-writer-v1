@@ -296,6 +296,123 @@ class BlogWriterAPI {
     }
   }
 
+  // Create async blog generation job
+  async createJob(params: {
+    topic: string;
+    keywords?: string[];
+    target_audience?: string;
+    tone?: string;
+    word_count?: number;
+    include_external_links?: boolean;
+    include_backlinks?: boolean;
+    backlink_count?: number;
+    quality_level?: string;
+    preset?: string;
+    preset_id?: string;
+    use_enhanced?: boolean;
+    content_goal?: string;
+    custom_instructions?: string;
+    template_type?: string;
+    length?: 'short' | 'medium' | 'long' | 'very_long';
+    use_google_search?: boolean;
+    use_fact_checking?: boolean;
+    use_citations?: boolean;
+    use_serp_optimization?: boolean;
+    use_consensus_generation?: boolean;
+    use_knowledge_graph?: boolean;
+    use_semantic_keywords?: boolean;
+    use_quality_scoring?: boolean;
+    include_product_research?: boolean;
+    include_brands?: boolean;
+    include_models?: boolean;
+    include_prices?: boolean;
+    include_features?: boolean;
+    include_reviews?: boolean;
+    include_pros_cons?: boolean;
+    include_product_table?: boolean;
+    include_comparison_section?: boolean;
+    include_buying_guide?: boolean;
+    include_faq_section?: boolean;
+    research_depth?: 'basic' | 'standard' | 'comprehensive';
+  }): Promise<{
+    job_id: string;
+    status: string;
+    message: string;
+    estimated_completion_time?: number;
+    queue_id?: string;
+  } | null> {
+    try {
+      logger.debug('Creating async blog generation job', { params });
+      
+      const response = await fetch('/api/blog-writer/generate?async_mode=true', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(params),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
+      }
+      
+      const result = await response.json();
+      logger.debug('Async job created successfully', { job_id: result.job_id });
+      return result;
+    } catch (error) {
+      logger.logError(error instanceof Error ? error : new Error('Failed to create async job'), {
+        endpoint: '/api/blog-writer/generate',
+        params
+      });
+      return null;
+    }
+  }
+
+  // Poll job status
+  async pollJobStatus(jobId: string): Promise<{
+    job_id: string;
+    status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed';
+    progress_percentage: number;
+    current_stage?: string;
+    created_at: string;
+    started_at?: string;
+    completed_at?: string;
+    result?: Record<string, unknown>;
+    error_message?: string;
+    estimated_time_remaining?: number;
+  } | null> {
+    try {
+      logger.debug('Polling job status', { job_id: jobId });
+      
+      const response = await fetch(`/api/blog-writer/jobs/${jobId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
+      }
+      
+      const result = await response.json();
+      logger.debug('Job status retrieved', { 
+        job_id: jobId,
+        status: result.status,
+        progress: result.progress_percentage 
+      });
+      return result;
+    } catch (error) {
+      logger.logError(error instanceof Error ? error : new Error('Failed to poll job status'), {
+        endpoint: `/api/blog-writer/jobs/${jobId}`,
+        job_id: jobId
+      });
+      return null;
+    }
+  }
+
   // Blog generation API with Cloud Run health check
   // Supports custom instructions and quality features per CLIENT_SIDE_PROMPT_GUIDE.md v1.3.0
   async generateBlog(params: {
@@ -725,6 +842,8 @@ export const {
   getDrafts,
   healthCheck,
   getDetailedHealth,
+  createJob,
+  pollJobStatus,
   generateBlog,
   getPresets,
   getQualityLevels,
