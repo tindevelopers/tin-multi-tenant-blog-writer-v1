@@ -33,7 +33,7 @@ export function InternalLinksDisplay({
   const normalizedLinks: InternalLink[] = internal_links.map(link => {
     if ('anchor_text' in link && 'url' in link) {
       return {
-        anchor_text: String(link.anchor_text || link.anchor || ''),
+        anchor_text: String(link.anchor_text || ''),
         url: String(link.url || '')
       };
     }
