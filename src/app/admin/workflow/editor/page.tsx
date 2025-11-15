@@ -386,8 +386,8 @@ export default function EditorPage() {
         }
 
         // Store full result for v1.3.1 feature displays
-        if (result && typeof result === 'object') {
-          setGenerationResult(result as EnhancedBlogResponse);
+        if (result && typeof result === 'object' && 'content' in result && 'title' in result) {
+          setGenerationResult(result as unknown as EnhancedBlogResponse);
         }
 
         setSuccess('Content generated successfully');
