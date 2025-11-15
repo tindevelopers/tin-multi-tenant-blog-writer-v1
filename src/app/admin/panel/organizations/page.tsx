@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import CreateOrganizationModal from "@/components/admin/CreateOrganizationModal";
 
 interface Organization {
-  id: string;
+  org_id: string;
   name: string;
   slug: string;
   created_at: string;
@@ -16,11 +18,15 @@ interface Organization {
 }
 
 export default function OrganizationsManagementPage() {
+  const router = useRouter();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedOrgs, setSelectedOrgs] = useState<Set<string>>(new Set());
   const [userRole, setUserRole] = useState<string>("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deletingOrgId, setDeletingOrgId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -44,16 +50,46 @@ export default function OrganizationsManagementPage() {
     // Fetch organizations
     const fetchOrganizations = async () => {
       try {
-        const { data, error } = await supabase
+        // Fetch organizations
+        const { data: orgsData, error: orgsError } = await supabase
           .from("organizations")
-          .select(`
-            *,
-            _count:users(count)
-          `)
+          .select("*")
           .order("created_at", { ascending: false });
 
-        if (error) throw error;
-        setOrganizations(data || []);
+        if (orgsError) throw orgsError;
+
+        // Fetch user counts per organization
+        const { data: usersData, error: usersError } = await supabase
+          .from("users")
+          .select("org_id");
+
+        if (usersError) {
+          console.error("Error fetching user counts:", usersError);
+          // Still set organizations even if user count fails
+          setOrganizations(orgsData || []);
+          setLoading(false);
+          return;
+        }
+
+        // Count users per organization
+        const userCounts: Record<string, number> = {};
+        if (usersData) {
+          usersData.forEach((user) => {
+            if (user.org_id) {
+              userCounts[user.org_id] = (userCounts[user.org_id] || 0) + 1;
+            }
+          });
+        }
+
+        // Merge user counts with organizations
+        const organizationsWithCounts = (orgsData || []).map((org) => ({
+          ...org,
+          _count: {
+            users: userCounts[org.org_id] || 0,
+          },
+        }));
+
+        setOrganizations(organizationsWithCounts);
       } catch (error) {
         console.error("Error fetching organizations:", error);
       } finally {
@@ -80,7 +116,7 @@ export default function OrganizationsManagementPage() {
     if (selectedOrgs.size === filteredOrganizations.length) {
       setSelectedOrgs(new Set());
     } else {
-      setSelectedOrgs(new Set(filteredOrganizations.map(org => org.id)));
+      setSelectedOrgs(new Set(filteredOrganizations.map(org => org.org_id)));
     }
   };
 
@@ -91,10 +127,165 @@ export default function OrganizationsManagementPage() {
 
   const canManageOrgs = ["system_admin", "super_admin"].includes(userRole);
 
+  // Redirect organization admins - they shouldn't access this page
+  useEffect(() => {
+    if (userRole && !canManageOrgs) {
+      router.push("/admin/panel");
+    }
+  }, [userRole, canManageOrgs, router]);
+
+  const handleCreateSuccess = () => {
+    // Refresh organizations list
+    const fetchOrganizations = async () => {
+      try {
+        const supabase = createClient();
+        
+        // Fetch organizations
+        const { data: orgsData, error: orgsError } = await supabase
+          .from("organizations")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (orgsError) throw orgsError;
+
+        // Fetch user counts per organization
+        const { data: usersData, error: usersError } = await supabase
+          .from("users")
+          .select("org_id");
+
+        if (!usersError && usersData) {
+          // Count users per organization
+          const userCounts: Record<string, number> = {};
+          usersData.forEach((user) => {
+            if (user.org_id) {
+              userCounts[user.org_id] = (userCounts[user.org_id] || 0) + 1;
+            }
+          });
+
+          // Merge user counts with organizations
+          const organizationsWithCounts = (orgsData || []).map((org) => ({
+            ...org,
+            _count: {
+              users: userCounts[org.org_id] || 0,
+            },
+          }));
+
+          setOrganizations(organizationsWithCounts);
+        } else {
+          // If user count fails, just set organizations without counts
+          setOrganizations(orgsData || []);
+        }
+      } catch (error) {
+        console.error("Error fetching organizations:", error);
+      }
+    };
+    fetchOrganizations();
+  };
+
+  const handleDeleteClick = (orgId: string) => {
+    setDeletingOrgId(orgId);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingOrgId) return;
+
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        alert("Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`/api/admin/organizations/${deletingOrgId}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete organization");
+      }
+
+      // Refresh organizations list
+      const { data: orgsData, error: orgsError } = await supabase
+        .from("organizations")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (orgsError) {
+        throw new Error(orgsError.message);
+      }
+
+      // Fetch user counts per organization
+      const { data: usersData, error: usersError } = await supabase
+        .from("users")
+        .select("org_id");
+
+      if (!usersError && usersData && orgsData) {
+        // Count users per organization
+        const userCounts: Record<string, number> = {};
+        usersData.forEach((user) => {
+          if (user.org_id) {
+            userCounts[user.org_id] = (userCounts[user.org_id] || 0) + 1;
+          }
+        });
+
+        // Merge user counts with organizations
+        const organizationsWithCounts = orgsData.map((org) => ({
+          ...org,
+          _count: {
+            users: userCounts[org.org_id] || 0,
+          },
+        }));
+
+        setOrganizations(organizationsWithCounts);
+      } else {
+        // If user count fails, just set organizations without counts
+        setOrganizations(orgsData || []);
+      }
+
+      setShowDeleteConfirm(false);
+      setDeletingOrgId(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete organization");
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+    setDeletingOrgId(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-brand-600"></div>
+      </div>
+    );
+  }
+
+  // Show access denied if not system/super admin
+  if (userRole && !canManageOrgs) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">Access Denied</h3>
+          <p className="text-red-700 dark:text-red-300">
+            You do not have permission to access organization management. Only system administrators can manage organizations.
+          </p>
+          <button
+            onClick={() => router.push("/admin/panel")}
+            className="mt-4 px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700"
+          >
+            Back to Dashboard
+          </button>
+        </div>
       </div>
     );
   }
@@ -113,7 +304,10 @@ export default function OrganizationsManagementPage() {
             </p>
           </div>
           {canManageOrgs && (
-            <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
+            <button 
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+            >
               Create Organization
             </button>
           )}
@@ -266,13 +460,13 @@ export default function OrganizationsManagementPage() {
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
               {filteredOrganizations.map((org) => (
-                <tr key={org.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr key={org.org_id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   {canManageOrgs && (
                     <td className="px-6 py-4 whitespace-nowrap">
                       <input
                         type="checkbox"
-                        checked={selectedOrgs.has(org.id)}
-                        onChange={() => handleOrgSelection(org.id)}
+                        checked={selectedOrgs.has(org.org_id)}
+                        onChange={() => handleOrgSelection(org.org_id)}
                         className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                       />
                     </td>
@@ -298,13 +492,22 @@ export default function OrganizationsManagementPage() {
                   {canManageOrgs && (
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
-                        <button className="text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300">
+                        <button 
+                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id}/edit`)}
+                          className="text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+                        >
                           Edit
                         </button>
-                        <button className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300">
+                        <button 
+                          onClick={() => router.push(`/admin/panel/organizations/${org.org_id}/settings`)}
+                          className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
                           Settings
                         </button>
-                        <button className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                        <button 
+                          onClick={() => handleDeleteClick(org.org_id)}
+                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        >
                           Delete
                         </button>
                       </div>
@@ -328,6 +531,45 @@ export default function OrganizationsManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Create Organization Modal */}
+      <CreateOrganizationModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onSuccess={handleCreateSuccess}
+      />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deletingOrgId && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleDeleteCancel} />
+            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Delete Organization
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                Are you sure you want to delete this organization? This action cannot be undone. 
+                The organization must have no users before it can be deleted.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleDeleteCancel}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

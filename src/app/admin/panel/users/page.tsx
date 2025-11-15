@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import RoleBadge from "@/components/ui/RoleBadge";
+import AddUserModal from "@/components/admin/AddUserModal";
 
 interface User {
   user_id: string;
@@ -17,12 +19,15 @@ interface User {
 }
 
 export default function UsersManagementPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
   const [userRole, setUserRole] = useState<string>("");
+  const [userOrgId, setUserOrgId] = useState<string>("");
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
 
   const roles = [
     { value: "all", label: "All Roles" },
@@ -37,17 +42,18 @@ export default function UsersManagementPage() {
   useEffect(() => {
     const supabase = createClient();
     
-    // Get current user role
+    // Get current user role and organization
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase
           .from("users")
-          .select("role")
+          .select("role, org_id")
           .eq("user_id", user.id)
           .single()
           .then(({ data }) => {
             if (data) {
               setUserRole(data.role);
+              setUserOrgId(data.org_id);
             }
           });
       }
@@ -56,10 +62,35 @@ export default function UsersManagementPage() {
     // Fetch users
     const fetchUsers = async () => {
       try {
-        const { data, error } = await supabase
+        // Get current user's org_id first
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser) {
+          setLoading(false);
+          return;
+        }
+
+        const { data: currentUserData } = await supabase
           .from("users")
-          .select("*, organizations(*)")
-          .order("created_at", { ascending: false });
+          .select("role, org_id")
+          .eq("user_id", currentUser.id)
+          .single();
+
+        if (!currentUserData) {
+          setLoading(false);
+          return;
+        }
+
+        // Build query based on role
+        let query = supabase
+          .from("users")
+          .select("*, organizations(*)");
+
+        // Organization admins can only see users from their own organization
+        if (!["system_admin", "super_admin"].includes(currentUserData.role)) {
+          query = query.eq("org_id", currentUserData.org_id);
+        }
+
+        const { data, error } = await query.order("created_at", { ascending: false });
 
         if (error) throw error;
         setUsers(data || []);
@@ -122,7 +153,7 @@ export default function UsersManagementPage() {
   });
 
   const canEditRoles = ["system_admin", "super_admin"].includes(userRole);
-  const canViewAllUsers = ["system_admin", "super_admin", "admin"].includes(userRole);
+  const canAddUsers = ["system_admin", "super_admin", "admin"].includes(userRole);
 
   if (loading) {
     return (
@@ -145,9 +176,14 @@ export default function UsersManagementPage() {
               Manage user accounts, roles, and permissions
             </p>
           </div>
-          <button className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors">
-            Add User
-          </button>
+          {canAddUsers && (
+            <button 
+              onClick={() => setShowAddUserModal(true)}
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              Add User
+            </button>
+          )}
         </div>
       </div>
 
@@ -311,6 +347,40 @@ export default function UsersManagementPage() {
           </div>
         )}
       </div>
+
+      {/* Add User Modal */}
+      <AddUserModal
+        isOpen={showAddUserModal}
+        onClose={() => setShowAddUserModal(false)}
+        onSuccess={async () => {
+          // Refresh users list
+          const supabase = createClient();
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (!currentUser) return;
+
+          const { data: currentUserData } = await supabase
+            .from("users")
+            .select("role, org_id")
+            .eq("user_id", currentUser.id)
+            .single();
+
+          if (!currentUserData) return;
+
+          let query = supabase
+            .from("users")
+            .select("*, organizations(*)");
+
+          // Organization admins can only see users from their own organization
+          if (!["system_admin", "super_admin"].includes(currentUserData.role)) {
+            query = query.eq("org_id", currentUserData.org_id);
+          }
+
+          const { data, error } = await query.order("created_at", { ascending: false });
+          if (!error && data) {
+            setUsers(data);
+          }
+        }}
+      />
     </div>
   );
 }

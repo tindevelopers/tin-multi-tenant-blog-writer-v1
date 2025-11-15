@@ -12,6 +12,7 @@ import {
   ContentIdea
 } from '@/lib/content-ideas';
 import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
 
 export interface UseContentIdeasResult {
   // State
@@ -60,7 +61,7 @@ export function useContentIdeas(): UseContentIdeasResult {
       ];
       setContentIdeas(allIdeas);
 
-      console.log('✅ Generated content ideas:', {
+      logger.debug('✅ Generated content ideas:', {
         pillar: result.pillar_ideas.length,
         supporting: result.supporting_ideas.length,
         longTail: result.long_tail_ideas.length,
@@ -69,7 +70,7 @@ export function useContentIdeas(): UseContentIdeasResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate content ideas';
       setError(errorMessage);
-      console.error('Content ideas generation error:', err);
+      logger.error('Content ideas generation error:', err);
     } finally {
       setLoading(false);
     }
@@ -142,7 +143,7 @@ export function useContentIdeas(): UseContentIdeasResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load clusters';
       setError(errorMessage);
-      console.error('Load clusters error:', err);
+      logger.error('Load clusters error:', err);
     } finally {
       setLoading(false);
     }
@@ -161,7 +162,7 @@ export function useContentIdeas(): UseContentIdeasResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load content ideas';
       setError(errorMessage);
-      console.error('Load content ideas error:', err);
+      logger.error('Load content ideas error:', err);
     } finally {
       setLoading(false);
     }

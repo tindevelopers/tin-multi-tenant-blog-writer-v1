@@ -32,63 +32,93 @@ export default function AdminPanelDashboard() {
   useEffect(() => {
     const supabase = createClient();
     
-    // Get current user role
+    // Get current user role and organization
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase
           .from("users")
-          .select("role")
+          .select("role, org_id")
           .eq("user_id", user.id)
           .single()
           .then(({ data }) => {
             if (data) {
               setUserRole(data.role);
+              
+              // Fetch stats based on role
+              fetchStats(data.role, data.org_id, supabase);
             }
           });
       }
     });
-
-    // Mock data for now - in real app, fetch from database
-    setTimeout(() => {
-      setStats({
-        totalUsers: 156,
-        totalOrganizations: 23,
-        activeIntegrations: 8,
-        totalApiCalls: 12450,
-        recentActivity: [
-          {
-            id: "1",
-            type: "user",
-            description: "New user registered: john@example.com",
-            timestamp: new Date().toISOString(),
-            user: "System"
-          },
-          {
-            id: "2",
-            type: "organization",
-            description: "Organization 'Tech Corp' created",
-            timestamp: new Date(Date.now() - 3600000).toISOString(),
-            user: "admin@techcorp.com"
-          },
-          {
-            id: "3",
-            type: "integration",
-            description: "WordPress integration activated",
-            timestamp: new Date(Date.now() - 7200000).toISOString(),
-            user: "manager@blogco.com"
-          },
-          {
-            id: "4",
-            type: "system",
-            description: "System backup completed successfully",
-            timestamp: new Date(Date.now() - 10800000).toISOString(),
-            user: "System"
-          }
-        ]
-      });
-      setLoading(false);
-    }, 1000);
   }, []);
+
+  const fetchStats = async (role: string, orgId: string, supabase: ReturnType<typeof createClient>) => {
+    try {
+      if (["system_admin", "super_admin"].includes(role)) {
+        // System admins see all stats
+        const [usersResult, orgsResult, integrationsResult] = await Promise.all([
+          supabase.from("users").select("user_id", { count: "exact", head: true }),
+          supabase.from("organizations").select("org_id", { count: "exact", head: true }),
+          supabase.from("integrations_development").select("integration_id", { count: "exact", head: true }),
+        ]);
+
+        setStats({
+          totalUsers: usersResult.count || 0,
+          totalOrganizations: orgsResult.count || 0,
+          activeIntegrations: integrationsResult.count || 0,
+          totalApiCalls: 12450, // TODO: Fetch from API logs
+          recentActivity: [
+            {
+              id: "1",
+              type: "user",
+              description: "New user registered: john@example.com",
+              timestamp: new Date().toISOString(),
+              user: "System"
+            },
+            {
+              id: "2",
+              type: "organization",
+              description: "Organization 'Tech Corp' created",
+              timestamp: new Date(Date.now() - 3600000).toISOString(),
+              user: "admin@techcorp.com"
+            },
+            {
+              id: "3",
+              type: "integration",
+              description: "WordPress integration activated",
+              timestamp: new Date(Date.now() - 7200000).toISOString(),
+              user: "manager@blogco.com"
+            },
+            {
+              id: "4",
+              type: "system",
+              description: "System backup completed successfully",
+              timestamp: new Date(Date.now() - 10800000).toISOString(),
+              user: "System"
+            }
+          ]
+        });
+      } else {
+        // Organization admins see only their organization's stats
+        const [usersResult, integrationsResult] = await Promise.all([
+          supabase.from("users").select("user_id", { count: "exact", head: true }).eq("org_id", orgId),
+          supabase.from("integrations_development").select("integration_id", { count: "exact", head: true }).eq("org_id", orgId),
+        ]);
+
+        setStats({
+          totalUsers: usersResult.count || 0,
+          totalOrganizations: 1, // They only see their own org
+          activeIntegrations: integrationsResult.count || 0,
+          totalApiCalls: 0, // TODO: Fetch from API logs filtered by org
+          recentActivity: [] // TODO: Fetch org-specific activity
+        });
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      setLoading(false);
+    }
+  };
 
   const getRoleBasedFeatures = () => {
     switch (userRole) {

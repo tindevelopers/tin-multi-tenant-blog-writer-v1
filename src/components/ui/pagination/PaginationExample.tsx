@@ -4,10 +4,11 @@ import PaginationWithText from "@/components/ui/pagination/PaginationWithText";
 import PaginationWithTextWithIcon from "@/components/ui/pagination/PaginationWithTextWitIcon";
 import PaginationWithIcon from "@/components/ui/pagination/PaginationWitIcon";
 import ComponentCard from "@/components/common/ComponentCard";
+import { logger } from '@/utils/logger';
 
 export default function PaginationExample() {
   const handlePageChange = (page: number) => {
-    console.log(`Page changed to ${page}`);
+    logger.debug(`Page changed to ${page}`);
     // Here you would typically fetch data for the new page
   };
   return (

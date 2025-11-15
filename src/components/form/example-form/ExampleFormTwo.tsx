@@ -9,13 +9,14 @@ import Radio from "../input/Radio";
 import Form from "../Form";
 import Button from "../../ui/button/Button";
 import DatePicker from "@/components/form/date-picker";
+import { logger } from '@/utils/logger';
 
 export default function ExampleFormTwo() {
   const [selectedOption, setSelectedOption] = useState<string>("Free");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form submitted:");
+    logger.debug("Form submitted:");
   };
 
   const optionsGender = [
@@ -34,12 +35,12 @@ export default function ExampleFormTwo() {
     { value: "canada", label: "Canada" },
   ];
   const handleSelectGender = (value: string) => {
-    console.log("Selected value:", value);
+    logger.debug("Selected value:", value);
   };
 
   const handleRadioChange = (value: string) => {
     setSelectedOption(value);
-    console.log("Selected:", value);
+    logger.debug("Selected:", value);
   };
 
   return (
@@ -77,7 +78,7 @@ export default function ExampleFormTwo() {
               placeholder="Select an option"
               onChange={(dates, currentDateString) => {
                 // Handle your logic
-                console.log({ dates, currentDateString });
+                logger.debug('Date range changed', { dates, currentDateString });
               }}
             />
           </div>

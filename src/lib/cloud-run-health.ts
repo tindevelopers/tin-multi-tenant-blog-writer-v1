@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 interface CloudRunHealthStatus {
   isHealthy: boolean;
   isWakingUp: boolean;
@@ -18,62 +19,89 @@ class CloudRunHealthManager {
 
   /**
    * Wake up the Cloud Run instance and wait for it to be healthy
+   * Note: CORS readiness is tested by actual API calls in keyword-research.ts retry logic
    */
   async wakeUpAndWait(): Promise<CloudRunHealthStatus> {
-    console.log('🌅 Starting Cloud Run wake-up process...');
+    logger.debug('🌅 Starting Cloud Run wake-up process...');
     
     let attempts = 0;
     let lastError: string | undefined;
+    const maxAttempts = 10; // More attempts for cold starts
+    const baseDelay = 2000; // Start with 2 seconds
 
-    while (attempts < this.maxWakeupAttempts) {
+    // Determine if we're running client-side or server-side
+    const isServerSide = typeof window === 'undefined';
+    const healthCheckUrl = isServerSide 
+      ? `${this.baseURL}/health` // Direct Cloud Run health check on server
+      : '/api/cloud-run/health'; // Use API route on client to avoid CORS
+
+    while (attempts < maxAttempts) {
       attempts++;
-      console.log(`🔄 Wake-up attempt ${attempts}/${this.maxWakeupAttempts}`);
+      logger.debug(`🔄 Wake-up attempt ${attempts}/${maxAttempts}`);
 
       try {
-        // Try to wake up the instance with a simple request
-        const response = await fetch(`${this.baseURL}/health`, {
+        // Check health - use direct URL on server, API route on client
+        const healthResponse = await fetch(healthCheckUrl, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
           },
-          // Add timeout to prevent hanging
           signal: AbortSignal.timeout(10000),
         });
 
-        if (response.ok) {
-          const healthData = await response.json();
-          console.log('✅ Cloud Run is awake and healthy:', healthData);
-          
-          // Wait a bit more to ensure it's fully ready
-          console.log(`⏳ Waiting ${this.healthCheckDelay/1000} seconds for full readiness...`);
-          await new Promise(resolve => setTimeout(resolve, this.healthCheckDelay));
-          
-          // Final health check
-          const finalHealth = await this.checkHealth();
-          if (finalHealth.isHealthy) {
-            return {
-              isHealthy: true,
-              isWakingUp: false,
-              lastChecked: new Date(),
-              attempts,
-            };
-          }
+        let healthData: any;
+        if (isServerSide) {
+          // Server-side: Cloud Run returns { status: 'healthy', ... }
+          const rawData = await healthResponse.json();
+          healthData = {
+            isHealthy: rawData.status === 'healthy',
+            isWakingUp: false,
+            error: rawData.status !== 'healthy' ? 'Service not healthy' : undefined,
+          };
+        } else {
+          // Client-side: API route returns { isHealthy, isWakingUp, ... }
+          healthData = await healthResponse.json();
         }
+
+        if (healthData.isHealthy) {
+          logger.debug('✅ Cloud Run health check passed - service is ready');
+          return {
+            isHealthy: true,
+            isWakingUp: false,
+            lastChecked: new Date(),
+            attempts,
+          };
+        } else if (healthData.isWakingUp) {
+          lastError = healthData.error || 'Cloud Run is starting up...';
+          logger.debug(`⏳ Cloud Run is starting up...`);
+        } else {
+          lastError = healthData.error || 'Cloud Run is not available';
+        }
+
+        // Calculate exponential backoff delay
+        const delay = Math.min(baseDelay * Math.pow(1.5, attempts - 1), 10000); // Max 10 seconds
+        logger.debug(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         lastError = errorMessage;
-        console.warn(`⚠️ Wake-up attempt ${attempts} failed:`, errorMessage);
+        logger.warn(`⚠️ Wake-up attempt ${attempts} failed:`, errorMessage);
         
-        if (attempts < this.maxWakeupAttempts) {
-          console.log(`⏳ Waiting ${this.wakeupDelay/1000} seconds before retry...`);
-          await new Promise(resolve => setTimeout(resolve, this.wakeupDelay));
+        if (attempts < maxAttempts) {
+          const delay = Math.min(baseDelay * Math.pow(1.5, attempts - 1), 10000);
+          logger.debug(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
     }
 
+    // If we've exhausted attempts, still mark as waking up if it was a startup issue
+    const isStillWakingUp = Boolean(lastError?.includes('starting up') || lastError?.includes('CORS'));
+
     return {
       isHealthy: false,
-      isWakingUp: false,
+      isWakingUp: isStillWakingUp,
       lastChecked: new Date(),
       attempts,
       error: lastError || 'Failed to wake up Cloud Run instance',
@@ -82,10 +110,17 @@ class CloudRunHealthManager {
 
   /**
    * Check if the Cloud Run instance is healthy
+   * Uses API route on client to avoid CORS issues, direct URL on server
    */
   async checkHealth(): Promise<CloudRunHealthStatus> {
     try {
-      const response = await fetch(`${this.baseURL}/health`, {
+      // Determine if we're running client-side or server-side
+      const isServerSide = typeof window === 'undefined';
+      const healthCheckUrl = isServerSide 
+        ? `${this.baseURL}/health` // Direct Cloud Run health check on server
+        : '/api/cloud-run/health'; // Use API route on client to avoid CORS
+
+      const response = await fetch(healthCheckUrl, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -93,32 +128,37 @@ class CloudRunHealthManager {
         signal: AbortSignal.timeout(5000), // 5 second timeout for health check
       });
 
-      if (response.ok) {
-        return {
-          isHealthy: true,
+      let data: any;
+      if (isServerSide) {
+        // Server-side: Cloud Run returns { status: 'healthy', ... }
+        const rawData = await response.json();
+        data = {
+          isHealthy: rawData.status === 'healthy',
           isWakingUp: false,
-          lastChecked: new Date(),
-          attempts: 0,
+          error: rawData.status !== 'healthy' ? 'Service not healthy' : undefined,
         };
       } else {
-        return {
-          isHealthy: false,
-          isWakingUp: false,
-          lastChecked: new Date(),
-          attempts: 0,
-          error: `Health check failed with status ${response.status}`,
-        };
+        // Client-side: API route returns { isHealthy, isWakingUp, ... }
+        data = await response.json();
       }
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        return {
-          isHealthy: false,
-          isWakingUp: false,
-          lastChecked: new Date(),
-          attempts: 0,
-          error: errorMessage,
-        };
-      }
+
+      return {
+        isHealthy: data.isHealthy === true,
+        isWakingUp: data.isWakingUp === true,
+        lastChecked: new Date(),
+        attempts: 0,
+        error: data.error || undefined,
+      };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        isHealthy: false,
+        isWakingUp: false,
+        lastChecked: new Date(),
+        attempts: 0,
+        error: errorMessage,
+      };
+    }
   }
 
   /**
@@ -139,7 +179,7 @@ class CloudRunHealthManager {
       }
       return null;
     } catch (error) {
-      console.error('Failed to get detailed health:', error);
+      logger.error('Failed to get detailed health:', error);
       return null;
     }
   }
@@ -159,7 +199,7 @@ class CloudRunHealthManager {
 
       return response.ok;
     } catch (error) {
-      console.error(`Test endpoint ${endpoint} failed:`, error);
+      logger.error(`Test endpoint ${endpoint} failed:`, error);
       return false;
     }
   }

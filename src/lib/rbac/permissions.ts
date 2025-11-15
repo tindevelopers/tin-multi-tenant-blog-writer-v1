@@ -5,6 +5,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createClientClient } from '@/lib/supabase/client';
 import { UserRole, PermissionName, ROLE_LEVELS } from './types';
+import { logger } from '@/utils/logger';
 
 /**
  * Check if a user has a specific permission (server-side)
@@ -23,13 +24,13 @@ export async function hasPermission(
       });
     
     if (error) {
-      console.error('Error checking permission:', error);
+      logger.error('Error checking permission:', error);
       return false;
     }
     
     return data === true;
   } catch (error) {
-    console.error('Error in hasPermission:', error);
+    logger.error('Error in hasPermission:', error);
     return false;
   }
 }
@@ -51,13 +52,13 @@ export async function hasPermissionClient(
       });
     
     if (error) {
-      console.error('Error checking permission:', error);
+      logger.error('Error checking permission:', error);
       return false;
     }
     
     return data === true;
   } catch (error) {
-    console.error('Error in hasPermissionClient:', error);
+    logger.error('Error in hasPermissionClient:', error);
     return false;
   }
 }
@@ -75,13 +76,13 @@ export async function getUserRoleLevel(userId: string): Promise<number> {
       });
     
     if (error) {
-      console.error('Error getting role level:', error);
+      logger.error('Error getting role level:', error);
       return 0;
     }
     
     return data || 0;
   } catch (error) {
-    console.error('Error in getUserRoleLevel:', error);
+    logger.error('Error in getUserRoleLevel:', error);
     return 0;
   }
 }
@@ -99,13 +100,13 @@ export async function getUserRoleLevelClient(userId: string): Promise<number> {
       });
     
     if (error) {
-      console.error('Error getting role level:', error);
+      logger.error('Error getting role level:', error);
       return 0;
     }
     
     return data || 0;
   } catch (error) {
-    console.error('Error in getUserRoleLevelClient:', error);
+    logger.error('Error in getUserRoleLevelClient:', error);
     return 0;
   }
 }
@@ -137,13 +138,13 @@ export async function getUserPermissions(userId: string): Promise<{
       });
     
     if (error) {
-      console.error('Error getting user permissions:', error);
+      logger.error('Error getting user permissions:', error);
       return [];
     }
     
     return data || [];
   } catch (error) {
-    console.error('Error in getUserPermissions:', error);
+    logger.error('Error in getUserPermissions:', error);
     return [];
   }
 }
@@ -165,13 +166,13 @@ export async function getUserPermissionsClient(userId: string): Promise<{
       });
     
     if (error) {
-      console.error('Error getting user permissions:', error);
+      logger.error('Error getting user permissions:', error);
       return [];
     }
     
     return data || [];
   } catch (error) {
-    console.error('Error in getUserPermissionsClient:', error);
+    logger.error('Error in getUserPermissionsClient:', error);
     return [];
   }
 }
@@ -235,7 +236,7 @@ export async function getCurrentUserRole(): Promise<UserRole | null> {
     
     return userProfile?.role as UserRole || null;
   } catch (error) {
-    console.error('Error getting current user role:', error);
+    logger.error('Error getting current user role:', error);
     return null;
   }
 }
@@ -278,7 +279,7 @@ export async function canManageUser(
     
     return managerLevel > targetLevel;
   } catch (error) {
-    console.error('Error in canManageUser:', error);
+    logger.error('Error in canManageUser:', error);
     return false;
   }
 }
@@ -317,7 +318,7 @@ export async function updateUserRole(
     
     return { success: true };
   } catch (error) {
-    console.error('Error updating user role:', error);
+    logger.error('Error updating user role:', error);
     return { success: false, error: 'Failed to update user role' };
   }
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SystemSettingsPage() {
+  const router = useRouter();
   const [settings, setSettings] = useState({
     siteName: "Blog Writer",
     siteDescription: "Multi-tenant blog writing platform",

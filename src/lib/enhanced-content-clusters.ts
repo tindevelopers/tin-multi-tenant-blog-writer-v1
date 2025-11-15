@@ -12,6 +12,7 @@
 import { createClient } from '@/lib/supabase/client';
 import type { BlogResearchResults, KeywordCluster, TitleSuggestion } from '@/lib/keyword-research';
 import type { ContentOutline } from '@/lib/content-ideas';
+import { logger } from '@/utils/logger';
 
 // =====================================================
 // Enhanced Types and Interfaces
@@ -182,7 +183,7 @@ export class EnhancedContentClustersService {
   ): Promise<ClusterGenerationResponse> {
     const { research_results, target_audience, industry, content_strategy, max_keywords_per_cluster = 25 } = request;
 
-    console.log('🔄 Generating enhanced clusters from research results...');
+    logger.debug('🔄 Generating enhanced clusters from research results...');
     
     // Extract keyword clusters from research
     const keywordClusters = research_results.keyword_analysis.cluster_groups;
@@ -252,7 +253,7 @@ export class EnhancedContentClustersService {
       recommendations,
     };
 
-    console.log('✅ Generated enhanced clusters:', {
+    logger.debug('✅ Generated enhanced clusters:', {
       clusters: response.clusters.length,
       articles: response.total_articles_generated,
       traffic_estimate: response.traffic_estimates,
@@ -315,7 +316,7 @@ export class EnhancedContentClustersService {
     // Enhanced content generation with better distribution
     const keywordCluster = cluster.keyword_clusters[0];
     if (!keywordCluster) {
-      console.warn('No keyword cluster found');
+      logger.warn('No keyword cluster found');
       return articles;
     }
 
@@ -1081,7 +1082,7 @@ export class EnhancedContentClustersService {
     articles: HumanReadableArticle[]
   ): Promise<{ success: boolean; cluster_ids?: string[]; error?: string }> {
     try {
-      console.log('🚀 Starting saveEnhancedClusters with:', {
+      logger.debug('🚀 Starting saveEnhancedClusters with:', {
         userId,
         userIdType: typeof userId,
         clustersCount: clusters.length,
@@ -1103,50 +1104,50 @@ export class EnhancedContentClustersService {
       
       // Validate input data
       if (!userId || typeof userId !== 'string') {
-        console.error('❌ Invalid userId:', userId);
+        logger.error('❌ Invalid userId:', userId);
         return { success: false, error: 'Invalid user ID' };
       }
       
       if (!clusters || clusters.length === 0) {
-        console.error('❌ No clusters to save');
+        logger.error('❌ No clusters to save');
         return { success: false, error: 'No clusters provided' };
       }
       
       if (!articles || articles.length === 0) {
-        console.error('❌ No articles to save');
+        logger.error('❌ No articles to save');
         return { success: false, error: 'No articles provided' };
       }
 
       const supabase = createClient();
-      console.log('🔧 Supabase client created successfully');
+      logger.debug('🔧 Supabase client created successfully');
       
       // Check user authentication
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      console.log('🔐 Authentication check:', {
+      logger.debug('🔐 Authentication check:', {
         user: user ? { id: user.id, email: user.email } : null,
         authError,
         authErrorExists: !!authError
       });
       
       if (authError || !user) {
-        console.error('❌ Authentication failed:', authError);
+        logger.error('❌ Authentication failed:', authError);
         return { success: false, error: 'User not authenticated' };
       }
       
       if (user.id !== userId) {
-        console.error('❌ User ID mismatch:', { providedUserId: userId, authenticatedUserId: user.id });
+        logger.error('❌ User ID mismatch:', { providedUserId: userId, authenticatedUserId: user.id });
         return { success: false, error: 'User ID mismatch' };
       }
 
       // Test table access before attempting insert
       try {
-        console.log('🔍 Testing table access...');
+        logger.debug('🔍 Testing table access...');
         const { data: testData, error: testError } = await supabase
           .from('content_clusters')
           .select('id')
           .limit(1);
         
-        console.log('🔍 Table access test result:', {
+        logger.debug('🔍 Table access test result:', {
           testData,
           testError,
           testErrorExists: !!testError,
@@ -1156,18 +1157,18 @@ export class EnhancedContentClustersService {
         });
         
         if (testError) {
-          console.error('❌ Table access test failed:', testError);
+          logger.error('❌ Table access test failed:', testError);
           return { success: false, error: `Table access failed: ${testError instanceof Error ? testError.message : 'Unknown error'}` };
         }
         
         // Also test the articles table
-        console.log('🔍 Testing cluster_content_ideas table access...');
+        logger.debug('🔍 Testing cluster_content_ideas table access...');
         const { data: ideasTestData, error: ideasTestError } = await supabase
           .from('cluster_content_ideas')
           .select('id')
           .limit(1);
         
-        console.log('🔍 Ideas table access test result:', {
+        logger.debug('🔍 Ideas table access test result:', {
           ideasTestData,
           ideasTestError,
           ideasTestErrorExists: !!ideasTestError,
@@ -1175,12 +1176,12 @@ export class EnhancedContentClustersService {
         });
         
         if (ideasTestError) {
-          console.error('❌ Ideas table access test failed:', ideasTestError);
+          logger.error('❌ Ideas table access test failed:', ideasTestError);
           return { success: false, error: `Ideas table access failed: ${ideasTestError instanceof Error ? ideasTestError.message : 'Unknown error'}` };
         }
         
       } catch (testException) {
-        console.error('❌ Exception during table access test:', {
+        logger.error('❌ Exception during table access test:', {
           testException,
           testExceptionMessage: testException instanceof Error ? testException.message : 'Unknown error',
           testExceptionStack: testException instanceof Error ? testException.stack : 'No stack trace',
@@ -1216,7 +1217,7 @@ export class EnhancedContentClustersService {
           content_strategy: cluster.content_strategy,
         };
 
-        console.log('🔍 Attempting to save cluster with data:', {
+        logger.debug('🔍 Attempting to save cluster with data:', {
           cluster_name: clusterInsertData.cluster_name,
           pillar_keyword: clusterInsertData.pillar_keyword,
           user_id: clusterInsertData.user_id,
@@ -1224,7 +1225,7 @@ export class EnhancedContentClustersService {
         });
 
         // Save cluster
-        console.log('🔍 About to insert cluster data into database...');
+        logger.debug('🔍 About to insert cluster data into database...');
         
         let clusterData: any = null;
         let clusterError: any = null;
@@ -1239,7 +1240,7 @@ export class EnhancedContentClustersService {
           clusterData = result.data;
           clusterError = result.error;
 
-          console.log('🔍 Database response:', { 
+          logger.debug('🔍 Database response:', { 
             clusterData, 
             clusterError,
             clusterDataExists: !!clusterData,
@@ -1248,7 +1249,7 @@ export class EnhancedContentClustersService {
             clusterErrorStringified: JSON.stringify(clusterError)
           });
         } catch (insertError) {
-          console.error('❌ Exception during cluster insert:', {
+          logger.error('❌ Exception during cluster insert:', {
             insertError,
             insertErrorType: typeof insertError,
             insertErrorMessage: insertError instanceof Error ? insertError.message : 'Unknown error',
@@ -1274,7 +1275,7 @@ export class EnhancedContentClustersService {
             data: clusterInsertData
           };
           
-          console.error('❌ Failed to save enhanced cluster - Full error details:', errorInfo);
+          logger.error('❌ Failed to save enhanced cluster - Full error details:', errorInfo);
           
           // Try to get a meaningful error message
           let errorMessage = 'Unknown database error';
@@ -1294,11 +1295,11 @@ export class EnhancedContentClustersService {
         }
 
         if (!clusterData) {
-          console.error('❌ No data returned from cluster insert, but no error either');
+          logger.error('❌ No data returned from cluster insert, but no error either');
           return { success: false, error: 'No data returned from database insert' };
         }
 
-        console.log('✅ Successfully saved cluster:', clusterData);
+        logger.debug('✅ Successfully saved cluster:', clusterData);
 
         clusterIds.push(clusterData.id);
 
@@ -1342,16 +1343,16 @@ export class EnhancedContentClustersService {
             .insert(articlesToInsert);
 
           if (articlesError) {
-            console.error('Failed to save enhanced articles:', articlesError);
+            logger.error('Failed to save enhanced articles:', articlesError);
             return { success: false, error: articlesError instanceof Error ? articlesError.message : 'Unknown error' };
           }
         }
       }
 
-      console.log('✅ Successfully saved enhanced clusters and articles');
+      logger.debug('✅ Successfully saved enhanced clusters and articles');
       return { success: true, cluster_ids: clusterIds };
     } catch (error: unknown) {
-      console.error('❌ Unexpected error in saveEnhancedClusters:', {
+      logger.error('❌ Unexpected error in saveEnhancedClusters:', {
         error,
         errorType: typeof error,
         errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -1378,13 +1379,13 @@ export class EnhancedContentClustersService {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Failed to fetch enhanced clusters:', error);
+        logger.error('Failed to fetch enhanced clusters:', error);
         return [];
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error fetching enhanced clusters:', error);
+      logger.error('Error fetching enhanced clusters:', error);
       return [];
     }
   }
@@ -1403,13 +1404,13 @@ export class EnhancedContentClustersService {
         .order('priority', { ascending: false });
 
       if (error) {
-        console.error('Failed to fetch enhanced articles:', error);
+        logger.error('Failed to fetch enhanced articles:', error);
         return [];
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error fetching enhanced articles:', error);
+      logger.error('Error fetching enhanced articles:', error);
       return [];
     }
   }

@@ -8,6 +8,7 @@ import {
   ArrowLeftIcon,
   CheckIcon
 } from "@heroicons/react/24/outline";
+import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 
 export default function EditDraftPage() {
   const router = useRouter();
@@ -168,36 +169,35 @@ export default function EditDraftPage() {
           <label htmlFor="content" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Content
           </label>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                Edit Content (Raw)
-              </label>
-              <textarea
-                id="content"
-                value={formData.content}
-                onChange={(e) => handleInputChange('content', e.target.value)}
-                rows={20}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-mono text-sm"
-                placeholder="Enter draft content..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                Preview
-              </label>
-              <div className="h-80 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700">
-                <div 
-                  className="text-gray-900 dark:text-white leading-relaxed text-sm"
-                  dangerouslySetInnerHTML={{ 
-                    __html: formData.content 
-                      ? formData.content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>')
-                      : '<p class="text-gray-500 italic">No content to preview</p>'
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+          <TipTapEditor
+            content={formData.content || ''}
+            onChange={(html) => handleInputChange('content', html)}
+            placeholder="Start writing your blog post..."
+            onImageUpload={async (file) => {
+              try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/images/upload', {
+                  method: 'POST',
+                  body: formData,
+                });
+
+                if (!response.ok) {
+                  const error = await response.json();
+                  throw new Error(error.error || 'Upload failed');
+                }
+
+                const result = await response.json();
+                return result.url;
+              } catch (error) {
+                console.error('Error uploading image:', error);
+                throw error;
+              }
+            }}
+            editable={true}
+            className="mt-2"
+          />
         </div>
 
         {/* Status */}

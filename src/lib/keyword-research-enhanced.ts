@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 /**
  * Enhanced Keyword Research Service
  * Integrates with Blog Writer API's keyword endpoints via Next.js API routes
@@ -118,7 +119,7 @@ export class EnhancedKeywordResearchService {
       
       return data;
     } catch (error) {
-      console.error('Error analyzing keywords:', error);
+      logger.error('Error analyzing keywords:', error);
       throw error;
     }
   }
@@ -144,7 +145,7 @@ export class EnhancedKeywordResearchService {
       const data = await response.json();
       return data;
     } catch (error) {
-      console.error('Error getting keyword suggestions:', error);
+      logger.error('Error getting keyword suggestions:', error);
       throw error;
     }
   }
@@ -176,7 +177,7 @@ export class EnhancedKeywordResearchService {
       const data = await response.json();
       return data.keywords || [];
     } catch (error) {
-      console.error('Error extracting keywords:', error);
+      logger.error('Error extracting keywords:', error);
       throw error;
     }
   }
@@ -228,7 +229,7 @@ export class EnhancedKeywordResearchService {
         suggestions,
       };
     } catch (error) {
-      console.error('Error in comprehensive research:', error);
+      logger.error('Error in comprehensive research:', error);
       throw error;
     }
   }

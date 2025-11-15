@@ -13,6 +13,7 @@ import {
 } from '@/lib/enhanced-content-clusters';
 import { createClient } from '@/lib/supabase/client';
 import type { BlogResearchResults } from '@/lib/keyword-research';
+import { logger } from '@/utils/logger';
 
 export interface UseEnhancedContentClustersResult {
   // State
@@ -50,7 +51,7 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
       setLoading(true);
       setError(null);
 
-      console.log('🔄 Generating enhanced clusters from research...', {
+      logger.debug('🔄 Generating enhanced clusters from research...', {
         keywords: request.research_results.keyword_analysis.cluster_groups.length,
         targetAudience: request.target_audience,
         industry: request.industry
@@ -67,7 +68,7 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
       });
       setArticles(allArticles);
 
-      console.log('✅ Generated enhanced clusters:', {
+      logger.debug('✅ Generated enhanced clusters:', {
         clusters: result.clusters.length,
         articles: result.total_articles_generated,
         trafficEstimate: result.traffic_estimates,
@@ -75,7 +76,7 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate enhanced clusters';
       setError(errorMessage);
-      console.error('Enhanced clusters generation error:', err);
+      logger.error('Enhanced clusters generation error:', err);
     } finally {
       setLoading(false);
     }
@@ -148,18 +149,18 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
         return;
       }
 
-      console.log('🔄 Loading user clusters...');
+      logger.debug('🔄 Loading user clusters...');
       const userClusters = await enhancedClustersService.getUserEnhancedClusters(user.id);
       setClusters(userClusters);
       
-      console.log('✅ Loaded user clusters:', {
+      logger.debug('✅ Loaded user clusters:', {
         count: userClusters.length,
         clusters: userClusters.map(c => ({ name: c.cluster_name, status: c.cluster_status }))
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load enhanced clusters';
       setError(errorMessage);
-      console.error('Load enhanced clusters error:', err);
+      logger.error('Load enhanced clusters error:', err);
     } finally {
       setLoading(false);
     }
@@ -173,11 +174,11 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
       setLoading(true);
       setError(null);
 
-      console.log('🔄 Loading cluster articles...', { clusterId });
+      logger.debug('🔄 Loading cluster articles...', { clusterId });
       const clusterArticles = await enhancedClustersService.getClusterEnhancedArticles(clusterId);
       setArticles(clusterArticles);
       
-      console.log('✅ Loaded cluster articles:', {
+      logger.debug('✅ Loaded cluster articles:', {
         clusterId,
         count: clusterArticles.length,
         types: clusterArticles.reduce((acc, article) => {
@@ -188,7 +189,7 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load cluster articles';
       setError(errorMessage);
-      console.error('Load cluster articles error:', err);
+      logger.error('Load cluster articles error:', err);
     } finally {
       setLoading(false);
     }

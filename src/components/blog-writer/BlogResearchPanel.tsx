@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useKeywordResearch, useResearchProgress } from '@/hooks/useKeywordResearch';
 import type { BlogResearchResults, TitleSuggestion, KeywordData } from '@/lib/keyword-research';
+import { logger } from '@/utils/logger';
 
 interface BlogResearchPanelProps {
   onResearchComplete?: (results: BlogResearchResults) => void;
@@ -60,7 +61,7 @@ const BlogResearchPanel: React.FC<BlogResearchPanelProps> = ({
       const results = await performFullResearch(topic.trim(), targetAudience, userId);
       onResearchComplete?.(results);
     } catch (error) {
-      console.error('Research failed:', error);
+      logger.error('Research failed:', error);
     }
   };
 

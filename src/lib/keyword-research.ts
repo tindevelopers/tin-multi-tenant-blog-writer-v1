@@ -2,18 +2,99 @@
 
 import cloudRunHealth from './cloud-run-health';
 import keywordStorageService from './keyword-storage';
+import { logger } from '@/utils/logger';
+
+// Enhanced endpoint types from FRONTEND_INTEGRATION_GUIDE.md v1.3.0
+export interface TrendsData {
+  trend_score: number;
+  is_trending: boolean;
+  related_topics: string[];
+  related_queries: string[];
+}
+
+export interface KeywordIdea {
+  keyword: string;
+  search_volume: number;
+  cpc?: number;
+  competition?: number;
+  difficulty?: string;
+}
+
+export interface RelevantPage {
+  url: string;
+  title: string;
+  rank_group: number;
+  word_count?: number;
+  structure?: Record<string, unknown>;
+}
+
+export interface SERPAISummary {
+  summary: string;
+  main_topics: string[];
+  missing_topics: string[];
+  common_questions: string[];
+  recommendations: string[];
+  content_depth?: string;
+}
 
 export interface KeywordData {
   keyword: string;
-  search_volume?: number;
-  difficulty: 'easy' | 'medium' | 'hard';
+  // Basic Metrics
+  search_volume?: number;                    // Local monthly search volume
+  global_search_volume?: number;             // Global monthly search volume (v1.3.0)
+  search_volume_by_country?: {               // Search volume breakdown by country (v1.3.0)
+    [countryCode: string]: number;
+  };
+  monthly_searches?: Array<{                 // Historical monthly search data (v1.3.0)
+    month: string;
+    search_volume: number;
+  }>;
+  difficulty: 'easy' | 'medium' | 'hard' | 'very_easy' | 'very_hard';
   competition: number; // 0-1 scale
-  cpc?: number;
-  trend_score?: number;
-  recommended: boolean;
-  reason: string;
+  cpc?: number;                              // Cost per click (organic CPC, not Google Ads)
+  cpc_currency?: string;                     // Currency code (e.g., "USD") (v1.3.0)
+  cps?: number;                              // Cost per sale (v1.3.0)
+  clicks?: number;                           // Estimated monthly clicks (v1.3.0)
+  trend_score?: number;                      // -1.0 to 1.0
+  // Enhanced Metrics (v1.3.0)
+  parent_topic?: string;                     // Parent topic for clustering
+  category_type?: 'topic' | 'question' | 'action' | 'entity'; // Keyword category type
+  cluster_score?: number;                     // 0.0-1.0 (clustering confidence)
+  // AI Optimization (v1.3.0)
+  ai_search_volume?: number;                 // AI-optimized search volume
+  ai_trend?: number;                         // AI trend score (-1.0 to 1.0)
+  ai_monthly_searches?: Array<{              // Historical AI search volume (v1.3.0)
+    month: string;
+    volume: number;
+  }>;
+  // Traffic & Performance (v1.3.0)
+  traffic_potential?: number;                 // Estimated traffic potential
+  // SERP Features (v1.3.0)
+  serp_features?: string[];                  // SERP features present (PAA, Featured Snippet, etc.)
+  serp_feature_counts?: {                    // Counts of SERP features (v1.3.0)
+    [feature: string]: number;
+  };
+  // Related Keywords
   related_keywords: string[];
   long_tail_keywords: string[];
+  // Additional Data (v1.3.0)
+  also_rank_for?: string[];                  // Keywords that pages ranking for this also rank for
+  also_talk_about?: string[];                // Related topics/entities
+  top_competitors?: string[];                // Top competing domains
+  primary_intent?: string;                   // Primary search intent
+  intent_probabilities?: {                   // Intent probability breakdown (v1.3.0)
+    [intent: string]: number;
+  };
+  first_seen?: string;                       // Date keyword first seen (ISO format)
+  last_updated?: string;                     // Date data was last updated (ISO format)
+  // Recommendations
+  recommended: boolean;
+  reason: string;
+  // Enhanced endpoint fields (legacy, kept for backward compatibility)
+  trends_data?: TrendsData;
+  keyword_ideas?: KeywordIdea[];
+  relevant_pages?: RelevantPage[];
+  serp_ai_summary?: SERPAISummary;
 }
 
 export interface KeywordAnalysis {
@@ -21,6 +102,32 @@ export interface KeywordAnalysis {
   overall_score: number;
   recommendations: string[];
   cluster_groups: KeywordCluster[];
+  // Enhanced response fields (v1.3.0)
+  location?: {
+    used: string;
+    detected_from_ip: boolean;
+    specified: boolean;
+  };
+  discovery?: {
+    // Additional discovery data from DataForSEO
+    [key: string]: unknown;
+  };
+  serp_analysis?: {
+    // SERP analysis summary
+    [key: string]: unknown;
+  };
+  serp_ai_summary?: {
+    // AI-generated SERP summary
+    [key: string]: unknown;
+  };
+  total_keywords?: number;
+  original_keywords?: string[];
+  suggested_keywords?: string[];
+  cluster_summary?: {
+    total_keywords: number;
+    cluster_count: number;
+    unclustered_count: number;
+  };
 }
 
 export interface KeywordCluster {
@@ -31,6 +138,17 @@ export interface KeywordCluster {
   avg_difficulty: 'easy' | 'medium' | 'hard';
   avg_competition: number;
   cluster_score: number;
+  parent_topic?: string;
+  category_type?: 'topic' | 'question' | 'action' | 'entity';
+  keyword_count?: number;
+}
+
+export interface ClusterData {
+  parent_topic: string;
+  keywords: string[];
+  cluster_score: number;
+  category_type: 'topic' | 'question' | 'action' | 'entity';
+  keyword_count: number;
 }
 
 export interface TitleSuggestion {
@@ -60,310 +178,448 @@ export interface BlogResearchResults {
   };
 }
 
+/**
+ * Keyword Research Service - Rebuilt from scratch
+ * 
+ * Key improvements:
+ * - Always uses 75 suggestions per keyword for optimal long-tail results
+ * - Proper fallback when enhanced endpoint is unavailable
+ * - Better error handling and retry logic
+ * - Optimal batch size of 20 keywords
+ */
 class KeywordResearchService {
   private baseURL: string;
+  private useApiRoutes: boolean;
 
-  constructor(baseURL: string) {
-    this.baseURL = baseURL;
+  constructor(
+    baseURL?: string,
+    useApiRoutes: boolean = true
+  ) {
+    this.baseURL = baseURL || 
+      (typeof window !== 'undefined' 
+        ? window.location.origin 
+        : 'https://blog-writer-api-dev-613248238610.europe-west1.run.app');
+    this.useApiRoutes = useApiRoutes;
   }
 
   /**
-   * Extract keywords from text using NLP
+   * Retry API call with exponential backoff
    */
-  async extractKeywords(text: string): Promise<string[]> {
-    console.log('🔍 Extracting keywords from text...');
+  private async retryApiCall<T>(
+    apiCall: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 2000
+  ): Promise<T> {
+    let lastError: Error | null = null;
     
-    try {
-      // Try to ensure Cloud Run is awake, but don't fail if it's not
-      const healthStatus = await cloudRunHealth.wakeUpAndWait();
-      if (!healthStatus.isHealthy) {
-        console.warn(`⚠️ Cloud Run is not healthy: ${healthStatus.error}. Using fallback method.`);
-        return this.fallbackKeywordExtraction(text);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await apiCall();
+      } catch (error: unknown) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        const isRetryable = error instanceof Error && 
+          (error.message.includes('503') || 
+           error.message.includes('timeout') ||
+           error.message.includes('network'));
+        
+        if (isRetryable && attempt < maxRetries) {
+          const delay = baseDelay * Math.pow(2, attempt - 1);
+          logger.debug(`⚠️ Retry attempt ${attempt}/${maxRetries} after ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        throw lastError;
       }
-
-      const response = await fetch(`${this.baseURL}/api/v1/keywords/extract`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(15000),
-      });
-
-      if (!response.ok) {
-        console.warn(`⚠️ Keyword extraction API failed: ${response.status} ${response.statusText}. Using fallback method.`);
-        return this.fallbackKeywordExtraction(text);
-      }
-
-      const data = await response.json();
-      console.log('✅ Keywords extracted via API');
-      return data.keywords || [];
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`⚠️ Keyword extraction error: ${errorMessage}. Using fallback method.`);
-      // Fallback to simple text processing
-      return this.fallbackKeywordExtraction(text);
     }
+    
+    throw lastError || new Error('Max retries exceeded');
   }
 
   /**
-   * Analyze keywords for SEO potential
+   * Analyze keywords - REBUILT with proper defaults and fallback
+   * Now supports enhanced endpoint features from v1.3.0
    */
-  async analyzeKeywords(keywords: string[]): Promise<KeywordAnalysis> {
-    console.log('📊 Analyzing keywords for SEO potential...');
+  async analyzeKeywords(
+    keywords: string[], 
+    maxSuggestionsPerKeyword: number = 75, // Default to 75 for optimal long-tail results
+    location: string = 'United States',
+    options?: {
+      include_trends?: boolean;
+      include_keyword_ideas?: boolean;
+      include_relevant_pages?: boolean;
+      include_serp_ai_summary?: boolean;
+      competitor_domain?: string;
+    }
+  ): Promise<KeywordAnalysis> {
+    logger.debug(`📊 Analyzing keywords (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
-    try {
-      // Try to ensure Cloud Run is awake, but use fallback if not
-      const healthStatus = await cloudRunHealth.wakeUpAndWait();
-      if (!healthStatus.isHealthy) {
-        console.warn(`⚠️ Cloud Run is not healthy: ${healthStatus.error}. Using fallback analysis.`);
-        return this.fallbackKeywordAnalysis(keywords);
+    // Optimal batch size for long-tail research
+    const OPTIMAL_BATCH_SIZE = 20;
+    if (keywords.length > OPTIMAL_BATCH_SIZE) {
+      throw new Error(`Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
+    }
+
+    // Ensure maxSuggestionsPerKeyword is at least 5 (API requirement) and defaults to 75
+    const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 75);
+    logger.debug(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
+
+    return await this.retryApiCall(async () => {
+      const apiUrl = this.useApiRoutes 
+        ? '/api/keywords/analyze'
+        : `${this.baseURL}/api/v1/keywords/enhanced`;
+      
+      const requestBody: Record<string, unknown> = {
+        keywords,
+        location,
+        language: 'en',
+        include_serp: false,
+        max_suggestions_per_keyword: finalMaxSuggestions
+      };
+
+      // Add enhanced endpoint parameters if provided
+      if (options) {
+        if (options.include_trends !== undefined) {
+          requestBody.include_trends = options.include_trends;
+        }
+        if (options.include_keyword_ideas !== undefined) {
+          requestBody.include_keyword_ideas = options.include_keyword_ideas;
+        }
+        if (options.include_relevant_pages !== undefined) {
+          requestBody.include_relevant_pages = options.include_relevant_pages;
+        }
+        if (options.include_serp_ai_summary !== undefined) {
+          requestBody.include_serp_ai_summary = options.include_serp_ai_summary;
+        }
+        if (options.competitor_domain) {
+          requestBody.competitor_domain = options.competitor_domain;
+        }
       }
 
-      const response = await fetch(`${this.baseURL}/api/v1/keywords/analyze`, {
+      logger.debug(`📤 Sending request to ${apiUrl} with ${finalMaxSuggestions} suggestions per keyword`);
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
-        body: JSON.stringify({ 
-          keywords,
-          text: keywords.join(' ') // Provide context
-        }),
-        signal: AbortSignal.timeout(20000),
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(90000), // 90 second timeout
       });
 
       if (!response.ok) {
-        console.warn(`⚠️ Keyword analysis API failed: ${response.status} ${response.statusText}. Using fallback analysis.`);
-        return this.fallbackKeywordAnalysis(keywords);
+        const responseText = await response.text();
+        let errorMessage = `API returned ${response.status}`;
+        
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorData.message || errorData.detail || errorMessage;
+        } catch {
+          errorMessage = responseText || errorMessage;
+        }
+
+        logger.error(`❌ API error (${response.status}):`, errorMessage);
+        logger.error(`❌ Request body:`, JSON.stringify(requestBody, null, 2));
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       
-      // Enhance the analysis with clustering
-      const keywordAnalysis = data.keyword_analysis || data;
-      const clusters = this.createKeywordClusters(keywordAnalysis);
+      // Debug: Log API response structure to understand search_volume location
+      logger.debug('📊 API Response structure:', {
+        hasEnhancedAnalysis: !!data.enhanced_analysis,
+        hasKeywordAnalysis: !!data.keyword_analysis,
+        sampleKeyword: Object.keys(data.enhanced_analysis || data.keyword_analysis || {})[0],
+        sampleData: Object.values(data.enhanced_analysis || data.keyword_analysis || {})[0]
+      });
       
-      console.log('✅ Keywords analyzed via API');
-      console.log('🔍 API response data structure:', data);
+      // Handle response structure
+      const enhancedAnalysis = data.enhanced_analysis || data.keyword_analysis || data;
       
-      // Debug search volume data
-      console.log('🔍 Search volume data check:', Object.entries(keywordAnalysis).map(([key, data]: [string, any]) => ({
-        keyword: key,
-        search_volume: data?.search_volume,
-        search_volume_type: typeof data?.search_volume
-      })));
+      // Filter and process keywords
+      const filteredAnalysis: Record<string, KeywordData> = {};
+      Object.entries(enhancedAnalysis).forEach(([keyword, kwData]: [string, any]) => {
+        const wordCount = keyword.trim().split(/\s+/).length;
+        if (wordCount > 1 || keyword.trim().length > 5) {
+          // Extract search_volume from various possible locations
+          // API might return it as search_volume, volume, monthly_searches, or in metadata
+          const searchVolume = kwData.search_volume 
+            ?? kwData.volume 
+            ?? kwData.monthly_searches 
+            ?? kwData.metadata?.search_volume 
+            ?? kwData.metadata?.volume
+            ?? null;
+          
+          // Debug: Log search volume extraction for first keyword
+          if (Object.keys(filteredAnalysis).length === 0) {
+            logger.debug('🔍 Search volume extraction for keyword', {
+              keyword,
+              'kwData.search_volume': kwData.search_volume,
+              'kwData.volume': kwData.volume,
+              'kwData.monthly_searches': kwData.monthly_searches,
+              'kwData.metadata': kwData.metadata,
+              extracted: searchVolume
+            });
+          }
+          
+          filteredAnalysis[keyword] = {
+            keyword: kwData.keyword || keyword,
+            // Basic Metrics
+            search_volume: searchVolume,
+            global_search_volume: kwData.global_search_volume,
+            search_volume_by_country: kwData.search_volume_by_country,
+            monthly_searches: kwData.monthly_searches,
+            difficulty: kwData.difficulty || 'medium',
+            competition: kwData.competition ?? 0.5,
+            cpc: kwData.cpc ?? null,
+            cpc_currency: kwData.cpc_currency,
+            cps: kwData.cps,
+            clicks: kwData.clicks,
+            trend_score: kwData.trend_score ?? 0,
+            // Enhanced Metrics (v1.3.0)
+            parent_topic: kwData.parent_topic,
+            cluster_score: kwData.cluster_score,
+            category_type: kwData.category_type,
+            // AI Optimization (v1.3.0)
+            ai_search_volume: kwData.ai_search_volume,
+            ai_trend: kwData.ai_trend,
+            ai_monthly_searches: kwData.ai_monthly_searches,
+            // Traffic & Performance (v1.3.0)
+            traffic_potential: kwData.traffic_potential,
+            // SERP Features (v1.3.0)
+            serp_features: kwData.serp_features,
+            serp_feature_counts: kwData.serp_feature_counts,
+            // Related Keywords
+            related_keywords: kwData.related_keywords || [],
+            long_tail_keywords: kwData.long_tail_keywords || [],
+            // Additional Data (v1.3.0)
+            also_rank_for: kwData.also_rank_for,
+            also_talk_about: kwData.also_talk_about,
+            top_competitors: kwData.top_competitors,
+            primary_intent: kwData.primary_intent,
+            intent_probabilities: kwData.intent_probabilities,
+            first_seen: kwData.first_seen,
+            last_updated: kwData.last_updated,
+            // Recommendations
+            recommended: kwData.recommended ?? false,
+            reason: kwData.reason || '',
+            // Enhanced endpoint fields (legacy, kept for backward compatibility)
+            trends_data: kwData.trends_data,
+            keyword_ideas: kwData.keyword_ideas,
+            relevant_pages: kwData.relevant_pages,
+            serp_ai_summary: kwData.serp_ai_summary,
+          };
+        }
+      });
+      
+      // Process clusters
+      let clusters: KeywordCluster[] = [];
+      if (data.clusters && Array.isArray(data.clusters)) {
+        clusters = data.clusters.map((cluster: ClusterData, index: number) => ({
+          id: `cluster-${index}`,
+          name: cluster.parent_topic,
+          keywords: cluster.keywords || [],
+          primary_keyword: cluster.keywords?.[0] || '',
+          avg_difficulty: 'medium' as const,
+          avg_competition: 0.5,
+          cluster_score: cluster.cluster_score || 0,
+          parent_topic: cluster.parent_topic,
+          category_type: cluster.category_type,
+          keyword_count: cluster.keyword_count || cluster.keywords?.length || 0,
+        }));
+      }
+
+      logger.debug(`✅ Analysis complete: ${Object.keys(filteredAnalysis).length} keywords, ${clusters.length} clusters`);
       
       return {
-        keyword_analysis: keywordAnalysis,
-        overall_score: this.calculateOverallScore(keywordAnalysis),
-        recommendations: this.generateRecommendations(keywordAnalysis),
+        keyword_analysis: filteredAnalysis,
+        overall_score: this.calculateOverallScore(filteredAnalysis),
+        recommendations: this.generateRecommendations(filteredAnalysis),
         cluster_groups: clusters,
+        // Enhanced response fields (v1.3.0)
+        location: data.location,
+        discovery: data.discovery,
+        serp_analysis: data.serp_analysis,
+        serp_ai_summary: data.serp_ai_summary,
+        total_keywords: data.total_keywords,
+        original_keywords: data.original_keywords,
+        suggested_keywords: data.suggested_keywords,
+        cluster_summary: data.cluster_summary,
       };
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`⚠️ Keyword analysis error: ${errorMessage}. Using fallback analysis.`);
-      return this.fallbackKeywordAnalysis(keywords);
-    }
+    });
   }
 
   /**
-   * Get keyword suggestions based on seed keywords
+   * Extract keywords from text
    */
-  async getKeywordSuggestions(seedKeywords: string[]): Promise<string[]> {
-    console.log('💡 Getting keyword suggestions...');
-    
-    try {
-      // Try to ensure Cloud Run is awake, but use fallback if not
-      const healthStatus = await cloudRunHealth.wakeUpAndWait();
-      if (!healthStatus.isHealthy) {
-        console.warn(`⚠️ Cloud Run is not healthy: ${healthStatus.error}. Using fallback suggestions.`);
-        return this.generateFallbackSuggestions(seedKeywords);
-      }
+  async extractKeywords(text: string): Promise<string[]> {
+    if (!text || text.trim().length < 10) {
+      return [text.trim()];
+    }
 
-      const response = await fetch(`${this.baseURL}/api/v1/keywords/suggest`, {
+    try {
+      const apiUrl = this.useApiRoutes 
+        ? '/api/keywords/extract'
+        : `${this.baseURL}/api/v1/keywords/extract`;
+
+      const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({ 
-          keywords: seedKeywords,
-          limit: 20 
-        }),
-        signal: AbortSignal.timeout(15000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: text }),
+        signal: AbortSignal.timeout(30000),
       });
 
       if (!response.ok) {
-        console.warn(`⚠️ Keyword suggestions API failed: ${response.status} ${response.statusText}. Using fallback suggestions.`);
-        return this.generateFallbackSuggestions(seedKeywords);
+        throw new Error(`Extraction failed: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('✅ Keyword suggestions generated via API');
-      return data.suggestions || [];
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`⚠️ Keyword suggestions error: ${errorMessage}. Using fallback suggestions.`);
-      // Fallback suggestions
-      return this.generateFallbackSuggestions(seedKeywords);
+      return data.extracted_keywords || data.keywords || [];
+    } catch (error) {
+      logger.warn('Keyword extraction failed, using topic as keyword:', error);
+      return [text.trim()];
     }
   }
 
   /**
-   * Generate blog title suggestions based on keyword research
+   * Get keyword suggestions
    */
-  async generateTitleSuggestions(
-    primaryKeyword: string, 
-    secondaryKeywords: string[], 
-    targetAudience: string = 'general'
-  ): Promise<TitleSuggestion[]> {
-    console.log('📝 Generating blog title suggestions...');
+  async getKeywordSuggestions(
+    keywords: string[],
+    limit: number = 150,
+    location: string = 'United States'
+  ): Promise<string[]> {
+    try {
+      const apiUrl = this.useApiRoutes 
+        ? '/api/keywords/suggest'
+        : `${this.baseURL}/api/v1/keywords/suggest`;
     
-    const titles: TitleSuggestion[] = [];
-    const keyword = primaryKeyword.toLowerCase();
-    
-    // Question-based titles
-    titles.push({
-      title: `How to ${keyword}: A Complete Guide`,
-      type: 'how_to',
-      seo_score: 85,
-      readability_score: 90,
-      keyword_density: 1.2,
-      estimated_traffic: 'high',
-      reasoning: 'Question-based titles perform well for informational content'
-    });
+      const allSuggestions: string[] = [];
+      
+      for (const keyword of keywords) {
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword, limit }),
+          signal: AbortSignal.timeout(30000),
+        });
 
-    titles.push({
-      title: `What is ${keyword}? Everything You Need to Know`,
-      type: 'question',
-      seo_score: 80,
-      readability_score: 85,
-      keyword_density: 1.0,
-      estimated_traffic: 'medium',
-      reasoning: 'Definition-style titles attract beginners and general audience'
-    });
+        if (response.ok) {
+          const data = await response.json();
+          const suggestions = data.keyword_suggestions || data.suggestions || [];
+          allSuggestions.push(...suggestions);
+        }
+      }
 
-    // List-based titles
-    if (secondaryKeywords.length > 0) {
-      titles.push({
-        title: `${secondaryKeywords.slice(0, 3).map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(', ')}: ${primaryKeyword} Tips`,
-        type: 'list',
-        seo_score: 75,
-        readability_score: 80,
-        keyword_density: 1.5,
-        estimated_traffic: 'medium',
-        reasoning: 'List-style titles are highly shareable and scannable'
-      });
+      return [...new Set(allSuggestions)].slice(0, limit);
+    } catch (error) {
+      logger.error('Keyword suggestions failed:', error);
+      return [];
     }
-
-    // Guide titles
-    titles.push({
-      title: `The Ultimate ${primaryKeyword.charAt(0).toUpperCase() + primaryKeyword.slice(1)} Guide for ${targetAudience}`,
-      type: 'guide',
-      seo_score: 90,
-      readability_score: 85,
-      keyword_density: 1.3,
-      estimated_traffic: 'high',
-      reasoning: 'Comprehensive guides rank well and attract long-term traffic'
-    });
-
-    // Comparison titles
-    if (secondaryKeywords.length >= 2) {
-      titles.push({
-        title: `${secondaryKeywords[0].charAt(0).toUpperCase() + secondaryKeywords[0].slice(1)} vs ${secondaryKeywords[1].charAt(0).toUpperCase() + secondaryKeywords[1].slice(1)}: ${primaryKeyword} Comparison`,
-        type: 'comparison',
-        seo_score: 70,
-        readability_score: 75,
-        keyword_density: 1.8,
-        estimated_traffic: 'medium',
-        reasoning: 'Comparison content helps users make informed decisions'
-      });
-    }
-
-    return titles.sort((a, b) => b.seo_score - a.seo_score);
   }
 
   /**
-   * Perform comprehensive blog research
+   * Perform comprehensive blog research - REBUILT
+   * Now supports enhanced endpoint features for better content quality
    */
   async performBlogResearch(
     topic: string, 
     targetAudience: string = 'general',
-    userId?: string
+    userId?: string,
+    location: string = 'United States',
+    useEnhancedFeatures: boolean = true // Enable enhanced features by default
   ): Promise<BlogResearchResults> {
-    console.log('🔬 Starting comprehensive blog research...');
+    logger.debug('🔬 Starting comprehensive blog research...');
     
     try {
-      // Step 1: Extract keywords from topic
+      // Step 1: Extract keywords
       const extractedKeywords = await this.extractKeywords(topic);
-      console.log('📋 Extracted keywords:', extractedKeywords);
+      logger.debug('📋 Extracted keywords:', extractedKeywords);
 
-      // Step 2: Get additional keyword suggestions
-      const suggestedKeywords = await this.getKeywordSuggestions([topic]);
-      console.log('💡 Suggested keywords:', suggestedKeywords);
+      // Step 2: Get keyword suggestions
+      const suggestedKeywords = await this.getKeywordSuggestions([topic], 150, location);
+      logger.debug(`💡 Suggested keywords (${suggestedKeywords.length}):`, suggestedKeywords.slice(0, 10));
 
-      // Combine and deduplicate keywords
+      // Combine keywords
       const allKeywords = [...new Set([...extractedKeywords, ...suggestedKeywords, topic])];
       
-      // Step 3: Analyze keywords
-      const keywordAnalysis = await this.analyzeKeywords(allKeywords);
-      console.log('📊 Keyword analysis completed');
+      // Step 3: Analyze keywords in batches
+      const BATCH_SIZE = 20;
+      const MAX_SUGGESTIONS_PER_KEYWORD = 75; // Optimal for long-tail research
+      
+      let keywordAnalysis: KeywordAnalysis;
+      
+      if (allKeywords.length > BATCH_SIZE) {
+        logger.debug(`⚠️ Batching analysis: ${allKeywords.length} keywords into batches of ${BATCH_SIZE}...`);
+        
+        const batches: KeywordAnalysis[] = [];
+        
+        // Enhanced options for better content quality
+        const enhancedOptions = useEnhancedFeatures ? {
+          include_trends: true, // Google Trends for trending topics
+          include_keyword_ideas: true, // Keyword ideas for content expansion
+          include_relevant_pages: true, // Competitor analysis
+          include_serp_ai_summary: true, // AI-powered SERP summary
+        } : undefined;
+        
+        for (let i = 0; i < allKeywords.length; i += BATCH_SIZE) {
+          const batch = allKeywords.slice(i, i + BATCH_SIZE);
+          logger.debug(`📊 Analyzing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allKeywords.length / BATCH_SIZE)} (${batch.length} keywords)...`);
+          
+          const batchAnalysis = await this.analyzeKeywords(batch, MAX_SUGGESTIONS_PER_KEYWORD, location, enhancedOptions);
+          batches.push(batchAnalysis);
+        }
+        
+        // Merge batches
+        const mergedAnalysis: Record<string, KeywordData> = {};
+        let totalScore = 0;
+        const allRecommendations: string[] = [];
+        const allClusters: KeywordCluster[] = [];
+        
+        batches.forEach((batch, index) => {
+          Object.assign(mergedAnalysis, batch.keyword_analysis);
+          totalScore += batch.overall_score;
+          allRecommendations.push(...batch.recommendations);
+          batch.cluster_groups.forEach(cluster => {
+            allClusters.push({
+              ...cluster,
+              id: `batch-${index}-${cluster.id}`
+            });
+          });
+        });
+        
+        keywordAnalysis = {
+          keyword_analysis: mergedAnalysis,
+          overall_score: totalScore / batches.length,
+          recommendations: [...new Set(allRecommendations)],
+          cluster_groups: allClusters
+        };
+        
+        logger.debug(`✅ Merged ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords`);
+      } else {
+        // Enhanced options for better content quality
+        const enhancedOptions = useEnhancedFeatures ? {
+          include_trends: true,
+          include_keyword_ideas: true,
+          include_relevant_pages: true,
+          include_serp_ai_summary: true,
+        } : undefined;
+        
+        keywordAnalysis = await this.analyzeKeywords(allKeywords, MAX_SUGGESTIONS_PER_KEYWORD, location, enhancedOptions);
+      }
 
       // Step 4: Generate title suggestions
-      const titleSuggestions = await this.generateTitleSuggestions(
-        topic, 
-        allKeywords.slice(0, 5), 
-        targetAudience
-      );
-      console.log('📝 Title suggestions generated');
+      const primaryKeyword = Object.keys(keywordAnalysis.keyword_analysis)[0] || topic;
+      const secondaryKeywords = Object.keys(keywordAnalysis.keyword_analysis).slice(1, 10);
+      const titleSuggestions = this.generateTitleSuggestions(primaryKeyword, secondaryKeywords, targetAudience);
 
-      // Step 5: Create content strategy
-      const contentStrategy = this.createContentStrategy(keywordAnalysis, topic, targetAudience);
-      
+      // Step 5: Generate content strategy
+      const contentStrategy = this.generateContentStrategy(keywordAnalysis, targetAudience);
+
       // Step 6: Generate SEO insights
-      const seoInsights = this.generateSEOInsights(keywordAnalysis, topic);
-
-      // Step 7: Save keywords to database if user is provided
-      if (userId) {
-        console.log('💾 Saving keywords to database for user:', userId);
-        try {
-          const keywordsToSave = Object.entries(keywordAnalysis.keyword_analysis).map(([keyword, data]) => ({
-            keyword,
-            search_volume: data.search_volume,
-            difficulty: data.difficulty,
-            competition: data.competition,
-            cpc: data.cpc,
-            trend_score: data.trend_score,
-            recommended: data.recommended,
-            reason: data.reason,
-            related_keywords: data.related_keywords,
-            long_tail_keywords: data.long_tail_keywords,
-          }));
-
-          const saveResult = await keywordStorageService.saveKeywords(
-            userId,
-            topic,
-            keywordsToSave,
-            {
-              keyword_analysis: keywordAnalysis,
-              title_suggestions: titleSuggestions,
-              content_strategy: contentStrategy,
-              seo_insights: seoInsights,
-            }
-          );
-
-          if (saveResult.success) {
-            console.log('✅ Keywords saved to database successfully');
-          } else {
-            console.warn('⚠️ Failed to save keywords to database:', saveResult.error);
-          }
-        } catch (saveError) {
-          console.warn('⚠️ Error saving keywords to database:', saveError);
-          // Don't throw error - research can continue without saving
-        }
-      }
+      const seoInsights = this.generateSEOInsights(keywordAnalysis);
 
       return {
         keyword_analysis: keywordAnalysis,
@@ -372,237 +628,167 @@ class KeywordResearchService {
         seo_insights: seoInsights,
       };
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Blog research error:', errorMessage);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('❌ Blog research failed:', errorMessage);
       throw new Error(`Blog research failed: ${errorMessage}`);
     }
   }
 
-  // Helper methods
-  private fallbackKeywordExtraction(text: string): string[] {
-    // Simple keyword extraction as fallback
-    const words = text.toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .split(/\s+/)
-      .filter(word => word.length > 3)
-      .filter(word => !['this', 'that', 'with', 'have', 'will', 'from', 'they', 'been', 'were', 'said', 'each', 'which', 'their', 'time', 'would', 'there', 'could', 'other', 'after', 'first', 'well', 'also', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'may', 'say', 'she', 'use', 'her', 'many', 'some', 'very', 'when', 'much', 'then', 'them', 'can', 'only', 'other', 'new', 'some', 'take', 'come', 'work', 'first', 'well', 'way', 'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'may', 'say', 'she', 'use', 'her', 'many'].includes(word));
-    
-    // Get unique words and return top 10
-    return [...new Set(words)].slice(0, 10);
-  }
-
-  private generateFallbackSuggestions(seedKeywords: string[]): string[] {
-    const suggestions: string[] = [];
-    
-    seedKeywords.forEach(keyword => {
-      // Add variations
-      suggestions.push(`${keyword} guide`);
-      suggestions.push(`${keyword} tips`);
-      suggestions.push(`how to ${keyword}`);
-      suggestions.push(`${keyword} for beginners`);
-      suggestions.push(`best ${keyword}`);
-      suggestions.push(`${keyword} tutorial`);
-    });
-    
-    return [...new Set(suggestions)].slice(0, 25);
-  }
-
-  private fallbackKeywordAnalysis(keywords: string[]): KeywordAnalysis {
-    console.log('📊 Using fallback keyword analysis...');
-    console.log('📊 Keywords to analyze:', keywords);
-    
-    // Generate mock keyword data for each keyword
-    const keywordAnalysis: Record<string, KeywordData> = {};
-    
-    keywords.forEach((keyword, index) => {
-      // Generate semi-realistic data based on keyword characteristics
-      const length = keyword.split(' ').length;
-      const isLongTail = length > 3;
-      const difficulty = isLongTail ? 'easy' : (length > 2 ? 'medium' : 'hard');
-      const competition = isLongTail ? 0.3 : (length > 2 ? 0.6 : 0.8);
-      const searchVolume = isLongTail ? Math.floor(Math.random() * 1000) + 100 : Math.floor(Math.random() * 5000) + 1000;
-      
-      keywordAnalysis[keyword] = {
-        keyword,
-        search_volume: searchVolume,
-        difficulty: difficulty as 'easy' | 'medium' | 'hard',
-        competition,
-        cpc: parseFloat((Math.random() * 3 + 0.5).toFixed(2)),
-        trend_score: parseFloat((Math.random() * 20 + 60).toFixed(2)),
-        recommended: difficulty === 'easy' || difficulty === 'medium',
-        reason: difficulty === 'easy' 
-          ? 'Low competition, good opportunity for ranking'
-          : difficulty === 'medium'
-          ? 'Moderate competition, achievable with quality content'
-          : 'High competition, requires strong domain authority',
-        related_keywords: this.generateRelatedKeywords(keyword),
-        long_tail_keywords: this.generateLongTailKeywords(keyword),
-      };
-    });
-    
-    // Debug generated search volumes
-    console.log('📊 Generated search volumes:', Object.entries(keywordAnalysis).map(([key, data]) => ({
-      keyword: key,
-      search_volume: data.search_volume,
-      search_volume_type: typeof data.search_volume
-    })));
-    
-    // Create clusters
-    const clusters = this.createKeywordClusters(keywordAnalysis);
-    
-    return {
-      keyword_analysis: keywordAnalysis,
-      overall_score: this.calculateOverallScore(keywordAnalysis),
-      recommendations: this.generateRecommendations(keywordAnalysis),
-      cluster_groups: clusters,
-    };
-  }
-
-  private generateRelatedKeywords(keyword: string): string[] {
-    const baseWords = keyword.split(' ');
-    const related: string[] = [];
-    
-    if (baseWords.length > 0) {
-      related.push(`${keyword} guide`);
-      related.push(`${keyword} tips`);
-      related.push(`best ${keyword}`);
-      related.push(`${baseWords[0]} techniques`);
-    }
-    
-    return related.slice(0, 5);
-  }
-
-  private generateLongTailKeywords(keyword: string): string[] {
-    return [
-      `how to ${keyword}`,
-      `${keyword} for beginners`,
-      `${keyword} step by step`,
-      `${keyword} complete guide`,
-      `best ${keyword} methods`,
-    ].slice(0, 3);
-  }
-
-  private createKeywordClusters(keywordAnalysis: Record<string, KeywordData>): KeywordCluster[] {
-    const clusters: KeywordCluster[] = [];
-    const keywords = Object.keys(keywordAnalysis);
-    
-    // Simple clustering based on keyword similarity
-    const processed = new Set<string>();
-    
-    keywords.forEach(keyword => {
-      if (processed.has(keyword)) return;
-      
-      const cluster: KeywordCluster = {
-        id: `cluster_${clusters.length + 1}`,
-        name: keyword.charAt(0).toUpperCase() + keyword.slice(1) + ' Cluster',
-        keywords: [keyword],
-        primary_keyword: keyword,
-        avg_difficulty: keywordAnalysis[keyword].difficulty,
-        avg_competition: keywordAnalysis[keyword].competition,
-        cluster_score: this.calculateClusterScore([keywordAnalysis[keyword]]),
-      };
-      
-      // Find related keywords
-      keywords.forEach(otherKeyword => {
-        if (otherKeyword !== keyword && !processed.has(otherKeyword)) {
-          if (this.areKeywordsRelated(keyword, otherKeyword)) {
-            cluster.keywords.push(otherKeyword);
-            cluster.avg_competition = (cluster.avg_competition + keywordAnalysis[otherKeyword].competition) / 2;
-          }
-        }
-      });
-      
-      clusters.push(cluster);
-      cluster.keywords.forEach(k => processed.add(k));
-    });
-    
-    return clusters;
-  }
-
-  private areKeywordsRelated(keyword1: string, keyword2: string): boolean {
-    // Simple relatedness check based on word overlap
-    const words1 = keyword1.toLowerCase().split(/\s+/);
-    const words2 = keyword2.toLowerCase().split(/\s+/);
-    
-    const commonWords = words1.filter(word => words2.includes(word));
-    return commonWords.length > 0 && commonWords.length / Math.max(words1.length, words2.length) > 0.3;
-  }
-
-  private calculateClusterScore(keywords: KeywordData[]): number {
+  /**
+   * Calculate overall score
+   */
+  calculateOverallScore(analysis: Record<string, KeywordData>): number {
+    const keywords = Object.values(analysis);
     if (keywords.length === 0) return 0;
     
-    const avgCompetition = keywords.reduce((sum, k) => sum + k.competition, 0) / keywords.length;
-    const avgDifficulty = keywords.filter(k => k.difficulty === 'easy').length / keywords.length;
+    const avgDifficulty = keywords.reduce((sum, kw) => {
+      const diff = kw.difficulty === 'easy' ? 1 : kw.difficulty === 'medium' ? 2 : 3;
+      return sum + diff;
+    }, 0) / keywords.length;
     
-    return Math.round((avgDifficulty * 100) - (avgCompetition * 50) + 50);
+    const avgCompetition = keywords.reduce((sum, kw) => sum + (kw.competition || 0.5), 0) / keywords.length;
+    
+    return Math.round(100 - (avgDifficulty * 20) - (avgCompetition * 30));
   }
 
-  private calculateOverallScore(keywordAnalysis: Record<string, KeywordData>): number {
-    const keywords = Object.values(keywordAnalysis) as KeywordData[];
-    if (keywords.length === 0) return 0;
-    
-    const avgCompetition = keywords.reduce((sum, k) => sum + k.competition, 0) / keywords.length;
-    const easyKeywords = keywords.filter(k => k.difficulty === 'easy').length;
-    const recommendedKeywords = keywords.filter(k => k.recommended).length;
-    
-    return Math.round((easyKeywords / keywords.length) * 40 + (recommendedKeywords / keywords.length) * 40 - (avgCompetition * 20));
-  }
-
-  private generateRecommendations(keywordAnalysis: Record<string, KeywordData>): string[] {
+  /**
+   * Generate recommendations
+   */
+  generateRecommendations(analysis: Record<string, KeywordData>): string[] {
     const recommendations: string[] = [];
-    const keywords = Object.values(keywordAnalysis) as KeywordData[];
+    const keywords = Object.values(analysis);
     
-    const easyKeywords = keywords.filter(k => k.difficulty === 'easy');
-    const hardKeywords = keywords.filter(k => k.difficulty === 'hard');
-    
+    const easyKeywords = keywords.filter(kw => kw.difficulty === 'easy');
     if (easyKeywords.length > 0) {
-      recommendations.push(`Focus on easy keywords: ${easyKeywords.map(k => k.keyword).join(', ')}`);
+      recommendations.push(`Focus on ${easyKeywords.length} easy keywords for quick wins`);
     }
     
-    if (hardKeywords.length > 0) {
-      recommendations.push(`Consider avoiding very competitive keywords: ${hardKeywords.map(k => k.keyword).join(', ')}`);
-    }
-    
-    const recommendedKeywords = keywords.filter(k => k.recommended);
-    if (recommendedKeywords.length > 0) {
-      recommendations.push(`Prioritize these keywords for best results: ${recommendedKeywords.map(k => k.keyword).join(', ')}`);
+    const highVolume = keywords.filter(kw => (kw.search_volume || 0) > 1000);
+    if (highVolume.length > 0) {
+      recommendations.push(`Target ${highVolume.length} high-volume keywords for maximum traffic`);
     }
     
     return recommendations;
   }
 
-  private createContentStrategy(keywordAnalysis: KeywordAnalysis, topic: string, targetAudience: string) {
-    const primaryKeyword = keywordAnalysis.cluster_groups[0]?.primary_keyword || topic;
+  /**
+   * Generate title suggestions
+   */
+  generateTitleSuggestions(
+    primaryKeyword: string,
+    secondaryKeywords: string[],
+    audience: string = 'general'
+  ): TitleSuggestion[] {
+    const titles: TitleSuggestion[] = [
+      {
+        title: `Complete Guide to ${primaryKeyword}`,
+        type: 'guide',
+        seo_score: 85,
+        readability_score: 90,
+        keyword_density: 0.02,
+        estimated_traffic: 'high',
+        reasoning: 'Comprehensive guides rank well and attract long-term traffic'
+      }
+    ];
     
+    return titles;
+  }
+
+  /**
+   * Generate content strategy
+   */
+  generateContentStrategy(
+    analysis: KeywordAnalysis,
+    targetAudience: string
+  ): BlogResearchResults['content_strategy'] {
     return {
-      recommended_approach: 'Create comprehensive, in-depth content that addresses user intent',
+      recommended_approach: 'Create comprehensive, in-depth content',
       target_audience: targetAudience,
-      content_angle: `Focus on practical, actionable advice for ${targetAudience} interested in ${primaryKeyword}`,
-      competitor_analysis: 'Analyze top-ranking content to identify content gaps and improvement opportunities',
+      content_angle: 'Educational and informative',
+      competitor_analysis: 'Focus on providing unique value'
     };
   }
 
-  private generateSEOInsights(keywordAnalysis: KeywordAnalysis, topic: string) {
-    const primaryKeyword = keywordAnalysis.cluster_groups[0]?.primary_keyword || topic;
-    const secondaryKeywords = keywordAnalysis.cluster_groups.flatMap(c => c.keywords).slice(1, 5);
+  /**
+   * Generate SEO insights - Enhanced with v1.3.0 features
+   */
+  generateSEOInsights(analysis: KeywordAnalysis): BlogResearchResults['seo_insights'] {
+    const keywords = Object.keys(analysis.keyword_analysis);
+    const primaryKeyword = keywords[0] || '';
+    const primaryKeywordData = analysis.keyword_analysis[primaryKeyword];
+    
+    // Use SERP AI Summary for content length recommendation if available
+    let contentLengthRecommendation = 2000; // Default
+    if (primaryKeywordData?.serp_ai_summary?.content_depth) {
+      const depth = primaryKeywordData.serp_ai_summary.content_depth;
+      if (depth === 'comprehensive') {
+        contentLengthRecommendation = 4000;
+      } else if (depth === 'detailed') {
+        contentLengthRecommendation = 3000;
+      } else if (depth === 'medium') {
+        contentLengthRecommendation = 2000;
+      } else {
+        contentLengthRecommendation = 1500;
+      }
+    }
+    
+    // Extract keyword ideas for secondary keywords
+    const keywordIdeas: string[] = [];
+    if (primaryKeywordData?.keyword_ideas) {
+      keywordIdeas.push(...primaryKeywordData.keyword_ideas
+        .slice(0, 10)
+        .map(idea => idea.keyword));
+    }
+    
+    // Combine with existing secondary keywords
+    const secondaryKeywords = [
+      ...keywords.slice(1, 10),
+      ...keywordIdeas
+    ].slice(0, 15); // Limit to 15 total
     
     return {
       primary_keyword: primaryKeyword,
       secondary_keywords: secondaryKeywords,
-      content_length_recommendation: 2000, // Based on keyword competition
-      internal_linking_opportunities: [
-        `${primaryKeyword} guide`,
-        `${primaryKeyword} tips`,
-        `how to ${primaryKeyword}`,
-      ],
+      content_length_recommendation: contentLengthRecommendation,
+      internal_linking_opportunities: keywords.slice(0, 5)
+    };
+  }
+
+  /**
+   * Extract enhanced insights from keyword analysis for blog generation
+   * Uses v1.3.0 enhanced endpoint features
+   */
+  extractEnhancedInsights(analysis: KeywordAnalysis, primaryKeyword: string): {
+    trendsData?: TrendsData;
+    keywordIdeas?: KeywordIdea[];
+    serpAISummary?: SERPAISummary;
+    relevantPages?: RelevantPage[];
+    isTrending?: boolean;
+    mainTopics?: string[];
+    missingTopics?: string[];
+    commonQuestions?: string[];
+    recommendations?: string[];
+  } {
+    const keywordData = analysis.keyword_analysis[primaryKeyword];
+    if (!keywordData) {
+      return {};
+    }
+
+    return {
+      trendsData: keywordData.trends_data,
+      keywordIdeas: keywordData.keyword_ideas,
+      serpAISummary: keywordData.serp_ai_summary,
+      relevantPages: keywordData.relevant_pages,
+      isTrending: keywordData.trends_data?.is_trending || false,
+      mainTopics: keywordData.serp_ai_summary?.main_topics,
+      missingTopics: keywordData.serp_ai_summary?.missing_topics,
+      commonQuestions: keywordData.serp_ai_summary?.common_questions,
+      recommendations: keywordData.serp_ai_summary?.recommendations,
     };
   }
 }
 
-// Create singleton instance
-const keywordResearchService = new KeywordResearchService(
-  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app'
-);
-
+// Export singleton instance
+const keywordResearchService = new KeywordResearchService();
 export default keywordResearchService;
-export { KeywordResearchService };
+

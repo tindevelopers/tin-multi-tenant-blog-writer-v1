@@ -13,8 +13,15 @@ import { blogWriterAPI } from "@/lib/blog-writer-api";
 import BlogResearchPanel from "@/components/blog-writer/BlogResearchPanel";
 import ContentSuggestionsPanel from "@/components/blog-writer/ContentSuggestionsPanel";
 import EnhancedContentClustersPanel from "@/components/content-clusters/EnhancedContentClustersPanel";
+import BrandVoiceSettings from "@/components/blog-writer/BrandVoiceSettings";
+import ContentPresetsManager from "@/components/blog-writer/ContentPresetsManager";
+import InternalLinkSuggestions from "@/components/blog-writer/InternalLinkSuggestions";
+import WorkflowStatusIndicator from "@/components/blog-writer/WorkflowStatusIndicator";
+import QuickActionsMenu from "@/components/blog-writer/QuickActionsMenu";
+import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
+import Alert from "@/components/ui/alert/Alert";
 
 function NewDraftContent() {
   const router = useRouter();
@@ -71,13 +78,37 @@ function NewDraftContent() {
     tone: "professional",
     word_count: 800,
     preset: "seo_focused",
+    preset_id: "", // New: Content preset ID
     quality_level: "high",
     content: "",
-    excerpt: ""
+    excerpt: "",
+    include_external_links: true, // Default to true for better SEO
+    include_backlinks: true, // Default to true
+    backlink_count: 5, // Default number of backlinks
+    // Custom instructions and quality features (v1.3.0)
+    template_type: "expert_authority" as "expert_authority" | "how_to_guide" | "comparison" | "case_study" | "news_update" | "tutorial" | "listicle" | "review",
+    custom_instructions: "",
+    length: "medium" as "short" | "medium" | "long" | "very_long",
+    use_google_search: false,
+    use_fact_checking: false,
+    use_citations: false,
+    use_serp_optimization: false,
+    use_consensus_generation: false,
+    use_knowledge_graph: false,
+    use_semantic_keywords: false,
+    use_quality_scoring: false,
   });
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [savedPostId, setSavedPostId] = useState<string | null>(null);
+  const [queueId, setQueueId] = useState<string | null>(null);
+  const [queueStatus, setQueueStatus] = useState<string | null>(null);
+  const [approvalId, setApprovalId] = useState<string | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
+  const [showPlatformSelector, setShowPlatformSelector] = useState(false);
+  const [brandVoice, setBrandVoice] = useState<any>(null);
+  const [selectedPreset, setSelectedPreset] = useState<any>(null);
   
   // Research workflow state
   const [researchResults, setResearchResults] = useState<BlogResearchResults | null>(null);
@@ -104,6 +135,20 @@ function NewDraftContent() {
     { value: "conversational", label: "Conversational" },
     { value: "humorous", label: "Humorous" }
   ];
+
+  const templateTypes = [
+    { value: "expert_authority", label: "Expert Authority", description: "Position as domain expert" },
+    { value: "how_to_guide", label: "How-To Guide", description: "Step-by-step instructions" },
+    { value: "comparison", label: "Comparison", description: "Structured comparison format" },
+    { value: "case_study", label: "Case Study", description: "Real-world examples" },
+    { value: "news_update", label: "News Update", description: "Recent developments" },
+    { value: "tutorial", label: "Tutorial", description: "Learning objectives" },
+    { value: "listicle", label: "Listicle", description: "Numbered/bulleted format" },
+    { value: "review", label: "Review", description: "Comprehensive evaluation" }
+  ];
+
+  // Auto-enable quality features for premium/enterprise
+  const isPremiumQuality = formData.quality_level === 'premium' || formData.quality_level === 'enterprise';
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -235,10 +280,38 @@ function NewDraftContent() {
         keywords: keywords.length > 0 ? keywords : undefined,
         target_audience: targetAudience || undefined,
         tone: formData.tone,
-        word_count: wordCount
+        word_count: wordCount,
+        preset_id: formData.preset_id || undefined,
+        quality_level: formData.quality_level,
+        include_external_links: formData.include_external_links,
+        include_backlinks: formData.include_backlinks,
+        backlink_count: formData.include_backlinks ? formData.backlink_count : undefined,
+        // Custom instructions and quality features (v1.3.0)
+        template_type: formData.template_type,
+        custom_instructions: formData.custom_instructions || undefined,
+        length: formData.length,
+        use_google_search: isPremiumQuality ? true : formData.use_google_search,
+        use_fact_checking: isPremiumQuality ? true : formData.use_fact_checking,
+        use_citations: isPremiumQuality ? true : formData.use_citations,
+        use_serp_optimization: isPremiumQuality ? true : formData.use_serp_optimization,
+        use_consensus_generation: isPremiumQuality ? true : formData.use_consensus_generation,
+        use_knowledge_graph: isPremiumQuality ? true : formData.use_knowledge_graph,
+        use_semantic_keywords: isPremiumQuality ? true : formData.use_semantic_keywords,
+        use_quality_scoring: isPremiumQuality ? true : formData.use_quality_scoring,
       });
 
       console.log('🔍 Generated result:', result);
+
+      // Capture queue_id if present
+      if (result && (result as any).queue_id) {
+        const capturedQueueId = (result as any).queue_id;
+        setQueueId(capturedQueueId);
+        setQueueStatus("generating");
+        console.log('✅ Queue ID captured:', capturedQueueId);
+        
+        // Show success message with link to queue
+        alert(`Blog generation started! View progress in the queue dashboard. Queue ID: ${capturedQueueId}`);
+      }
 
       if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
         setGeneratedContent(result);
@@ -271,6 +344,69 @@ function NewDraftContent() {
       alert("Error generating content. Please check your connection and try again.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRequestApproval = async () => {
+    if (!queueId && !savedPostId) {
+      alert("Please generate or save the blog first");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/blog-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          queue_id: queueId || null,
+          post_id: savedPostId || null,
+          review_notes: "",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to request approval");
+      }
+
+      const data = await response.json();
+      setApprovalId(data.approval_id);
+      setApprovalStatus("pending");
+      alert("Approval requested successfully!");
+    } catch (error) {
+      console.error("Error requesting approval:", error);
+      alert("Failed to request approval. Please try again.");
+    }
+  };
+
+  const handlePublish = async (platforms: string[]) => {
+    if (!savedPostId && !queueId) {
+      alert("Please save the blog first");
+      return;
+    }
+
+    try {
+      for (const platform of platforms) {
+        const response = await fetch("/api/blog-publishing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            post_id: savedPostId || null,
+            queue_id: queueId || null,
+            platform,
+            scheduled_at: null,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to publish to ${platform}`);
+        }
+      }
+
+      alert(`Successfully queued for publishing to: ${platforms.join(", ")}`);
+      setShowPlatformSelector(false);
+    } catch (error) {
+      console.error("Error publishing:", error);
+      alert("Failed to publish. Please try again.");
     }
   };
 
@@ -314,7 +450,9 @@ function NewDraftContent() {
           generated_from_research: true,
           research_results: researchResults,
           generation_timestamp: new Date().toISOString(),
-          ai_generated: true
+          ai_generated: true,
+          preset_id: formData.preset_id || null,
+          brand_voice_used: !!brandVoice
         }
       };
 
@@ -324,8 +462,10 @@ function NewDraftContent() {
       
       if (result) {
         console.log('✅ Draft saved successfully:', result);
+        setSavedPostId(result.post_id);
         alert("Draft saved successfully!");
-        router.push("/admin/drafts");
+        // Don't redirect immediately - allow user to add internal links
+        // router.push("/admin/drafts");
       } else {
         console.log('❌ createDraft returned null/undefined');
         alert("Failed to save draft. Please try again.");
@@ -356,8 +496,30 @@ function NewDraftContent() {
             <p className="text-gray-600 dark:text-gray-400 mt-2">
               Use AI to generate content or start from scratch
             </p>
+            {/* Workflow Status Indicator */}
+            {(queueId || approvalId) && (
+              <div className="mt-3">
+                <WorkflowStatusIndicator
+                  queueId={queueId}
+                  queueStatus={queueStatus as any}
+                  approvalId={approvalId}
+                  approvalStatus={approvalStatus as any}
+                />
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-2">
+            {/* Quick Actions Menu */}
+            {(queueId || approvalId || savedPostId) && (
+              <QuickActionsMenu
+                queueId={queueId}
+                approvalId={approvalId}
+                postId={savedPostId}
+                status={queueStatus || undefined}
+                onRequestApproval={handleRequestApproval}
+                onPublish={() => setShowPlatformSelector(true)}
+              />
+            )}
             {researchResults && (
               <button
                 onClick={() => setShowContentSuggestions(!showContentSuggestions)}
@@ -506,6 +668,48 @@ function NewDraftContent() {
             </div>
           </div>
 
+          {/* Brand Voice & Presets */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Brand Voice & Presets
+            </h2>
+            
+            <div className="space-y-4">
+              {/* Brand Voice Compact View */}
+              <BrandVoiceSettings 
+                compact={true}
+                onSettingsChange={(settings) => {
+                  setBrandVoice(settings);
+                  if (settings?.tone) {
+                    setFormData(prev => ({ ...prev, tone: settings.tone }));
+                  }
+                  if (settings?.target_audience) {
+                    setFormData(prev => ({ ...prev, target_audience: settings.target_audience }));
+                  }
+                }}
+              />
+
+              {/* Content Preset Selection */}
+              <ContentPresetsManager
+                compact={true}
+                selectedPresetId={formData.preset_id}
+                onPresetSelect={(preset) => {
+                  setSelectedPreset(preset);
+                  if (preset) {
+                    setFormData(prev => ({
+                      ...prev,
+                      preset_id: preset.preset_id || '',
+                      word_count: preset.word_count || prev.word_count,
+                      quality_level: preset.quality_level || prev.quality_level
+                    }));
+                  } else {
+                    setFormData(prev => ({ ...prev, preset_id: '' }));
+                  }
+                }}
+              />
+            </div>
+          </div>
+
           {/* Content Settings */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -515,7 +719,7 @@ function NewDraftContent() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Writing Preset
+                  Writing Preset (Legacy)
                 </label>
                 <select
                   name="preset"
@@ -529,11 +733,14 @@ function NewDraftContent() {
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Note: Use Content Preset above for organization-level presets
+                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Tone
+                  Tone {brandVoice && <span className="text-xs text-green-600">(from brand voice)</span>}
                 </label>
                 <select
                   name="tone"
@@ -551,7 +758,7 @@ function NewDraftContent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Word Count
+                  Word Count {selectedPreset && <span className="text-xs text-blue-600">(from preset)</span>}
                 </label>
                 <input
                   type="number"
@@ -562,6 +769,244 @@ function NewDraftContent() {
                   min="100"
                   max="3000"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Quality Level {selectedPreset && <span className="text-xs text-blue-600">(from preset)</span>}
+                </label>
+                <select
+                  name="quality_level"
+                  value={formData.quality_level}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="standard">Standard</option>
+                  <option value="high">High</option>
+                  <option value="premium">Premium (Auto-enables all quality features)</option>
+                  <option value="enterprise">Enterprise (Auto-enables all quality features)</option>
+                </select>
+                {isPremiumQuality && (
+                  <p className="mt-1 text-xs text-green-600 dark:text-green-400">
+                    ✓ All quality features will be automatically enabled
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Template Type
+                </label>
+                <select
+                  name="template_type"
+                  value={formData.template_type}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  {templateTypes.map(template => (
+                    <option key={template.value} value={template.value}>
+                      {template.label} - {template.description}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Select the content structure template for your blog post
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Content Length
+                </label>
+                <select
+                  name="length"
+                  value={formData.length}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="short">Short (~500-1000 words)</option>
+                  <option value="medium">Medium (~1000-2000 words)</option>
+                  <option value="long">Long (~2000-3000 words)</option>
+                  <option value="very_long">Very Long (3000+ words)</option>
+                </select>
+              </div>
+
+              {!isPremiumQuality && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Quality Features (Optional)
+                  </h3>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                    Enable advanced features for better content quality. Premium/Enterprise quality enables all features automatically.
+                  </p>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_google_search}
+                        onChange={(e) => setFormData({ ...formData, use_google_search: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Google Search Research</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_fact_checking}
+                        onChange={(e) => setFormData({ ...formData, use_fact_checking: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Fact-Checking</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_citations}
+                        onChange={(e) => setFormData({ ...formData, use_citations: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Citations</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_serp_optimization}
+                        onChange={(e) => setFormData({ ...formData, use_serp_optimization: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">SERP Optimization</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_consensus_generation}
+                        onChange={(e) => setFormData({ ...formData, use_consensus_generation: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        Consensus Generation (GPT-4o + Claude) - Best Quality
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_knowledge_graph}
+                        onChange={(e) => setFormData({ ...formData, use_knowledge_graph: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Knowledge Graph</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_semantic_keywords}
+                        onChange={(e) => setFormData({ ...formData, use_semantic_keywords: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Semantic Keywords</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.use_quality_scoring}
+                        onChange={(e) => setFormData({ ...formData, use_quality_scoring: e.target.checked })}
+                        className="w-4 h-4 text-purple-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">Quality Scoring</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Custom Instructions (Optional)
+                </label>
+                <textarea
+                  name="custom_instructions"
+                  value={formData.custom_instructions}
+                  onChange={handleInputChange}
+                  rows={6}
+                  placeholder="Add custom instructions for structure, linking, images, or quality requirements..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white text-sm"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Leave empty to use default instructions. Premium quality uses default instructions automatically.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* External Links & SEO Options */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border-2 border-blue-200 dark:border-blue-800 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              External Links & SEO Options
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Configure external links and backlinks to improve SEO and content credibility
+            </p>
+            
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <input
+                  type="checkbox"
+                  id="include_external_links"
+                  name="include_external_links"
+                  checked={formData.include_external_links}
+                  onChange={handleInputChange}
+                  className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex-1">
+                  <label htmlFor="include_external_links" className="block text-sm font-medium text-gray-900 dark:text-white cursor-pointer">
+                    Include external links to source documents
+                  </label>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Automatically add links to authoritative sources and references in your blog content
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                <input
+                  type="checkbox"
+                  id="include_backlinks"
+                  name="include_backlinks"
+                  checked={formData.include_backlinks}
+                  onChange={handleInputChange}
+                  className="mt-1 w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div className="flex-1">
+                  <label htmlFor="include_backlinks" className="block text-sm font-medium text-gray-900 dark:text-white cursor-pointer">
+                    Include backlinks
+                  </label>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Add strategic backlinks to improve SEO and content discoverability
+                  </p>
+                  
+                  {formData.include_backlinks && (
+                    <div className="mt-3 ml-0">
+                      <label htmlFor="backlink_count" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Number of backlinks:
+                      </label>
+                      <input
+                        type="number"
+                        id="backlink_count"
+                        name="backlink_count"
+                        value={formData.backlink_count}
+                        onChange={handleInputChange}
+                        className="w-32 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                        min="1"
+                        max="20"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Recommended: 3-7 backlinks per article
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -599,14 +1044,46 @@ function NewDraftContent() {
             
             {generatedContent ? (
               <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Response:</h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg max-h-96 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
-                      {JSON.stringify(generatedContent, null, 2)}
-                    </pre>
+                {generatedContent.title != null && String(generatedContent.title).trim() !== '' && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Title:</h3>
+                    <p className="text-gray-700 dark:text-gray-300">{String(generatedContent.title)}</p>
                   </div>
-                </div>
+                )}
+                {generatedContent.excerpt != null && String(generatedContent.excerpt).trim() !== '' && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Excerpt:</h3>
+                    <p className="text-gray-700 dark:text-gray-300">{String(generatedContent.excerpt)}</p>
+                  </div>
+                )}
+                {generatedContent.content != null && String(generatedContent.content).trim() !== '' && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2">Content:</h3>
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg max-h-96 overflow-y-auto">
+                      <div className="prose dark:prose-invert max-w-none">
+                        <div className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
+                          {String(generatedContent.content)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {generatedContent.metadata != null && (
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">Generation Info:</h3>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                      {Boolean((generatedContent.metadata as Record<string, unknown>).used_brand_voice) && (
+                        <div>✓ Brand voice applied</div>
+                      )}
+                      {Boolean((generatedContent.metadata as Record<string, unknown>).used_preset) && (
+                        <div>✓ Content preset applied</div>
+                      )}
+                      {Boolean((generatedContent.metadata as Record<string, unknown>).enhanced) && (
+                        <div>✓ Enhanced generation used</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-8">
@@ -617,6 +1094,18 @@ function NewDraftContent() {
               </div>
             )}
           </div>
+
+          {/* Internal Link Suggestions */}
+          {savedPostId && generatedContent?.content != null && String(generatedContent.content).trim() !== '' && (
+            <InternalLinkSuggestions
+              postId={savedPostId}
+              content={String(generatedContent.content)}
+              compact={true}
+              onLinkAdd={(link) => {
+                console.log('Internal link added:', link);
+              }}
+            />
+          )}
 
           {/* API Status */}
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4">
@@ -631,6 +1120,14 @@ function NewDraftContent() {
           </div>
         </div>
       </div>
+
+      {/* Platform Selector Modal */}
+      {showPlatformSelector && (
+        <PlatformSelector
+          onSelect={handlePublish}
+          onCancel={() => setShowPlatformSelector(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
 
 export async function GET(
   request: NextRequest,
@@ -15,8 +16,8 @@ export async function GET(
     }
 
     const { id: draftId } = await params;
-    console.log('📝 Fetching draft:', draftId);
-    console.log('👤 Current user ID:', user.id);
+    logger.debug('📝 Fetching draft:', draftId);
+    logger.debug('👤 Current user ID:', user.id);
 
     // Fetch the draft - RLS policies will ensure user can only access their org's posts
     const { data: draft, error: draftError } = await supabase
@@ -26,8 +27,8 @@ export async function GET(
       .single();
 
     if (draftError) {
-      console.error('❌ Error fetching draft:', draftError);
-      console.error('❌ Error details:', JSON.stringify(draftError, null, 2));
+      logger.error('❌ Error fetching draft:', draftError);
+      logger.error('❌ Error details:', JSON.stringify(draftError, null, 2));
       
       // Provide more specific error messages
       if (draftError.code === 'PGRST116') {
@@ -43,11 +44,11 @@ export async function GET(
       }, { status: 404 });
     }
 
-    console.log('✅ Draft fetched successfully:', draft.title);
+    logger.debug('✅ Draft fetched successfully:', draft.title);
     return NextResponse.json({ data: draft });
 
   } catch (error) {
-    console.error('❌ Error in GET /api/drafts/[id]:', error);
+    logger.error('❌ Error in GET /api/drafts/[id]:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -69,7 +70,7 @@ export async function PUT(
     const body = await request.json();
     const { title, content, excerpt, status } = body;
 
-    console.log('📝 Updating draft:', draftId);
+    logger.debug('📝 Updating draft:', draftId);
 
     // Update the draft - RLS policies will ensure user can only update their org's posts
     const { data: updatedDraft, error: updateError } = await supabase
@@ -86,15 +87,15 @@ export async function PUT(
       .single();
 
     if (updateError) {
-      console.error('❌ Error updating draft:', updateError);
+      logger.error('❌ Error updating draft:', updateError);
       return NextResponse.json({ error: 'Failed to update draft' }, { status: 400 });
     }
 
-    console.log('✅ Draft updated successfully:', updatedDraft.title);
+    logger.debug('✅ Draft updated successfully:', updatedDraft.title);
     return NextResponse.json({ data: updatedDraft });
 
   } catch (error) {
-    console.error('❌ Error in PUT /api/drafts/[id]:', error);
+    logger.error('❌ Error in PUT /api/drafts/[id]:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -113,7 +114,7 @@ export async function DELETE(
     }
 
     const { id: draftId } = await params;
-    console.log('📝 Deleting draft:', draftId);
+    logger.debug('📝 Deleting draft:', draftId);
 
     // Delete the draft - RLS policies will ensure user can only delete their org's posts
     const { error: deleteError } = await supabase
@@ -122,15 +123,15 @@ export async function DELETE(
       .eq('post_id', draftId);
 
     if (deleteError) {
-      console.error('❌ Error deleting draft:', deleteError);
+      logger.error('❌ Error deleting draft:', deleteError);
       return NextResponse.json({ error: 'Failed to delete draft' }, { status: 400 });
     }
 
-    console.log('✅ Draft deleted successfully');
+    logger.debug('✅ Draft deleted successfully');
     return NextResponse.json({ success: true });
 
   } catch (error) {
-    console.error('❌ Error in DELETE /api/drafts/[id]:', error);
+    logger.error('❌ Error in DELETE /api/drafts/[id]:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -85,9 +85,19 @@ const menuItems: MenuItem[] = [
       {
         name: "Organization Settings",
         path: "/admin/panel/organizations/settings",
-        roles: ["system_admin", "super_admin"]
+        roles: ["system_admin", "super_admin", "admin", "owner"]
       }
     ]
+  },
+  {
+    name: "Integrations",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-5.656-3.555l4-4m0 0l4 4m-4-4v12m-4-4h12" />
+      </svg>
+    ),
+    path: "/admin/panel/integrations",
+    roles: ["system_admin", "super_admin", "admin"]
   },
   {
     name: "System Settings",
@@ -141,6 +151,28 @@ const menuItems: MenuItem[] = [
         name: "System Analytics",
         path: "/admin/panel/analytics/system",
         roles: ["system_admin"]
+      }
+    ]
+  },
+  {
+    name: "Content Settings",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    ),
+    path: "/admin/settings",
+    roles: ["system_admin", "super_admin", "admin", "manager", "editor"],
+    children: [
+      {
+        name: "Brand Voice",
+        path: "/admin/settings/brand-voice",
+        roles: ["system_admin", "super_admin", "admin", "manager", "editor"]
+      },
+      {
+        name: "Content Presets",
+        path: "/admin/settings/content-presets",
+        roles: ["system_admin", "super_admin", "admin", "manager", "editor"]
       }
     ]
   }

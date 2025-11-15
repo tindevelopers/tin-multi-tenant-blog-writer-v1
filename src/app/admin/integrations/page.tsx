@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { 
   PlusIcon, 
   MagnifyingGlassIcon, 
@@ -25,10 +27,42 @@ import {
 } from "@heroicons/react/24/outline";
 
 export default function IntegrationsPage() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([]);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Check user role and redirect admins to admin panel integrations
+  useEffect(() => {
+    const checkUserRole = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const { data: userData } = await supabase
+          .from("users")
+          .select("role")
+          .eq("user_id", user.id)
+          .single();
+        
+        if (userData?.role) {
+          setUserRole(userData.role);
+          
+          // Redirect admins to the admin panel integrations page
+          if (["system_admin", "super_admin", "admin"].includes(userData.role)) {
+            router.replace("/admin/panel/integrations");
+            return;
+          }
+        }
+      }
+      setLoading(false);
+    };
+    
+    checkUserRole();
+  }, [router]);
 
   // Mock integrations data
   const integrations = [
@@ -260,6 +294,19 @@ export default function IntegrationsPage() {
     );
   };
 
+  // Show loading state while checking role
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -271,13 +318,18 @@ export default function IntegrationsPage() {
               Integrations
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Connect your blog writer with external services and APIs to streamline your content workflow
+              View your organization&apos;s connected integrations. Contact your administrator to add or modify integrations.
             </p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-            <PlusIcon className="w-5 h-5" />
-            Add Integration
-          </button>
+          {userRole && ["system_admin", "super_admin", "admin"].includes(userRole) ? (
+            <button 
+              onClick={() => router.push("/admin/panel/integrations")}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+            >
+              <PlusIcon className="w-5 h-5" />
+              Manage Integrations
+            </button>
+          ) : null}
         </div>
       </div>
 

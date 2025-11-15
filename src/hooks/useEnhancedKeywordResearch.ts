@@ -13,6 +13,7 @@ import {
 } from '@/lib/keyword-research-enhanced';
 import { KeywordStorageService } from '@/lib/keyword-storage';
 import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
 
 export interface UseKeywordResearchResult {
   // State
@@ -80,23 +81,23 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
 
       // Save to database
       try {
-        console.log('🔍 Attempting to save keywords to database...');
+        logger.debug('🔍 Attempting to save keywords to database...');
         const supabase = createClient();
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         
-        console.log('🔍 User auth result:', { user: user?.id, error: userError?.message });
+        logger.debug('🔍 User auth result:', { user: user?.id, error: userError?.message });
         
         if (userError) {
-          console.error('❌ Auth error when saving keywords:', userError);
+          logger.error('❌ Auth error when saving keywords:', userError);
           throw userError;
         }
         
         if (!user) {
-          console.error('❌ No user authenticated when saving keywords');
+          logger.error('❌ No user authenticated when saving keywords');
           throw new Error('User not authenticated');
         }
 
-        console.log('✅ User authenticated:', user.id);
+        logger.debug('✅ User authenticated:', user.id);
         
         const keywordStorage = new KeywordStorageService();
         
@@ -114,7 +115,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
           long_tail_keywords: (k.related_keywords || []).slice(0, 3) // Use first 3 as long-tail
         }));
 
-        console.log('🔍 Saving keywords:', { 
+        logger.debug('🔍 Saving keywords:', { 
           userId: user.id, 
           primaryKeyword, 
           keywordCount: storageKeywords.length 
@@ -132,22 +133,22 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
           }
         );
         
-        console.log('💾 Save result:', saveResult);
+        logger.debug('💾 Save result:', saveResult);
         
         if (saveResult.success) {
-          console.log('✅ Keywords saved to database successfully');
+          logger.debug('✅ Keywords saved to database successfully');
         } else {
-          console.error('❌ Failed to save keywords:', saveResult.error);
+          logger.error('❌ Failed to save keywords:', saveResult.error);
         }
       } catch (saveError) {
-        console.error('⚠️ Failed to save keywords to database:', saveError);
+        logger.error('⚠️ Failed to save keywords to database:', saveError);
         // Don't fail the entire research if saving fails
       }
 
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Keyword research failed';
       setError(errorMessage);
-      console.error('Keyword research error:', err);
+      logger.error('Keyword research error:', err);
     } finally {
       setLoading(false);
     }
@@ -202,7 +203,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Keyword analysis failed';
       setError(errorMessage);
-      console.error('Keyword analysis error:', err);
+      logger.error('Keyword analysis error:', err);
     } finally {
       setLoading(false);
     }
@@ -226,7 +227,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Clustering failed';
       setError(errorMessage);
-      console.error('Clustering error:', err);
+      logger.error('Clustering error:', err);
     } finally {
       setLoading(false);
     }
@@ -303,7 +304,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load research history';
       setError(errorMessage);
-      console.error('Load history error:', err);
+      logger.error('Load history error:', err);
     } finally {
       setLoading(false);
     }

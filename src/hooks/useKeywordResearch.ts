@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
+import { logger } from '@/utils/logger';
 import keywordResearchService, { 
   BlogResearchResults, 
   KeywordAnalysis, 
@@ -86,17 +87,17 @@ export function useKeywordResearch(): UseKeywordResearchReturn {
     setResearchResults(null);
 
     try {
-      console.log('🔬 Starting full keyword research for:', topic);
+      logger.debug('🔬 Starting full keyword research for:', topic);
       const results = await keywordResearchService.performBlogResearch(topic, audience, userId);
       
       setResearchResults(results);
-      console.log('✅ Keyword research completed:', results);
+      logger.debug('✅ Keyword research completed:', results);
       
       return results;
     } catch (error: any) {
       const errorMessage = error.message || 'Failed to perform keyword research';
       setResearchError(errorMessage);
-      console.error('❌ Keyword research failed:', error);
+      logger.error('❌ Keyword research failed:', error);
       throw error;
     } finally {
       setIsResearching(false);

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { KeywordStorageService, type KeywordHistory, type StoredKeyword } from '@/lib/keyword-storage';
 import { createClient } from '@/lib/supabase/client';
-import { History, Search, TrendingUp, Target, Eye, Calendar, User } from 'lucide-react';
+import { History, Search, TrendingUp, Eye, Calendar } from 'lucide-react';
 import Alert from '@/components/ui/alert/Alert';
 
 export default function KeywordHistoryPage() {
@@ -11,29 +11,28 @@ export default function KeywordHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedHistory, setSelectedHistory] = useState<KeywordHistory | null>(null);
-  const [user, setUser] = useState<any>(null);
 
-  useEffect(() => {
-    initializeAuth();
-    
-    // Listen for auth state changes
-    const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
-      if (event === 'SIGNED_IN' && session?.user) {
-        setUser(session.user);
-        loadKeywordHistory(session.user);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setKeywordHistory([]);
-        setError('Please log in to view your research history');
+  const loadKeywordHistory = useCallback(async (userData: { id: string }) => {
+    try {
+      setLoading(true);
+      
+      if (!userData) {
+        setError('User not authenticated');
+        return;
       }
-    });
 
-    return () => subscription.unsubscribe();
+      const keywordStorage = new KeywordStorageService();
+      const history = await keywordStorage.getUserResearchSessions(userData.id);
+      setKeywordHistory(history);
+    } catch (err) {
+      console.error('Error loading keyword history:', err);
+      setError('Failed to load keyword history');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const initializeAuth = async () => {
+  const initializeAuth = useCallback(async () => {
     try {
       const supabase = createClient();
       
@@ -70,34 +69,31 @@ export default function KeywordHistoryPage() {
       }
 
       console.log('✅ User authenticated:', user.id);
-      setUser(user);
       await loadKeywordHistory(user);
     } catch (err) {
       console.error('Initialization error:', err);
       setError('Failed to initialize authentication');
       setLoading(false);
     }
-  };
+  }, [loadKeywordHistory]);
 
-  const loadKeywordHistory = async (userData: any) => {
-    try {
-      setLoading(true);
-      
-      if (!userData) {
-        setError('User not authenticated');
-        return;
+  useEffect(() => {
+    initializeAuth();
+    
+    // Listen for auth state changes
+    const supabase = createClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event, session?.user?.id);
+      if (event === 'SIGNED_IN' && session?.user) {
+        loadKeywordHistory(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setKeywordHistory([]);
+        setError('Please log in to view your research history');
       }
+    });
 
-      const keywordStorage = new KeywordStorageService();
-      const history = await keywordStorage.getUserResearchSessions(userData.id);
-      setKeywordHistory(history);
-    } catch (err) {
-      console.error('Error loading keyword history:', err);
-      setError('Failed to load keyword history');
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => subscription.unsubscribe();
+  }, [initializeAuth, loadKeywordHistory]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {

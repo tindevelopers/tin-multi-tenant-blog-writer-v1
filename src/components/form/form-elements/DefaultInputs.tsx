@@ -6,6 +6,7 @@ import Input from "../input/InputField";
 import Select from "../Select";
 import { EyeCloseIcon, EyeIcon, TimeIcon } from "../../../icons";
 import DatePicker from "@/components/form/date-picker";
+import { logger } from '@/utils/logger';
 
 export default function DefaultInputs() {
   const [showPassword, setShowPassword] = useState(false);
@@ -15,7 +16,7 @@ export default function DefaultInputs() {
     { value: "development", label: "Development" },
   ];
   const handleSelectChange = (value: string) => {
-    console.log("Selected value:", value);
+    logger.debug("Selected value:", value);
   };
 
   return (
@@ -66,7 +67,7 @@ export default function DefaultInputs() {
             placeholder="Select a date"
             onChange={(dates, currentDateString) => {
               // Handle your logic
-              console.log({ dates, currentDateString });
+              logger.debug('Date range changed', { dates, currentDateString });
             }}
           />
         </div>
@@ -78,7 +79,7 @@ export default function DefaultInputs() {
               type="time"
               id="tm"
               name="tm"
-              onChange={(e) => console.log(e.target.value)}
+              onChange={(e) => logger.debug(e.target.value)}
             />
             <span className="absolute text-gray-500 -translate-y-1/2 pointer-events-none right-3 top-1/2 dark:text-gray-400">
               <TimeIcon />

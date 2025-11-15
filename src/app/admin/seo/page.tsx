@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PrimaryKeywordInput } from "@/components/keyword-research/PrimaryKeywordInput";
-import { MasterKeywordTable } from "@/components/keyword-research/MasterKeywordTable";
+import MasterKeywordTable from "@/components/keyword-research/MasterKeywordTable";
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
 import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnhancedKeywordResearch";
 import { useContentIdeas } from "@/hooks/useContentIdeas";

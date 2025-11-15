@@ -1,159 +1,162 @@
-# 🚀 Phase 1 Deployment Status
+# Deployment Status
 
-## ✅ **Code: COMPLETE & PUSHED**
+## ✅ Code Pushed Successfully
 
-**Git Commit**: `05faca1`  
 **Branch**: `develop`  
-**GitHub**: ✅ **Successfully pushed**  
-**Repository**: `tindevelopers/tin-multi-tenant-blog-writer-v1`
+**Commit**: `d2ae05f`  
+**Message**: "Add integration API routes with connection method support and encryption"
+
+### Changes Deployed:
+- ✅ Integration API routes (`connect-api-key`, `[id]/test`)
+- ✅ Updated `connect-and-recommend` endpoint
+- ✅ Updated OAuth callback handler
+- ✅ Credential encryption utilities
+- ✅ Database adapter updates
+- ✅ Test scripts and documentation
+- ✅ Database migrations (need to be run manually in Supabase)
 
 ---
 
-## ✅ **Local Development: RUNNING**
+## 🚀 Deployment Process
 
-**Server**: `http://localhost:3002`  
-**Feature**: `http://localhost:3002/admin/seo`  
-**Status**: ✅ **Fully operational**  
-**Tests**: All API routes working (lines 260, 264, 284, 286 in terminal)
+### Automatic Deployment (Vercel)
+If Vercel is connected to your GitHub repository:
+1. ✅ Code pushed to `develop` branch
+2. ⏳ Vercel detects push (usually within 30 seconds)
+3. ⏳ Build starts automatically
+4. ⏳ Deployment completes (~2-3 minutes)
 
----
+**Check Status**: https://vercel.com/dashboard
 
-## ⚠️ **Vercel Deployment: WAITING FOR TOKEN**
-
-### Current Status
-
-**GitHub Secrets**:
-- ✅ `VERCEL_ORG_ID` - Set (2025-10-14)
-- ✅ `VERCEL_PROJECT_ID` - Set (2025-10-14)
-- ⚠️  `VERCEL_TOKEN` - **NEEDS TO BE CREATED**
-
-### Why Deployment Failed
-
-GitHub Actions workflow needs `VERCEL_TOKEN` to deploy to Vercel. This must be created manually at:
-
-**https://vercel.com/account/tokens**
-
----
-
-## 🎯 **What You Need To Do** (2 minutes)
-
-### Quick Setup:
-
-1. **Create Vercel Token**:
-   - Visit: https://vercel.com/account/tokens
-   - Click "Create Token"
-   - Name: "GitHub Actions - Blog Writer"
-   - Click "Create"
-   - **Copy the token**
-
-2. **Add to GitHub**:
-   - Visit: https://github.com/tindevelopers/tin-multi-tenant-blog-writer-v1/settings/secrets/actions
-   - Click "New repository secret"
-   - Name: `VERCEL_TOKEN`
-   - Value: (paste your token)
-   - Click "Add secret"
-
-3. **Done!** ✅
-
----
-
-## 🔄 **After Setup**
-
-Once `VERCEL_TOKEN` is added:
-
-### Automatic Deployment
+### Manual Deployment
+If auto-deploy is not configured:
 ```bash
-# Any push to develop will auto-deploy
-git push origin develop
-```
-
-### Manual Deployment  
-```bash
-# Deploy preview
-vercel
-
-# Deploy production
 vercel --prod
 ```
 
 ---
 
-## 📊 **Deployment Workflow**
+## 📋 Post-Deployment Checklist
 
-When you push to `develop` (after token is set):
+### 1. Verify Deployment ✅
+- [ ] Check Vercel dashboard for successful deployment
+- [ ] Verify build completed without errors
+- [ ] Check deployment URL is accessible
 
-1. **GitHub Actions triggers**
-2. **Runs tests** (linting, type-check)
-3. **Builds application** (npm run build)
-4. **Deploys to Vercel** (using token)
-5. **Comments deployment URL** on commit
+### 2. Run Database Migrations ⚠️ **REQUIRED**
+The following migrations need to be run in Supabase SQL Editor:
 
----
+**Migration 1**: `20250118000000_add_connection_method_support.sql`
+- Adds `connection_method`, `status`, `org_id`, etc.
+- Creates UNIQUE constraint
+- Adds CASCADE delete
 
-## 🎊 **Current Phase 1 Status**
+**Migration 2**: `20250118000001_fix_oauth_state_type.sql`
+- Changes `oauth_states.state_value` from UUID to TEXT
 
-### ✅ Development
-- Code complete
-- Locally tested
-- All features working
-- Database migrated
-- API routes functional
+**Migration 3**: `20250118000002_update_log_status_constraint.sql`
+- Updates log status constraint
+- Fixes `oauth_state` column type
 
-### ✅ Version Control
-- Committed to Git
-- Pushed to GitHub develop branch
-- TypeScript errors fixed
-- Ready for team collaboration
+**How to Run**:
+1. Go to: https://supabase.com/dashboard/project/edtxtpqrfpxeogukfunq/sql
+2. Copy and paste each migration file content
+3. Click "Run"
+4. Verify no errors
 
-### ⚠️ Production Deployment
-- Waiting for VERCEL_TOKEN
-- 2 out of 3 secrets configured
-- Vercel project linked
-- Workflow ready to run
+### 3. Set Environment Variables ⚠️ **REQUIRED**
+In Vercel Dashboard → Settings → Environment Variables:
 
----
+- [ ] `INTEGRATION_ENCRYPTION_KEY` - Generate with: `openssl rand -hex 32`
+- [ ] Verify `SUPABASE_SERVICE_ROLE_KEY` is set
+- [ ] Verify `NEXT_PUBLIC_SUPABASE_URL` is set
+- [ ] Verify `NEXT_PUBLIC_APP_URL` is set
 
-## 📝 **Quick Reference**
+**Generate Encryption Key**:
+```bash
+openssl rand -hex 32
+# Copy the output and add to Vercel environment variables
+```
 
-**Project Details**:
-- **Vercel Org ID**: `team_3Y0hANzD4PovKmUwUyc2WVpb`
-- **Vercel Project ID**: `prj_01DmJydV6xWIs088QMzsSRkIWnvR`
-- **Project Name**: `tin-multi-tenant-blog-writer-v1`
-- **Vercel Team**: `tindeveloper`
+### 4. Test Deployment ✅
+Once deployment completes and migrations are run:
 
-**GitHub Repo**:
-- **Owner**: `tindevelopers`
-- **Repo**: `tin-multi-tenant-blog-writer-v1`
-- **Branch**: `develop`
+```bash
+# Get fresh token (expires in 1 hour)
+node scripts/get-token.js systemadmin@tin.info <password> https://tin-multi-tenant-blog-writer-v1.vercel.app
 
----
-
-## 📚 **Documentation Created**
-
-For detailed setup instructions, see:
-- **`QUICK_VERCEL_SETUP.md`** - 2-minute setup guide
-- **`VERCEL_SECRETS_SETUP.md`** - Comprehensive setup guide
-- **`scripts/setup-vercel-token.sh`** - Automated setup script
+# Run tests
+INTEGRATION_TEST_BASE_URL="https://tin-multi-tenant-blog-writer-v1.vercel.app" \
+INTEGRATION_TEST_TOKEN="<fresh_token>" \
+node scripts/test-integrations.js --skip-oauth --verbose
+```
 
 ---
 
-## ✅ **Bottom Line**
+## 🔍 Monitoring Deployment
 
-**Phase 1 is COMPLETE and WORKING!**
+### Check Vercel Dashboard
+1. Go to: https://vercel.com/dashboard
+2. Find your project: `tin-multi-tenant-blog-writer-v1`
+3. Check latest deployment status
+4. View build logs if errors occur
 
-- ✅ All code implemented
-- ✅ Locally tested at http://localhost:3002/admin/seo
-- ✅ Pushed to GitHub
-- ✅ TypeScript passing
-- ✅ Ready for production
-
-**Just need 1 quick step** to enable auto-deployment to Vercel:
-- Create token at https://vercel.com/account/tokens
-- Add as GitHub secret
-
-**Or use it locally as-is - everything works!** 🚀
+### Check GitHub Actions (if configured)
+1. Go to: https://github.com/tindevelopers/tin-multi-tenant-blog-writer-v1/actions
+2. Find latest workflow run
+3. Check build status
 
 ---
 
-**Phase 1: DELIVERED & OPERATIONAL** ✅
+## ⚠️ Common Issues
 
+### Build Fails
+- **Check**: Build logs in Vercel dashboard
+- **Common causes**: Missing environment variables, TypeScript errors
+- **Fix**: Add missing env vars, fix code errors
+
+### Routes Still Return 404
+- **Check**: Deployment completed successfully
+- **Check**: Routes exist in `src/app/api/integrations/`
+- **Fix**: Redeploy if needed
+
+### Database Errors
+- **Check**: Migrations were run in Supabase
+- **Check**: Environment variables are correct
+- **Fix**: Run migrations, verify env vars
+
+---
+
+## 📊 Expected Test Results After Deployment
+
+Once everything is deployed and configured:
+
+```
+✅ Passed: 7-8 tests
+❌ Failed: 0-1 tests (depending on implementation)
+⏭️  Skipped: 1 test (OAuth - requires browser)
+```
+
+---
+
+## 🎯 Next Steps
+
+1. ⏳ **Wait for deployment** (~2-3 minutes)
+2. ⚠️ **Run database migrations** in Supabase
+3. ⚠️ **Set INTEGRATION_ENCRYPTION_KEY** in Vercel
+4. ✅ **Test endpoints** with test script
+5. ✅ **Verify functionality** in production
+
+---
+
+## 📝 Notes
+
+- **Token expires**: Your current token expires in ~20 minutes
+- **Get fresh token**: Use `scripts/get-token.js` after deployment
+- **Production URL**: https://tin-multi-tenant-blog-writer-v1.vercel.app
+- **Supabase Project**: edtxtpqrfpxeogukfunq
+
+---
+
+**Deployment initiated**: $(date)  
+**Status**: Pending deployment completion
