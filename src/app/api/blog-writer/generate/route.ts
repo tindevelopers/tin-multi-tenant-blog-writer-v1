@@ -159,16 +159,18 @@ function buildBlogResponse(
     
     // v1.3.1: Generated images (featured + section images)
     generated_images: [
-      ...(featuredImage ? [{
+      ...(featuredImage?.image_url ? [{
         type: 'featured' as const,
         image_url: featuredImage.image_url,
         alt_text: `Featured image for ${title}`
       }] : []),
-      ...sectionImages.map(img => ({
-        type: 'section' as const,
-        image_url: img.image.image_url,
-        alt_text: img.image.alt_text || `Section image`
-      }))
+      ...sectionImages
+        .filter(img => img.image.image_url)
+        .map(img => ({
+          type: 'section' as const,
+          image_url: img.image.image_url!,
+          alt_text: img.image.alt_text || `Section image`
+        }))
     ],
     
     // Include generated featured image if available
