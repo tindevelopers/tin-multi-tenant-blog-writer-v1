@@ -5,8 +5,8 @@
  * All providers should extend this class and implement the abstract methods.
  */
 
-import type {
 import { logger } from '@/utils/logger';
+import type {
   IIntegrationProvider,
   IntegrationType,
   ConnectionConfig,

@@ -8,8 +8,8 @@
 
 import { BaseIntegrationProvider } from '../base-provider';
 import { blogWriterAPI } from '@/lib/blog-writer-api';
-import type {
 import { logger } from '@/utils/logger';
+import type {
   IIntegrationProvider,
   IntegrationType,
   ConnectionConfig,
