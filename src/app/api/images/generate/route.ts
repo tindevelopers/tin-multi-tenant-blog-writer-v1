@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     const healthStatus = await cloudRunHealth.wakeUpAndWait();
     
     if (!healthStatus.isHealthy) {
-      logger.error('❌ Cloud Run is not healthy:', healthStatus.error);
+      logger.error('❌ Cloud Run is not healthy', { error: healthStatus.error });
       return NextResponse.json(
         { 
           error: healthStatus.isWakingUp 
@@ -60,11 +60,11 @@ export async function POST(request: NextRequest) {
       signal: AbortSignal.timeout(60000), // 60 second timeout
     });
     
-    logger.debug('📥 External API response status:', response.status);
+    logger.debug('📥 External API response status', { status: response.status });
     
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error('❌ External API error:', response.status, errorText);
+      logger.error('❌ External API error', { status: response.status, error: errorText });
       return NextResponse.json(
         { error: `External API error: ${response.status} ${errorText}` },
         { status: response.status }
@@ -77,7 +77,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
     
   } catch (error) {
-    logger.error('❌ Error in image generation API:', error);
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'image-generation',
+    });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }

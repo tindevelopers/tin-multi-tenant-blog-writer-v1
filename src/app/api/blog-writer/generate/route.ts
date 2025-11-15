@@ -296,14 +296,14 @@ export async function POST(request: NextRequest) {
       } else {
         userId = user.id;
         orgId = userProfile.org_id;
-        logger.debug('✅ Using authenticated user:', userId, 'Org:', orgId);
+        logger.debug('✅ Using authenticated user', { userId, orgId });
       }
     } else {
       // Use service client with default system values
       const serviceSupabase = createServiceClient();
       userId = '00000000-0000-0000-0000-000000000002';
       orgId = '00000000-0000-0000-0000-000000000001';
-      logger.debug('✅ Using service client with system user:', userId, 'Org:', orgId);
+      logger.debug('✅ Using service client with system user', { userId, orgId });
     }
     
     // Create queue entry before generation starts
@@ -490,9 +490,9 @@ export async function POST(request: NextRequest) {
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
     
     // shouldUseEnhanced and endpoint already declared above for queue entry
-    logger.debug('🌐 Calling external API:', `${API_BASE_URL}${endpoint}`);
-    logger.debug('🔑 API Key present:', !!API_KEY);
-    logger.debug('🌐 Using endpoint:', endpoint, '(Enhanced - Always Enabled)');
+    logger.debug('🌐 Calling external API', { url: `${API_BASE_URL}${endpoint}` });
+    logger.debug('🔑 API Key present', { hasKey: !!API_KEY });
+    logger.debug('🌐 Using endpoint (Enhanced - Always Enabled)', { endpoint });
     
     // Auto-enable quality features for premium/enterprise quality levels
     const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise' || 
@@ -805,7 +805,7 @@ export async function POST(request: NextRequest) {
       requestPayload.backlink_count = backlink_count;
     }
     
-    logger.debug('📤 Request payload:', JSON.stringify(requestPayload, null, 2));
+    logger.debug('📤 Request payload', { payload: JSON.stringify(requestPayload, null, 2) });
     const systemPromptForLog = typeof requestPayload.system_prompt === 'string' ? requestPayload.system_prompt : '';
     logger.debug('📤 Key parameters being sent:', {
       topic: requestPayload.topic,
@@ -834,7 +834,7 @@ export async function POST(request: NextRequest) {
     
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error('❌ External API error:', response.status, errorText);
+      logger.error('❌ External API error', { status: response.status, error: errorText });
       
       // Update queue entry with error if queue exists
       if (queueId) {
@@ -869,7 +869,7 @@ export async function POST(request: NextRequest) {
       contentPreview: result.content?.substring(0, 200) || result.blog_post?.content?.substring(0, 200) || 'No content',
       contentLength: result.content?.length || result.blog_post?.content?.length || 0,
     });
-    logger.debug('📄 Raw API response (first 500 chars):', JSON.stringify(result).substring(0, 500));
+    logger.debug('📄 Raw API response (first 500 chars)', { response: JSON.stringify(result).substring(0, 500) });
     
     // Update queue entry with progress updates if queue exists
     if (queueId) {

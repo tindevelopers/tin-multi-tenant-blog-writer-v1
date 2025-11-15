@@ -171,7 +171,7 @@ class KeywordStorageService {
         return { success: false, error: keywordsError.message };
       }
 
-      logger.debug('✅ Successfully saved keywords to database:', keywordResult?.length, 'keywords');
+      logger.debug('✅ Successfully saved keywords to database', { count: keywordResult?.length });
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

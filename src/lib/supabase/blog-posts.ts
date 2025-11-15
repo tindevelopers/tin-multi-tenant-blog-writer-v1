@@ -113,10 +113,12 @@ class BlogPostsService {
       }
       
       const result = await response.json();
-      logger.debug('✅ Posts fetched successfully:', result.data?.length || 0, 'posts');
+      logger.debug('✅ Posts fetched successfully', { count: result.data?.length || 0 });
       return result.data || [];
     } catch (error) {
-      logger.error('❌ Error in getPosts:', error);
+      logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+        context: 'getPosts',
+      });
       throw error;
     }
   }

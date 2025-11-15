@@ -67,7 +67,7 @@ export default function DefaultInputs() {
             placeholder="Select a date"
             onChange={(dates, currentDateString) => {
               // Handle your logic
-              logger.debug({ dates, currentDateString });
+              logger.debug('Date range changed', { dates, currentDateString });
             }}
           />
         </div>

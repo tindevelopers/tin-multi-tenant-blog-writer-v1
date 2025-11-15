@@ -348,11 +348,11 @@ export async function POST(request: NextRequest) {
     if (logId) {
       await integrationLogger.updateLog(logId, {
         status: 'failed',
-        error_message: error.message || 'Unknown error',
-        error_code: error.code || 'connection_failed',
+        error_message: error instanceof Error ? error.message : 'Unknown error',
+        error_code: (error as { code?: string })?.code || 'connection_failed',
         error_details: {
-          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-          name: error.name,
+          stack: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined,
+          name: error instanceof Error ? error.name : 'Unknown',
         },
       });
     }

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const body = await parseJsonBody<KeywordDifficultyRequest>(request);
     
     // Validate required fields
-    validateRequiredFields(body, ['keyword']);
+    validateRequiredFields(body as unknown as Record<string, unknown>, ['keyword']);
     
     if (typeof body.keyword !== 'string' || body.keyword.trim().length === 0) {
       return NextResponse.json(

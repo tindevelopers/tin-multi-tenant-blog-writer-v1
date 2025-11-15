@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
         source_post:blog_posts!internal_link_graph_source_post_id_fkey(post_id, title, status),
         target_post:blog_posts!internal_link_graph_target_post_id_fkey(post_id, title, status)
       `)
-      .eq('org_id', userProfile.org_id);
+      .eq('org_id', user.org_id);
 
     if (sourcePostId) {
       query = query.eq('source_post_id', sourcePostId);
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       .from('blog_posts')
       .select('post_id, org_id')
       .in('post_id', [source_post_id, target_post_id])
-      .eq('org_id', userProfile.org_id);
+      .eq('org_id', user.org_id);
 
     if (postsError || !posts || posts.length !== 2) {
       return NextResponse.json({ error: 'Invalid post IDs or posts not found' }, { status: 400 });

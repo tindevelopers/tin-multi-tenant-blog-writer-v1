@@ -79,8 +79,8 @@ export async function POST(request: NextRequest) {
       content,
       excerpt: excerpt || '',
       status: status as 'draft' | 'published' | 'scheduled' | 'archived',
-      seo_data: seo_data || {},
-      metadata: finalMetadata as Record<string, unknown>,
+      seo_data: (seo_data || {}) as Database['public']['Tables']['blog_posts']['Row']['seo_data'],
+      metadata: finalMetadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

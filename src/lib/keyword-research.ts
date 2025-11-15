@@ -354,7 +354,8 @@ class KeywordResearchService {
           
           // Debug: Log search volume extraction for first keyword
           if (Object.keys(filteredAnalysis).length === 0) {
-            logger.debug('🔍 Search volume extraction for keyword:', keyword, {
+            logger.debug('🔍 Search volume extraction for keyword', {
+              keyword,
               'kwData.search_volume': kwData.search_volume,
               'kwData.volume': kwData.volume,
               'kwData.monthly_searches': kwData.monthly_searches,

@@ -120,9 +120,12 @@ export default function EditorPage() {
   }
 
   interface ContentPreset {
+    preset_id?: string;
     id?: string;
     name?: string;
     description?: string;
+    word_count?: number;
+    quality_level?: string;
     [key: string]: unknown;
   }
 
@@ -554,7 +557,7 @@ export default function EditorPage() {
       logger.logError(err instanceof Error ? err : new Error('Unknown error'), {
         context: 'save-draft',
       });
-      setError(err.message || 'Failed to save draft');
+      setError(err instanceof Error ? err.message : 'Failed to save draft');
     } finally {
       setLoading(false);
     }
@@ -739,7 +742,7 @@ export default function EditorPage() {
                   compact={true}
                   selectedPresetId={formData.preset_id}
                   onPresetSelect={(preset) => {
-                    setSelectedPreset(preset);
+                    setSelectedPreset(preset as ContentPreset | null);
                     if (preset) {
                       setFormData(prev => ({
                         ...prev,

@@ -57,7 +57,7 @@ export async function createClient(request?: NextRequest) {
             cookieStore.set({ name, value, ...options });
           } catch (error) {
             // Silently fail if cookies can't be set (e.g., in middleware)
-            logger.warn('Could not set cookie:', name, error);
+            logger.warn('Could not set cookie', { name, error: error instanceof Error ? error.message : String(error) });
           }
         },
         remove(name: string, options: any) {
@@ -65,7 +65,7 @@ export async function createClient(request?: NextRequest) {
             cookieStore.set({ name, value: '', ...options });
           } catch (error) {
             // Silently fail if cookies can't be removed (e.g., in middleware)
-            logger.warn('Could not remove cookie:', name, error);
+            logger.warn('Could not remove cookie', { name, error: error instanceof Error ? error.message : String(error) });
           }
         },
       },

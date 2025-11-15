@@ -58,6 +58,12 @@ export async function POST(request: NextRequest) {
       language?: string;
       max_suggestions_per_keyword?: number;
       include_search_volume?: boolean;
+      include_serp?: boolean;
+      include_trends?: boolean;
+      include_keyword_ideas?: boolean;
+      include_relevant_pages?: boolean;
+      include_serp_ai_summary?: boolean;
+      competitor_domain?: string;
     }>(request);
     
     // Validate required fields per FRONTEND_API_INTEGRATION_GUIDE.md
@@ -162,6 +168,7 @@ export async function POST(request: NextRequest) {
       const { 
         max_suggestions_per_keyword, 
         include_search_volume,
+        include_serp,
         include_trends,
         include_keyword_ideas,
         include_relevant_pages,
