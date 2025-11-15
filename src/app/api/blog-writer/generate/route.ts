@@ -169,7 +169,7 @@ function buildBlogResponse(
         .map(img => ({
           type: 'section' as const,
           image_url: img.image.image_url!,
-          alt_text: img.image.alt_text || `Section image`
+          alt_text: (img.image as any).alt_text || `Section image`
         }))
     ],
     
