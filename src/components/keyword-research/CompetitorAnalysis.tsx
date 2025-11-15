@@ -138,7 +138,7 @@ export function CompetitorAnalysis({
           {competitors.length > 0 && (
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Competitor Rankings for "{primaryKeyword}"
+                Competitor Rankings for &quot;{primaryKeyword}&quot;
               </h3>
 
               <div className="space-y-3">
@@ -252,7 +252,7 @@ export function CompetitorAnalysis({
           {/* Empty State */}
           {competitors.length === 0 && !analyzing && (
             <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-              <p>Enter competitor domains and click "Analyze" to see comparison data.</p>
+              <p>Enter competitor domains and click &quot;Analyze&quot; to see comparison data.</p>
             </div>
           )}
         </div>
