@@ -150,50 +150,6 @@ export function useAsyncBlogGeneration(
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   
-  // Create async job
-  const createJob = useCallback(async (request: BlogGenerationRequest): Promise<string | null> => {
-    try {
-      setError(null);
-      setResult(null);
-      setProgress(0);
-      
-      // Use local API route with async_mode=true
-      const response = await fetch('/api/blog-writer/generate?async_mode=true', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to create job' }));
-        throw new Error(errorData.error || errorData.detail || `HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const newJobId = data.job_id;
-      
-      if (!newJobId) {
-        throw new Error('No job_id returned from API');
-      }
-      
-      setJobId(newJobId);
-      setStatus(data.status || 'queued');
-      
-      // Auto-start polling if enabled
-      if (opts.autoPoll && newJobId) {
-        // Use setTimeout to avoid calling pollJob before it's defined
-        setTimeout(() => pollJob(newJobId), 0);
-      }
-      
-      return newJobId;
-    } catch (err: any) {
-      const errorMessage = err.message || 'Failed to create job';
-      setError(errorMessage);
-      opts.onError?.(errorMessage);
-      return null;
-    }
-  }, [opts, pollJob]);
-  
   // Stop polling
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -303,6 +259,49 @@ export function useAsyncBlogGeneration(
     // Start polling
     return poll();
   }, [opts, isPolling, stopPolling]);
+  
+  // Create async job
+  const createJob = useCallback(async (request: BlogGenerationRequest): Promise<string | null> => {
+    try {
+      setError(null);
+      setResult(null);
+      setProgress(0);
+      
+      // Use local API route with async_mode=true
+      const response = await fetch('/api/blog-writer/generate?async_mode=true', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to create job' }));
+        throw new Error(errorData.error || errorData.detail || `HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const newJobId = data.job_id;
+      
+      if (!newJobId) {
+        throw new Error('No job_id returned from API');
+      }
+      
+      setJobId(newJobId);
+      setStatus(data.status || 'queued');
+      
+      // Auto-start polling if enabled
+      if (opts.autoPoll && newJobId) {
+        pollJob(newJobId);
+      }
+      
+      return newJobId;
+    } catch (err: any) {
+      const errorMessage = err.message || 'Failed to create job';
+      setError(errorMessage);
+      opts.onError?.(errorMessage);
+      return null;
+    }
+  }, [opts, pollJob]);
   
   // Reset state
   const reset = useCallback(() => {
