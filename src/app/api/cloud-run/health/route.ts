@@ -8,13 +8,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/utils/logger';
 
 const CLOUD_RUN_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
 const HEALTH_CHECK_TIMEOUT = 10000; // 10 seconds
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 Proxying Cloud Run health check...');
+    logger.debug('Proxying Cloud Run health check');
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
 
       if (response.ok) {
         const healthData = await response.json();
-        console.log('✅ Cloud Run is healthy');
+        logger.debug('Cloud Run is healthy');
         
         return NextResponse.json({
           isHealthy: true,
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
         // If we got a response (even if error), the service is running
         // 503 might mean overloaded or temporarily unavailable, but not starting up
         const is503 = response.status === 503;
-        console.warn(`⚠️ Cloud Run health check returned status ${response.status}`);
+        logger.warn('Cloud Run health check returned non-OK status', { status: response.status });
         
         // Try to parse error response
         let errorMessage = `Health check failed with status ${response.status}`;
@@ -65,17 +66,18 @@ export async function GET(request: NextRequest) {
           error: errorMessage,
         }, { status: response.status });
       }
-    } catch (fetchError: any) {
+    } catch (fetchError: unknown) {
       clearTimeout(timeoutId);
       
       // Check if it's a timeout or network error (likely cold start)
-      const isTimeout = fetchError.name === 'AbortError' || fetchError.message?.includes('timeout');
-      const isNetworkError = fetchError.message?.includes('Failed to fetch') || 
-                            fetchError.message?.includes('NetworkError') ||
-                            fetchError.code === 'ECONNREFUSED';
+      const error = fetchError instanceof Error ? fetchError : new Error(String(fetchError));
+      const isTimeout = error.name === 'AbortError' || error.message?.includes('timeout');
+      const isNetworkError = error.message?.includes('Failed to fetch') || 
+                            error.message?.includes('NetworkError') ||
+                            (fetchError as { code?: string }).code === 'ECONNREFUSED';
       
       if (isTimeout || isNetworkError) {
-        console.log('⏳ Cloud Run appears to be cold-starting (timeout/network error)');
+        logger.debug('Cloud Run appears to be cold-starting', { isTimeout, isNetworkError });
         return NextResponse.json({
           isHealthy: false,
           isWakingUp: true, // Indicate it's likely starting up
@@ -86,8 +88,10 @@ export async function GET(request: NextRequest) {
       
       throw fetchError;
     }
-  } catch (error: any) {
-    console.error('❌ Error checking Cloud Run health:', error);
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'cloud-run-health',
+    });
     
     // Extract a clean error message
     let errorMessage = 'Failed to check Cloud Run health';
@@ -95,8 +99,8 @@ export async function GET(request: NextRequest) {
       errorMessage = error.message;
     } else if (typeof error === 'string') {
       errorMessage = error;
-    } else if (error?.message) {
-      errorMessage = error.message;
+    } else if (error && typeof error === 'object' && 'message' in error) {
+      errorMessage = String(error.message);
     }
     
     // Don't include URL parsing errors in the message - they're misleading

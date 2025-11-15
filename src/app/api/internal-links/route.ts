@@ -1,26 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
+import { getAuthenticatedUser, handleApiError } from '@/lib/api-utils';
 
 // GET - Get internal links for a post or organization
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const sourcePostId = searchParams.get('source_post_id');
@@ -49,37 +40,28 @@ export async function GET(request: NextRequest) {
     const { data: links, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching internal links:', error);
+      logger.error('Error fetching internal links', { error });
       return NextResponse.json({ error: 'Failed to fetch internal links' }, { status: 500 });
     }
 
     return NextResponse.json({ links });
-  } catch (error) {
-    console.error('Error in GET /api/internal-links:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'internal-links-get',
+    });
+    return handleApiError(error);
   }
 }
 
 // POST - Create internal link
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
+    const supabase = await createClient();
 
     const body = await request.json();
     const {
@@ -111,7 +93,7 @@ export async function POST(request: NextRequest) {
     }
 
     const linkData = {
-      org_id: userProfile.org_id,
+      org_id: user.org_id,
       source_post_id,
       target_post_id,
       anchor_text,
@@ -136,37 +118,28 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      console.error('Error creating internal link:', error);
+      logger.error('Error creating internal link', { error });
       return NextResponse.json({ error: 'Failed to create internal link' }, { status: 500 });
     }
 
     return NextResponse.json({ link });
-  } catch (error) {
-    console.error('Error in POST /api/internal-links:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'internal-links-post',
+    });
+    return handleApiError(error);
   }
 }
 
 // DELETE - Delete internal link
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const linkId = searchParams.get('link_id');
@@ -179,17 +152,19 @@ export async function DELETE(request: NextRequest) {
       .from('internal_link_graph')
       .delete()
       .eq('link_id', linkId)
-      .eq('org_id', userProfile.org_id);
+      .eq('org_id', user.org_id);
 
     if (error) {
-      console.error('Error deleting internal link:', error);
+      logger.error('Error deleting internal link', { error });
       return NextResponse.json({ error: 'Failed to delete internal link' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('Error in DELETE /api/internal-links:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'internal-links-delete',
+    });
+    return handleApiError(error);
   }
 }
 

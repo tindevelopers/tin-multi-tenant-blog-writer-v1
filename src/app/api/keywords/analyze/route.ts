@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/utils/logger';
+import { parseJsonBody } from '@/lib/api-utils';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
   'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
@@ -25,7 +27,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       
       // If it's a 503 (Service Unavailable), retry
       if (response.status === 503 && attempt < retries) {
-        console.log(`⚠️ Cloud Run returned 503, retrying (${attempt}/${retries})...`);
+        logger.debug('Cloud Run returned 503, retrying', { attempt, retries });
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
         continue;
       }
@@ -36,7 +38,7 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       const isNetworkError = error instanceof TypeError;
       
       if ((isTimeout || isNetworkError) && attempt < retries) {
-        console.log(`⚠️ Network error, retrying (${attempt}/${retries})...`);
+        logger.debug('Network error, retrying', { attempt, retries, isTimeout, isNetworkError });
         await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
         continue;
       }
@@ -50,7 +52,13 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await parseJsonBody<{
+      keywords: Array<string | { keyword?: string; [key: string]: unknown }>;
+      location?: string;
+      language?: string;
+      max_suggestions_per_keyword?: number;
+      include_search_volume?: boolean;
+    }>(request);
     
     // Validate required fields per FRONTEND_API_INTEGRATION_GUIDE.md
     if (!body.keywords || !Array.isArray(body.keywords) || body.keywords.length === 0) {
@@ -148,7 +156,7 @@ export async function POST(request: NextRequest) {
     
     // If enhanced endpoint returns 503 (not available), fallback to regular endpoint
     if (response.status === 503) {
-      console.log('⚠️ Enhanced endpoint unavailable, falling back to regular endpoint');
+      logger.debug('Enhanced endpoint unavailable, falling back to regular endpoint');
       endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
       // Regular endpoint doesn't support enhanced features, remove them
       const { 
@@ -186,13 +194,19 @@ export async function POST(request: NextRequest) {
       try {
         // Try to get the response text first
         const responseText = await response.text();
-        console.error(`❌ Blog Writer API error response body (raw):`, responseText);
+        logger.error('Blog Writer API error response body', { 
+          status: response.status,
+          responseText 
+        });
         
         if (responseText) {
           try {
             // Try to parse as JSON
             const errorData = JSON.parse(responseText);
-            console.error(`❌ Blog Writer API error data (parsed):`, errorData);
+            logger.error('Blog Writer API error data (parsed)', { 
+              status: response.status,
+              errorData 
+            });
             
             // Per FRONTEND_API_INTEGRATION_GUIDE.md: errors can have 'detail', 'error', or 'message' fields
             // Priority: detail > error > message (per guide's error handling pattern)
@@ -228,12 +242,18 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch (parseError) {
-        console.error(`❌ Failed to parse error response:`, parseError);
+        logger.error('Failed to parse error response', { 
+          status: response.status,
+          error: parseError 
+        });
         // Use default error message
       }
       
-      console.error(`❌ Blog Writer API error (${response.status}):`, errorMessage);
-      console.error(`❌ Request body sent:`, JSON.stringify(requestBody, null, 2));
+      logger.error('Blog Writer API error', { 
+        status: response.status,
+        errorMessage,
+        requestBody 
+      });
       
       return NextResponse.json(
         { error: errorMessage },
@@ -269,7 +289,9 @@ export async function POST(request: NextRequest) {
       cluster_summary: data.cluster_summary || null
     });
   } catch (error: unknown) {
-    console.error('Error in keywords/analyze:', error);
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'keywords-analyze',
+    });
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { error: `Failed to analyze keywords: ${errorMessage}` },

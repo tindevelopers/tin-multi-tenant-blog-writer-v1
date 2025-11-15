@@ -10,6 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealthManager from '@/lib/cloud-run-health';
+import { logger } from '@/utils/logger';
+import { parseJsonBody, handleApiError } from '@/lib/api-utils';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
   'https://blog-writer-api-dev-kq42l26tuq-ew.a.run.app';
@@ -24,11 +26,18 @@ export async function POST(request: NextRequest) {
     // Allow unauthenticated requests for testing (similar to blog generation route)
     // In production, you may want to enforce authentication
     if (authError || !user) {
-      console.log('⚠️ No authenticated user, proceeding with system defaults');
+      logger.debug('No authenticated user, proceeding with system defaults');
     }
 
     // Parse request body
-    const body = await request.json();
+    const body = await parseJsonBody<{
+      keywords?: string[];
+      industry?: string;
+      existing_topics?: string[];
+      target_audience?: string;
+      count?: number;
+    }>(request);
+    
     const { keywords, industry, existing_topics, target_audience, count } = body;
 
     // Build request payload
@@ -79,10 +88,15 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown API error' }));
-      console.error('Backend API error for /topics/recommend:', errorData);
+      logger.error('Backend API error for /topics/recommend', {
+        status: response.status,
+        error: errorData,
+      });
       
       // Extract error message
-      const errorMessage = errorData.detail || errorData.error || errorData.message || 
+      const errorMessage = (errorData as { detail?: string; error?: string; message?: string }).detail || 
+        (errorData as { detail?: string; error?: string; message?: string }).error || 
+        (errorData as { detail?: string; error?: string; message?: string }).message || 
         `API returned ${response.status}`;
       
       return NextResponse.json(
@@ -94,20 +108,19 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
 
-  } catch (error: any) {
-    console.error('Error in /api/blog-writer/topics/recommend:', error);
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'blog-writer-topics-recommend',
+    });
     
-    if (error.name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       return NextResponse.json(
         { error: 'Request timeout. The topic recommendation took too long.' },
         { status: 504 }
       );
     }
     
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 

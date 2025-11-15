@@ -8,6 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { logger } from '@/utils/logger';
+import { getAuthenticatedUser, handleApiError } from '@/lib/api-utils';
 
 const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
 const API_KEY = process.env.BLOG_WRITER_API_KEY;
@@ -15,27 +17,11 @@ const API_KEY = process.env.BLOG_WRITER_API_KEY;
 export async function POST(request: NextRequest) {
   try {
     // Get authenticated user
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
       return NextResponse.json(
         { error: 'Not authenticated' },
         { status: 401 }
-      );
-    }
-
-    // Get user's organization
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userData || !userData.org_id) {
-      return NextResponse.json(
-        { error: 'User organization not found' },
-        { status: 404 }
       );
     }
 
@@ -74,7 +60,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         image_data: dataUri,
         file_name: file.name,
-        folder: `blog-images/${userData.org_id}`,
+        folder: `blog-images/${user.org_id}`,
         // Note: Blog Writer API will fetch Cloudinary credentials from organization settings
       }),
       signal: AbortSignal.timeout(60000), // 60 second timeout
@@ -82,7 +68,10 @@ export async function POST(request: NextRequest) {
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      console.error('Blog Writer API upload error:', errorText);
+      logger.error('Blog Writer API upload error', {
+        status: uploadResponse.status,
+        error: errorText,
+      });
       return NextResponse.json(
         { error: `Upload failed: ${uploadResponse.statusText}` },
         { status: uploadResponse.status }
@@ -92,10 +81,11 @@ export async function POST(request: NextRequest) {
     const result = await uploadResponse.json();
 
     // Save to media_assets table
+    const supabase = await createClient();
     const { data: assetData, error: assetError } = await supabase
       .from('media_assets')
       .insert({
-        org_id: userData.org_id,
+        org_id: user.org_id,
         uploaded_by: user.id,
         file_name: file.name,
         file_url: result.secure_url || result.url,
@@ -113,7 +103,10 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (assetError) {
-      console.error('Error saving media asset:', assetError);
+      logger.error('Error saving media asset', {
+        error: assetError,
+        orgId: user.org_id,
+      });
       // Still return success if upload worked, even if saving to DB failed
     }
 
@@ -125,12 +118,11 @@ export async function POST(request: NextRequest) {
       asset_id: assetData?.asset_id,
     });
 
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'images-upload',
+    });
+    return handleApiError(error);
   }
 }
 

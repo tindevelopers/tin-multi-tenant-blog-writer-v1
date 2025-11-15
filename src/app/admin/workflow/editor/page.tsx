@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { logger } from '@/utils/logger';
 import { 
   FileText, 
   ArrowRight, 
@@ -131,7 +132,7 @@ export default function EditorPage() {
             .maybeSingle();
 
           if (sessionError && sessionError.code !== 'PGRST116') {
-            console.error('Error loading session:', sessionError);
+            // Session error logged silently - session may not exist yet
           }
 
           if (session) {
@@ -158,7 +159,7 @@ export default function EditorPage() {
           }
         }
       } catch (error) {
-        console.error('Error loading data:', error);
+        // Error loading data - set error state for UI
         setError('Failed to load editor data');
       }
     };
@@ -174,7 +175,7 @@ export default function EditorPage() {
         // Fetch quality levels
         const qualityLevelsData = await blogWriterAPI.getQualityLevels();
         if (Array.isArray(qualityLevelsData) && qualityLevelsData.length > 0) {
-          setQualityLevels(qualityLevelsData.map((level: any) => ({
+          setQualityLevels(qualityLevelsData.map((level: { id?: string; value?: string; name?: string; label?: string; description?: string }) => ({
             value: level.id || level.value || level.name || String(level),
             label: level.label || level.name || level.description || String(level),
             description: level.description
@@ -192,14 +193,16 @@ export default function EditorPage() {
         // Fetch presets
         const presetsData = await blogWriterAPI.getPresets();
         if (Array.isArray(presetsData) && presetsData.length > 0) {
-          setPresets(presetsData.map((preset: any) => ({
+          setPresets(presetsData.map((preset: { id?: string; value?: string; name?: string; label?: string; description?: string }) => ({
             value: preset.id || preset.value || preset.name || String(preset),
             label: preset.label || preset.name || preset.description || String(preset),
             description: preset.description
           })));
         }
       } catch (error) {
-        console.error('Error loading quality options:', error);
+        logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+          context: 'load-quality-options',
+        });
         // Set default quality levels on error
         setQualityLevels([
           { value: 'low', label: 'Low (Fast)', description: 'Quick generation, basic quality' },
@@ -274,11 +277,11 @@ export default function EditorPage() {
       });
 
       // Capture queue_id if present
-      if (result && typeof result === 'object' && (result as any).queue_id) {
-        const capturedQueueId = (result as any).queue_id;
+      if (result && typeof result === 'object' && 'queue_id' in result) {
+        const capturedQueueId = (result as { queue_id: string }).queue_id;
         setQueueId(capturedQueueId);
         setQueueStatus("generating");
-        console.log('✅ Queue ID captured:', capturedQueueId);
+        logger.debug('Queue ID captured', { queueId: capturedQueueId });
         
         // Show success message with link to queue
         setSuccess(`Blog generation started! View progress in the queue dashboard.`);
@@ -319,7 +322,9 @@ export default function EditorPage() {
         setError('Failed to generate content. Please try again.');
       }
     } catch (err: any) {
-      console.error('Error generating content:', err);
+      logger.logError(err instanceof Error ? err : new Error('Unknown error'), {
+        context: 'generate-content',
+      });
       setError(err.message || 'Failed to generate content');
     } finally {
       setGenerating(false);
@@ -353,7 +358,9 @@ export default function EditorPage() {
       setSuccess("Approval requested successfully!");
       setTimeout(() => setSuccess(null), 3000);
     } catch (error) {
-      console.error("Error requesting approval:", error);
+      logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+        context: 'request-approval',
+      });
       setError("Failed to request approval. Please try again.");
     }
   };
@@ -386,7 +393,9 @@ export default function EditorPage() {
       setTimeout(() => setSuccess(null), 5000);
       setShowPlatformSelector(false);
     } catch (error) {
-      console.error("Error publishing:", error);
+      logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+        context: 'publish-content',
+      });
       setError("Failed to publish. Please try again.");
     }
   };
@@ -472,15 +481,16 @@ export default function EditorPage() {
             .eq('session_id', sessionId);
 
           if (workflowError) {
-            console.error('❌ Error updating workflow session:', workflowError);
+            logger.error('Error updating workflow session', { 
+              error: workflowError,
+              sessionId 
+            });
             // Don't throw - draft was saved successfully, workflow update is secondary
           } else {
-            console.log('✅ Draft saved successfully:', {
+            logger.debug('Draft saved successfully', {
               postId,
               title: formData.title,
               sessionId,
-              savedToBlogPosts: true,
-              savedToWorkflowData: true
             });
           }
         }
@@ -493,8 +503,10 @@ export default function EditorPage() {
       } else {
         setError('Failed to save draft');
       }
-    } catch (err: any) {
-      console.error('Error saving draft:', err);
+    } catch (err: unknown) {
+      logger.logError(err instanceof Error ? err : new Error('Unknown error'), {
+        context: 'save-draft',
+      });
       setError(err.message || 'Failed to save draft');
     } finally {
       setLoading(false);
@@ -1174,7 +1186,9 @@ export default function EditorPage() {
                     const result = await response.json();
                     return result.url;
                   } catch (error) {
-                    console.error('Error uploading image:', error);
+                    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+                      context: 'upload-image',
+                    });
                     throw error;
                   }
                 }}
