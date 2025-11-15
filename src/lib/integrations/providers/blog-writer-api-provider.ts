@@ -9,6 +9,7 @@
 import { BaseIntegrationProvider } from '../base-provider';
 import { blogWriterAPI } from '@/lib/blog-writer-api';
 import type {
+import { logger } from '@/utils/logger';
   IIntegrationProvider,
   IntegrationType,
   ConnectionConfig,
@@ -86,7 +87,7 @@ export class BlogWriterAPIProvider extends BaseIntegrationProvider
         },
       };
     } catch (error: any) {
-      console.error(`Failed to connect to ${this.type}:`, error);
+      logger.error(`Failed to connect to ${this.type}:`, error);
       return {
         success: false,
         error: error.message || 'Connection failed',
@@ -99,7 +100,7 @@ export class BlogWriterAPIProvider extends BaseIntegrationProvider
    * Note: Blog Writer API doesn't have a disconnect endpoint, so this is a no-op
    */
   async disconnect(integrationId: string): Promise<void> {
-    console.log(`Disconnecting ${this.type} integration ${integrationId}`);
+    logger.debug(`Disconnecting ${this.type} integration ${integrationId}`);
     // Blog Writer API doesn't have a disconnect endpoint
     // The integration is managed locally in our database
   }

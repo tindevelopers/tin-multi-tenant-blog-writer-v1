@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { KeyIcon, CheckCircleIcon, XCircleIcon, ExclamationTriangleIcon, EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import { logger } from '@/utils/logger';
 
 interface CloudinaryConfigProps {
   orgId: string;
@@ -68,7 +69,7 @@ export function CloudinaryConfig({ orgId, onSave }: CloudinaryConfigProps) {
           .single();
 
         if (orgError) {
-          console.error("Error loading organization:", orgError);
+          logger.error("Error loading organization:", orgError);
           setLoading(false);
           return;
         }
@@ -84,7 +85,7 @@ export function CloudinaryConfig({ orgId, onSave }: CloudinaryConfigProps) {
           setStatus("configured");
         }
       } catch (err) {
-        console.error("Error loading credentials:", err);
+        logger.error("Error loading credentials:", err);
         setError(err instanceof Error ? err.message : "Failed to load credentials");
       } finally {
         setLoading(false);
@@ -159,7 +160,7 @@ export function CloudinaryConfig({ orgId, onSave }: CloudinaryConfigProps) {
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      console.error("Error saving credentials:", err);
+      logger.error("Error saving credentials:", err);
       setError(err instanceof Error ? err.message : "Failed to save credentials");
       setStatus("error");
     } finally {

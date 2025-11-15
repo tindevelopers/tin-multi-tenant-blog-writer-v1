@@ -7,6 +7,7 @@
 
 import { createServiceClient } from '@/lib/supabase/service';
 import type { Database } from '@/types/database';
+import { logger } from '@/utils/logger';
 
 type LogStatus = 
   | 'initiated'
@@ -101,13 +102,13 @@ export class IntegrationLogger {
         .single();
 
       if (error) {
-        console.error('❌ Failed to log integration connection:', error);
+        logger.error('❌ Failed to log integration connection:', error);
         return null;
       }
 
       return data?.log_id || null;
     } catch (error) {
-      console.error('❌ Error logging integration connection:', error);
+      logger.error('❌ Error logging integration connection:', error);
       return null;
     }
   }
@@ -135,13 +136,13 @@ export class IntegrationLogger {
         .eq('log_id', logId);
 
       if (error) {
-        console.error('❌ Failed to update log:', error);
+        logger.error('❌ Failed to update log:', error);
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('❌ Error updating log:', error);
+      logger.error('❌ Error updating log:', error);
       return false;
     }
   }
@@ -184,13 +185,13 @@ export class IntegrationLogger {
       const { data, error } = await query;
 
       if (error) {
-        console.error('❌ Failed to fetch logs:', error);
+        logger.error('❌ Failed to fetch logs:', error);
         return [];
       }
 
       return data || [];
     } catch (error) {
-      console.error('❌ Error fetching logs:', error);
+      logger.error('❌ Error fetching logs:', error);
       return [];
     }
   }

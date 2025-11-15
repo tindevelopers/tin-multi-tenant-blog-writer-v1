@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 /**
  * Image Generation Service
  * Handles image generation using Stability.ai via Blog Writer API
@@ -110,7 +111,7 @@ class BlogImageGenerator {
         }
         
         const errorMessage = error.detail || error.error || error.message || `Image generation failed: ${response.statusText}`;
-        console.error('❌ Image generation API error:', {
+        logger.error('❌ Image generation API error:', {
           status: response.status,
           statusText: response.statusText,
           error: errorMessage,
@@ -121,7 +122,7 @@ class BlogImageGenerator {
       }
 
       const result = await response.json();
-      console.log('✅ Image generation API response:', {
+      logger.debug('✅ Image generation API response:', {
         success: result.success,
         imagesCount: result.images?.length || 0,
         provider: result.provider,
@@ -129,7 +130,7 @@ class BlogImageGenerator {
       });
       return result;
     } catch (error) {
-      console.error('❌ Image generation error:', {
+      logger.error('❌ Image generation error:', {
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
         endpoint: this.useLocalRoute ? '/api/images/generate' : `${this.apiUrl}/api/v1/images/generate`
@@ -165,13 +166,13 @@ class BlogImageGenerator {
       });
 
       if (!response.success || response.images.length === 0) {
-        console.warn('Image generation returned no images:', response.error_message);
+        logger.warn('Image generation returned no images:', response.error_message);
         return null;
       }
 
       return response.images[0];
     } catch (error) {
-      console.error('Failed to generate featured image:', error);
+      logger.error('Failed to generate featured image:', error);
       // Don't throw - return null so blog generation can continue without image
       return null;
     }
@@ -212,7 +213,7 @@ class BlogImageGenerator {
       }
     }
 
-    console.warn('Image generation failed after retries:', lastError?.message);
+    logger.warn('Image generation failed after retries:', lastError?.message);
     return null;
   }
 }

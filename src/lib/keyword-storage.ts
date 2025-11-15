@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
 
 export interface StoredKeyword {
   id: string;
@@ -50,30 +51,30 @@ class KeywordStorageService {
     researchResults?: Record<string, unknown>
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log('💾 Saving keywords to database for user:', userId);
-      console.log('💾 Topic:', topic);
-      console.log('💾 Keywords count:', keywords.length);
-      console.log('💾 First few keywords:', keywords.slice(0, 3));
+      logger.debug('💾 Saving keywords to database for user:', userId);
+      logger.debug('💾 Topic:', topic);
+      logger.debug('💾 Keywords count:', keywords.length);
+      logger.debug('💾 First few keywords:', keywords.slice(0, 3));
       
       // Create a fresh Supabase client with auth context
       const supabase = createClient();
       
       // Test auth first
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      console.log('💾 Auth check:', { userId: user?.id, error: authError?.message });
+      logger.debug('💾 Auth check:', { userId: user?.id, error: authError?.message });
       
       if (authError) {
-        console.error('💾 Auth error:', authError);
+        logger.error('💾 Auth error:', authError);
         return { success: false, error: authError.message };
       }
       
       if (!user) {
-        console.error('💾 No user found');
+        logger.error('💾 No user found');
         return { success: false, error: 'User not authenticated' };
       }
       
       // First, save the research session
-      console.log('💾 Inserting research session...');
+      logger.debug('💾 Inserting research session...');
       
       // Let's try a simpler approach first - test with minimal data
       const sessionData = {
@@ -86,32 +87,32 @@ class KeywordStorageService {
           generated_at: new Date().toISOString()
         }
       };
-      console.log('💾 Session data:', sessionData);
+      logger.debug('💾 Session data:', sessionData);
       
       // Test the insert step by step
-      console.log('💾 Testing table access...');
+      logger.debug('💾 Testing table access...');
       const { data: tableTest, error: tableError } = await supabase
         .from('keyword_research_sessions')
         .select('id')
         .limit(1);
       
-      console.log('💾 Table access test:', { data: tableTest, error: tableError });
+      logger.debug('💾 Table access test:', { data: tableTest, error: tableError });
       
       if (tableError) {
-        console.error('❌ Cannot access keyword_research_sessions table:', tableError);
+        logger.error('❌ Cannot access keyword_research_sessions table:', tableError);
         return { success: false, error: `Table access error: ${tableError.message}` };
       }
       
-      console.log('✅ Table access successful');
+      logger.debug('✅ Table access successful');
       
-      console.log('💾 Attempting insert...');
+      logger.debug('💾 Attempting insert...');
       const { data: sessionResult, error: sessionError } = await supabase
         .from('keyword_research_sessions')
         .insert(sessionData)
         .select()
         .single();
 
-      console.log('💾 Session insert result:', { 
+      logger.debug('💾 Session insert result:', { 
         data: sessionResult, 
         error: sessionError,
         errorCode: sessionError?.code,
@@ -120,8 +121,8 @@ class KeywordStorageService {
       });
 
       if (sessionError) {
-        console.error('❌ Failed to save research session:', sessionError);
-        console.error('❌ Session data that failed:', sessionData);
+        logger.error('❌ Failed to save research session:', sessionError);
+        logger.error('❌ Session data that failed:', sessionData);
         
         // Try to provide more helpful error information
         if (sessionError.code === 'PGRST301' || sessionError.message?.includes('permission denied')) {
@@ -134,7 +135,7 @@ class KeywordStorageService {
         return { success: false, error: sessionError.message || JSON.stringify(sessionError) };
       }
       
-      console.log('✅ Research session saved:', sessionResult.id);
+      logger.debug('✅ Research session saved:', sessionResult.id);
 
       // Then save individual keywords
       const keywordInserts = keywords.map(keyword => ({
@@ -152,29 +153,29 @@ class KeywordStorageService {
         long_tail_keywords: keyword.long_tail_keywords || [],
       }));
 
-      console.log('💾 Inserting keywords...');
-      console.log('💾 First keyword insert:', keywordInserts[0]);
+      logger.debug('💾 Inserting keywords...');
+      logger.debug('💾 First keyword insert:', keywordInserts[0]);
       
       const { data: keywordResult, error: keywordsError } = await supabase
         .from('user_keywords')
         .insert(keywordInserts)
         .select();
 
-      console.log('💾 Keywords insert result:', { 
+      logger.debug('💾 Keywords insert result:', { 
         count: keywordResult?.length, 
         error: keywordsError?.message 
       });
 
       if (keywordsError) {
-        console.error('❌ Failed to save keywords:', keywordsError);
+        logger.error('❌ Failed to save keywords:', keywordsError);
         return { success: false, error: keywordsError.message };
       }
 
-      console.log('✅ Successfully saved keywords to database:', keywordResult?.length, 'keywords');
+      logger.debug('✅ Successfully saved keywords to database:', keywordResult?.length, 'keywords');
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error saving keywords:', errorMessage);
+      logger.error('Error saving keywords:', errorMessage);
       return { success: false, error: errorMessage };
     }
   }
@@ -196,13 +197,13 @@ class KeywordStorageService {
         .limit(limit);
 
       if (error) {
-        console.error('Failed to retrieve user keywords:', error);
+        logger.error('Failed to retrieve user keywords:', error);
         return [];
       }
 
       return data || [];
     } catch (error: unknown) {
-      console.error('Error retrieving user keywords:', error);
+      logger.error('Error retrieving user keywords:', error);
       return [];
     }
   }
@@ -224,7 +225,7 @@ class KeywordStorageService {
         .limit(limit);
 
       if (error) {
-        console.error('Failed to retrieve research sessions:', error);
+        logger.error('Failed to retrieve research sessions:', error);
         return [];
       }
 
@@ -237,7 +238,7 @@ class KeywordStorageService {
         created_at: session.created_at,
       })) || [];
     } catch (error: unknown) {
-      console.error('Error retrieving research sessions:', error);
+      logger.error('Error retrieving research sessions:', error);
       return [];
     }
   }
@@ -259,13 +260,13 @@ class KeywordStorageService {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Failed to retrieve keywords by topic:', error);
+        logger.error('Failed to retrieve keywords by topic:', error);
         return [];
       }
 
       return data || [];
     } catch (error: unknown) {
-      console.error('Error retrieving keywords by topic:', error);
+      logger.error('Error retrieving keywords by topic:', error);
       return [];
     }
   }
@@ -285,14 +286,14 @@ class KeywordStorageService {
         .eq('id', keywordId);
 
       if (error) {
-        console.error('Failed to update keyword:', error);
+        logger.error('Failed to update keyword:', error);
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error updating keyword:', errorMessage);
+      logger.error('Error updating keyword:', errorMessage);
       return { success: false, error: errorMessage };
     }
   }
@@ -309,14 +310,14 @@ class KeywordStorageService {
         .eq('id', keywordId);
 
       if (error) {
-        console.error('Failed to delete keyword:', error);
+        logger.error('Failed to delete keyword:', error);
         return { success: false, error: error.message };
       }
 
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error deleting keyword:', errorMessage);
+      logger.error('Error deleting keyword:', errorMessage);
       return { success: false, error: errorMessage };
     }
   }
@@ -336,13 +337,13 @@ class KeywordStorageService {
         .limit(20);
 
       if (error) {
-        console.error('Failed to search keywords:', error);
+        logger.error('Failed to search keywords:', error);
         return [];
       }
 
       return data || [];
     } catch (error: unknown) {
-      console.error('Error searching keywords:', error);
+      logger.error('Error searching keywords:', error);
       return [];
     }
   }

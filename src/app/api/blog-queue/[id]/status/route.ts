@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
+import { getAuthenticatedUser } from '@/lib/api-utils';
 
 /**
  * GET /api/blog-queue/[id]/status
@@ -15,30 +16,19 @@ export async function GET(
 ) {
   const { id } = await params;
   try {
-    const supabase = await createClient(request);
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser(request);
     if (!user) {
       return new Response('Unauthorized', { status: 401 });
     }
-
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return new Response('User profile not found', { status: 404 });
-    }
+    
+    const supabase = await createClient();
 
     // Verify queue item exists and belongs to user's org
     const { data: queueItem, error: queueError } = await supabase
       .from('blog_generation_queue')
       .select('queue_id, org_id, status, progress_percentage, current_stage')
       .eq('queue_id', id)
-      .eq('org_id', userProfile.org_id)
+      .eq('org_id', user.org_id)
       .single();
 
     if (queueError || !queueItem) {
@@ -51,7 +41,7 @@ export async function GET(
         const encoder = new TextEncoder();
         
         // Send initial connection message
-        const send = (data: any) => {
+        const send = (data: Record<string, unknown>) => {
           const message = `data: ${JSON.stringify(data)}\n\n`;
           controller.enqueue(encoder.encode(message));
         };
@@ -86,7 +76,7 @@ export async function GET(
 
             if (updatedItem) {
               // Get latest progress update
-              const progressUpdates = (updatedItem.progress_updates as any[]) || [];
+              const progressUpdates = (updatedItem.progress_updates as Array<Record<string, unknown>>) || [];
               const latestUpdate = progressUpdates.length > 0 
                 ? progressUpdates[progressUpdates.length - 1]
                 : null;
@@ -113,8 +103,10 @@ export async function GET(
                 controller.close();
               }
             }
-          } catch (error) {
-            logger.error('Error polling queue status:', error);
+          } catch (error: unknown) {
+            logger.error('Error polling queue status', {
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
             send({
               type: 'error',
               message: error instanceof Error ? error.message : 'Unknown error',
@@ -150,8 +142,10 @@ export async function GET(
         'X-Accel-Buffering': 'no' // Disable buffering for nginx
       }
     });
-  } catch (error) {
-    logger.error('Error in SSE endpoint:', error);
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'blog-queue-status-sse',
+    });
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 

@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import { useContentAnalysis } from '@/hooks/useContentAnalysis';
+import { logger } from '@/utils/logger';
 import { 
   ChartBarIcon, 
   DocumentTextIcon,
@@ -45,7 +46,7 @@ export function ContentAnalysisPanel({
         onAnalysisComplete(analysisResult);
       }
     } catch (err) {
-      console.error('Analysis failed:', err);
+      logger.error('Analysis failed:', err);
     }
   };
 

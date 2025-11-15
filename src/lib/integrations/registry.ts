@@ -7,6 +7,7 @@
 
 import type { IIntegrationProvider, IntegrationType } from './types';
 import { BaseIntegrationProvider } from './base-provider';
+import { logger } from '@/utils/logger';
 
 class IntegrationRegistry {
   private providers: Map<IntegrationType, new () => IIntegrationProvider> = new Map();
@@ -17,7 +18,7 @@ class IntegrationRegistry {
    */
   register(type: IntegrationType, providerClass: new () => IIntegrationProvider): void {
     if (this.providers.has(type)) {
-      console.warn(`Provider ${type} is already registered. Overwriting...`);
+      logger.warn(`Provider ${type} is already registered. Overwriting...`);
     }
     this.providers.set(type, providerClass);
   }
@@ -34,7 +35,7 @@ class IntegrationRegistry {
     // Create new instance if provider is registered
     const ProviderClass = this.providers.get(type);
     if (!ProviderClass) {
-      console.error(`Provider ${type} is not registered`);
+      logger.error(`Provider ${type} is not registered`);
       return null;
     }
 
@@ -43,7 +44,7 @@ class IntegrationRegistry {
       this.instances.set(type, instance);
       return instance;
     } catch (error) {
-      console.error(`Failed to instantiate provider ${type}:`, error);
+      logger.error(`Failed to instantiate provider ${type}:`, error);
       return null;
     }
   }

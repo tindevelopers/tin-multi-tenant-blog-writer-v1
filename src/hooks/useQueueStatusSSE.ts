@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { QueueStatus } from "@/lib/blog-queue-state-machine";
+import { logger } from '@/utils/logger';
 
 interface QueueStatusUpdate {
   status: QueueStatus;
@@ -54,13 +55,13 @@ export function useQueueStatusSSE(queueId: string | null) {
           eventSource.close();
         }
       } catch (err) {
-        console.error("Error parsing SSE message:", err);
+        logger.error("Error parsing SSE message:", err);
         setError("Failed to parse status update");
       }
     };
 
     eventSource.onerror = (err) => {
-      console.error("SSE connection error:", err);
+      logger.error("SSE connection error:", err);
       setError("Connection error");
       eventSource.close();
     };

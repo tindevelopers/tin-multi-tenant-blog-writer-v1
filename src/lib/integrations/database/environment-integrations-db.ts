@@ -16,6 +16,7 @@ import type {
   IntegrationStatus,
   HealthStatus,
 } from '../types';
+import { logger } from '@/utils/logger';
 import {
   encryptConnectionConfig,
   decryptConnectionConfig,
@@ -56,7 +57,7 @@ export class EnvironmentIntegrationsDB {
       const nodeEnv = String(process.env.NODE_ENV || 'development');
       const vercelEnv = process.env.VERCEL_ENV;
       
-      console.log(`[EnvironmentIntegrationsDB] Environment detection: NODE_ENV=${nodeEnv}, VERCEL_ENV=${vercelEnv}`);
+      logger.debug(`[EnvironmentIntegrationsDB] Environment detection: NODE_ENV=${nodeEnv}, VERCEL_ENV=${vercelEnv}`);
       
       if (vercelEnv === 'production' || nodeEnv === 'production') {
         this.env = 'prod';
@@ -66,7 +67,7 @@ export class EnvironmentIntegrationsDB {
         this.env = 'dev';
       }
       
-      console.log(`[EnvironmentIntegrationsDB] Detected environment: ${this.env}`);
+      logger.debug(`[EnvironmentIntegrationsDB] Detected environment: ${this.env}`);
     }
   }
 
@@ -75,8 +76,8 @@ export class EnvironmentIntegrationsDB {
    */
   async getIntegrations(orgId: string): Promise<Integration[]> {
     const tableName = getTableName('integrations', this.env);
-    console.log(`[EnvironmentIntegrationsDB] getIntegrations: Using table "${tableName}" for env "${this.env}", orgId="${orgId}"`);
-    console.log(`[EnvironmentIntegrationsDB] Table name value:`, JSON.stringify(tableName));
+    logger.debug(`[EnvironmentIntegrationsDB] getIntegrations: Using table "${tableName}" for env "${this.env}", orgId="${orgId}"`);
+    logger.debug(`[EnvironmentIntegrationsDB] Table name value:`, JSON.stringify(tableName));
     
     if (!tableName || tableName === 'integrations') {
       throw new Error(`Invalid table name: "${tableName}". Expected table name with environment suffix (e.g., integrations_dev)`);
@@ -89,8 +90,8 @@ export class EnvironmentIntegrationsDB {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error(`[EnvironmentIntegrationsDB] Error querying table "${tableName}":`, error);
-      console.error(`[EnvironmentIntegrationsDB] Error details:`, JSON.stringify(error, null, 2));
+      logger.error(`[EnvironmentIntegrationsDB] Error querying table "${tableName}":`, error);
+      logger.error(`[EnvironmentIntegrationsDB] Error details:`, JSON.stringify(error, null, 2));
       throw new Error(`Failed to fetch integrations: ${error.message}`);
     }
 

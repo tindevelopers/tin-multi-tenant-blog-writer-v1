@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { logger } from '@/utils/logger';
 
 interface WorkflowStatus {
   queueId: string | null;
@@ -97,7 +98,7 @@ export function useBlogWorkflow(postId: string | null, queueId: string | null) {
           }
         }
       } catch (error) {
-        console.error("Error fetching workflow status:", error);
+        logger.error("Error fetching workflow status:", error);
       } finally {
         setLoading(false);
       }

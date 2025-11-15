@@ -8,6 +8,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { logger } from '@/utils/logger';
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -125,7 +126,7 @@ export function ConnectIntegrationForm({
       setSuccess(`Successfully connected to ${provider}!`);
       onSuccess?.(data.data);
     } catch (err: any) {
-      console.error('ConnectIntegrationForm error:', err);
+      logger.error('ConnectIntegrationForm error:', err);
       const errorMessage = err?.message || err?.toString() || 'An error occurred';
       setError(errorMessage);
       onError?.(errorMessage);

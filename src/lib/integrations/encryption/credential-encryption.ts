@@ -6,6 +6,7 @@
  */
 
 import crypto from 'crypto';
+import { logger } from '@/utils/logger';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -60,7 +61,7 @@ export function encryptCredential(plaintext: string): string {
     // Return format: iv:authTag:encryptedData
     return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
   } catch (error) {
-    console.error('Encryption error:', error);
+    logger.error('Encryption error:', error);
     throw new Error(`Failed to encrypt credential: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -77,7 +78,7 @@ export function decryptCredential(encryptedText: string): string {
   // Check if already decrypted (plaintext)
   if (!encryptedText.includes(':')) {
     // Legacy: might be plaintext, return as-is (should be migrated)
-    console.warn('Decrypting plaintext credential (should be encrypted)');
+    logger.warn('Decrypting plaintext credential (should be encrypted)');
     return encryptedText;
   }
   
@@ -102,7 +103,7 @@ export function decryptCredential(encryptedText: string): string {
     
     return decrypted;
   } catch (error) {
-    console.error('Decryption error:', error);
+    logger.error('Decryption error:', error);
     throw new Error(`Failed to decrypt credential: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -156,7 +157,7 @@ export function decryptConnectionConfig(config: Record<string, unknown>): Record
         decrypted[field] = decryptCredential(decrypted[field] as string);
       } catch (error) {
         // If decryption fails, might be plaintext (legacy data)
-        console.warn(`Failed to decrypt ${field}, assuming plaintext:`, error);
+        logger.warn(`Failed to decrypt ${field}, assuming plaintext:`, error);
         // Keep as-is
       }
     }

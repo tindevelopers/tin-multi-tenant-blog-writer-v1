@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { XMarkIcon } from "@heroicons/react/24/outline";
+import { logger } from '@/utils/logger';
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -75,7 +76,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
         }
       }
     } catch (err) {
-      console.error("Error fetching user info:", err);
+      logger.error("Error fetching user info:", err);
     }
   };
 
@@ -90,7 +91,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
       if (error) throw error;
       setOrganizations(data || []);
     } catch (err) {
-      console.error("Error fetching organizations:", err);
+      logger.error("Error fetching organizations:", err);
       setError("Failed to load organizations");
     }
   };

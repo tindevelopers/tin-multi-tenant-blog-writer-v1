@@ -10,6 +10,7 @@
  */
 
 import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
 
 // =====================================================
 // Types and Interfaces
@@ -399,7 +400,7 @@ export class ContentIdeasService {
         .single();
 
       if (clusterError) {
-        console.error('Failed to save cluster:', clusterError);
+        logger.error('Failed to save cluster:', clusterError);
         return { success: false, error: clusterError.message };
       }
 
@@ -429,15 +430,15 @@ export class ContentIdeasService {
         .insert(ideasToInsert);
 
       if (ideasError) {
-        console.error('Failed to save content ideas:', ideasError);
+        logger.error('Failed to save content ideas:', ideasError);
         return { success: false, error: ideasError.message };
       }
 
-      console.log('✅ Successfully saved content cluster and ideas');
+      logger.debug('✅ Successfully saved content cluster and ideas');
       return { success: true, cluster_id: clusterData.id };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error saving content cluster:', errorMessage);
+      logger.error('Error saving content cluster:', errorMessage);
       return { success: false, error: errorMessage };
     }
   }
@@ -456,13 +457,13 @@ export class ContentIdeasService {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Failed to fetch clusters:', error);
+        logger.error('Failed to fetch clusters:', error);
         return [];
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error fetching clusters:', error);
+      logger.error('Error fetching clusters:', error);
       return [];
     }
   }
@@ -481,13 +482,13 @@ export class ContentIdeasService {
         .order('priority', { ascending: false });
 
       if (error) {
-        console.error('Failed to fetch content ideas:', error);
+        logger.error('Failed to fetch content ideas:', error);
         return [];
       }
 
       return data || [];
     } catch (error) {
-      console.error('Error fetching content ideas:', error);
+      logger.error('Error fetching content ideas:', error);
       return [];
     }
   }

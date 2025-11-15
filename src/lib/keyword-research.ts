@@ -2,6 +2,7 @@
 
 import cloudRunHealth from './cloud-run-health';
 import keywordStorageService from './keyword-storage';
+import { logger } from '@/utils/logger';
 
 // Enhanced endpoint types from FRONTEND_INTEGRATION_GUIDE.md v1.3.0
 export interface TrendsData {
@@ -38,26 +39,62 @@ export interface SERPAISummary {
 
 export interface KeywordData {
   keyword: string;
-  search_volume?: number;
-  difficulty: 'easy' | 'medium' | 'hard';
+  // Basic Metrics
+  search_volume?: number;                    // Local monthly search volume
+  global_search_volume?: number;             // Global monthly search volume (v1.3.0)
+  search_volume_by_country?: {               // Search volume breakdown by country (v1.3.0)
+    [countryCode: string]: number;
+  };
+  monthly_searches?: Array<{                 // Historical monthly search data (v1.3.0)
+    month: string;
+    search_volume: number;
+  }>;
+  difficulty: 'easy' | 'medium' | 'hard' | 'very_easy' | 'very_hard';
   competition: number; // 0-1 scale
-  cpc?: number;
-  trend_score?: number;
-  recommended: boolean;
-  reason: string;
+  cpc?: number;                              // Cost per click (organic CPC, not Google Ads)
+  cpc_currency?: string;                     // Currency code (e.g., "USD") (v1.3.0)
+  cps?: number;                              // Cost per sale (v1.3.0)
+  clicks?: number;                           // Estimated monthly clicks (v1.3.0)
+  trend_score?: number;                      // -1.0 to 1.0
+  // Enhanced Metrics (v1.3.0)
+  parent_topic?: string;                     // Parent topic for clustering
+  category_type?: 'topic' | 'question' | 'action' | 'entity'; // Keyword category type
+  cluster_score?: number;                     // 0.0-1.0 (clustering confidence)
+  // AI Optimization (v1.3.0)
+  ai_search_volume?: number;                 // AI-optimized search volume
+  ai_trend?: number;                         // AI trend score (-1.0 to 1.0)
+  ai_monthly_searches?: Array<{              // Historical AI search volume (v1.3.0)
+    month: string;
+    volume: number;
+  }>;
+  // Traffic & Performance (v1.3.0)
+  traffic_potential?: number;                 // Estimated traffic potential
+  // SERP Features (v1.3.0)
+  serp_features?: string[];                  // SERP features present (PAA, Featured Snippet, etc.)
+  serp_feature_counts?: {                    // Counts of SERP features (v1.3.0)
+    [feature: string]: number;
+  };
+  // Related Keywords
   related_keywords: string[];
   long_tail_keywords: string[];
-  // New clustering fields from API
-  parent_topic?: string;
-  cluster_score?: number;
-  category_type?: 'topic' | 'question' | 'action' | 'entity';
-  // Enhanced endpoint fields (v1.3.0)
+  // Additional Data (v1.3.0)
+  also_rank_for?: string[];                  // Keywords that pages ranking for this also rank for
+  also_talk_about?: string[];                // Related topics/entities
+  top_competitors?: string[];                // Top competing domains
+  primary_intent?: string;                   // Primary search intent
+  intent_probabilities?: {                   // Intent probability breakdown (v1.3.0)
+    [intent: string]: number;
+  };
+  first_seen?: string;                       // Date keyword first seen (ISO format)
+  last_updated?: string;                     // Date data was last updated (ISO format)
+  // Recommendations
+  recommended: boolean;
+  reason: string;
+  // Enhanced endpoint fields (legacy, kept for backward compatibility)
   trends_data?: TrendsData;
   keyword_ideas?: KeywordIdea[];
   relevant_pages?: RelevantPage[];
   serp_ai_summary?: SERPAISummary;
-  ai_search_volume?: number;
-  ai_trend?: number;
 }
 
 export interface KeywordAnalysis {
@@ -65,6 +102,32 @@ export interface KeywordAnalysis {
   overall_score: number;
   recommendations: string[];
   cluster_groups: KeywordCluster[];
+  // Enhanced response fields (v1.3.0)
+  location?: {
+    used: string;
+    detected_from_ip: boolean;
+    specified: boolean;
+  };
+  discovery?: {
+    // Additional discovery data from DataForSEO
+    [key: string]: unknown;
+  };
+  serp_analysis?: {
+    // SERP analysis summary
+    [key: string]: unknown;
+  };
+  serp_ai_summary?: {
+    // AI-generated SERP summary
+    [key: string]: unknown;
+  };
+  total_keywords?: number;
+  original_keywords?: string[];
+  suggested_keywords?: string[];
+  cluster_summary?: {
+    total_keywords: number;
+    cluster_count: number;
+    unclustered_count: number;
+  };
 }
 
 export interface KeywordCluster {
@@ -161,7 +224,7 @@ class KeywordResearchService {
         
         if (isRetryable && attempt < maxRetries) {
           const delay = baseDelay * Math.pow(2, attempt - 1);
-          console.log(`⚠️ Retry attempt ${attempt}/${maxRetries} after ${delay}ms...`);
+          logger.debug(`⚠️ Retry attempt ${attempt}/${maxRetries} after ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -189,7 +252,7 @@ class KeywordResearchService {
       competitor_domain?: string;
     }
   ): Promise<KeywordAnalysis> {
-    console.log(`📊 Analyzing keywords (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
+    logger.debug(`📊 Analyzing keywords (${keywords.length} keywords, max_suggestions: ${maxSuggestionsPerKeyword})...`);
     
     // Optimal batch size for long-tail research
     const OPTIMAL_BATCH_SIZE = 20;
@@ -199,7 +262,7 @@ class KeywordResearchService {
 
     // Ensure maxSuggestionsPerKeyword is at least 5 (API requirement) and defaults to 75
     const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 75);
-    console.log(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
+    logger.debug(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
 
     return await this.retryApiCall(async () => {
       const apiUrl = this.useApiRoutes 
@@ -233,7 +296,7 @@ class KeywordResearchService {
         }
       }
 
-      console.log(`📤 Sending request to ${apiUrl} with ${finalMaxSuggestions} suggestions per keyword`);
+      logger.debug(`📤 Sending request to ${apiUrl} with ${finalMaxSuggestions} suggestions per keyword`);
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -256,8 +319,8 @@ class KeywordResearchService {
           errorMessage = responseText || errorMessage;
         }
 
-        console.error(`❌ API error (${response.status}):`, errorMessage);
-        console.error(`❌ Request body:`, JSON.stringify(requestBody, null, 2));
+        logger.error(`❌ API error (${response.status}):`, errorMessage);
+        logger.error(`❌ Request body:`, JSON.stringify(requestBody, null, 2));
         
         throw new Error(errorMessage);
       }
@@ -265,7 +328,7 @@ class KeywordResearchService {
       const data = await response.json();
       
       // Debug: Log API response structure to understand search_volume location
-      console.log('📊 API Response structure:', {
+      logger.debug('📊 API Response structure:', {
         hasEnhancedAnalysis: !!data.enhanced_analysis,
         hasKeywordAnalysis: !!data.keyword_analysis,
         sampleKeyword: Object.keys(data.enhanced_analysis || data.keyword_analysis || {})[0],
@@ -291,7 +354,7 @@ class KeywordResearchService {
           
           // Debug: Log search volume extraction for first keyword
           if (Object.keys(filteredAnalysis).length === 0) {
-            console.log('🔍 Search volume extraction for keyword:', keyword, {
+            logger.debug('🔍 Search volume extraction for keyword:', keyword, {
               'kwData.search_volume': kwData.search_volume,
               'kwData.volume': kwData.volume,
               'kwData.monthly_searches': kwData.monthly_searches,
@@ -302,25 +365,50 @@ class KeywordResearchService {
           
           filteredAnalysis[keyword] = {
             keyword: kwData.keyword || keyword,
+            // Basic Metrics
             search_volume: searchVolume,
+            global_search_volume: kwData.global_search_volume,
+            search_volume_by_country: kwData.search_volume_by_country,
+            monthly_searches: kwData.monthly_searches,
             difficulty: kwData.difficulty || 'medium',
             competition: kwData.competition ?? 0.5,
             cpc: kwData.cpc ?? null,
+            cpc_currency: kwData.cpc_currency,
+            cps: kwData.cps,
+            clicks: kwData.clicks,
             trend_score: kwData.trend_score ?? 0,
-            recommended: kwData.recommended ?? false,
-            reason: kwData.reason || '',
-            related_keywords: kwData.related_keywords || [],
-            long_tail_keywords: kwData.long_tail_keywords || [],
+            // Enhanced Metrics (v1.3.0)
             parent_topic: kwData.parent_topic,
             cluster_score: kwData.cluster_score,
             category_type: kwData.category_type,
-            // Enhanced endpoint fields (v1.3.0)
+            // AI Optimization (v1.3.0)
+            ai_search_volume: kwData.ai_search_volume,
+            ai_trend: kwData.ai_trend,
+            ai_monthly_searches: kwData.ai_monthly_searches,
+            // Traffic & Performance (v1.3.0)
+            traffic_potential: kwData.traffic_potential,
+            // SERP Features (v1.3.0)
+            serp_features: kwData.serp_features,
+            serp_feature_counts: kwData.serp_feature_counts,
+            // Related Keywords
+            related_keywords: kwData.related_keywords || [],
+            long_tail_keywords: kwData.long_tail_keywords || [],
+            // Additional Data (v1.3.0)
+            also_rank_for: kwData.also_rank_for,
+            also_talk_about: kwData.also_talk_about,
+            top_competitors: kwData.top_competitors,
+            primary_intent: kwData.primary_intent,
+            intent_probabilities: kwData.intent_probabilities,
+            first_seen: kwData.first_seen,
+            last_updated: kwData.last_updated,
+            // Recommendations
+            recommended: kwData.recommended ?? false,
+            reason: kwData.reason || '',
+            // Enhanced endpoint fields (legacy, kept for backward compatibility)
             trends_data: kwData.trends_data,
             keyword_ideas: kwData.keyword_ideas,
             relevant_pages: kwData.relevant_pages,
             serp_ai_summary: kwData.serp_ai_summary,
-            ai_search_volume: kwData.ai_search_volume,
-            ai_trend: kwData.ai_trend,
           };
         }
       });
@@ -342,13 +430,22 @@ class KeywordResearchService {
         }));
       }
 
-      console.log(`✅ Analysis complete: ${Object.keys(filteredAnalysis).length} keywords, ${clusters.length} clusters`);
+      logger.debug(`✅ Analysis complete: ${Object.keys(filteredAnalysis).length} keywords, ${clusters.length} clusters`);
       
       return {
         keyword_analysis: filteredAnalysis,
         overall_score: this.calculateOverallScore(filteredAnalysis),
         recommendations: this.generateRecommendations(filteredAnalysis),
         cluster_groups: clusters,
+        // Enhanced response fields (v1.3.0)
+        location: data.location,
+        discovery: data.discovery,
+        serp_analysis: data.serp_analysis,
+        serp_ai_summary: data.serp_ai_summary,
+        total_keywords: data.total_keywords,
+        original_keywords: data.original_keywords,
+        suggested_keywords: data.suggested_keywords,
+        cluster_summary: data.cluster_summary,
       };
     });
   }
@@ -380,7 +477,7 @@ class KeywordResearchService {
       const data = await response.json();
       return data.extracted_keywords || data.keywords || [];
     } catch (error) {
-      console.warn('Keyword extraction failed, using topic as keyword:', error);
+      logger.warn('Keyword extraction failed, using topic as keyword:', error);
       return [text.trim()];
     }
   }
@@ -417,7 +514,7 @@ class KeywordResearchService {
 
       return [...new Set(allSuggestions)].slice(0, limit);
     } catch (error) {
-      console.error('Keyword suggestions failed:', error);
+      logger.error('Keyword suggestions failed:', error);
       return [];
     }
   }
@@ -433,16 +530,16 @@ class KeywordResearchService {
     location: string = 'United States',
     useEnhancedFeatures: boolean = true // Enable enhanced features by default
   ): Promise<BlogResearchResults> {
-    console.log('🔬 Starting comprehensive blog research...');
+    logger.debug('🔬 Starting comprehensive blog research...');
     
     try {
       // Step 1: Extract keywords
       const extractedKeywords = await this.extractKeywords(topic);
-      console.log('📋 Extracted keywords:', extractedKeywords);
+      logger.debug('📋 Extracted keywords:', extractedKeywords);
 
       // Step 2: Get keyword suggestions
       const suggestedKeywords = await this.getKeywordSuggestions([topic], 150, location);
-      console.log(`💡 Suggested keywords (${suggestedKeywords.length}):`, suggestedKeywords.slice(0, 10));
+      logger.debug(`💡 Suggested keywords (${suggestedKeywords.length}):`, suggestedKeywords.slice(0, 10));
 
       // Combine keywords
       const allKeywords = [...new Set([...extractedKeywords, ...suggestedKeywords, topic])];
@@ -454,7 +551,7 @@ class KeywordResearchService {
       let keywordAnalysis: KeywordAnalysis;
       
       if (allKeywords.length > BATCH_SIZE) {
-        console.log(`⚠️ Batching analysis: ${allKeywords.length} keywords into batches of ${BATCH_SIZE}...`);
+        logger.debug(`⚠️ Batching analysis: ${allKeywords.length} keywords into batches of ${BATCH_SIZE}...`);
         
         const batches: KeywordAnalysis[] = [];
         
@@ -468,7 +565,7 @@ class KeywordResearchService {
         
         for (let i = 0; i < allKeywords.length; i += BATCH_SIZE) {
           const batch = allKeywords.slice(i, i + BATCH_SIZE);
-          console.log(`📊 Analyzing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allKeywords.length / BATCH_SIZE)} (${batch.length} keywords)...`);
+          logger.debug(`📊 Analyzing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(allKeywords.length / BATCH_SIZE)} (${batch.length} keywords)...`);
           
           const batchAnalysis = await this.analyzeKeywords(batch, MAX_SUGGESTIONS_PER_KEYWORD, location, enhancedOptions);
           batches.push(batchAnalysis);
@@ -499,7 +596,7 @@ class KeywordResearchService {
           cluster_groups: allClusters
         };
         
-        console.log(`✅ Merged ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords`);
+        logger.debug(`✅ Merged ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords`);
       } else {
         // Enhanced options for better content quality
         const enhancedOptions = useEnhancedFeatures ? {
@@ -531,7 +628,7 @@ class KeywordResearchService {
       };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('❌ Blog research failed:', errorMessage);
+      logger.error('❌ Blog research failed:', errorMessage);
       throw new Error(`Blog research failed: ${errorMessage}`);
     }
   }

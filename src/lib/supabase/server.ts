@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextRequest } from "next/server";
+import { logger } from '@/utils/logger';
 
 export async function createClient(request?: NextRequest) {
   const cookieStore = await cookies();
@@ -35,7 +36,7 @@ export async function createClient(request?: NextRequest) {
     });
     
     if (sessionError) {
-      console.error('Failed to set session:', sessionError);
+      logger.error('Failed to set session:', sessionError);
       // Still return client - API route will handle auth failure
     }
     
@@ -56,7 +57,7 @@ export async function createClient(request?: NextRequest) {
             cookieStore.set({ name, value, ...options });
           } catch (error) {
             // Silently fail if cookies can't be set (e.g., in middleware)
-            console.warn('Could not set cookie:', name, error);
+            logger.warn('Could not set cookie:', name, error);
           }
         },
         remove(name: string, options: any) {
@@ -64,7 +65,7 @@ export async function createClient(request?: NextRequest) {
             cookieStore.set({ name, value: '', ...options });
           } catch (error) {
             // Silently fail if cookies can't be removed (e.g., in middleware)
-            console.warn('Could not remove cookie:', name, error);
+            logger.warn('Could not remove cookie:', name, error);
           }
         },
       },

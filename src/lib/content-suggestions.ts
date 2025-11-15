@@ -1,6 +1,7 @@
 "use client";
 
 import { blogWriterAPI } from './blog-writer-api';
+import { logger } from '@/utils/logger';
 
 export interface ContentSuggestion {
   id: string;
@@ -37,15 +38,15 @@ class ContentSuggestionService {
     researchResults: any,
     targetAudience: string = 'general'
   ): Promise<ContentSuggestion[]> {
-    console.log('🎯 Generating content suggestions from research results...');
-    console.log('📊 Research results structure:', researchResults);
+    logger.debug('🎯 Generating content suggestions from research results...');
+    logger.debug('📊 Research results structure:', researchResults);
     
     try {
       const suggestions: ContentSuggestion[] = [];
       
       // Validate research results
       if (!researchResults) {
-        console.error('❌ No research results provided');
+        logger.error('❌ No research results provided');
         return [];
       }
       
@@ -53,22 +54,22 @@ class ContentSuggestionService {
       const keywordAnalysis = researchResults.keyword_analysis?.keyword_analysis || {};
       const titleSuggestions = researchResults.title_suggestions || [];
       
-      console.log('🔍 Keyword analysis:', keywordAnalysis);
-      console.log('🔍 Keyword analysis keys:', Object.keys(keywordAnalysis));
-      console.log('📝 Title suggestions:', titleSuggestions);
-      console.log('📝 Title suggestions length:', titleSuggestions.length);
+      logger.debug('🔍 Keyword analysis:', keywordAnalysis);
+      logger.debug('🔍 Keyword analysis keys:', Object.keys(keywordAnalysis));
+      logger.debug('📝 Title suggestions:', titleSuggestions);
+      logger.debug('📝 Title suggestions length:', titleSuggestions.length);
       
       // Check if we have any data to work with
       if (Object.keys(keywordAnalysis).length === 0 && titleSuggestions.length === 0) {
-        console.warn('⚠️ No keyword analysis or title suggestions found in research results');
-        console.warn('⚠️ Research results structure:', JSON.stringify(researchResults, null, 2));
+        logger.warn('⚠️ No keyword analysis or title suggestions found in research results');
+        logger.warn('⚠️ Research results structure:', JSON.stringify(researchResults, null, 2));
         // Create fallback suggestions based on available data
         return this.createFallbackSuggestions(researchResults, targetAudience);
       }
 
       // If we have minimal data, create at least one suggestion
       if (Object.keys(keywordAnalysis).length === 0 && titleSuggestions.length > 0) {
-        console.log('🔄 Creating suggestions from title suggestions only...');
+        logger.debug('🔄 Creating suggestions from title suggestions only...');
         return this.createSuggestionsFromTitles(titleSuggestions, targetAudience);
       }
       
@@ -79,10 +80,10 @@ class ContentSuggestionService {
         targetAudience
       );
       if (pillarSuggestion) {
-        console.log('✅ Pillar suggestion created:', pillarSuggestion.title);
+        logger.debug('✅ Pillar suggestion created:', pillarSuggestion.title);
         suggestions.push(pillarSuggestion);
       } else {
-        console.warn('⚠️ No pillar suggestion created');
+        logger.warn('⚠️ No pillar suggestion created');
       }
       
       // 2. Create supporting content suggestions
@@ -91,7 +92,7 @@ class ContentSuggestionService {
         titleSuggestions,
         targetAudience
       );
-      console.log(`✅ Created ${supportingSuggestions.length} supporting suggestions`);
+      logger.debug(`✅ Created ${supportingSuggestions.length} supporting suggestions`);
       suggestions.push(...supportingSuggestions);
       
       // 3. Create how-to content suggestions
@@ -99,7 +100,7 @@ class ContentSuggestionService {
         keywordAnalysis,
         targetAudience
       );
-      console.log(`✅ Created ${howToSuggestions.length} how-to suggestions`);
+      logger.debug(`✅ Created ${howToSuggestions.length} how-to suggestions`);
       suggestions.push(...howToSuggestions);
       
       // 4. Create list content suggestions
@@ -107,22 +108,22 @@ class ContentSuggestionService {
         keywordAnalysis,
         targetAudience
       );
-      console.log(`✅ Created ${listSuggestions.length} list suggestions`);
+      logger.debug(`✅ Created ${listSuggestions.length} list suggestions`);
       suggestions.push(...listSuggestions);
       
-      console.log(`✅ Generated ${suggestions.length} content suggestions`);
+      logger.debug(`✅ Generated ${suggestions.length} content suggestions`);
       
       // If no suggestions were generated, create at least one fallback
       if (suggestions.length === 0) {
-        console.log('🔄 No suggestions generated, creating emergency fallback...');
+        logger.debug('🔄 No suggestions generated, creating emergency fallback...');
         return this.createEmergencyFallback(targetAudience);
       }
       
       return suggestions;
       
     } catch (error) {
-      console.error('❌ Error generating content suggestions:', error);
-      console.log('🆘 Creating emergency fallback due to error...');
+      logger.error('❌ Error generating content suggestions:', error);
+      logger.debug('🆘 Creating emergency fallback due to error...');
       return this.createEmergencyFallback(targetAudience);
     }
   }
@@ -135,8 +136,8 @@ class ContentSuggestionService {
     titleSuggestions: any[],
     targetAudience: string
   ): ContentSuggestion | null {
-    console.log('🏗️ Creating pillar content suggestion...');
-    console.log('🔍 Available keywords:', Object.keys(keywordAnalysis));
+    logger.debug('🏗️ Creating pillar content suggestion...');
+    logger.debug('🔍 Available keywords:', Object.keys(keywordAnalysis));
     
     // Find the highest volume, broadest keyword for pillar content
     let pillarKeyword = Object.entries(keywordAnalysis)
@@ -155,7 +156,7 @@ class ContentSuggestionService {
     }
     
     if (!pillarKeyword) {
-      console.warn('⚠️ No keywords available for pillar content');
+      logger.warn('⚠️ No keywords available for pillar content');
       return null;
     }
     
@@ -363,7 +364,7 @@ class ContentSuggestionService {
    * Create suggestions from title suggestions when keyword analysis is missing
    */
   private createSuggestionsFromTitles(titleSuggestions: any[], targetAudience: string): ContentSuggestion[] {
-    console.log('🔄 Creating suggestions from title suggestions...');
+    logger.debug('🔄 Creating suggestions from title suggestions...');
     
     const suggestions: ContentSuggestion[] = [];
     
@@ -401,7 +402,7 @@ class ContentSuggestionService {
       });
     });
     
-    console.log(`✅ Created ${suggestions.length} suggestions from titles`);
+    logger.debug(`✅ Created ${suggestions.length} suggestions from titles`);
     return suggestions;
   }
 
@@ -409,7 +410,7 @@ class ContentSuggestionService {
    * Create emergency fallback suggestions when everything else fails
    */
   private createEmergencyFallback(targetAudience: string): ContentSuggestion[] {
-    console.log('🆘 Creating emergency fallback suggestions...');
+    logger.debug('🆘 Creating emergency fallback suggestions...');
     
     return [
       {
@@ -441,7 +442,7 @@ class ContentSuggestionService {
    * Create fallback suggestions when research data is minimal
    */
   private createFallbackSuggestions(researchResults: any, targetAudience: string): ContentSuggestion[] {
-    console.log('🔄 Creating fallback suggestions...');
+    logger.debug('🔄 Creating fallback suggestions...');
     
     const suggestions: ContentSuggestion[] = [];
     
@@ -500,7 +501,7 @@ class ContentSuggestionService {
       });
     }
     
-    console.log(`✅ Created ${suggestions.length} fallback suggestions`);
+    logger.debug(`✅ Created ${suggestions.length} fallback suggestions`);
     return suggestions;
   }
 

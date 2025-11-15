@@ -1,13 +1,14 @@
 "use client";
 import React, { useState } from "react";
 import RadioSm from "../../form/input/RadioSm";
+import { logger } from '@/utils/logger';
 
 export default function ListWithRadio() {
   const [selectedValue, setSelectedValue] = useState<string>("option1");
 
   const handleChange = (value: string) => {
     setSelectedValue(value);
-    console.log("Selected Value:", value);
+    logger.debug("Selected Value:", value);
   };
   return (
     <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03] sm:w-fit">

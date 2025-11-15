@@ -4,6 +4,7 @@ import ComponentCard from "../../common/ComponentCard";
 import Label from "../Label";
 import Select from "../Select";
 import MultiSelect from "../MultiSelect";
+import { logger } from '@/utils/logger';
 
 export default function SelectInputs() {
   const options = [
@@ -15,7 +16,7 @@ export default function SelectInputs() {
   const [selectedValues, setSelectedValues] = useState<string[]>([]);
 
   const handleSelectChange = (value: string) => {
-    console.log("Selected value:", value);
+    logger.debug("Selected value:", value);
   };
 
   const multiOptions = [

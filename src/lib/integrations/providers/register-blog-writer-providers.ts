@@ -12,6 +12,7 @@ import {
   BlogWriterAPIShopifyProvider,
 } from './blog-writer-api-provider';
 import type { IntegrationType } from '../types';
+import { logger } from '@/utils/logger';
 
 /**
  * Register Blog Writer API providers
@@ -29,7 +30,7 @@ export function registerBlogWriterAPIProviders(): void {
   // Register Shopify provider
   registerProvider('shopify' as IntegrationType, BlogWriterAPIShopifyProvider);
 
-  console.log('✅ Registered Blog Writer API providers: webflow, wordpress, shopify');
+  logger.debug('✅ Registered Blog Writer API providers: webflow, wordpress, shopify');
 }
 
 /**

@@ -139,8 +139,10 @@ export async function POST(request: NextRequest) {
         } else {
           logger.warn('⚠️ Could not auto-detect Site ID - user may need to provide it manually');
         }
-      } catch (error: any) {
-        logger.error('❌ Error auto-detecting Site ID:', error);
+      } catch (error: unknown) {
+        logger.error('Error auto-detecting Site ID', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
         // Don't fail the connection - site_id is optional, user can provide it later
       }
     }
@@ -166,9 +168,9 @@ export async function POST(request: NextRequest) {
             },
           });
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         connectionStatus = 'error';
-        errorMessage = error.message || 'Connection test failed';
+        errorMessage = error instanceof Error ? error.message : 'Connection test failed';
         lastTestedAt = new Date().toISOString();
         
         if (logId) {
@@ -305,13 +307,15 @@ export async function POST(request: NextRequest) {
           }
         }
       }
-    } catch (error: any) {
-      logger.error('❌ Database error:', error);
+    } catch (error: unknown) {
+      logger.error('Database error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
       
       if (logId) {
         await integrationLogger.updateLog(logId, {
           status: 'failed',
-          error_message: error.message || 'Database error',
+          error_message: error instanceof Error ? error.message : 'Database error',
           error_code: 'database_error',
         });
       }
@@ -335,8 +339,10 @@ export async function POST(request: NextRequest) {
       },
     }, { status: 201 });
 
-  } catch (error: any) {
-    logger.error('❌ Error in connect-api-key:', error);
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'integrations-connect-api-key',
+    });
 
     // Update log: failed
     if (logId) {
@@ -353,8 +359,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: error.message || 'Failed to connect integration via API key',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+        error: error instanceof Error ? error.message : 'Failed to connect integration via API key',
+        details: process.env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined,
         log_id: logId,
       },
       { status: 500 }

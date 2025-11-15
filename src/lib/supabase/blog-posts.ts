@@ -1,4 +1,5 @@
 import type { Database } from '@/types/database';
+import { logger } from '@/utils/logger';
 
 type BlogPost = Database['public']['Tables']['blog_posts']['Row'];
 type BlogPostInsert = Database['public']['Tables']['blog_posts']['Insert'];
@@ -30,7 +31,7 @@ class BlogPostsService {
    */
   async createDraft(params: CreateDraftParams): Promise<BlogPost | null> {
     try {
-      console.log('📝 Creating blog post draft via API:', params.title);
+      logger.debug('📝 Creating blog post draft via API:', params.title);
       
       const response = await fetch('/api/drafts/save', {
         method: 'POST',
@@ -50,16 +51,16 @@ class BlogPostsService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ API error:', errorData);
+        logger.error('❌ API error:', errorData);
         throw new Error(`Failed to save draft: ${errorData.error || 'Unknown error'}`);
       }
 
       const result = await response.json();
-      console.log('✅ Draft created successfully via API:', result.data.id);
+      logger.debug('✅ Draft created successfully via API:', result.data.id);
       return result.data;
 
     } catch (error) {
-      console.error('❌ Error creating draft:', error);
+      logger.error('❌ Error creating draft:', error);
       throw error;
     }
   }
@@ -69,7 +70,7 @@ class BlogPostsService {
    */
   async updatePost(postId: string, params: UpdateDraftParams): Promise<BlogPost | null> {
     try {
-      console.log('📝 Updating blog post:', postId);
+      logger.debug('📝 Updating blog post:', postId);
       
       const response = await fetch(`/api/drafts/${postId}`, {
         method: 'PUT',
@@ -81,15 +82,15 @@ class BlogPostsService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ API error:', errorData);
+        logger.error('❌ API error:', errorData);
         throw new Error(`Failed to update post: ${errorData.error || 'Unknown error'}`);
       }
 
       const result = await response.json();
-      console.log('✅ Post updated successfully:', result.data?.title);
+      logger.debug('✅ Post updated successfully:', result.data?.title);
       return result.data || null;
     } catch (error) {
-      console.error('❌ Error in updatePost:', error);
+      logger.error('❌ Error in updatePost:', error);
       throw error;
     }
   }
@@ -99,7 +100,7 @@ class BlogPostsService {
    */
   async getPosts(status?: 'draft' | 'published' | 'scheduled' | 'archived'): Promise<BlogPost[]> {
     try {
-      console.log('📝 Fetching blog posts, status:', status);
+      logger.debug('📝 Fetching blog posts, status:', status);
       
       const response = await fetch('/api/drafts/list?' + new URLSearchParams({
         status: status || 'draft'
@@ -107,15 +108,15 @@ class BlogPostsService {
       
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ API error:', errorData);
+        logger.error('❌ API error:', errorData);
         throw new Error(`Failed to fetch posts: ${errorData.error || 'Unknown error'}`);
       }
       
       const result = await response.json();
-      console.log('✅ Posts fetched successfully:', result.data?.length || 0, 'posts');
+      logger.debug('✅ Posts fetched successfully:', result.data?.length || 0, 'posts');
       return result.data || [];
     } catch (error) {
-      console.error('❌ Error in getPosts:', error);
+      logger.error('❌ Error in getPosts:', error);
       throw error;
     }
   }
@@ -125,21 +126,21 @@ class BlogPostsService {
    */
   async getPost(postId: string): Promise<BlogPost | null> {
     try {
-      console.log('📝 Fetching blog post:', postId);
+      logger.debug('📝 Fetching blog post:', postId);
       
       const response = await fetch(`/api/drafts/${postId}`);
       
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ API error:', errorData);
+        logger.error('❌ API error:', errorData);
         throw new Error(`Failed to fetch post: ${errorData.error || 'Unknown error'}`);
       }
       
       const result = await response.json();
-      console.log('✅ Post fetched successfully:', result.data?.title);
+      logger.debug('✅ Post fetched successfully:', result.data?.title);
       return result.data || null;
     } catch (error) {
-      console.error('❌ Error in getPost:', error);
+      logger.error('❌ Error in getPost:', error);
       throw error;
     }
   }
@@ -149,7 +150,7 @@ class BlogPostsService {
    */
   async deletePost(postId: string): Promise<boolean> {
     try {
-      console.log('📝 Deleting blog post:', postId);
+      logger.debug('📝 Deleting blog post:', postId);
       
       const response = await fetch(`/api/drafts/${postId}`, {
         method: 'DELETE',
@@ -157,15 +158,15 @@ class BlogPostsService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ API error:', errorData);
+        logger.error('❌ API error:', errorData);
         throw new Error(`Failed to delete post: ${errorData.error || 'Unknown error'}`);
       }
 
       const result = await response.json();
-      console.log('✅ Post deleted successfully');
+      logger.debug('✅ Post deleted successfully');
       return result.success || false;
     } catch (error) {
-      console.error('❌ Error in deletePost:', error);
+      logger.error('❌ Error in deletePost:', error);
       throw error;
     }
   }

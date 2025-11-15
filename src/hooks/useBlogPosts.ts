@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import blogPostsService, { CreateDraftParams, UpdateDraftParams } from '@/lib/supabase/blog-posts';
 import type { Database } from '@/types/database';
+import { logger } from '@/utils/logger';
 
 type BlogPost = Database['public']['Tables']['blog_posts']['Row'];
 
@@ -52,7 +53,7 @@ export function useBlogPost(postId: string) {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch post';
-      console.error('Error fetching post:', err);
+      logger.error('Error fetching post:', err);
       setError(errorMessage.includes('not found') || errorMessage.includes('404') 
         ? 'Draft not found. It may have been deleted or you may not have permission to access it.'
         : errorMessage);

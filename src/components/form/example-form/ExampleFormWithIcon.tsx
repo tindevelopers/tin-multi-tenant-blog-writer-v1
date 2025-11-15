@@ -12,11 +12,12 @@ import {
 import Checkbox from "../input/Checkbox";
 import Label from "../Label";
 import Button from "../../ui/button/Button";
+import { logger } from '@/utils/logger';
 
 export default function ExampleFormWithIcon() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Form submitted:");
+    logger.debug("Form submitted:");
   };
 
   const [isChecked, setIsChecked] = useState(false);

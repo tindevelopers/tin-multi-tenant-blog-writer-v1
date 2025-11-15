@@ -13,6 +13,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -113,7 +114,7 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         }
       }
     } catch (err) {
-      console.error('Error loading integration:', err);
+      logger.error('Error loading integration:', err);
     }
   };
 

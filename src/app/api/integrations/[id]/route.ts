@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import type { ConnectionConfig, FieldMapping, IntegrationStatus, ConnectionMethod } from '@/lib/integrations/types';
 import { logger } from '@/utils/logger';
+import { getAuthenticatedUser, requireRole, parseJsonBody, handleApiError } from '@/lib/api-utils';
 
 /**
  * GET /api/integrations/[id]
@@ -19,41 +20,27 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient(request);
-    
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const { id } = await params;
     
-    // Get user's organization first
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
+    const { id } = await params;
 
     // Get integration using new database adapter
     const dbAdapter = new EnvironmentIntegrationsDB();
-    const integration = await dbAdapter.getIntegration(id, userProfile.org_id);
+    const integration = await dbAdapter.getIntegration(id, user.org_id);
     
     if (!integration) {
-      logger.error(`[GET] Integration ${id} not found for org ${userProfile.org_id}`);
+      logger.error('Integration not found', { integrationId: id, orgId: user.org_id });
       return NextResponse.json({ 
         error: 'Integration not found or does not belong to your organization' 
       }, { status: 404 });
     }
 
     // Double-check organization ownership
-    if (integration.org_id !== userProfile.org_id) {
-      logger.error(`[GET] Integration ${id} org_id ${integration.org_id} does not match user org ${userProfile.org_id}`);
+    if (integration.org_id !== user.org_id) {
+      logger.error('Integration org mismatch', { integrationId: id, integrationOrgId: integration.org_id, userOrgId: user.org_id });
       return NextResponse.json({ 
         error: 'Integration does not belong to your organization' 
       }, { status: 403 });
@@ -64,12 +51,11 @@ export async function GET(
       data: integration 
     });
 
-  } catch (error) {
-    logger.error('Error fetching integration:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch integration' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'integrations-get-by-id',
+    });
+    return handleApiError(error);
   }
 }
 
@@ -103,43 +89,20 @@ async function handleUpdate(
   params: Promise<{ id: string }>
 ) {
   try {
-    const supabase = await createClient(request);
-    
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check admin permissions
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('org_id, role')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
-
-    // Check admin permissions - allow system_admin, super_admin, admin, and manager
-    const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
-    if (!allowedRoles.includes(userProfile.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions. Admin, Manager, or higher role required.' }, { status: 403 });
-    }
+    const user = await requireRole(request, ['system_admin', 'super_admin', 'admin', 'manager']);
 
     const { id } = await params;
-    const body = await request.json();
+    const body = await parseJsonBody<{
+      connection?: ConnectionConfig;
+      config?: Record<string, unknown>;
+      connection_method?: ConnectionMethod;
+      status?: IntegrationStatus;
+    }>(request);
     const { 
       connection,
       config,
       connection_method,
       status 
-    }: {
-      connection?: ConnectionConfig;
-      config?: Record<string, unknown>;
-      connection_method?: ConnectionMethod;
-      status?: IntegrationStatus;
     } = body;
 
     // Support both 'connection' and 'config' for backward compatibility
@@ -149,17 +112,17 @@ async function handleUpdate(
     const dbAdapter = new EnvironmentIntegrationsDB();
     
     // Verify integration exists and belongs to user's org
-    const existing = await dbAdapter.getIntegration(id, userProfile.org_id);
+    const existing = await dbAdapter.getIntegration(id, user.org_id);
     if (!existing) {
-      logger.error(`[Update] Integration ${id} not found for org ${userProfile.org_id}`);
+      logger.error('Integration not found for update', { integrationId: id, orgId: user.org_id });
       return NextResponse.json({ 
         error: 'Integration not found or does not belong to your organization' 
       }, { status: 404 });
     }
     
     // Double-check organization ownership
-    if (existing.org_id !== userProfile.org_id) {
-      logger.error(`[Update] Integration ${id} org_id ${existing.org_id} does not match user org ${userProfile.org_id}`);
+    if (existing.org_id !== user.org_id) {
+      logger.error('Integration org mismatch on update', { integrationId: id, integrationOrgId: existing.org_id, userOrgId: user.org_id });
       return NextResponse.json({ 
         error: 'Integration does not belong to your organization' 
       }, { status: 403 });
@@ -176,7 +139,7 @@ async function handleUpdate(
         connection_method: connectionMethod,
         status: status,
       },
-      userProfile.org_id
+      user.org_id
     );
 
     return NextResponse.json({ 
@@ -184,12 +147,11 @@ async function handleUpdate(
       data: integration 
     });
 
-  } catch (error) {
-    logger.error('Error updating integration:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update integration' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'integrations-update',
+    });
+    return handleApiError(error);
   }
 }
 
@@ -202,30 +164,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient(request);
-    
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Check admin permissions
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('org_id, role')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
-
-    // Check admin permissions - allow system_admin, super_admin, admin, and manager
-    const allowedRoles = ['system_admin', 'super_admin', 'admin', 'manager'];
-    if (!allowedRoles.includes(userProfile.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions. Admin, Manager, or higher role required.' }, { status: 403 });
-    }
+    const user = await requireRole(request, ['system_admin', 'super_admin', 'admin', 'manager']);
 
     const { id } = await params;
 
@@ -233,36 +172,35 @@ export async function DELETE(
     const dbAdapter = new EnvironmentIntegrationsDB();
     
     // Verify integration exists and belongs to user's org
-    const existing = await dbAdapter.getIntegration(id, userProfile.org_id);
+    const existing = await dbAdapter.getIntegration(id, user.org_id);
     if (!existing) {
-      logger.error(`[Delete] Integration ${id} not found for org ${userProfile.org_id}`);
+      logger.error('Integration not found for delete', { integrationId: id, orgId: user.org_id });
       return NextResponse.json({ 
         error: 'Integration not found or does not belong to your organization' 
       }, { status: 404 });
     }
     
     // Double-check organization ownership
-    if (existing.org_id !== userProfile.org_id) {
-      logger.error(`[Delete] Integration ${id} org_id ${existing.org_id} does not match user org ${userProfile.org_id}`);
+    if (existing.org_id !== user.org_id) {
+      logger.error('Integration org mismatch on delete', { integrationId: id, integrationOrgId: existing.org_id, userOrgId: user.org_id });
       return NextResponse.json({ 
         error: 'Integration does not belong to your organization' 
       }, { status: 403 });
     }
 
     // Delete integration
-    await dbAdapter.deleteIntegration(id, userProfile.org_id);
+    await dbAdapter.deleteIntegration(id, user.org_id);
 
     return NextResponse.json({ 
       success: true,
       message: 'Integration deleted successfully'
     });
 
-  } catch (error) {
-    logger.error('Error deleting integration:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete integration' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'integrations-delete',
+    });
+    return handleApiError(error);
   }
 }
 

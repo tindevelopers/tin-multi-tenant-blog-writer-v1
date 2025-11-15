@@ -230,32 +230,59 @@ interface KeywordAnalysisResponse {
   enhanced_analysis: {
     [keyword: string]: {
       // Basic Metrics
-      search_volume: number;
-      difficulty: 'easy' | 'medium' | 'hard';
-      competition: number;              // 0.0-1.0
-      cpc: number;                     // Cost per click
-      trend_score: number;             // -1.0 to 1.0
+      search_volume: number;                    // Local monthly search volume
+      global_search_volume?: number;            // Global monthly search volume
+      search_volume_by_country?: {              // Search volume breakdown by country
+        [countryCode: string]: number;
+      };
+      monthly_searches?: Array<{                // Historical monthly search data
+        month: string;
+        search_volume: number;
+      }>;
+      difficulty: 'easy' | 'medium' | 'hard' | 'very_easy' | 'very_hard';
+      competition: number;                      // 0.0-1.0
+      cpc: number;                             // Cost per click (organic CPC, not Google Ads)
+      cpc_currency?: string;                    // Currency code (e.g., "USD")
+      cps?: number;                            // Cost per sale
+      clicks?: number;                          // Estimated monthly clicks
+      trend_score: number;                     // -1.0 to 1.0
       
-      // Enhanced Metrics
-      parent_topic?: string;
-      category_type?: string;
-      cluster_score?: number;          // 0.0-1.0
+      // Enhanced Metrics (v1.3.0)
+      parent_topic?: string;                    // Parent topic for clustering
+      category_type?: string;                   // Keyword category type
+      cluster_score?: number;                   // 0.0-1.0 (clustering confidence)
       
-      // AI Optimization
-      ai_search_volume?: number;
-      ai_trend?: number;
-      ai_monthly_searches?: Array<{
+      // AI Optimization (v1.3.0)
+      ai_search_volume?: number;               // AI-optimized search volume
+      ai_trend?: number;                        // AI trend score (-1.0 to 1.0)
+      ai_monthly_searches?: Array<{             // Historical AI search volume
         month: string;
         volume: number;
       }>;
       
-      // Related Keywords
-      related_keywords: string[];
-      long_tail_keywords: string[];
+      // Traffic & Performance
+      traffic_potential?: number;                // Estimated traffic potential
       
       // SERP Features
-      serp_features?: string[];
-      traffic_potential?: number;
+      serp_features?: string[];                 // SERP features present (PAA, Featured Snippet, etc.)
+      serp_feature_counts?: {                   // Counts of SERP features
+        [feature: string]: number;
+      };
+      
+      // Related Keywords
+      related_keywords: string[];              // Related keyword suggestions
+      long_tail_keywords: string[];            // Long-tail variations
+      
+      // Additional Data (v1.3.0)
+      also_rank_for?: string[];                // Keywords that pages ranking for this also rank for
+      also_talk_about?: string[];              // Related topics/entities
+      top_competitors?: string[];               // Top competing domains
+      primary_intent?: string;                  // Primary search intent
+      intent_probabilities?: {                  // Intent probability breakdown
+        [intent: string]: number;
+      };
+      first_seen?: string;                      // Date keyword first seen
+      last_updated?: string;                    // Date data was last updated
       
       // Recommendations
       recommended: boolean;
@@ -266,16 +293,41 @@ interface KeywordAnalysisResponse {
   clusters?: Array<{
     parent_topic: string;
     keywords: string[];
-    avg_search_volume: number;
-    avg_difficulty: string;
+    cluster_score: number;
+    category_type: string;
+    keyword_count: number;
   }>;
   
-  summary: {
+  cluster_summary?: {
     total_keywords: number;
-    recommended_keywords: number;
-    avg_search_volume: number;
-    avg_difficulty: string;
+    cluster_count: number;
+    unclustered_count: number;
   };
+  
+  location?: {
+    used: string;
+    detected_from_ip: boolean;
+    specified: boolean;
+  };
+  
+  discovery?: {
+    // Additional discovery data from DataForSEO
+    [key: string]: any;
+  };
+  
+  serp_analysis?: {
+    // SERP analysis summary
+    [key: string]: any;
+  };
+  
+  serp_ai_summary?: {
+    // AI-generated SERP summary
+    [key: string]: any;
+  };
+  
+  total_keywords: number;
+  original_keywords: string[];
+  suggested_keywords: string[];
 }
 ```
 
@@ -741,10 +793,26 @@ function renderImages(images: ImageMetadata[]) {
 ## Changelog
 
 ### Version 1.3.0 (2025-11-14)
-- ✅ Enhanced keyword analysis with granular metrics
-- ✅ Added `parent_topic`, `category_type`, `cluster_score` to keyword analysis
-- ✅ Added AI optimization metrics (`ai_search_volume`, `ai_trend`)
+
+#### Keyword Analysis Enhancements
+- ✅ **Granular Metrics**: Added `global_search_volume`, `search_volume_by_country`, `monthly_searches`
+- ✅ **Traffic Metrics**: Added `clicks`, `cps`, `traffic_potential` for better traffic estimation
+- ✅ **Clustering**: Added `parent_topic`, `category_type`, `cluster_score` for keyword organization
+- ✅ **AI Optimization**: Added `ai_search_volume`, `ai_trend`, `ai_monthly_searches` for AI-optimized content
+- ✅ **CPC Fix**: Now returns organic CPC (~$2.00) instead of Google Ads CPC (~$10.05)
+- ✅ **Related Data**: Added `also_rank_for`, `also_talk_about`, `top_competitors`
+- ✅ **Intent Analysis**: Added `primary_intent`, `intent_probabilities`
+- ✅ **SERP Features**: Enhanced `serp_features` and `serp_feature_counts`
+
+#### Blog Generation
 - ✅ Improved content metadata structure
+- ✅ Enhanced structured data (Schema.org)
+- ✅ Better image placement and metadata
+
+#### Documentation
+- ✅ Complete TypeScript/React integration guide
+- ✅ Error handling patterns
+- ✅ Best practices and examples
 
 ### Version 1.2.0
 - ✅ Multi-stage blog generation pipeline

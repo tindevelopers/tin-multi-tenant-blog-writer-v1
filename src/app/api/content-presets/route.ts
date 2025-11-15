@@ -1,27 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
+import { getAuthenticatedUser, requireRole, parseJsonBody, validateRequiredFields, handleApiError } from '@/lib/api-utils';
 
 // GET - Get content presets for organization
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
+    const supabase = await createClient();
 
     const { searchParams } = new URL(request.url);
     const presetId = searchParams.get('preset_id');
@@ -32,7 +22,7 @@ export async function GET(request: NextRequest) {
       result = await supabase
       .from('content_presets')
       .select('*')
-      .eq('org_id', userProfile.org_id)
+      .eq('org_id', user.org_id)
         .eq('is_active', true)
         .eq('preset_id', presetId)
         .maybeSingle();
@@ -40,7 +30,7 @@ export async function GET(request: NextRequest) {
       result = await supabase
         .from('content_presets')
         .select('*')
-        .eq('org_id', userProfile.org_id)
+        .eq('org_id', user.org_id)
         .eq('is_active', true)
         .eq('is_default', true)
         .maybeSingle();
@@ -48,7 +38,7 @@ export async function GET(request: NextRequest) {
       result = await supabase
         .from('content_presets')
         .select('*')
-        .eq('org_id', userProfile.org_id)
+        .eq('org_id', user.org_id)
         .eq('is_active', true)
         .order('is_default', { ascending: false })
         .order('created_at', { ascending: false });
@@ -62,39 +52,38 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ presets });
-  } catch (error) {
-    logger.error('Error in GET /api/content-presets:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'content-presets-get',
+    });
+    return handleApiError(error);
   }
 }
 
 // POST - Create or update content preset
 export async function POST(request: NextRequest) {
   try {
+    const user = await requireRole(request, ['admin', 'manager', 'editor']);
+
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    
+    const body = await parseJsonBody<{
+      preset_id?: string;
+      name: string;
+      description?: string;
+      word_count?: number;
+      content_format?: string;
+      seo_template?: Record<string, unknown>;
+      publishing_schedule?: Record<string, unknown>;
+      integration_field_mappings?: Record<string, unknown>;
+      quality_level?: string;
+      preset_config?: Record<string, unknown>;
+      is_default?: boolean;
+      is_active?: boolean;
+    }>(request);
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    validateRequiredFields(body, ['name']);
 
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id, role')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
-
-    // Check permissions (only admin, manager, editor can update)
-    if (!['admin', 'manager', 'editor'].includes(userProfile.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-    }
-
-    const body = await request.json();
     const {
       preset_id,
       name,
@@ -110,21 +99,17 @@ export async function POST(request: NextRequest) {
       is_active = true
     } = body;
 
-    if (!name) {
-      return NextResponse.json({ error: 'name is required' }, { status: 400 });
-    }
-
     // If setting as default, unset other defaults
     if (is_default) {
       await supabase
         .from('content_presets')
         .update({ is_default: false })
-        .eq('org_id', userProfile.org_id)
+        .eq('org_id', user.org_id)
         .eq('is_default', true);
     }
 
     const presetData = {
-      org_id: userProfile.org_id,
+      org_id: user.org_id,
       created_by: user.id,
       name,
       description: description || null,
@@ -146,7 +131,7 @@ export async function POST(request: NextRequest) {
         .from('content_presets')
         .update(presetData)
         .eq('preset_id', preset_id)
-        .eq('org_id', userProfile.org_id)
+        .eq('org_id', user.org_id)
         .select()
         .single();
 
@@ -178,37 +163,20 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ preset: result });
-  } catch (error) {
-    logger.error('Error in POST /api/content-presets:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'content-presets-post',
+    });
+    return handleApiError(error);
   }
 }
 
 // DELETE - Delete content preset
 export async function DELETE(request: NextRequest) {
   try {
+    const user = await requireRole(request, ['admin', 'manager']);
+
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id, role')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return NextResponse.json({ error: 'User organization not found' }, { status: 404 });
-    }
-
-    // Check permissions (only admin, manager can delete)
-    if (!['admin', 'manager'].includes(userProfile.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-    }
 
     const { searchParams } = new URL(request.url);
     const presetId = searchParams.get('preset_id');
@@ -221,7 +189,7 @@ export async function DELETE(request: NextRequest) {
       .from('content_presets')
       .delete()
       .eq('preset_id', presetId)
-      .eq('org_id', userProfile.org_id);
+      .eq('org_id', user.org_id);
 
     if (error) {
       logger.error('Error deleting content preset:', error);
@@ -229,9 +197,11 @@ export async function DELETE(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    logger.error('Error in DELETE /api/content-presets:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'content-presets-delete',
+    });
+    return handleApiError(error);
   }
 }
 

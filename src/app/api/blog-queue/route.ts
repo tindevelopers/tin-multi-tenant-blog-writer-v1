@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { canTransitionQueueStatus, type QueueStatus } from '@/lib/blog-queue-state-machine';
 import { logger } from '@/utils/logger';
+import { getAuthenticatedUser, parseJsonBody, validateRequiredFields, handleApiError } from '@/lib/api-utils';
 
 /**
  * GET /api/blog-queue
@@ -17,9 +18,7 @@ import { logger } from '@/utils/logger';
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient(request);
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -27,21 +26,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (userError || !userProfile) {
-      return NextResponse.json(
-        { error: 'User profile not found' },
-        { status: 404 }
-      );
-    }
-
-    const orgId = userProfile.org_id;
+    const supabase = await createClient();
+    const orgId = user.org_id;
 
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -106,12 +92,11 @@ export async function GET(request: NextRequest) {
         hasMore: (count || 0) > offset + limit
       }
     });
-  } catch (error) {
-    logger.error('Error in GET /api/blog-queue:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'blog-queue-get',
+    });
+    return handleApiError(error);
   }
 }
 
@@ -134,9 +119,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient(request);
-    const { data: { user } } = await supabase.auth.getUser();
-
+    const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -144,30 +127,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user's org_id
-    const { data: userProfile, error: userError } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+    const supabase = await createClient();
+    const orgId = user.org_id;
+    
+    const body = await parseJsonBody<{
+      topic: string;
+      keywords?: string[];
+      target_audience?: string;
+      tone?: string;
+      word_count?: number;
+      quality_level?: string;
+      custom_instructions?: string;
+      template_type?: string;
+      priority?: number;
+      metadata?: Record<string, unknown>;
+    }>(request);
 
-    if (userError || !userProfile) {
-      return NextResponse.json(
-        { error: 'User profile not found' },
-        { status: 404 }
-      );
-    }
-
-    const orgId = userProfile.org_id;
-    const body = await request.json();
-
-    // Validate required fields
-    if (!body.topic) {
-      return NextResponse.json(
-        { error: 'Topic is required' },
-        { status: 400 }
-      );
-    }
+    validateRequiredFields(body, ['topic']);
 
     // Create queue entry
     const { data: queueItem, error: insertError } = await supabase
@@ -177,12 +153,12 @@ export async function POST(request: NextRequest) {
         created_by: user.id,
         topic: body.topic,
         keywords: body.keywords || [],
-        target_audience: body.target_audience,
-        tone: body.tone,
-        word_count: body.word_count,
-        quality_level: body.quality_level,
-        custom_instructions: body.custom_instructions,
-        template_type: body.template_type,
+        target_audience: body.target_audience || null,
+        tone: body.tone || null,
+        word_count: body.word_count || null,
+        quality_level: body.quality_level || null,
+        custom_instructions: body.custom_instructions || null,
+        template_type: body.template_type || null,
         priority: body.priority || 5,
         status: 'queued',
         progress_percentage: 0,
@@ -209,12 +185,11 @@ export async function POST(request: NextRequest) {
       success: true,
       queue_item: queueItem
     }, { status: 201 });
-  } catch (error) {
-    logger.error('Error in POST /api/blog-queue:', error);
-    return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+      context: 'blog-queue-post',
+    });
+    return handleApiError(error);
   }
 }
 

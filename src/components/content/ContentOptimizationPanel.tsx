@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import { useContentOptimization } from '@/hooks/useContentOptimization';
+import { logger } from '@/utils/logger';
 import { 
   SparklesIcon,
   ArrowPathIcon,
@@ -44,7 +45,7 @@ export function ContentOptimizationPanel({
         onOptimized(optimizationResult.optimized_content);
       }
     } catch (err) {
-      console.error('Optimization failed:', err);
+      logger.error('Optimization failed:', err);
     }
   };
 

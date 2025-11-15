@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 interface CloudRunHealthStatus {
   isHealthy: boolean;
   isWakingUp: boolean;
@@ -21,7 +22,7 @@ class CloudRunHealthManager {
    * Note: CORS readiness is tested by actual API calls in keyword-research.ts retry logic
    */
   async wakeUpAndWait(): Promise<CloudRunHealthStatus> {
-    console.log('🌅 Starting Cloud Run wake-up process...');
+    logger.debug('🌅 Starting Cloud Run wake-up process...');
     
     let attempts = 0;
     let lastError: string | undefined;
@@ -36,7 +37,7 @@ class CloudRunHealthManager {
 
     while (attempts < maxAttempts) {
       attempts++;
-      console.log(`🔄 Wake-up attempt ${attempts}/${maxAttempts}`);
+      logger.debug(`🔄 Wake-up attempt ${attempts}/${maxAttempts}`);
 
       try {
         // Check health - use direct URL on server, API route on client
@@ -63,7 +64,7 @@ class CloudRunHealthManager {
         }
 
         if (healthData.isHealthy) {
-          console.log('✅ Cloud Run health check passed - service is ready');
+          logger.debug('✅ Cloud Run health check passed - service is ready');
           return {
             isHealthy: true,
             isWakingUp: false,
@@ -72,24 +73,24 @@ class CloudRunHealthManager {
           };
         } else if (healthData.isWakingUp) {
           lastError = healthData.error || 'Cloud Run is starting up...';
-          console.log(`⏳ Cloud Run is starting up...`);
+          logger.debug(`⏳ Cloud Run is starting up...`);
         } else {
           lastError = healthData.error || 'Cloud Run is not available';
         }
 
         // Calculate exponential backoff delay
         const delay = Math.min(baseDelay * Math.pow(1.5, attempts - 1), 10000); // Max 10 seconds
-        console.log(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
+        logger.debug(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         lastError = errorMessage;
-        console.warn(`⚠️ Wake-up attempt ${attempts} failed:`, errorMessage);
+        logger.warn(`⚠️ Wake-up attempt ${attempts} failed:`, errorMessage);
         
         if (attempts < maxAttempts) {
           const delay = Math.min(baseDelay * Math.pow(1.5, attempts - 1), 10000);
-          console.log(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
+          logger.debug(`⏳ Waiting ${Math.round(delay/1000)} seconds before retry...`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
@@ -178,7 +179,7 @@ class CloudRunHealthManager {
       }
       return null;
     } catch (error) {
-      console.error('Failed to get detailed health:', error);
+      logger.error('Failed to get detailed health:', error);
       return null;
     }
   }
@@ -198,7 +199,7 @@ class CloudRunHealthManager {
 
       return response.ok;
     } catch (error) {
-      console.error(`Test endpoint ${endpoint} failed:`, error);
+      logger.error(`Test endpoint ${endpoint} failed:`, error);
       return false;
     }
   }

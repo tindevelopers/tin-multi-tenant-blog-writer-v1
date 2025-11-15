@@ -1,3 +1,4 @@
+import { logger } from '@/utils/logger';
 /**
  * Webflow API Client
  * 
@@ -58,7 +59,7 @@ export async function getWebflowSites(apiKey: string): Promise<WebflowSite[]> {
     const data: WebflowSitesResponse = await response.json();
     return data.sites || [];
   } catch (error: any) {
-    console.error('Error fetching Webflow sites:', error);
+    logger.error('Error fetching Webflow sites:', error);
     throw new Error(`Failed to fetch Webflow sites: ${error.message}`);
   }
 }
@@ -87,7 +88,7 @@ export async function getWebflowCollections(
     const data: WebflowCollectionsResponse = await response.json();
     return data.collections || [];
   } catch (error: any) {
-    console.error('Error fetching Webflow collections:', error);
+    logger.error('Error fetching Webflow collections:', error);
     throw new Error(`Failed to fetch Webflow collections: ${error.message}`);
   }
 }
@@ -128,7 +129,7 @@ export async function autoDetectWebflowSiteId(
           }
         } catch (error) {
           // If we can't fetch collections for this site, skip it
-          console.warn(`Could not fetch collections for site ${site.id}:`, error);
+          logger.warn(`Could not fetch collections for site ${site.id}:`, error);
           continue;
         }
       }
@@ -138,7 +139,7 @@ export async function autoDetectWebflowSiteId(
     // (API keys are usually site-specific, so this should be fine)
     return sites[0].id;
   } catch (error: any) {
-    console.error('Error auto-detecting Webflow site ID:', error);
+    logger.error('Error auto-detecting Webflow site ID:', error);
     throw error;
   }
 }

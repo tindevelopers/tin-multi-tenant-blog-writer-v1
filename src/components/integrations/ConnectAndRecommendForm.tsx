@@ -9,6 +9,7 @@
 
 import React, { useState } from 'react';
 import {
+import { logger } from '@/utils/logger';
   CheckCircleIcon,
   XCircleIcon,
   ExclamationTriangleIcon,
@@ -165,7 +166,7 @@ export function ConnectAndRecommendForm({
       setResult(data.data);
       onSuccess?.(data.data);
     } catch (err: any) {
-      console.error('ConnectAndRecommendForm error:', err);
+      logger.error('ConnectAndRecommendForm error:', err);
       const errorMessage = err?.message || err?.toString() || 'An error occurred';
       setError(errorMessage);
       onError?.(errorMessage);

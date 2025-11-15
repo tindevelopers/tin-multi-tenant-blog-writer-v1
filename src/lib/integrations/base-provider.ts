@@ -6,6 +6,7 @@
  */
 
 import type {
+import { logger } from '@/utils/logger';
   IIntegrationProvider,
   IntegrationType,
   ConnectionConfig,
@@ -76,7 +77,7 @@ export abstract class BaseIntegrationProvider implements IIntegrationProvider {
         sites = await this.getSites(config);
       } catch (error) {
         // Some providers might not have sites concept
-        console.warn(`Failed to fetch sites for ${this.type}:`, error);
+        logger.warn(`Failed to fetch sites for ${this.type}:`, error);
       }
 
       return {
@@ -102,7 +103,7 @@ export abstract class BaseIntegrationProvider implements IIntegrationProvider {
   async disconnect(integrationId: string): Promise<void> {
     // Base implementation - most providers don't need special disconnect logic
     // Credentials are just removed from database
-    console.log(`Disconnecting ${this.type} integration: ${integrationId}`);
+    logger.debug(`Disconnecting ${this.type} integration: ${integrationId}`);
   }
 
   /**

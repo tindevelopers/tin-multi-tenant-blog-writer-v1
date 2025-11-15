@@ -7,6 +7,7 @@ import { EnvelopeIcon } from "../../../icons";
 import PhoneInput from "../group-input/PhoneInput";
 import CopyInput from "./CopyInput";
 import UrlPrefixInput from "./UrlPrefixInput";
+import { logger } from '@/utils/logger';
 
 export default function InputGroup() {
   const countries = [
@@ -16,7 +17,7 @@ export default function InputGroup() {
     { code: "AU", label: "+61" },
   ];
   const handlePhoneNumberChange = (phoneNumber: string) => {
-    console.log("Updated phone number:", phoneNumber);
+    logger.debug("Updated phone number:", phoneNumber);
   };
   return (
     <ComponentCard title="Input Group">

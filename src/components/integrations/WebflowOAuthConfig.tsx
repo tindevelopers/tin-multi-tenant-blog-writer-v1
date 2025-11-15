@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { logger } from '@/utils/logger';
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -52,7 +53,7 @@ export function WebflowOAuthConfig({ onClose }: WebflowOAuthConfigProps) {
         }
       }
     } catch (err) {
-      console.error('Error checking OAuth status:', err);
+      logger.error('Error checking OAuth status:', err);
     }
   };
 

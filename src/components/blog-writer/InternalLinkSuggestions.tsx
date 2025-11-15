@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link2, Loader2, Plus, ExternalLink, CheckCircle2, X } from 'lucide-react';
 import Alert from '@/components/ui/alert/Alert';
+import { logger } from '@/utils/logger';
 
 interface LinkSuggestion {
   post_id: string;
@@ -56,7 +57,7 @@ export default function InternalLinkSuggestions({
         setError(data.error || 'Failed to load link suggestions');
       }
     } catch (err: any) {
-      console.error('Error loading link suggestions:', err);
+      logger.error('Error loading link suggestions:', err);
       setError('Failed to load link suggestions');
     } finally {
       setLoading(false);
@@ -93,7 +94,7 @@ export default function InternalLinkSuggestions({
         setError(data.error || 'Failed to add link');
       }
     } catch (err: any) {
-      console.error('Error adding link:', err);
+      logger.error('Error adding link:', err);
       setError('Failed to add link');
     } finally {
       setAddingLinks(prev => {

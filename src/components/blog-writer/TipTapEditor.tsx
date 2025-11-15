@@ -28,6 +28,7 @@ import {
   AlignJustify
 } from 'lucide-react';
 import { useState, useCallback } from 'react';
+import { logger } from '@/utils/logger';
 
 interface TipTapEditorProps {
   content: string;
@@ -104,7 +105,7 @@ export default function TipTapEditor({
           alert('Failed to upload image. Please try again.');
         }
       } catch (error) {
-        console.error('Error uploading image:', error);
+        logger.error('Error uploading image:', error);
         alert('Error uploading image. Please try again.');
       } finally {
         setUploadingImage(false);

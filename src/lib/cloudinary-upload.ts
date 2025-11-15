@@ -4,6 +4,7 @@
  */
 
 import { createServiceClient } from '@/lib/supabase/service';
+import { logger } from '@/utils/logger';
 
 interface CloudinaryCredentials {
   cloud_name: string;
@@ -35,13 +36,13 @@ export async function getCloudinaryCredentials(orgId: string): Promise<Cloudinar
       .single();
 
     if (error || !org) {
-      console.error('Error fetching organization:', error);
+      logger.error('Error fetching organization:', error);
       return null;
     }
 
     const settings = org.settings as Record<string, unknown> | null;
     if (!settings || !settings.cloudinary) {
-      console.warn(`No Cloudinary credentials found for org ${orgId}`);
+      logger.warn(`No Cloudinary credentials found for org ${orgId}`);
       return null;
     }
 
@@ -51,13 +52,13 @@ export async function getCloudinaryCredentials(orgId: string): Promise<Cloudinar
     const api_secret = cloudinary.api_secret as string;
 
     if (!cloud_name || !api_key || !api_secret) {
-      console.warn(`Incomplete Cloudinary credentials for org ${orgId}`);
+      logger.warn(`Incomplete Cloudinary credentials for org ${orgId}`);
       return null;
     }
 
     return { cloud_name, api_key, api_secret };
   } catch (error) {
-    console.error('Error getting Cloudinary credentials:', error);
+    logger.error('Error getting Cloudinary credentials:', error);
     return null;
   }
 }
@@ -79,7 +80,7 @@ export async function uploadViaBlogWriterAPI(
     // Get organization's Cloudinary credentials
     const credentials = await getCloudinaryCredentials(orgId);
     if (!credentials) {
-      console.error(`No Cloudinary credentials configured for org ${orgId}`);
+      logger.error(`No Cloudinary credentials configured for org ${orgId}`);
       return null;
     }
 
@@ -123,7 +124,7 @@ export async function uploadViaBlogWriterAPI(
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      console.error('Blog Writer API Cloudinary upload error:', errorText);
+      logger.error('Blog Writer API Cloudinary upload error:', errorText);
       throw new Error(`Cloudinary upload failed: ${uploadResponse.statusText}`);
     }
 
@@ -140,7 +141,7 @@ export async function uploadViaBlogWriterAPI(
       resource_type: result.resource_type || 'image',
     };
   } catch (error) {
-    console.error('Error uploading via Blog Writer API:', error);
+    logger.error('Error uploading via Blog Writer API:', error);
     return null;
   }
 }
@@ -158,16 +159,16 @@ export async function saveMediaAsset(
   try {
     // Validate required fields
     if (!orgId) {
-      console.error('❌ saveMediaAsset: orgId is required');
+      logger.error('❌ saveMediaAsset: orgId is required');
       return null;
     }
     
     if (!cloudinaryResult || !cloudinaryResult.secure_url) {
-      console.error('❌ saveMediaAsset: Invalid cloudinaryResult or missing secure_url');
+      logger.error('❌ saveMediaAsset: Invalid cloudinaryResult or missing secure_url');
       return null;
     }
 
-    console.log('💾 Saving media asset to database:', {
+    logger.debug('💾 Saving media asset to database:', {
       orgId,
       userId,
       fileName,
@@ -180,7 +181,7 @@ export async function saveMediaAsset(
     
     // Check if service role key is configured
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('❌ SUPABASE_SERVICE_ROLE_KEY is not configured. Cannot save to database.');
+      logger.error('❌ SUPABASE_SERVICE_ROLE_KEY is not configured. Cannot save to database.');
       return null;
     }
 
@@ -201,7 +202,7 @@ export async function saveMediaAsset(
       },
     };
 
-    console.log('💾 Inserting media asset with data:', {
+    logger.debug('💾 Inserting media asset with data:', {
       ...insertData,
       metadata: insertData.metadata,
       file_url: insertData.file_url.substring(0, 50) + '...'
@@ -214,7 +215,7 @@ export async function saveMediaAsset(
       .single();
 
     if (error) {
-      console.error('❌ Error saving media asset to database:', {
+      logger.error('❌ Error saving media asset to database:', {
         error: error.message,
         code: error.code,
         details: error.details,
@@ -228,11 +229,11 @@ export async function saveMediaAsset(
     }
 
     if (!data || !data.asset_id) {
-      console.error('❌ No asset_id returned from insert');
+      logger.error('❌ No asset_id returned from insert');
       return null;
     }
 
-    console.log('✅ Media asset saved successfully:', {
+    logger.debug('✅ Media asset saved successfully:', {
       asset_id: data.asset_id,
       file_name: fileName,
       org_id: orgId
@@ -240,7 +241,7 @@ export async function saveMediaAsset(
 
     return data.asset_id;
   } catch (error) {
-    console.error('❌ Exception saving media asset:', {
+    logger.error('❌ Exception saving media asset:', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       orgId,

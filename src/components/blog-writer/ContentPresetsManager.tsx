@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save, Loader2, Plus, X, CheckCircle2, Edit2, Trash2 } from 'lucide-react';
 import Alert from '@/components/ui/alert/Alert';
+import { logger } from '@/utils/logger';
 
 interface ContentPreset {
   preset_id?: string;
@@ -85,7 +86,7 @@ export default function ContentPresetsManager({
         setPresets(Array.isArray(data.presets) ? data.presets : []);
       }
     } catch (err: any) {
-      console.error('Error loading presets:', err);
+      logger.error('Error loading presets:', err);
       setError('Failed to load content presets');
     } finally {
       setLoading(false);
@@ -129,7 +130,7 @@ export default function ContentPresetsManager({
         setError(data.error || 'Failed to save preset');
       }
     } catch (err: any) {
-      console.error('Error saving preset:', err);
+      logger.error('Error saving preset:', err);
       setError('Failed to save preset');
     } finally {
       setSaving(false);
@@ -168,7 +169,7 @@ export default function ContentPresetsManager({
         setError(data.error || 'Failed to delete preset');
       }
     } catch (err: any) {
-      console.error('Error deleting preset:', err);
+      logger.error('Error deleting preset:', err);
       setError('Failed to delete preset');
     }
   };

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Save, Loader2, CheckCircle2, AlertCircle, Plus, X } from 'lucide-react';
 import Alert from '@/components/ui/alert/Alert';
+import { logger } from '@/utils/logger';
 
 interface BrandVoiceSettingsProps {
   onSettingsChange?: (settings: any) => void;
@@ -73,7 +74,7 @@ export default function BrandVoiceSettings({ onSettingsChange, compact = false }
         }
       }
     } catch (err: any) {
-      console.error('Error loading brand voice:', err);
+      logger.error('Error loading brand voice:', err);
       setError('Failed to load brand voice settings');
     } finally {
       setLoading(false);
@@ -105,7 +106,7 @@ export default function BrandVoiceSettings({ onSettingsChange, compact = false }
         setError(data.error || 'Failed to save brand voice settings');
       }
     } catch (err: any) {
-      console.error('Error saving brand voice:', err);
+      logger.error('Error saving brand voice:', err);
       setError('Failed to save brand voice settings');
     } finally {
       setSaving(false);
