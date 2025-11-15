@@ -21,7 +21,7 @@ import QuickActionsMenu from "@/components/blog-writer/QuickActionsMenu";
 import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
-import Alert from "@/components/ui/alert/Alert";
+// import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
   const router = useRouter();
@@ -68,9 +68,10 @@ function NewDraftContent() {
       const word_count = searchParams.get('word_count');
 
       if (title || topic || keywords || keyword || target_audience || word_count || search_type) {
-        console.log('🔍 URL parameters detected, populating form:', {
-          title, topic, keywords, keyword, search_type, niche, target_audience, word_count
-        });
+        // URL parameters detected, populating form
+        // console.log('🔍 URL parameters detected, populating form:', {
+        //   title, topic, keywords, keyword, search_type, niche, target_audience, word_count
+        // });
 
         // Map search_type to template_type if provided
         const templateType = search_type ? mapSearchTypeToTemplate(search_type) : formData.template_type;
@@ -91,6 +92,7 @@ function NewDraftContent() {
         setShowContentSuggestions(true);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
   
   const [formData, setFormData] = useState({
