@@ -57,12 +57,17 @@ export function useCloudRunStatus() {
             } else {
               errorMessage = errorText.substring(0, 200);
             }
+            // Return early since we've consumed the response body
+            throw new Error(errorMessage);
           }
-        } catch {
+        } catch (parseError) {
+          // If we already threw an error above, re-throw it
+          if (parseError instanceof Error && parseError.message !== errorMessage) {
+            throw parseError;
+          }
           errorMessage = response.statusText || `HTTP ${response.status}`;
+          throw new Error(errorMessage);
         }
-        
-        throw new Error(errorMessage);
       }
 
       const data = await response.json();
