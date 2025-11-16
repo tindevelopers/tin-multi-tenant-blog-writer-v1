@@ -182,18 +182,23 @@ export async function POST(request: NextRequest) {
     let regularData: any = null;
     
     // Try enhanced endpoint first
-    logger.info('🔧 API URL Configuration', {
+    // Log URL configuration - use error level to ensure it shows in production logs
+    logger.error('🔧 API URL Configuration (DEBUG)', {
       BLOG_WRITER_API_URL,
       NODE_ENV: process.env.NODE_ENV,
       VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF,
+      GIT_BRANCH: process.env.GIT_BRANCH,
+      BRANCH: process.env.BRANCH,
       hasEnvOverride: !!process.env.BLOG_WRITER_API_URL,
+      envVarValue: process.env.BLOG_WRITER_API_URL || 'NOT SET',
     });
     
     const enhancedEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
-    logger.info('🔍 Calling enhanced endpoint', {
+    logger.error('🔍 Calling enhanced endpoint (DEBUG)', {
       endpoint: enhancedEndpoint,
       baseUrl: BLOG_WRITER_API_URL,
       path: '/api/v1/keywords/enhanced',
+      fullUrl: enhancedEndpoint,
       keywords: normalizedKeywords,
       location: body.location,
       language: body.language,
@@ -229,10 +234,11 @@ export async function POST(request: NextRequest) {
     
     // Always try regular endpoint to get baseline data and fill any gaps
     const regularEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
-    logger.info('🔍 Calling regular endpoint', {
+    logger.error('🔍 Calling regular endpoint (DEBUG)', {
       endpoint: regularEndpoint,
       baseUrl: BLOG_WRITER_API_URL,
       path: '/api/v1/keywords/analyze',
+      fullUrl: regularEndpoint,
       keywords: normalizedKeywords,
       location: body.location,
       language: body.language,
