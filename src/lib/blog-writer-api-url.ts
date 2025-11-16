@@ -37,14 +37,14 @@ export function getBlogWriterApiUrl(): string {
       branchLower === 'prod' || 
       branchLower === 'production') {
     // Production branch → Production API
-    return 'https://blog-writer-api-prod-kq42l26tuq-uc.a.run.app';
+    return 'https://blog-writer-api-prod-613248238610.us-east1.run.app';
   } else if (branchLower.includes('staging') || 
              branchLower === 'stage') {
     // Staging branch → Staging API
-    return 'https://blog-writer-api-staging-kq42l26tuq-uc.a.run.app';
+    return 'https://blog-writer-api-staging-613248238610.europe-west9.run.app';
   } else {
     // Default to dev for develop, feature branches, etc.
-    return 'https://blog-writer-api-dev-kq42l26tuq-uc.a.run.app';
+    return 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
   }
 }
 
