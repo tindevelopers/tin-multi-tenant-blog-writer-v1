@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { parseJsonBody } from '@/lib/api-utils';
 import { createClient } from '@/lib/supabase/server';
+import { applyTestingLimits, limitResponseData, TESTING_MODE, getTestingModeIndicator } from '@/lib/testing-config';
 
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
@@ -107,24 +108,25 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate optimal batch size for long-tail keyword research (20 keywords max)
-    // Reduced from 30 to improve performance and reduce timeout risk with higher suggestion counts
-    const OPTIMAL_BATCH_SIZE = 20;
+    // Validate optimal batch size for long-tail keyword research
+    // Apply testing limits if in testing mode
+    const OPTIMAL_BATCH_SIZE = TESTING_MODE ? 5 : 20; // Reduced to 5 in testing mode
     if (normalizedKeywords.length > OPTIMAL_BATCH_SIZE) {
       return NextResponse.json(
-        { error: `Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once for optimal long-tail results. Received ${normalizedKeywords.length} keywords. Please batch your requests.` },
+        { error: `Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once${TESTING_MODE ? ' (testing mode)' : ' for optimal long-tail results'}. Received ${normalizedKeywords.length} keywords. Please batch your requests.` },
         { status: 422 }
       );
     }
     
     // Try enhanced endpoint first, fallback to regular if unavailable
     // Enhanced endpoint requires max_suggestions_per_keyword >= 5
-    // Default to 75 for optimal long-tail keyword research
-    const DEFAULT_MAX_SUGGESTIONS = 75; // Optimal for long-tail keyword discovery
+    // Apply testing limits if in testing mode
+    const DEFAULT_MAX_SUGGESTIONS = TESTING_MODE ? 5 : 75; // Reduced to 5 in testing mode
+    const MAX_SUGGESTIONS_CAP = TESTING_MODE ? 5 : 150; // Reduced cap in testing mode
     
     const maxSuggestions = body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5
-      ? Math.min(150, body.max_suggestions_per_keyword) // Cap at API maximum
-      : DEFAULT_MAX_SUGGESTIONS; // Default to 75 for optimal long-tail results
+      ? Math.min(MAX_SUGGESTIONS_CAP, body.max_suggestions_per_keyword) // Cap at testing limit or API maximum
+      : DEFAULT_MAX_SUGGESTIONS; // Default based on testing mode
     
     const requestBody: {
       keywords: string[];
@@ -154,6 +156,17 @@ export async function POST(request: NextRequest) {
       competitor_domain: body.competitor_domain,
     };
     
+    // Apply testing limits if in testing mode
+    const limitedRequestBody = applyTestingLimits(requestBody);
+    
+    if (TESTING_MODE) {
+      logger.info('🧪 Testing Mode: Applying data limits', {
+        originalKeywords: Array.isArray(requestBody.keywords) ? requestBody.keywords.length : 1,
+        limitedKeywords: Array.isArray(limitedRequestBody.keywords) ? limitedRequestBody.keywords.length : 1,
+        maxSuggestions: limitedRequestBody.max_suggestions_per_keyword,
+      });
+    }
+    
     // Try enhanced endpoint first
     let endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
     let response = await fetchWithRetry(
@@ -163,7 +176,7 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(limitedRequestBody),
       }
     );
     
@@ -188,6 +201,8 @@ export async function POST(request: NextRequest) {
         ...regularRequestBody,
         include_search_volume: true, // Try to get search volume from regular endpoint too
       };
+      // Apply testing limits to fallback request as well
+      const limitedRegularRequest = applyTestingLimits(regularRequestWithVolume);
       response = await fetchWithRetry(
         endpoint,
         {
@@ -195,7 +210,7 @@ export async function POST(request: NextRequest) {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(regularRequestWithVolume),
+          body: JSON.stringify(limitedRegularRequest),
         }
       );
     }
@@ -275,7 +290,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = await response.json();
+    let data = await response.json();
+    
+    // Apply testing limits to response data
+    data = limitResponseData(data);
+    
+    if (TESTING_MODE) {
+      logger.info('🧪 Testing Mode: Limited response data', {
+        originalKeywords: Object.keys(data.enhanced_analysis || data.keyword_analysis || {}).length,
+        limitedKeywords: Object.keys(data.enhanced_analysis || data.keyword_analysis || {}).length,
+        clusters: Array.isArray(data.clusters) ? data.clusters.length : 0,
+      });
+    }
     
     // Save search to database if save_search is true (default) and user is authenticated
     let savedSearchId: string | null = null;
@@ -372,7 +398,7 @@ export async function POST(request: NextRequest) {
     
     // Return full response including all fields
     // Map for backward compatibility (some code may still expect keyword_analysis)
-    return NextResponse.json({
+    const responseData: Record<string, unknown> = {
       ...data,
       // Backward compatibility mapping - use enhanced_analysis if available, otherwise keyword_analysis
       keyword_analysis: data.enhanced_analysis || data.keyword_analysis || data,
@@ -384,8 +410,17 @@ export async function POST(request: NextRequest) {
       clusters: data.clusters || [],
       cluster_summary: data.cluster_summary || null,
       // Include saved search ID if search was saved
-      saved_search_id: savedSearchId
-    });
+      saved_search_id: savedSearchId,
+    };
+    
+    // Add testing mode indicator if in testing mode
+    const testingIndicator = getTestingModeIndicator();
+    if (testingIndicator) {
+      responseData.testing_mode = true;
+      responseData.testing_mode_indicator = testingIndicator;
+    }
+    
+    return NextResponse.json(responseData);
   } catch (error: unknown) {
     logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
       context: 'keywords-analyze',

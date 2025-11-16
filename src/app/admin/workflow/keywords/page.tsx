@@ -91,6 +91,7 @@ export default function KeywordResearchPage() {
   const [enhancedAnalysis, setEnhancedAnalysis] = useState<EnhancedAnalysis>({});
   const [locationUsed, setLocationUsed] = useState<string>('');
   const [savedSearchId, setSavedSearchId] = useState<string | null>(null);
+  const [testingMode, setTestingMode] = useState<boolean>(false);
   
   const [collectionName, setCollectionName] = useState('');
 
@@ -130,9 +131,9 @@ export default function KeywordResearchPage() {
                 : (typeof collection.keywords === 'string' ? JSON.parse(collection.keywords) : []);
               
               if (savedKeywords && savedKeywords.length > 0) {
-                setKeywords(savedKeywords);
-                setCollectionName(collection.name || '');
-                generateClusters(savedKeywords);
+              setKeywords(savedKeywords);
+              setCollectionName(collection.name || '');
+              generateClusters(savedKeywords);
                 
                 // Set primary keyword from first keyword
                 if (savedKeywords.length > 0) {
@@ -177,10 +178,10 @@ export default function KeywordResearchPage() {
     });
 
     const clusterArray: ClusterData[] = Array.from(clusterMap.entries()).map(([topic, kws]) => ({
-      parent_topic: topic,
+        parent_topic: topic,
       keywords: kws.map(k => k.keyword),
       cluster_score: kws[0]?.cluster_score || 0.5,
-      keyword_count: kws.length
+        keyword_count: kws.length
     }));
 
     clusterArray.sort((a, b) => b.cluster_score - a.cluster_score);
@@ -200,7 +201,7 @@ export default function KeywordResearchPage() {
     
     return keyword;
   };
-
+  
   // Handle advanced search
   const handleAdvancedSearch = async (params: {
     query: string;
@@ -257,12 +258,18 @@ export default function KeywordResearchPage() {
 
       const data = await response.json();
       
+      // Check for testing mode indicator
+      if (data.testing_mode || data.testing_mode_indicator) {
+        setTestingMode(true);
+      }
+      
       console.log('🔍 API Response:', {
         hasEnhancedAnalysis: !!data.enhanced_analysis,
         enhancedAnalysisKeys: data.enhanced_analysis ? Object.keys(data.enhanced_analysis) : [],
         hasClusters: !!data.clusters,
         clusterCount: data.clusters?.length || 0,
         location: data.location,
+        testingMode: data.testing_mode,
         fullData: data,
       });
       
@@ -312,8 +319,8 @@ export default function KeywordResearchPage() {
               long_tail_keywords: metrics.long_tail_keywords,
               parent_topic: metrics.parent_topic,
               cluster_score: metrics.cluster_score,
-            };
-          });
+        };
+      });
           Object.assign(analysis, convertedAnalysis);
           setEnhancedAnalysis(analysis);
           console.log(`✅ Converted ${Object.keys(convertedAnalysis).length} keywords from keyword_analysis`);
@@ -360,7 +367,7 @@ export default function KeywordResearchPage() {
           keyword_count: c.keywords?.length || 0,
         })));
       } else {
-        generateClusters(keywordList);
+      generateClusters(keywordList);
       }
 
       console.log('📊 Processed keywords:', {
@@ -590,17 +597,17 @@ export default function KeywordResearchPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-              <Search className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                Keyword Research
-              </h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Discover high-value keywords for your content strategy
-              </p>
-            </div>
+          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+            <Search className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Keyword Research
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              Discover high-value keywords for your content strategy
+            </p>
+          </div>
           </div>
           <button
             onClick={() => setShowSavedSearches(true)}
@@ -683,8 +690,8 @@ export default function KeywordResearchPage() {
           defaultQuery={searchQuery}
           defaultLocation={location}
           defaultSearchType={searchType}
-        />
-      </div>
+            />
+          </div>
 
       {/* Overview Cards - Show when we have primary keyword data */}
       {primaryKeyword && primaryMetrics && (
@@ -694,8 +701,8 @@ export default function KeywordResearchPage() {
             metrics={primaryMetrics}
             location={location}
             locationUsed={locationUsed}
-          />
-        </div>
+            />
+          </div>
       )}
 
       {/* Bulk Actions Toolbar */}
@@ -738,7 +745,7 @@ export default function KeywordResearchPage() {
               setSuccess('Keyword list created');
             }}
           />
-        </div>
+                    </div>
       )}
 
       {/* Keyword Detail Tabs */}
