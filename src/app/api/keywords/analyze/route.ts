@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { logger } from '@/utils/logger';
+import { logger } from '@/lib/logger';
 import { parseJsonBody } from '@/lib/api-utils';
 import { createClient } from '@/lib/supabase/server';
 import { applyTestingLimits, limitResponseData, TESTING_MODE, getTestingModeIndicator } from '@/lib/testing-config';
