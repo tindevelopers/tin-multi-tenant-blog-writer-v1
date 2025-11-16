@@ -201,7 +201,9 @@ export async function POST(request: NextRequest) {
       fullUrl: enhancedEndpoint,
       keywords: normalizedKeywords,
       location: body.location,
+      locationInRequestBody: limitedRequestBody.location,
       language: body.language,
+      requestBodyLocation: limitedRequestBody.location,
     });
     
     try {
@@ -241,7 +243,9 @@ export async function POST(request: NextRequest) {
       fullUrl: regularEndpoint,
       keywords: normalizedKeywords,
       location: body.location,
+      locationInRequestBody: limitedRegularRequest.location,
       language: body.language,
+      requestBodyLocation: limitedRegularRequest.location,
     });
     
     try {
