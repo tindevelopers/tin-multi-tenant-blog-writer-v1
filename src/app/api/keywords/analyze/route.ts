@@ -254,12 +254,12 @@ export async function POST(request: NextRequest) {
     }
     
     // Merge results: Enhanced takes priority, but fill gaps from regular
-    let data: any = {};
+    let mergedData: any = {};
     let response: Response;
     
     if (enhancedData && enhancedResponse?.ok) {
       // Use enhanced data as base
-      data = { ...enhancedData };
+      mergedData = { ...enhancedData };
       response = enhancedResponse;
       
       // Merge in any missing data from regular endpoint
@@ -268,7 +268,7 @@ export async function POST(request: NextRequest) {
         
         // Merge keyword_analysis if enhanced doesn't have it or has gaps
         if (regularData.keyword_analysis) {
-          const enhancedAnalysis = data.enhanced_analysis || {};
+          const enhancedAnalysis = mergedData.enhanced_analysis || {};
           const regularAnalysis = regularData.keyword_analysis || {};
           
           // For each keyword in regular, add if missing in enhanced or fill gaps
@@ -289,31 +289,31 @@ export async function POST(request: NextRequest) {
             }
           });
           
-          data.enhanced_analysis = enhancedAnalysis;
+          mergedData.enhanced_analysis = enhancedAnalysis;
         }
         
         // Merge clusters if enhanced doesn't have them
-        if (!data.clusters && regularData.clusters) {
-          data.clusters = regularData.clusters;
+        if (!mergedData.clusters && regularData.clusters) {
+          mergedData.clusters = regularData.clusters;
         }
         
         // Merge other fields
-        if (!data.suggested_keywords && regularData.suggested_keywords) {
-          data.suggested_keywords = regularData.suggested_keywords;
+        if (!mergedData.suggested_keywords && regularData.suggested_keywords) {
+          mergedData.suggested_keywords = regularData.suggested_keywords;
         }
         
-        if (!data.original_keywords && regularData.original_keywords) {
-          data.original_keywords = regularData.original_keywords;
+        if (!mergedData.original_keywords && regularData.original_keywords) {
+          mergedData.original_keywords = regularData.original_keywords;
         }
         
         // Merge location info if enhanced doesn't have it
-        if (!data.location && regularData.location) {
-          data.location = regularData.location;
+        if (!mergedData.location && regularData.location) {
+          mergedData.location = regularData.location;
         }
       }
     } else if (regularData && regularResponse?.ok) {
       // Fallback to regular data if enhanced failed
-      data = { ...regularData };
+      mergedData = { ...regularData };
       response = regularResponse;
       logger.debug('⚠️ Using regular endpoint data only (enhanced unavailable)');
     } else {
