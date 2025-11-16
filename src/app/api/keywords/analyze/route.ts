@@ -167,23 +167,48 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Try enhanced endpoint first
-    let endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
-    let response = await fetchWithRetry(
-      endpoint,
-      {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-        body: JSON.stringify(limitedRequestBody),
-      }
-    );
+    // Strategy: Call both endpoints to get comprehensive results
+    // Enhanced endpoint provides richer data, regular endpoint provides baseline data
+    // We'll merge them intelligently
     
-    // If enhanced endpoint returns 503 (not available), fallback to regular endpoint
-    if (response.status === 503) {
-      logger.debug('Enhanced endpoint unavailable, falling back to regular endpoint');
-      endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
+    let enhancedResponse: Response | null = null;
+    let regularResponse: Response | null = null;
+    let enhancedData: any = null;
+    let regularData: any = null;
+    
+    // Try enhanced endpoint first
+    const enhancedEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
+    try {
+      enhancedResponse = await fetchWithRetry(
+        enhancedEndpoint,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(limitedRequestBody),
+        }
+      );
+      
+      if (enhancedResponse.ok) {
+        enhancedData = await enhancedResponse.json();
+        logger.debug('✅ Enhanced endpoint returned data', {
+          hasEnhancedAnalysis: !!enhancedData.enhanced_analysis,
+          keywordCount: Object.keys(enhancedData.enhanced_analysis || {}).length,
+        });
+      } else if (enhancedResponse.status !== 503) {
+        // If it's not 503, log the error but continue to try regular endpoint
+        logger.warn('Enhanced endpoint returned non-OK status', { 
+          status: enhancedResponse.status 
+        });
+      }
+    } catch (error) {
+      logger.debug('Enhanced endpoint failed, will try regular endpoint', { error });
+    }
+    
+    // Always try regular endpoint to get baseline data and fill any gaps
+    const regularEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
+    try {
       // Regular endpoint doesn't support enhanced features, remove them
       const { 
         max_suggestions_per_keyword, 
@@ -196,15 +221,18 @@ export async function POST(request: NextRequest) {
         competitor_domain,
         ...regularRequestBody 
       } = requestBody;
+      
       // Add include_search_volume to regular endpoint if it supports it
       const regularRequestWithVolume = {
         ...regularRequestBody,
         include_search_volume: true, // Try to get search volume from regular endpoint too
       };
-      // Apply testing limits to fallback request as well
+      
+      // Apply testing limits to regular request as well
       const limitedRegularRequest = applyTestingLimits(regularRequestWithVolume);
-      response = await fetchWithRetry(
-        endpoint,
+      
+      regularResponse = await fetchWithRetry(
+        regularEndpoint,
         {
           method: 'POST',
           headers: {
@@ -213,6 +241,87 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify(limitedRegularRequest),
         }
       );
+      
+      if (regularResponse.ok) {
+        regularData = await regularResponse.json();
+        logger.debug('✅ Regular endpoint returned data', {
+          hasKeywordAnalysis: !!regularData.keyword_analysis,
+          keywordCount: Object.keys(regularData.keyword_analysis || {}).length,
+        });
+      }
+    } catch (error) {
+      logger.debug('Regular endpoint failed', { error });
+    }
+    
+    // Merge results: Enhanced takes priority, but fill gaps from regular
+    let data: any = {};
+    let response: Response;
+    
+    if (enhancedData && enhancedResponse?.ok) {
+      // Use enhanced data as base
+      data = { ...enhancedData };
+      response = enhancedResponse;
+      
+      // Merge in any missing data from regular endpoint
+      if (regularData && regularResponse?.ok) {
+        logger.debug('🔄 Merging enhanced and regular endpoint results');
+        
+        // Merge keyword_analysis if enhanced doesn't have it or has gaps
+        if (regularData.keyword_analysis) {
+          const enhancedAnalysis = data.enhanced_analysis || {};
+          const regularAnalysis = regularData.keyword_analysis || {};
+          
+          // For each keyword in regular, add if missing in enhanced or fill gaps
+          Object.entries(regularAnalysis).forEach(([keyword, kwData]: [string, any]) => {
+            if (!enhancedAnalysis[keyword]) {
+              // Keyword not in enhanced, add from regular
+              enhancedAnalysis[keyword] = kwData;
+            } else {
+              // Keyword exists in both, merge data (enhanced takes priority, but fill nulls)
+              const enhancedKw = enhancedAnalysis[keyword];
+              Object.entries(kwData).forEach(([field, value]: [string, any]) => {
+                if (enhancedKw[field] === null || enhancedKw[field] === undefined || enhancedKw[field] === 0) {
+                  if (value !== null && value !== undefined) {
+                    enhancedKw[field] = value;
+                  }
+                }
+              });
+            }
+          });
+          
+          data.enhanced_analysis = enhancedAnalysis;
+        }
+        
+        // Merge clusters if enhanced doesn't have them
+        if (!data.clusters && regularData.clusters) {
+          data.clusters = regularData.clusters;
+        }
+        
+        // Merge other fields
+        if (!data.suggested_keywords && regularData.suggested_keywords) {
+          data.suggested_keywords = regularData.suggested_keywords;
+        }
+        
+        if (!data.original_keywords && regularData.original_keywords) {
+          data.original_keywords = regularData.original_keywords;
+        }
+        
+        // Merge location info if enhanced doesn't have it
+        if (!data.location && regularData.location) {
+          data.location = regularData.location;
+        }
+      }
+    } else if (regularData && regularResponse?.ok) {
+      // Fallback to regular data if enhanced failed
+      data = { ...regularData };
+      response = regularResponse;
+      logger.debug('⚠️ Using regular endpoint data only (enhanced unavailable)');
+    } else {
+      // Both failed - use whichever response we have for error handling
+      response = enhancedResponse || regularResponse || new Response(null, { status: 503 });
+      if (!response.ok) {
+        // Will be handled by error handling below
+      }
     }
 
     if (!response.ok) {
