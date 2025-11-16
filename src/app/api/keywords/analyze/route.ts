@@ -236,17 +236,6 @@ export async function POST(request: NextRequest) {
     
     // Always try regular endpoint to get baseline data and fill any gaps
     const regularEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
-    logger.error('🔍 Calling regular endpoint (DEBUG)', {
-      endpoint: regularEndpoint,
-      baseUrl: BLOG_WRITER_API_URL,
-      path: '/api/v1/keywords/analyze',
-      fullUrl: regularEndpoint,
-      keywords: normalizedKeywords,
-      location: body.location,
-      locationInRequestBody: limitedRegularRequest.location,
-      language: body.language,
-      requestBodyLocation: limitedRegularRequest.location,
-    });
     
     try {
       // Regular endpoint doesn't support enhanced features, remove them
@@ -270,6 +259,18 @@ export async function POST(request: NextRequest) {
       
       // Apply testing limits to regular request as well
       const limitedRegularRequest = applyTestingLimits(regularRequestWithVolume);
+      
+      logger.error('🔍 Calling regular endpoint (DEBUG)', {
+        endpoint: regularEndpoint,
+        baseUrl: BLOG_WRITER_API_URL,
+        path: '/api/v1/keywords/analyze',
+        fullUrl: regularEndpoint,
+        keywords: normalizedKeywords,
+        locationFromBody: body.location,
+        locationInRegularRequestBody: regularRequestBody.location,
+        locationInLimitedRequest: limitedRegularRequest.location,
+        language: body.language,
+      });
       
       regularResponse = await fetchWithRetry(
         regularEndpoint,
