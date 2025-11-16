@@ -94,19 +94,28 @@ export function KeywordDetailTabs({
   }, [keywords, filters]);
 
   // Matching terms (long-tail keywords)
+  // NOTE: Only include keywords that have their own individual metrics
+  // Long-tail keywords from the array are just strings without metrics, so we don't expand them
+  // Instead, we only show keywords that are actual entries in the keywords array with their own data
   const matchingTerms = useMemo(() => {
-    return keywords.filter(kw => 
-      kw.long_tail_keywords && kw.long_tail_keywords.length > 0
-    ).flatMap(kw => 
-      (kw.long_tail_keywords || []).map(lt => ({
-        keyword: lt,
-        parent: kw.keyword,
-        search_volume: kw.search_volume,
-        difficulty: kw.difficulty,
-        competition: kw.competition,
-        cpc: kw.cpc,
-      }))
-    );
+    // Filter to only show keywords that are actual entries (not expanded from long_tail_keywords)
+    // These should have unique metrics, not duplicated from a parent keyword
+    return keywords.filter(kw => {
+      // Exclude if this keyword appears in any other keyword's long_tail_keywords array
+      // (meaning it's a derived keyword, not a primary entry)
+      const isDerived = keywords.some(otherKw => 
+        otherKw.keyword !== kw.keyword && 
+        otherKw.long_tail_keywords?.includes(kw.keyword)
+      );
+      return !isDerived;
+    }).map(kw => ({
+      keyword: kw.keyword,
+      parent: kw.parent_topic || kw.keyword,
+      search_volume: kw.search_volume,
+      difficulty: kw.difficulty,
+      competition: kw.competition,
+      cpc: kw.cpc,
+    }));
   }, [keywords]);
 
   // Question keywords
