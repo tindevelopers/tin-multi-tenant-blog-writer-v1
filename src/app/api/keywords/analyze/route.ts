@@ -558,7 +558,7 @@ export async function POST(request: NextRequest) {
               search_mode: body.search_mode || 'keywords',
               save_search: shouldSaveSearch,
               filters: body.filters || {},
-              research_results: data,
+              // Use full_api_response only (research_results column doesn't exist in current schema)
               full_api_response: data,
               keyword_count: keywordCount,
               total_search_volume: totalSearchVolume,
