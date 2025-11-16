@@ -283,10 +283,21 @@ export default function KeywordResearchPage() {
       // Check if we have any data
       if (Object.keys(analysis).length === 0) {
         console.warn('⚠️ No enhanced_analysis data in response');
-        // Try to extract from keyword_analysis if available
-        if (data.keyword_analysis?.keyword_analysis) {
-          console.log('📋 Found keyword_analysis, converting...');
-          const keywordAnalysis = data.keyword_analysis.keyword_analysis;
+        // Try to extract from keyword_analysis if available (can be nested or flat)
+        let keywordAnalysis = null;
+        
+        if (data.keyword_analysis) {
+          // Check if it's nested (keyword_analysis.keyword_analysis) or flat
+          if (data.keyword_analysis.keyword_analysis) {
+            keywordAnalysis = data.keyword_analysis.keyword_analysis;
+            console.log('📋 Found nested keyword_analysis, converting...');
+          } else if (typeof data.keyword_analysis === 'object' && !Array.isArray(data.keyword_analysis)) {
+            keywordAnalysis = data.keyword_analysis;
+            console.log('📋 Found flat keyword_analysis, converting...');
+          }
+        }
+        
+        if (keywordAnalysis) {
           const convertedAnalysis: EnhancedAnalysis = {};
           Object.entries(keywordAnalysis).forEach(([keyword, metrics]: [string, any]) => {
             convertedAnalysis[keyword] = {
@@ -305,8 +316,15 @@ export default function KeywordResearchPage() {
           });
           Object.assign(analysis, convertedAnalysis);
           setEnhancedAnalysis(analysis);
+          console.log(`✅ Converted ${Object.keys(convertedAnalysis).length} keywords from keyword_analysis`);
         } else {
-          setError('No keyword data returned from API. Please try a different search query.');
+          console.error('❌ No keyword data found in response:', {
+            hasEnhancedAnalysis: !!data.enhanced_analysis,
+            hasKeywordAnalysis: !!data.keyword_analysis,
+            keywordAnalysisType: typeof data.keyword_analysis,
+            dataKeys: Object.keys(data),
+          });
+          setError('No keyword data returned from API. Please try a different search query or check the API status.');
           return;
         }
       }
