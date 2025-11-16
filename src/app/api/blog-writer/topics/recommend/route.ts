@@ -40,10 +40,12 @@ export async function POST(request: NextRequest) {
     const { keywords, industry, existing_topics, target_audience, count } = body;
 
     // Build request payload
+    // Backend API expects 'seed_keywords' instead of 'keywords'
     const requestPayload: Record<string, unknown> = {};
 
     if (keywords && Array.isArray(keywords) && keywords.length > 0) {
-      requestPayload.keywords = keywords;
+      // Map 'keywords' to 'seed_keywords' for backend API
+      requestPayload.seed_keywords = keywords;
     }
 
     if (industry) requestPayload.industry = industry;
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // At least one parameter is required
-    if (!requestPayload.keywords && !requestPayload.industry && !requestPayload.existing_topics) {
+    if (!requestPayload.seed_keywords && !requestPayload.industry && !requestPayload.existing_topics) {
       return NextResponse.json(
         { error: 'At least one of keywords, industry, or existing_topics is required' },
         { status: 400 }
