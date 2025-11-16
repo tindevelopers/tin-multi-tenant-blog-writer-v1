@@ -269,7 +269,7 @@ export default function KeywordResearchPage() {
               errorMessage = errorText.substring(0, 200); // Limit error text length
             }
           }
-        } catch (parseError) {
+        } catch {
           // If we can't parse the error, use status text
           errorMessage = response.statusText || `HTTP ${response.status}`;
         }
