@@ -205,7 +205,7 @@ class KeywordResearchService {
               return BLOG_WRITER_API_URL;
             } catch {
               // Fallback to dev endpoint if module can't be loaded
-              return 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
+                  return 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
             }
           })());
     this.useApiRoutes = useApiRoutes;
