@@ -182,9 +182,18 @@ export async function POST(request: NextRequest) {
     let regularData: any = null;
     
     // Try enhanced endpoint first
+    logger.info('🔧 API URL Configuration', {
+      BLOG_WRITER_API_URL,
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF,
+      hasEnvOverride: !!process.env.BLOG_WRITER_API_URL,
+    });
+    
     const enhancedEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
     logger.info('🔍 Calling enhanced endpoint', {
       endpoint: enhancedEndpoint,
+      baseUrl: BLOG_WRITER_API_URL,
+      path: '/api/v1/keywords/enhanced',
       keywords: normalizedKeywords,
       location: body.location,
       language: body.language,
@@ -222,6 +231,8 @@ export async function POST(request: NextRequest) {
     const regularEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
     logger.info('🔍 Calling regular endpoint', {
       endpoint: regularEndpoint,
+      baseUrl: BLOG_WRITER_API_URL,
+      path: '/api/v1/keywords/analyze',
       keywords: normalizedKeywords,
       location: body.location,
       language: body.language,
