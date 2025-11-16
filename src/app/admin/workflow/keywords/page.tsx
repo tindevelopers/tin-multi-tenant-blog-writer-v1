@@ -358,7 +358,8 @@ export default function KeywordResearchPage() {
       }
 
       // Convert enhanced analysis to keyword list
-      const keywordList: KeywordWithMetrics[] = Object.entries(analysis).map(([keyword, metrics]: [string, any]) => ({
+      // First, extract primary keywords from enhanced_analysis
+      const primaryKeywords: KeywordWithMetrics[] = Object.entries(analysis).map(([keyword, metrics]: [string, any]) => ({
         keyword,
         search_volume: metrics.search_volume,
         global_search_volume: metrics.global_search_volume,
@@ -370,7 +371,7 @@ export default function KeywordResearchPage() {
         reason: metrics.reason,
         related_keywords: metrics.related_keywords,
         long_tail_keywords: metrics.long_tail_keywords,
-        parent_topic: metrics.parent_topic,
+        parent_topic: metrics.parent_topic || keyword,
         cluster_score: metrics.cluster_score,
         primary_intent: metrics.primary_intent,
         intent_probabilities: metrics.intent_probabilities,
@@ -378,6 +379,45 @@ export default function KeywordResearchPage() {
         also_rank_for: metrics.also_rank_for,
         also_talk_about: metrics.also_talk_about,
       }));
+
+      // Extract individual keywords from discovery.matching_terms (these have their own metrics)
+      const matchingTerms: KeywordWithMetrics[] = [];
+      if (data.discovery?.matching_terms && Array.isArray(data.discovery.matching_terms)) {
+        data.discovery.matching_terms.forEach((term: any) => {
+          if (term.keyword && term.search_volume !== undefined) {
+            matchingTerms.push({
+              keyword: term.keyword,
+              search_volume: term.search_volume,
+              difficulty: term.keyword_difficulty ? 
+                (term.keyword_difficulty <= 30 ? 'easy' : term.keyword_difficulty <= 60 ? 'medium' : 'hard') : 
+                'medium',
+              competition: term.competition || 0,
+              cpc: term.cpc || 0,
+              parent_topic: term.parent_topic || primaryKeywords[0]?.parent_topic || primaryKeywords[0]?.keyword,
+              primary_intent: term.intent,
+            });
+          }
+        });
+      }
+
+      // Combine primary keywords and matching terms, avoiding duplicates
+      const keywordMap = new Map<string, KeywordWithMetrics>();
+      
+      // Add primary keywords first
+      primaryKeywords.forEach(kw => {
+        keywordMap.set(kw.keyword.toLowerCase(), kw);
+      });
+      
+      // Add matching terms (they override primary if same keyword, or add new ones)
+      matchingTerms.forEach(kw => {
+        const key = kw.keyword.toLowerCase();
+        // Only add if not already present, or if it has better data (non-zero volume)
+        if (!keywordMap.has(key) || (kw.search_volume && kw.search_volume > 0)) {
+          keywordMap.set(key, kw);
+        }
+      });
+
+      const keywordList: KeywordWithMetrics[] = Array.from(keywordMap.values());
 
       // Also include clusters if available
       if (data.clusters && Array.isArray(data.clusters)) {
