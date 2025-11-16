@@ -198,7 +198,15 @@ class KeywordResearchService {
     this.baseURL = baseURL || 
       (typeof window !== 'undefined' 
         ? window.location.origin 
-        : 'https://blog-writer-api-dev-613248238610.europe-west1.run.app');
+        : (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { BLOG_WRITER_API_URL } = require('./blog-writer-api-url');
+              return BLOG_WRITER_API_URL;
+            } catch {
+              return 'https://blog-writer-api-dev-kq42l26tuq-uc.a.run.app';
+            }
+          })());
     this.useApiRoutes = useApiRoutes;
   }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/lib/logger';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the Blog Writer API URL and key
-    const apiUrl = process.env.BLOG_WRITER_API_URL;
+    const apiUrl = BLOG_WRITER_API_URL;
     const apiKey = process.env.BLOG_WRITER_API_KEY;
 
     if (!apiUrl || !apiKey) {

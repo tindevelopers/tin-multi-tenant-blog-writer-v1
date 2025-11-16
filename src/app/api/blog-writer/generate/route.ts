@@ -9,9 +9,11 @@ import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountT
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 import { logger } from '@/utils/logger';
 
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+
 // Create server-side image generator (uses direct Cloud Run URL)
 const imageGenerator = new BlogImageGenerator(
-  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app',
+  BLOG_WRITER_API_URL,
   process.env.BLOG_WRITER_API_KEY || '',
   false // Don't use local route on server-side
 );
@@ -521,7 +523,7 @@ export async function POST(request: NextRequest) {
     logger.debug('✅ Cloud Run is healthy, proceeding with blog generation...');
     
     // Call the external blog writer API
-    const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+    const API_BASE_URL = BLOG_WRITER_API_URL;
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
     
     // shouldUseEnhanced and endpoint already declared above for queue entry

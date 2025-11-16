@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { parseJsonBody, handleApiError } from '@/lib/api-utils';
 
-const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
-  'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds

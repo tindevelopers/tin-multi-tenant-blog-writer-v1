@@ -4,7 +4,9 @@ import { logger } from '@/utils/logger';
  * Handles image generation using Stability.ai via Blog Writer API
  */
 
-const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
+
+const API_BASE_URL = BLOG_WRITER_API_URL;
 const API_KEY = process.env.BLOG_WRITER_API_KEY;
 
 // TypeScript Types

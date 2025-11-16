@@ -206,9 +206,10 @@ class CloudRunHealthManager {
 }
 
 // Create singleton instance
-const cloudRunHealth = new CloudRunHealthManager(
-  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app'
-);
+// Import at the end to avoid circular dependency issues
+import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
+
+const cloudRunHealth = new CloudRunHealthManager(BLOG_WRITER_API_URL);
 
 export default cloudRunHealth;
 export { CloudRunHealthManager, type CloudRunHealthStatus };

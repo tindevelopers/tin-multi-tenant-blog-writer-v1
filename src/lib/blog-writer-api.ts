@@ -6,7 +6,9 @@
 import cloudRunHealth from './cloud-run-health';
 import { logger } from '@/utils/logger';
 
-const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
+
+const API_BASE_URL = BLOG_WRITER_API_URL;
 const API_KEY = process.env.BLOG_WRITER_API_KEY; // Optional for open API
 
 // API Response types
