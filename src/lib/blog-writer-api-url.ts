@@ -44,8 +44,8 @@ export function getBlogWriterApiUrl(): string {
     return 'https://blog-writer-api-staging-613248238610.europe-west9.run.app';
   } else {
     // Default to dev for develop, feature branches, etc.
-    // Dev endpoint: https://blog-writer-api-dev-613248238610.europe-west1.run.app
-    return 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+    // Dev endpoint: https://blog-writer-api-dev-613248238610.europe-west9.run.app
+    return 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
   }
 }
 
