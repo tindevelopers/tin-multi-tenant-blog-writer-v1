@@ -204,7 +204,8 @@ class KeywordResearchService {
               const { BLOG_WRITER_API_URL } = require('./blog-writer-api-url');
               return BLOG_WRITER_API_URL;
             } catch {
-              return 'https://blog-writer-api-dev-kq42l26tuq-uc.a.run.app';
+              // Fallback to dev endpoint if module can't be loaded
+              return 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
             }
           })());
     this.useApiRoutes = useApiRoutes;
