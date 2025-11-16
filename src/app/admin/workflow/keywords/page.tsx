@@ -593,6 +593,23 @@ export default function KeywordResearchPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      {/* Testing Mode Indicator */}
+      {testingMode && (
+        <div className="mb-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🧪</span>
+            <div>
+              <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                Testing Mode Active
+              </p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                Limited data retrieval is enabled to reduce API costs during testing. Results are restricted to 5 keywords, 5 suggestions per keyword, and 5 clusters maximum.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
