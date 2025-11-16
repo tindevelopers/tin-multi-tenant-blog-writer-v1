@@ -252,8 +252,29 @@ export default function KeywordResearchPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        // Handle 404 and other errors
+        let errorMessage = `HTTP ${response.status}`;
+        
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } else {
+            // If response is HTML (like 404 page), get text instead
+            const errorText = await response.text();
+            if (errorText.includes('404') || errorText.includes('not found')) {
+              errorMessage = 'API endpoint not found. Please check if the server is running and the endpoint is configured correctly.';
+            } else {
+              errorMessage = errorText.substring(0, 200); // Limit error text length
+            }
+          }
+        } catch (parseError) {
+          // If we can't parse the error, use status text
+          errorMessage = response.statusText || `HTTP ${response.status}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
