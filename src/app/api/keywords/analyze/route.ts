@@ -4,7 +4,7 @@ import { parseJsonBody } from '@/lib/api-utils';
 import { createClient } from '@/lib/supabase/server';
 
 const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
-  'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+  'https://blog-writer-sdk-kq42l26tuq-uc.a.run.app';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds
