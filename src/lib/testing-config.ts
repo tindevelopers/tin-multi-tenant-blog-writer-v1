@@ -60,7 +60,7 @@ export function applyTestingLimits<T extends Record<string, unknown>>(body: T): 
     return body;
   }
   
-  const limited = { ...body };
+  const limited: Record<string, unknown> = { ...body };
   
   // Limit keywords array
   if (Array.isArray(limited.keywords)) {
@@ -87,7 +87,7 @@ export function applyTestingLimits<T extends Record<string, unknown>>(body: T): 
     limited.serp_depth = Math.min(limited.serp_depth, TESTING_LIMITS.serp.maxResults);
   }
   
-  return limited;
+  return limited as T;
 }
 
 /**
