@@ -399,7 +399,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let data = await response.json();
+    // Use merged data (already parsed from both endpoints)
+    let data = mergedData;
     
     // Apply testing limits to response data
     data = limitResponseData(data);
