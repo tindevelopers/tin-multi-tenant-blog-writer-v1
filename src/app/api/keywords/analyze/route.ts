@@ -461,6 +461,17 @@ export async function POST(request: NextRequest) {
     // Use merged data (already parsed from both endpoints)
     let data = mergedData;
     
+    logger.info('📊 Merged data summary', {
+      hasData: Object.keys(data).length > 0,
+      hasEnhancedAnalysis: !!data.enhanced_analysis,
+      hasKeywordAnalysis: !!data.keyword_analysis,
+      enhancedKeywordCount: data.enhanced_analysis ? Object.keys(data.enhanced_analysis).length : 0,
+      keywordAnalysisCount: data.keyword_analysis ? Object.keys(data.keyword_analysis).length : 0,
+      hasClusters: !!data.clusters,
+      clusterCount: Array.isArray(data.clusters) ? data.clusters.length : 0,
+      dataKeys: Object.keys(data),
+    });
+    
     // Apply testing limits to response data
     data = limitResponseData(data);
     
@@ -589,12 +600,23 @@ export async function POST(request: NextRequest) {
       responseData.testing_mode_indicator = testingIndicator;
     }
     
+    logger.info('✅ Successfully returning response', {
+      hasEnhancedAnalysis: !!responseData.enhanced_analysis,
+      hasKeywordAnalysis: !!responseData.keyword_analysis,
+      keywordCount: Object.keys(responseData.enhanced_analysis || responseData.keyword_analysis || {}).length,
+      savedSearchId: responseData.saved_search_id || null,
+    });
+    
     return NextResponse.json(responseData);
   } catch (error: unknown) {
-    logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    logger.error('❌ Keywords analyze error', {
+      error: errorMessage,
+      stack: errorStack,
       context: 'keywords-analyze',
     });
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { error: `Failed to analyze keywords: ${errorMessage}` },
       { status: 500 }
