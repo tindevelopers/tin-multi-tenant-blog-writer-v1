@@ -52,6 +52,11 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
 }
 
 export async function POST(request: NextRequest) {
+  logger.info('📥 Keywords analyze request received', {
+    url: request.url,
+    method: request.method,
+  });
+  
   try {
     const body = await parseJsonBody<{
       keywords: Array<string | { keyword?: string; [key: string]: unknown }>;
@@ -178,6 +183,13 @@ export async function POST(request: NextRequest) {
     
     // Try enhanced endpoint first
     const enhancedEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
+    logger.info('🔍 Calling enhanced endpoint', {
+      endpoint: enhancedEndpoint,
+      keywords: normalizedKeywords,
+      location: body.location,
+      language: body.language,
+    });
+    
     try {
       enhancedResponse = await fetchWithRetry(
         enhancedEndpoint,
@@ -208,6 +220,13 @@ export async function POST(request: NextRequest) {
     
     // Always try regular endpoint to get baseline data and fill any gaps
     const regularEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/analyze`;
+    logger.info('🔍 Calling regular endpoint', {
+      endpoint: regularEndpoint,
+      keywords: normalizedKeywords,
+      location: body.location,
+      language: body.language,
+    });
+    
     try {
       // Regular endpoint doesn't support enhanced features, remove them
       const { 
@@ -243,11 +262,37 @@ export async function POST(request: NextRequest) {
       );
       
       if (regularResponse.ok) {
-        regularData = await regularResponse.json();
-        logger.debug('✅ Regular endpoint returned data', {
-          hasKeywordAnalysis: !!regularData.keyword_analysis,
-          keywordCount: Object.keys(regularData.keyword_analysis || {}).length,
+        try {
+          regularData = await regularResponse.json();
+          logger.debug('✅ Regular endpoint returned data', {
+            hasKeywordAnalysis: !!regularData.keyword_analysis,
+            keywordCount: Object.keys(regularData.keyword_analysis || {}).length,
+            status: regularResponse.status,
+          });
+        } catch (parseError) {
+          logger.error('Failed to parse regular endpoint response', { 
+            error: parseError,
+            status: regularResponse.status 
+          });
+          // Try to get text response for debugging
+          const text = await regularResponse.text();
+          logger.error('Regular endpoint response text', { 
+            text: text.substring(0, 500) 
+          });
+        }
+      } else {
+        logger.warn('Regular endpoint returned non-OK status', { 
+          status: regularResponse.status,
+          statusText: regularResponse.statusText,
         });
+        try {
+          const errorText = await regularResponse.text();
+          logger.warn('Regular endpoint error response', { 
+            errorText: errorText.substring(0, 500) 
+          });
+        } catch {
+          // Ignore parse errors
+        }
       }
     } catch (error) {
       logger.debug('Regular endpoint failed', { error });
@@ -256,11 +301,18 @@ export async function POST(request: NextRequest) {
     // Merge results: Enhanced takes priority, but fill gaps from regular
     let mergedData: any = {};
     let response: Response;
+    let hasData = false;
     
     if (enhancedData && enhancedResponse?.ok) {
       // Use enhanced data as base
       mergedData = { ...enhancedData };
       response = enhancedResponse;
+      hasData = true;
+      
+      logger.debug('✅ Enhanced endpoint returned data', {
+        hasEnhancedAnalysis: !!mergedData.enhanced_analysis,
+        keywordCount: Object.keys(mergedData.enhanced_analysis || {}).length,
+      });
       
       // Merge in any missing data from regular endpoint
       if (regularData && regularResponse?.ok) {
@@ -315,16 +367,23 @@ export async function POST(request: NextRequest) {
       // Fallback to regular data if enhanced failed
       mergedData = { ...regularData };
       response = regularResponse;
-      logger.debug('⚠️ Using regular endpoint data only (enhanced unavailable)');
+      hasData = true;
+      logger.debug('⚠️ Using regular endpoint data only (enhanced unavailable)', {
+        hasKeywordAnalysis: !!mergedData.keyword_analysis,
+        keywordCount: Object.keys(mergedData.keyword_analysis || {}).length,
+      });
     } else {
       // Both failed - use whichever response we have for error handling
       response = enhancedResponse || regularResponse || new Response(null, { status: 503 });
-      if (!response.ok) {
-        // Will be handled by error handling below
-      }
+      hasData = false;
+      logger.warn('❌ Both endpoints failed', {
+        enhancedStatus: enhancedResponse?.status,
+        regularStatus: regularResponse?.status,
+      });
     }
 
-    if (!response.ok) {
+    // If we don't have data and response is not OK, handle error
+    if (!hasData || !response.ok) {
       // Clone the response so we can read it multiple times
       const responseClone = response.clone();
       let errorMessage = `Blog Writer API error: ${response.status} ${response.statusText}`;
