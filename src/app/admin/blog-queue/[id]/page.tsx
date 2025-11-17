@@ -152,7 +152,7 @@ export default function QueueItemDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           {/* Edit Blog button - show when blog is generated and has post_id */}
-          {(item.status === "generated" || item.status === "completed") && (item.post_id || (item.metadata as any)?.post_id) && (
+          {item.status === "generated" && (item.post_id || (item.metadata as any)?.post_id) && (
             <button
               onClick={() => router.push(`/admin/drafts/edit/${item.post_id || (item.metadata as any)?.post_id}`)}
               className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
