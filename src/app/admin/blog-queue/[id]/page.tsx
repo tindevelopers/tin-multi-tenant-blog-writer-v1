@@ -10,6 +10,7 @@ import {
   ArrowPathIcon,
   XMarkIcon,
   DocumentCheckIcon,
+  PencilIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueueItem } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
@@ -45,7 +46,8 @@ export default function QueueItemDetailPage() {
         throw new Error("Failed to fetch queue item");
       }
       const data = await response.json();
-      setItem(data);
+      // API returns { queue_item: ... } but we need the item directly
+      setItem(data.queue_item || data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load queue item");
@@ -149,6 +151,16 @@ export default function QueueItemDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Edit Blog button - show when blog is generated and has post_id */}
+          {(item.status === "generated" || item.status === "completed") && (item.post_id || (item.metadata as any)?.post_id) && (
+            <button
+              onClick={() => router.push(`/admin/drafts/edit/${item.post_id || (item.metadata as any)?.post_id}`)}
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+            >
+              <PencilIcon className="w-5 h-5" />
+              Edit Blog
+            </button>
+          )}
           {item.status === "generated" && (
             <button
               onClick={handleRequestApproval}

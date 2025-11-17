@@ -38,21 +38,29 @@ export function useQueueStatusSSE(queueId: string | null) {
 
     eventSource.onmessage = (event) => {
       try {
-        const data: QueueStatusUpdate = JSON.parse(event.data);
+        const data = JSON.parse(event.data);
         
-        setStatus(data.status);
-        setProgress(data.progress_percentage || 0);
-        setStage(data.current_stage || "");
-        setError(null);
+        // Handle different message types from SSE endpoint
+        if (data.type === 'status_update' || data.type === 'connected') {
+          setStatus(data.status);
+          setProgress(data.progress_percentage || 0);
+          setStage(data.current_stage || "");
+          setError(null);
 
-        // Close connection if status is terminal
-        const terminalStatuses: QueueStatus[] = [
-          "published",
-          "failed",
-          "cancelled",
-        ];
-        if (terminalStatuses.includes(data.status)) {
+          // Close connection if status is terminal
+          const terminalStatuses: QueueStatus[] = [
+            "published",
+            "failed",
+            "cancelled",
+          ];
+          if (terminalStatuses.includes(data.status)) {
+            eventSource.close();
+          }
+        } else if (data.type === 'complete') {
+          setStatus(data.status);
           eventSource.close();
+        } else if (data.type === 'error') {
+          setError(data.message || "Connection error");
         }
       } catch (err) {
         logger.error("Error parsing SSE message:", err);

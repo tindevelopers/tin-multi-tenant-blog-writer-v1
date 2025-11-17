@@ -1310,6 +1310,14 @@ export async function POST(request: NextRequest) {
     if (queueId && transformedResult) {
       try {
         const rawContent = result.blog_post?.content || result.content || transformedResult.content || '';
+        
+        // Get current queue item metadata first
+        const { data: currentQueueItem } = await supabase
+          .from('blog_generation_queue')
+          .select('metadata')
+          .eq('queue_id', queueId)
+          .single();
+        
         await supabase
           .from('blog_generation_queue')
           .update({
@@ -1341,7 +1349,7 @@ export async function POST(request: NextRequest) {
               .single();
             
             if (userProfile?.org_id) {
-              await supabase
+              const { data: savedPost, error: insertError } = await supabase
                 .from('blog_posts')
                 .insert({
                   org_id: userProfile.org_id,
@@ -1362,9 +1370,31 @@ export async function POST(request: NextRequest) {
                     queue_id: queueId,
                     generation_metadata: transformedResult.metadata,
                   }
-                });
+                })
+                .select('post_id')
+                .single();
               
-              logger.debug('✅ Generated blog auto-saved to blog_posts as draft');
+              if (savedPost && !insertError) {
+                // Update queue entry with post_id
+                await supabase
+                  .from('blog_generation_queue')
+                  .update({
+                    post_id: savedPost.post_id,
+                    metadata: {
+                      ...(currentQueueItem?.metadata || {}),
+                      post_id: savedPost.post_id,
+                      auto_saved: true
+                    }
+                  })
+                  .eq('queue_id', queueId);
+                
+                logger.debug('✅ Generated blog auto-saved to blog_posts as draft', {
+                  post_id: savedPost.post_id,
+                  queue_id: queueId
+                });
+              } else {
+                logger.warn('⚠️ Failed to save blog post:', insertError);
+              }
             }
           }
         } catch (saveError) {

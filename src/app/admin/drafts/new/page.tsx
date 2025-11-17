@@ -21,6 +21,7 @@ import QuickActionsMenu from "@/components/blog-writer/QuickActionsMenu";
 import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
+import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 // import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
@@ -138,6 +139,21 @@ function NewDraftContent() {
     stage: '',
     status: null,
   });
+  
+  // Use SSE for real-time progress updates when queueId is available
+  const { status: sseStatus, progress: sseProgress, stage: sseStage } = useQueueStatusSSE(queueId);
+  
+  // Update generation progress from SSE
+  useEffect(() => {
+    if (queueId && sseStatus) {
+      setQueueStatus(sseStatus);
+      setGenerationProgress({
+        percentage: sseProgress,
+        stage: sseStage || 'Processing...',
+        status: sseStatus,
+      });
+    }
+  }, [queueId, sseStatus, sseProgress, sseStage]);
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [showPlatformSelector, setShowPlatformSelector] = useState(false);
@@ -539,6 +555,35 @@ function NewDraftContent() {
                   approvalId={approvalId}
                   approvalStatus={approvalStatus as any}
                 />
+              </div>
+            )}
+            
+            {/* Generation Progress Display */}
+            {queueId && queueStatus === "generating" && (
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-900 dark:text-blue-300">
+                    {generationProgress.stage || "Generating blog..."}
+                  </span>
+                  <span className="text-sm text-blue-700 dark:text-blue-400">
+                    {generationProgress.percentage}%
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 mb-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${generationProgress.percentage}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
+                  <span>Queue ID: {queueId.substring(0, 8)}...</span>
+                  <button
+                    onClick={() => router.push(`/admin/blog-queue/${queueId}`)}
+                    className="hover:underline"
+                  >
+                    View Details →
+                  </button>
+                </div>
               </div>
             )}
           </div>
