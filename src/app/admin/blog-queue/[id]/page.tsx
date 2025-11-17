@@ -11,6 +11,9 @@ import {
   XMarkIcon,
   DocumentCheckIcon,
   PencilIcon,
+  EyeIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueueItem } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
@@ -24,6 +27,11 @@ export default function QueueItemDetailPage() {
   const [item, setItem] = useState<BlogGenerationQueueItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    status: true,
+    content: true,
+    metadata: false,
+  });
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -106,6 +114,54 @@ export default function QueueItemDetailPage() {
     }
   };
 
+  const handleRegenerate = async () => {
+    if (!item) return;
+    
+    if (!confirm(`Are you sure you want to regenerate "${item.generated_title || item.topic}"?`)) {
+      return;
+    }
+    
+    try {
+      // Create a new queue entry with the same parameters
+      const response = await fetch('/api/blog-writer/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: item.topic,
+          keywords: item.keywords || [],
+          target_audience: item.target_audience,
+          tone: item.tone,
+          word_count: item.word_count,
+          quality_level: item.quality_level,
+          template_type: item.template_type,
+          custom_instructions: item.custom_instructions,
+        }),
+      });
+      
+      if (!response.ok) throw new Error("Failed to regenerate");
+      
+      const result = await response.json();
+      if (result.queue_id) {
+        router.push(`/admin/blog-queue/${result.queue_id}`);
+      } else {
+        alert("Blog regeneration started!");
+      }
+    } catch (err) {
+      console.error("Error regenerating blog:", err);
+      alert("Failed to regenerate blog. Please try again.");
+    }
+  };
+
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  const postId = item?.post_id || (item?.metadata as any)?.post_id;
+  const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
+
   if (loading) {
     return (
       <div className="p-6">
@@ -150,15 +206,39 @@ export default function QueueItemDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Edit Blog button - show when blog is generated and has post_id */}
-          {item.status === "generated" && (item.post_id || (item.metadata as any)?.post_id) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View Blog button - show when blog is generated */}
+          {hasGeneratedContent && (
             <button
-              onClick={() => router.push(`/admin/drafts/edit/${item.post_id || (item.metadata as any)?.post_id}`)}
+              onClick={() => {
+                if (postId) {
+                  router.push(`/admin/drafts/view/${postId}`);
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              <EyeIcon className="w-5 h-5" />
+              View Blog
+            </button>
+          )}
+          {/* Edit Blog button - show when blog is generated and has post_id */}
+          {item.status === "generated" && postId && (
+            <button
+              onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
               className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
             >
               <PencilIcon className="w-5 h-5" />
               Edit Blog
+            </button>
+          )}
+          {/* Regenerate button - show when blog is generated */}
+          {item.status === "generated" && (
+            <button
+              onClick={handleRegenerate}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+            >
+              <ArrowPathIcon className="w-5 h-5" />
+              Regenerate
             </button>
           )}
           {item.status === "generated" && (
@@ -192,52 +272,79 @@ export default function QueueItemDetailPage() {
       </div>
 
       {/* Status Card */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Status
-          </h2>
-          <StatusBadge status={item.status} />
-        </div>
+      <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('status')}
+          className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Status
+            </h2>
+            <StatusBadge status={item.status} />
+          </div>
+          {expandedSections.status ? (
+            <ChevronUpIcon className="w-5 h-5 text-gray-500" />
+          ) : (
+            <ChevronDownIcon className="w-5 h-5 text-gray-500" />
+          )}
+        </button>
         
-        {item.status === "generating" && (
-          <ProgressIndicator
-            percentage={item.progress_percentage || 0}
-            stage={item.current_stage || "Starting..."}
-          />
-        )}
+        {expandedSections.status && (
+        <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+          {item.status === "generating" && (
+            <ProgressIndicator
+              percentage={item.progress_percentage || 0}
+              stage={item.current_stage || "Starting..."}
+            />
+          )}
 
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <InfoItem label="Status" value={statusMeta.label} />
-          <InfoItem
-            label="Priority"
-            value={item.priority?.toString() || "5"}
-          />
-          <InfoItem
-            label="Queued At"
-            value={formatDate(item.queued_at)}
-          />
-          {item.generation_started_at && (
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+            <InfoItem label="Status" value={statusMeta?.label || "N/A"} />
             <InfoItem
-              label="Started At"
-              value={formatDate(item.generation_started_at)}
+              label="Priority"
+              value={item.priority?.toString() || "5"}
             />
-          )}
-          {item.generation_completed_at && (
             <InfoItem
-              label="Completed At"
-              value={formatDate(item.generation_completed_at)}
+              label="Queued At"
+              value={formatDate(item.queued_at)}
             />
-          )}
+            {item.generation_started_at && (
+              <InfoItem
+                label="Started At"
+                value={formatDate(item.generation_started_at)}
+              />
+            )}
+            {item.generation_completed_at && (
+              <InfoItem
+                label="Completed At"
+                value={formatDate(item.generation_completed_at)}
+              />
+            )}
+          </div>
         </div>
+        )}
       </div>
 
       {/* Generation Details */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Generation Details
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('metadata')}
+          className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Generation Details
+          </h2>
+          {expandedSections.metadata ? (
+            <ChevronUpIcon className="w-5 h-5 text-gray-500" />
+          ) : (
+            <ChevronDownIcon className="w-5 h-5 text-gray-500" />
+          )}
+        </button>
+        
+        {expandedSections.metadata && (
+        <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <InfoItem label="Topic" value={item.topic} />
           <InfoItem
             label="Target Audience"
@@ -273,20 +380,36 @@ export default function QueueItemDetailPage() {
               ))}
             </div>
           </div>
+        </div>
         )}
       </div>
 
       {/* Generated Content */}
       {item.generated_content && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Generated Content
-          </h2>
-          <div className="prose dark:prose-invert max-w-none">
-            <div className="whitespace-pre-wrap text-gray-900 dark:text-white">
-              {item.generated_content}
+        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleSection('content')}
+            className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          >
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Generated Content
+            </h2>
+            {expandedSections.content ? (
+              <ChevronUpIcon className="w-5 h-5 text-gray-500" />
+            ) : (
+              <ChevronDownIcon className="w-5 h-5 text-gray-500" />
+            )}
+          </button>
+          
+          {expandedSections.content && (
+          <div className="p-6 border-t border-gray-200 dark:border-gray-700">
+            <div className="prose dark:prose-invert max-w-none">
+              <div className="whitespace-pre-wrap text-gray-900 dark:text-white">
+                {item.generated_content}
+              </div>
             </div>
           </div>
+          )}
         </div>
       )}
 
