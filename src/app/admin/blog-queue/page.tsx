@@ -383,7 +383,7 @@ export default function BlogQueuePage() {
           
           {expandedSections.filters && (
           <div className="p-4 space-y-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Status
@@ -442,6 +442,7 @@ export default function BlogQueuePage() {
                 <option value="week">This Week</option>
                 <option value="month">This Month</option>
               </select>
+            </div>
             </div>
           </div>
           )}

@@ -364,23 +364,24 @@ export default function QueueItemDetailPage() {
             value={item.template_type || "N/A"}
           />
         </div>
-        {item.keywords && item.keywords.length > 0 && (
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Keywords
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {item.keywords.map((keyword, idx) => (
-                <span
-                  key={idx}
-                  className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-sm"
-                >
-                  {keyword}
-                </span>
-              ))}
-            </div>
+            {item.keywords && item.keywords.length > 0 && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Keywords
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {item.keywords.map((keyword, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-sm"
+                    >
+                      {keyword}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
         )}
       </div>
 
