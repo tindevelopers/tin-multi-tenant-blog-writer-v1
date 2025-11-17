@@ -625,10 +625,11 @@ function QueueItemRow({
           {/* View Queue Details */}
           <button
             onClick={onView}
-            className="p-1.5 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition-colors"
             title="View Queue Details"
           >
             <EyeIcon className="w-4 h-4" />
+            <span className="text-xs">Details</span>
           </button>
           
           {/* View Blog - show when blog is generated */}
@@ -641,10 +642,11 @@ function QueueItemRow({
                   onView?.();
                 }
               }}
-              className="p-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
               title="View Blog"
             >
               <EyeIcon className="w-4 h-4" />
+              <span className="text-xs">View</span>
             </button>
           )}
           
@@ -652,10 +654,11 @@ function QueueItemRow({
           {item.status === "generated" && postId && (
             <button
               onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
-              className="p-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
               title="Edit Blog"
             >
               <PencilIcon className="w-4 h-4" />
+              <span className="text-xs">Edit</span>
             </button>
           )}
           
@@ -663,10 +666,11 @@ function QueueItemRow({
           {item.status === "generated" && (
             <button
               onClick={() => onRegenerate?.()}
-              className="p-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
               title="Regenerate Blog"
             >
               <ArrowPathIcon className="w-4 h-4" />
+              <span className="text-xs">Regenerate</span>
             </button>
           )}
           
@@ -674,10 +678,11 @@ function QueueItemRow({
           {item.status === "failed" && (
             <button
               onClick={onRetry}
-              className="p-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
               title="Retry"
             >
               <ArrowPathIcon className="w-4 h-4" />
+              <span className="text-xs">Retry</span>
             </button>
           )}
           
@@ -685,10 +690,11 @@ function QueueItemRow({
           {!["published", "cancelled"].includes(item.status) && (
             <button
               onClick={onCancel}
-              className="p-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
               title="Cancel"
             >
               <XMarkIcon className="w-4 h-4" />
+              <span className="text-xs">Cancel</span>
             </button>
           )}
         </div>
