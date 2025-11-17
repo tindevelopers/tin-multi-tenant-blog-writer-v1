@@ -1315,6 +1315,7 @@ export async function POST(request: NextRequest) {
           .update({
             generated_content: rawContent,
             generated_title: transformedResult.title,
+            generated_excerpt: transformedResult.excerpt,
             generation_metadata: {
               ...transformedResult.metadata,
               seo_score: transformedResult.seo_score,
@@ -1328,6 +1329,48 @@ export async function POST(request: NextRequest) {
           .eq('queue_id', queueId);
         
         logger.debug('✅ Queue entry updated with generated content');
+        
+        // Auto-save to blog_posts table as draft
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: userProfile } = await supabase
+              .from('users')
+              .select('org_id')
+              .eq('user_id', user.id)
+              .single();
+            
+            if (userProfile?.org_id) {
+              await supabase
+                .from('blog_posts')
+                .insert({
+                  org_id: userProfile.org_id,
+                  created_by: user.id,
+                  title: transformedResult.title,
+                  content: rawContent,
+                  excerpt: transformedResult.excerpt || '',
+                  status: 'draft',
+                  seo_data: {
+                    meta_title: transformedResult.meta_title,
+                    meta_description: transformedResult.meta_description,
+                    seo_score: transformedResult.seo_score,
+                    readability_score: transformedResult.readability_score,
+                    quality_score: transformedResult.quality_score,
+                  },
+                  metadata: {
+                    generated_from_queue: true,
+                    queue_id: queueId,
+                    generation_metadata: transformedResult.metadata,
+                  }
+                });
+              
+              logger.debug('✅ Generated blog auto-saved to blog_posts as draft');
+            }
+          }
+        } catch (saveError) {
+          logger.warn('⚠️ Failed to auto-save generated blog to blog_posts:', saveError);
+          // Non-blocking - blog is still in queue
+        }
       } catch (error) {
         logger.warn('⚠️ Failed to update queue entry with content:', error);
       }

@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealthManager from '@/lib/cloud-run-health';
-import { logger } from '@/utils/logger';
+import { logger } from '@/lib/logger';
 import { parseJsonBody, handleApiError } from '@/lib/api-utils';
 
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';

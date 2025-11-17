@@ -129,6 +129,15 @@ function NewDraftContent() {
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
   const [queueId, setQueueId] = useState<string | null>(null);
   const [queueStatus, setQueueStatus] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState<{
+    percentage: number;
+    stage: string;
+    status: string | null;
+  }>({
+    percentage: 0,
+    stage: '',
+    status: null,
+  });
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [showPlatformSelector, setShowPlatformSelector] = useState(false);
