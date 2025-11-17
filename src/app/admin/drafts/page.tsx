@@ -440,31 +440,43 @@ export default function DraftsPage() {
                     <div className="flex items-center justify-end gap-2">
                       <button 
                         onClick={() => handleViewDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 transition-colors"
-                        title="View draft"
+                        className="relative group text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 transition-colors rounded"
                       >
                         <EyeIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          View
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                       <button 
                         onClick={() => handleEditDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 transition-colors"
-                        title="Edit draft"
+                        className="relative group text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 transition-colors rounded"
                       >
                         <PencilIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          Edit
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                       <button 
                         onClick={() => handleShareDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-1 transition-colors"
-                        title="Share draft"
+                        className="relative group text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-1.5 transition-colors rounded"
                       >
                         <ShareIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          Share
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                       <button 
                         onClick={() => handleDeleteDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 transition-colors"
-                        title="Delete draft"
+                        className="relative group text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1.5 transition-colors rounded"
                       >
                         <TrashIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          Delete
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                     </div>
                   </td>

@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
       query = query.eq('status', status);
     }
     
-    query = query.order('created_at', { ascending: false });
+    // Order by updated_at first (most recently modified), then created_at (newest first)
+    query = query.order('updated_at', { ascending: false }).order('created_at', { ascending: false });
     
     const { data, error } = await query;
     
