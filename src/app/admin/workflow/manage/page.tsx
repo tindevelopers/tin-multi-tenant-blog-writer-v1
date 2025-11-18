@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   FolderOpen, 
@@ -115,7 +115,11 @@ export default function WorkflowManagePage() {
     }
 
     setFilteredWorkflows(filtered);
-  };
+  }, [workflows, searchTerm, filterStep]);
+
+  useEffect(() => {
+    filterWorkflows();
+  }, [filterWorkflows]);
 
   const handleDelete = async (sessionId: string) => {
     try {

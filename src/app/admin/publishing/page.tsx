@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   MagnifyingGlassIcon,
@@ -33,11 +33,7 @@ export default function PublishingPage() {
   });
   const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    fetchPublishing();
-  }, [filters]);
-
-  const fetchPublishing = async () => {
+  const fetchPublishing = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -62,7 +58,11 @@ export default function PublishingPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
+
+  useEffect(() => {
+    fetchPublishing();
+  }, [fetchPublishing]);
 
   const stats = {
     pending: publishing.filter((p) => p.status === "pending").length,
