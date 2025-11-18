@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   MagnifyingGlassIcon,
@@ -56,13 +56,7 @@ export default function BlogQueuePage() {
     filters: false,
   });
 
-  // Fetch queue items and stats
-  useEffect(() => {
-    fetchQueueItems();
-    fetchStats();
-  }, [filters]);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await fetch('/api/blog-queue/stats');
       if (response.ok) {
@@ -83,9 +77,9 @@ export default function BlogQueuePage() {
     } catch (err) {
       console.error('Error fetching stats:', err);
     }
-  };
+  }, []);
 
-  const fetchQueueItems = async () => {
+  const fetchQueueItems = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -116,7 +110,13 @@ export default function BlogQueuePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters]);
+
+  // Fetch queue items and stats
+  useEffect(() => {
+    fetchQueueItems();
+    fetchStats();
+  }, [fetchQueueItems, fetchStats]);
 
   const handleStatusChange = (queueId: string, newStatus: QueueStatus) => {
     // Update local state optimistically

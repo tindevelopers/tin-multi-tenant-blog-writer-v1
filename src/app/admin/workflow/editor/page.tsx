@@ -625,7 +625,25 @@ export default function EditorPage() {
     } finally {
       setLoading(false);
     }
-  }, [formData, userId, workflowSession]);
+  }, [
+    formData, 
+    userId, 
+    workflowSession, 
+    brandVoice, 
+    createDraft, 
+    generationResult?.content_metadata,
+    generationResult?.featured_image,
+    generationResult?.generated_images,
+    generationResult?.internal_links,
+    generationResult?.meta_description,
+    generationResult?.meta_title,
+    generationResult?.metadata,
+    generationResult?.quality_score,
+    generationResult?.readability_score,
+    generationResult?.seo_metadata,
+    generationResult?.seo_score,
+    generationResult?.structured_data
+  ]);
 
   return (
     <div className="max-w-7xl mx-auto">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeftIcon,
@@ -36,17 +36,7 @@ export default function QueueItemDetailPage() {
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
 
-  useEffect(() => {
-    fetchQueueItem();
-  }, [queueId]);
-
-  useEffect(() => {
-    if (status && item) {
-      setItem({ ...item, status: status as QueueStatus, progress_percentage: progress, current_stage: stage });
-    }
-  }, [status, progress, stage]);
-
-  const fetchQueueItem = async () => {
+  const fetchQueueItem = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/blog-queue/${queueId}`);
@@ -63,7 +53,17 @@ export default function QueueItemDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [queueId]);
+
+  useEffect(() => {
+    fetchQueueItem();
+  }, [fetchQueueItem]);
+
+  useEffect(() => {
+    if (status && item) {
+      setItem((prevItem) => prevItem ? { ...prevItem, status: status as QueueStatus, progress_percentage: progress, current_stage: stage } : null);
+    }
+  }, [status, progress, stage, item]);
 
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel this queue item?")) return;

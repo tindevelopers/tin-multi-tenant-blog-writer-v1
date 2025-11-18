@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeftIcon,
@@ -25,11 +25,7 @@ export default function ApprovalReviewPage() {
   const [reviewNotes, setReviewNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
 
-  useEffect(() => {
-    fetchApproval();
-  }, [approvalId]);
-
-  const fetchApproval = async () => {
+  const fetchApproval = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/blog-approvals/${approvalId}`);
@@ -46,7 +42,11 @@ export default function ApprovalReviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [approvalId]);
+
+  useEffect(() => {
+    fetchApproval();
+  }, [fetchApproval]);
 
   const handleApprove = async () => {
     try {
