@@ -2,7 +2,7 @@ import { logger } from '@/utils/logger';
 /**
  * Enhanced Keyword Research Service
  * Integrates with Blog Writer API's keyword endpoints via Next.js API routes
- * Based on API documentation: https://blog-writer-api-dev-613248238610.europe-west1.run.app/docs
+ * Based on API documentation: https://blog-writer-api-dev-613248238610.europe-west9.run.app/docs
  */
 
 const API_BASE_URL = '/api/keywords'; // Use Next.js API routes as proxy

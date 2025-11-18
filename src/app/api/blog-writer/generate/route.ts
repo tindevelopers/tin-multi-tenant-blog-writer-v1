@@ -10,8 +10,10 @@ import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generati
 import { logger } from '@/utils/logger';
 
 // Create server-side image generator (uses direct Cloud Run URL)
+// Use the blog-writer-api-url.ts helper to get the correct URL based on branch
+const { BLOG_WRITER_API_URL: defaultApiUrl } = require('@/lib/blog-writer-api-url');
 const imageGenerator = new BlogImageGenerator(
-  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app',
+  process.env.BLOG_WRITER_API_URL || defaultApiUrl || 'https://blog-writer-api-dev-613248238610.europe-west9.run.app',
   process.env.BLOG_WRITER_API_KEY || '',
   false // Don't use local route on server-side
 );
