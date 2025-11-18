@@ -129,23 +129,30 @@ export class EnhancedKeywordResearchService {
    */
   async suggestKeywords(keyword: string): Promise<KeywordSuggestionResponse> {
     try {
+      // Increase timeout to 60 seconds to account for Cloud Run cold starts
       const response = await fetch(`${this.baseUrl}/suggest`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ keyword }),
+        signal: AbortSignal.timeout(60000), // 60 second timeout
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
         throw new Error(errorData.error || `Keyword suggestions failed: ${response.statusText}`);
       }
 
       const data = await response.json();
       return data;
     } catch (error) {
-      logger.error('Error getting keyword suggestions:', error);
+      const isTimeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      if (isTimeout) {
+        logger.error('Error getting keyword suggestions: Request timed out. The API may be cold-starting. Please try again.', error);
+      } else {
+        logger.error('Error getting keyword suggestions:', error);
+      }
       throw error;
     }
   }

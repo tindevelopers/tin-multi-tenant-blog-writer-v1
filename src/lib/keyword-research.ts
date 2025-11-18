@@ -508,23 +508,33 @@ class KeywordResearchService {
       const allSuggestions: string[] = [];
       
       for (const keyword of keywords) {
+        // Increase timeout to 60 seconds to account for Cloud Run cold starts
+        // The server-side API route already has retry logic with 30s timeout per attempt
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword, limit }),
-          signal: AbortSignal.timeout(30000),
+          body: JSON.stringify({ keyword, limit, location }),
+          signal: AbortSignal.timeout(60000), // Increased from 30s to 60s
         });
 
         if (response.ok) {
           const data = await response.json();
           const suggestions = data.keyword_suggestions || data.suggestions || [];
           allSuggestions.push(...suggestions);
+        } else {
+          const errorText = await response.text();
+          logger.warn(`Keyword suggestions API returned ${response.status}:`, errorText);
         }
       }
 
       return [...new Set(allSuggestions)].slice(0, limit);
     } catch (error) {
-      logger.error('Keyword suggestions failed:', error);
+      const isTimeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      if (isTimeout) {
+        logger.error('Keyword suggestions failed: Request timed out. The API may be cold-starting. Please try again.', error);
+      } else {
+        logger.error('Keyword suggestions failed:', error);
+      }
       return [];
     }
   }
