@@ -57,7 +57,24 @@ export default function ViewDraftPage() {
     return null;
   }, [metadata, draft?.content]);
 
-  const seoMetadata = seoData?.seo_metadata || metadata?.seo_metadata;
+  // Merge SEO metadata from multiple sources
+  const seoMetadata = {
+    ...(seoData?.seo_metadata || {}),
+    ...(metadata?.seo_metadata || {}),
+    // Include direct SEO fields from seoData
+    ...(seoData && typeof seoData === 'object' ? {
+      meta_title: seoData.meta_title,
+      meta_description: seoData.meta_description,
+      twitter_card: seoData.twitter_card,
+      twitter_title: seoData.twitter_title,
+      twitter_description: seoData.twitter_description,
+      twitter_image: seoData.twitter_image,
+      og_title: seoData.og_title,
+      og_description: seoData.og_description,
+      og_image: seoData.og_image,
+      og_type: seoData.og_type,
+    } : {}),
+  };
   const structuredData = metadata?.structured_data || seoData?.structured_data;
   const qualityDimensions = metadata?.quality_dimensions;
   const qualityScore = metadata?.quality_score;
