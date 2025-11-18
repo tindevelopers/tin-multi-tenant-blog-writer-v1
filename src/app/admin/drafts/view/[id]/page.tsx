@@ -23,6 +23,7 @@ import { SEOMetadataEditor } from "@/components/content/SEOMetadataEditor";
 import { QualityDimensionsDisplay } from "@/components/content/QualityDimensionsDisplay";
 import { extractContentMetadata } from "@/lib/content-metadata-utils";
 import type { ContentMetadata } from "@/lib/content-metadata-utils";
+import { logger } from "@/utils/logger";
 import "./rich-preview.css";
 
 export default function ViewDraftPage() {
@@ -50,7 +51,7 @@ export default function ViewDraftPage() {
       try {
         return extractContentMetadata(draft.content);
       } catch (error) {
-        console.error('Failed to extract content metadata:', error);
+        logger.error('Failed to extract content metadata', { error });
         return null;
       }
     }
@@ -104,7 +105,7 @@ export default function ViewDraftPage() {
           alert('Failed to delete draft. Please try again.');
         }
       } catch (err) {
-        console.error('Error deleting draft:', err);
+        logger.error('Error deleting draft', { error: err });
         alert('Error deleting draft. Please try again.');
       }
     }
@@ -293,7 +294,7 @@ export default function ViewDraftPage() {
                       alt={draft.title}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        console.error('Image failed to load:', imageUrl);
+                        logger.warn('Image failed to load', { imageUrl });
                         e.currentTarget.style.display = 'none';
                       }}
                     />
@@ -417,7 +418,7 @@ export default function ViewDraftPage() {
                 topic={topic}
                 keywords={keywords}
                 onOptimized={(optimizedContent) => {
-                  console.log('Optimized content:', optimizedContent);
+                  logger.debug('Content optimized', { contentLength: optimizedContent?.length });
                 }}
               />
 
@@ -437,7 +438,10 @@ export default function ViewDraftPage() {
                 initialMetadata={seoMetadata}
                 initialStructuredData={structuredData}
                 onSave={(metadata, structuredData) => {
-                  console.log('SEO metadata saved:', { metadata, structuredData });
+                  logger.debug('SEO metadata saved', { 
+                    hasMetadata: !!metadata, 
+                    hasStructuredData: !!structuredData 
+                  });
                 }}
               />
             </div>

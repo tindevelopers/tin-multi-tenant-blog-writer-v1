@@ -97,7 +97,7 @@ export default function WorkflowManagePage() {
     }
   };
 
-  const filterWorkflows = () => {
+  const filterWorkflows = useCallback(() => {
     let filtered = [...workflows];
 
     // Filter by search term
