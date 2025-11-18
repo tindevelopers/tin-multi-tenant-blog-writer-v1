@@ -40,6 +40,36 @@ export function useCloudRunStatus() {
         },
       });
 
+      if (!response.ok) {
+        // Handle 404 and other errors
+        let errorMessage = `HTTP ${response.status}`;
+        
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorData.message || errorMessage;
+          } else {
+            // If response is HTML (like 404 page), get text instead
+            const errorText = await response.text();
+            if (errorText.includes('404') || errorText.includes('not found')) {
+              errorMessage = 'API route /api/cloud-run/health not found. Please check if the route is deployed and the server is running.';
+            } else {
+              errorMessage = errorText.substring(0, 200);
+            }
+            // Return early since we've consumed the response body
+            throw new Error(errorMessage);
+          }
+        } catch (parseError) {
+          // If we already threw an error above, re-throw it
+          if (parseError instanceof Error && parseError.message !== errorMessage) {
+            throw parseError;
+          }
+          errorMessage = response.statusText || `HTTP ${response.status}`;
+          throw new Error(errorMessage);
+        }
+      }
+
       const data = await response.json();
 
       const newStatus: CloudRunStatus = {

@@ -11,7 +11,9 @@ import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 import { getAuthenticatedUser, handleApiError } from '@/lib/api-utils';
 
-const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+
+const API_BASE_URL = BLOG_WRITER_API_URL;
 const API_KEY = process.env.BLOG_WRITER_API_KEY;
 
 export async function POST(request: NextRequest) {

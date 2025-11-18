@@ -11,6 +11,10 @@ import {
   ClockIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
+  EyeIcon,
+  PencilIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from "@heroicons/react/24/outline";
 import { QueueStatus, getQueueStatusMetadata } from "@/lib/blog-queue-state-machine";
 import { BlogGenerationQueueItem } from "@/types/blog-queue";
@@ -35,11 +39,51 @@ export default function BlogQueuePage() {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [stats, setStats] = useState({
+    queued: 0,
+    generating: 0,
+    generated: 0,
+    in_review: 0,
+    approved: 0,
+    published: 0,
+    failed: 0,
+    total: 0,
+    recent_24h: 0,
+    average_generation_time_minutes: 0,
+  });
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    stats: true,
+    filters: false,
+  });
 
-  // Fetch queue items
+  // Fetch queue items and stats
   useEffect(() => {
     fetchQueueItems();
+    fetchStats();
   }, [filters]);
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/blog-queue/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setStats({
+          queued: data.by_status?.queued || 0,
+          generating: data.by_status?.generating || 0,
+          generated: data.by_status?.generated || 0,
+          in_review: data.by_status?.in_review || 0,
+          approved: data.by_status?.approved || 0,
+          published: data.by_status?.published || 0,
+          failed: data.by_status?.failed || 0,
+          total: data.total || 0,
+          recent_24h: data.recent_24h || 0,
+          average_generation_time_minutes: data.average_generation_time_minutes || 0,
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+    }
+  };
 
   const fetchQueueItems = async () => {
     try {
@@ -103,9 +147,48 @@ export default function BlogQueuePage() {
       });
       if (!response.ok) throw new Error("Failed to retry");
       await fetchQueueItems();
+      await fetchStats();
     } catch (err) {
       console.error("Error retrying queue item:", err);
       alert("Failed to retry queue item");
+    }
+  };
+
+  const handleRegenerate = async (item: BlogGenerationQueueItem) => {
+    if (!confirm(`Are you sure you want to regenerate "${item.generated_title || item.topic}"?`)) {
+      return;
+    }
+    
+    try {
+      // Create a new queue entry with the same parameters
+      const response = await fetch('/api/blog-writer/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: item.topic,
+          keywords: item.keywords || [],
+          target_audience: item.target_audience,
+          tone: item.tone,
+          word_count: item.word_count,
+          quality_level: item.quality_level,
+          template_type: item.template_type,
+          custom_instructions: item.custom_instructions,
+        }),
+      });
+      
+      if (!response.ok) throw new Error("Failed to regenerate");
+      
+      const result = await response.json();
+      if (result.queue_id) {
+        router.push(`/admin/blog-queue/${result.queue_id}`);
+      } else {
+        await fetchQueueItems();
+        await fetchStats();
+        alert("Blog regeneration started!");
+      }
+    } catch (err) {
+      console.error("Error regenerating blog:", err);
+      alert("Failed to regenerate blog. Please try again.");
     }
   };
 
@@ -120,11 +203,11 @@ export default function BlogQueuePage() {
     return true;
   });
 
-  const stats = {
-    queued: queueItems.filter((i) => i.status === "queued").length,
-    generating: queueItems.filter((i) => i.status === "generating").length,
-    inReview: queueItems.filter((i) => i.status === "in_review").length,
-    published: queueItems.filter((i) => i.status === "published").length,
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
   };
 
   return (
@@ -149,31 +232,91 @@ export default function BlogQueuePage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard
-          label="Queued"
-          value={stats.queued}
-          color="gray"
-          icon="⏳"
-        />
-        <StatCard
-          label="Generating"
-          value={stats.generating}
-          color="blue"
-          icon="🔄"
-        />
-        <StatCard
-          label="In Review"
-          value={stats.inReview}
-          color="yellow"
-          icon="👀"
-        />
-        <StatCard
-          label="Published"
-          value={stats.published}
-          color="green"
-          icon="🌐"
-        />
+      <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('stats')}
+          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+        >
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Statistics
+          </h2>
+          {expandedSections.stats ? (
+            <ChevronUpIcon className="w-5 h-5 text-gray-500" />
+          ) : (
+            <ChevronDownIcon className="w-5 h-5 text-gray-500" />
+          )}
+        </button>
+        
+        {expandedSections.stats && (
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+              <StatCard
+                label="Total"
+                value={stats.total}
+                color="gray"
+                icon="📊"
+              />
+              <StatCard
+                label="Queued"
+                value={stats.queued}
+                color="gray"
+                icon="⏳"
+              />
+              <StatCard
+                label="Generating"
+                value={stats.generating}
+                color="blue"
+                icon="🔄"
+              />
+              <StatCard
+                label="Generated"
+                value={stats.generated}
+                color="green"
+                icon="✅"
+              />
+              <StatCard
+                label="In Review"
+                value={stats.in_review}
+                color="yellow"
+                icon="👀"
+              />
+              <StatCard
+                label="Published"
+                value={stats.published}
+                color="green"
+                icon="🌐"
+              />
+              <StatCard
+                label="Failed"
+                value={stats.failed}
+                color="red"
+                icon="❌"
+              />
+            </div>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Recent (24h)</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                  {stats.recent_24h}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Avg Generation Time</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                  {stats.average_generation_time_minutes > 0 
+                    ? `${Math.round(stats.average_generation_time_minutes)}m`
+                    : 'N/A'}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">Approved</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                  {stats.approved}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filters and Search */}
@@ -212,19 +355,35 @@ export default function BlogQueuePage() {
 
       {/* Filter Panel */}
       {showFilters && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-4 space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleSection('filters')}
+            className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          >
             <h3 className="font-semibold text-gray-900 dark:text-white">
               Filters
             </h3>
-            <button
-              onClick={() => setShowFilters(false)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              <XMarkIcon className="w-5 h-5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center gap-2">
+              {expandedSections.filters ? (
+                <ChevronUpIcon className="w-5 h-5 text-gray-500" />
+              ) : (
+                <ChevronDownIcon className="w-5 h-5 text-gray-500" />
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowFilters(false);
+                }}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </button>
+          
+          {expandedSections.filters && (
+          <div className="p-4 space-y-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Status
@@ -284,7 +443,9 @@ export default function BlogQueuePage() {
                 <option value="month">This Month</option>
               </select>
             </div>
+            </div>
           </div>
+          )}
         </div>
       )}
 
@@ -309,7 +470,8 @@ export default function BlogQueuePage() {
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -340,10 +502,12 @@ export default function BlogQueuePage() {
                   onView={() => router.push(`/admin/blog-queue/${item.queue_id}`)}
                   onCancel={() => handleCancel(item.queue_id)}
                   onRetry={() => handleRetry(item.queue_id)}
+                  onRegenerate={() => handleRegenerate(item)}
                 />
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -366,6 +530,7 @@ function StatCard({
     blue: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200",
     yellow: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200",
     green: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200",
+    red: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200",
   };
 
   return (
@@ -388,12 +553,19 @@ function QueueItemRow({
   onView,
   onCancel,
   onRetry,
+  onViewBlog,
+  onEditBlog,
+  onRegenerate,
 }: {
   item: BlogGenerationQueueItem;
   onView: () => void;
   onCancel: () => void;
   onRetry: () => void;
+  onViewBlog?: () => void;
+  onEditBlog?: () => void;
+  onRegenerate?: () => void;
 }) {
+  const router = useRouter();
   const statusMeta = getQueueStatusMetadata(item?.status);
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
@@ -404,6 +576,9 @@ function QueueItemRow({
       minute: "2-digit",
     });
   };
+
+  const postId = item.post_id || (item.metadata as any)?.post_id;
+  const hasGeneratedContent = item.status === "generated" && (item.generated_content || postId);
 
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
@@ -430,7 +605,7 @@ function QueueItemRow({
           />
         ) : (
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {statusMeta.description}
+            {statusMeta?.description || "N/A"}
           </span>
         )}
       </td>
@@ -446,27 +621,80 @@ function QueueItemRow({
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          {/* View Queue Details */}
           <button
             onClick={onView}
-            className="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition-colors"
+            title="View Queue Details"
           >
-            View
+            <EyeIcon className="w-4 h-4" />
+            <span className="text-xs">Details</span>
           </button>
+          
+          {/* View Blog - show when blog is generated */}
+          {hasGeneratedContent && (
+            <button
+              onClick={() => {
+                if (postId) {
+                  router.push(`/admin/drafts/view/${postId}`);
+                } else {
+                  onView?.();
+                }
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+              title="View Blog"
+            >
+              <EyeIcon className="w-4 h-4" />
+              <span className="text-xs">View</span>
+            </button>
+          )}
+          
+          {/* Edit Blog - show when blog is generated and has post_id */}
+          {item.status === "generated" && postId && (
+            <button
+              onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+              title="Edit Blog"
+            >
+              <PencilIcon className="w-4 h-4" />
+              <span className="text-xs">Edit</span>
+            </button>
+          )}
+          
+          {/* Regenerate - show when blog is generated */}
+          {item.status === "generated" && (
+            <button
+              onClick={() => onRegenerate?.()}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
+              title="Regenerate Blog"
+            >
+              <ArrowPathIcon className="w-4 h-4" />
+              <span className="text-xs">Regenerate</span>
+            </button>
+          )}
+          
+          {/* Retry - show when failed */}
           {item.status === "failed" && (
             <button
               onClick={onRetry}
-              className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+              title="Retry"
             >
-              Retry
+              <ArrowPathIcon className="w-4 h-4" />
+              <span className="text-xs">Retry</span>
             </button>
           )}
+          
+          {/* Cancel - show when not published or cancelled */}
           {!["published", "cancelled"].includes(item.status) && (
             <button
               onClick={onCancel}
-              className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+              title="Cancel"
             >
-              Cancel
+              <XMarkIcon className="w-4 h-4" />
+              <span className="text-xs">Cancel</span>
             </button>
           )}
         </div>

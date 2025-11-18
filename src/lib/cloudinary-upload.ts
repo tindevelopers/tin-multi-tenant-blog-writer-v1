@@ -5,6 +5,7 @@
 
 import { createServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/utils/logger';
+import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
 
 interface CloudinaryCredentials {
   cloud_name: string;
@@ -74,7 +75,7 @@ export async function uploadViaBlogWriterAPI(
   folder?: string
 ): Promise<CloudinaryUploadResult | null> {
   try {
-    const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+    const API_BASE_URL = BLOG_WRITER_API_URL;
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
 
     // Get organization's Cloudinary credentials

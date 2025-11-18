@@ -15,7 +15,11 @@ import {
   ShareIcon,
   TagIcon,
   CalendarIcon,
-  UserIcon
+  UserIcon,
+  DocumentIcon,
+  CheckCircleIcon,
+  BookOpenIcon,
+  ChartBarIcon
 } from "@heroicons/react/24/outline";
 
 export default function DraftsPage() {
@@ -86,11 +90,21 @@ export default function DraftsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "draft": return "bg-yellow-100 text-yellow-800";
-      case "review": return "bg-blue-100 text-blue-800";
-      case "archived": return "bg-gray-100 text-gray-800";
-      case "published": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "draft": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+      case "review": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+      case "archived": return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+      case "published": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      default: return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "draft": return <DocumentIcon className="w-4 h-4" />;
+      case "review": return <ClockIcon className="w-4 h-4" />;
+      case "archived": return <DocumentTextIcon className="w-4 h-4" />;
+      case "published": return <CheckCircleIcon className="w-4 h-4" />;
+      default: return <DocumentIcon className="w-4 h-4" />;
     }
   };
 
@@ -314,23 +328,40 @@ export default function DraftsPage() {
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Draft
+                <th className="px-6 py-3 text-left">
+                  <div className="flex items-center gap-2">
+                    <DocumentTextIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Draft</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
+                <th className="px-6 py-3 text-left">
+                  <div className="flex items-center gap-2">
+                    <ChartBarIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Status</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Author
+                <th className="px-6 py-3 text-left">
+                  <div className="flex items-center gap-2">
+                    <UserIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Author</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Modified
+                <th className="px-6 py-3 text-left">
+                  <div className="flex items-center gap-2">
+                    <ClockIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Modified</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Stats
+                <th className="px-6 py-3 text-left">
+                  <div className="flex items-center gap-2">
+                    <BookOpenIcon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Stats</span>
+                  </div>
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
+                <th className="px-6 py-3 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Actions</span>
+                  </div>
                 </th>
               </tr>
             </thead>
@@ -389,50 +420,61 @@ export default function DraftsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(draft.status)}`}>
-                      {draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-full ${getStatusColor(draft.status)}`}>
+                      {getStatusIcon(draft.status)}
+                      <span>{draft.status.charAt(0).toUpperCase() + draft.status.slice(1)}</span>
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center">
-                      <UserIcon className="w-4 h-4 mr-2 text-gray-400" />
-                      <span className="text-sm text-gray-900 dark:text-white">
+                    <div className="flex items-center gap-2">
+                      <UserIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                      <span className="text-base text-gray-900 dark:text-white font-medium">
                         {isSupabaseDraft(draft) ? (draft.created_by || 'Unknown') : draft.author}
                       </span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
-                      <ClockIcon className="w-4 h-4 mr-2" />
-                      {formatDate(isSupabaseDraft(draft) ? (draft.updated_at || draft.created_at) : draft.lastModified)}
+                    <div className="flex items-center gap-2 text-base text-gray-700 dark:text-gray-300">
+                      <ClockIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                      <span className="font-medium">
+                        {formatDate(isSupabaseDraft(draft) ? (draft.updated_at || draft.created_at) : draft.lastModified)}
+                      </span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 dark:text-white">
-                      <div>{(() => {
-                        // Calculate word count properly
-                        if (!isSupabaseDraft(draft) && draft.wordCount) {
-                          return draft.wordCount.toLocaleString();
-                        }
-                        if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
-                          // Count words by splitting on whitespace and filtering out empty strings
-                          const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
-                          return words.length.toLocaleString();
-                        }
-                        return '0';
-                      })()} words</div>
-                      <div className="text-gray-500 dark:text-gray-400">
-                        {(() => {
-                          if (!isSupabaseDraft(draft) && draft.readTime) {
-                            return draft.readTime;
-                          }
-                          if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
-                            const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
-                            const readTime = Math.ceil(words.length / 200); // Average reading speed: 200 words per minute
-                            return `${readTime} min read`;
-                          }
-                          return '0 min read';
-                        })()}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2 text-base text-gray-900 dark:text-white">
+                        <DocumentTextIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                        <span className="font-medium">
+                          {(() => {
+                            // Calculate word count properly
+                            if (!isSupabaseDraft(draft) && draft.wordCount) {
+                              return draft.wordCount.toLocaleString();
+                            }
+                            if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
+                              // Count words by splitting on whitespace and filtering out empty strings
+                              const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
+                              return words.length.toLocaleString();
+                            }
+                            return '0';
+                          })()} words
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-base text-gray-500 dark:text-gray-400">
+                        <ClockIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
+                        <span>
+                          {(() => {
+                            if (!isSupabaseDraft(draft) && draft.readTime) {
+                              return draft.readTime;
+                            }
+                            if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
+                              const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
+                              const readTime = Math.ceil(words.length / 200); // Average reading speed: 200 words per minute
+                              return `${readTime} min read`;
+                            }
+                            return '0 min read';
+                          })()}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -440,31 +482,43 @@ export default function DraftsPage() {
                     <div className="flex items-center justify-end gap-2">
                       <button 
                         onClick={() => handleViewDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 transition-colors"
-                        title="View draft"
+                        className="relative group text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 transition-colors rounded"
                       >
                         <EyeIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          View
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                       <button 
                         onClick={() => handleEditDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 transition-colors"
-                        title="Edit draft"
+                        className="relative group text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 transition-colors rounded"
                       >
                         <PencilIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          Edit
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                       <button 
                         onClick={() => handleShareDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-1 transition-colors"
-                        title="Share draft"
+                        className="relative group text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-1.5 transition-colors rounded"
                       >
                         <ShareIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          Share
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                       <button 
                         onClick={() => handleDeleteDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                        className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 transition-colors"
-                        title="Delete draft"
+                        className="relative group text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1.5 transition-colors rounded"
                       >
                         <TrashIcon className="w-4 h-4" />
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs font-medium text-white bg-gray-900 dark:bg-gray-700 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
+                          Delete
+                          <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></span>
+                        </span>
                       </button>
                     </div>
                   </td>

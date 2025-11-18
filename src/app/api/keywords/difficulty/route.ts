@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { parseJsonBody, validateRequiredFields, handleApiError } from '@/lib/api-utils';
 
-const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
-  'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
 export interface KeywordDifficultyRequest {
   keyword: string;

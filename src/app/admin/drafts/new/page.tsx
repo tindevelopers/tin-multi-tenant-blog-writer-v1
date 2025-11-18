@@ -21,7 +21,8 @@ import QuickActionsMenu from "@/components/blog-writer/QuickActionsMenu";
 import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
-import Alert from "@/components/ui/alert/Alert";
+import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
+// import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
   const router = useRouter();
@@ -39,27 +40,51 @@ function NewDraftContent() {
     });
   }, []);
 
-  // Handle URL parameters from content clusters page
+  // Map search_type to template_type
+  const mapSearchTypeToTemplate = (searchType: string | null): "expert_authority" | "how_to_guide" | "comparison" | "case_study" | "news_update" | "tutorial" | "listicle" | "review" => {
+    const mapping: Record<string, "expert_authority" | "how_to_guide" | "comparison" | "case_study" | "news_update" | "tutorial" | "listicle" | "review"> = {
+      'how_to': 'how_to_guide',
+      'product': 'comparison',
+      'comparison': 'comparison',
+      'listicle': 'listicle',
+      'qa': 'tutorial',
+      'brand': 'expert_authority',
+      'evergreen': 'expert_authority',
+      'seasonal': 'news_update',
+      'general': 'expert_authority',
+    };
+    return mapping[searchType || ''] || 'expert_authority';
+  };
+
+  // Handle URL parameters from content clusters page and keyword research
   useEffect(() => {
     if (searchParams) {
       const title = searchParams.get('title');
       const topic = searchParams.get('topic');
       const keywords = searchParams.get('keywords');
+      const keyword = searchParams.get('keyword'); // From keyword research
+      const search_type = searchParams.get('search_type'); // From keyword research
+      const niche = searchParams.get('niche'); // From keyword research
       const target_audience = searchParams.get('target_audience');
       const word_count = searchParams.get('word_count');
 
-      if (title || topic || keywords || target_audience || word_count) {
-        console.log('🔍 URL parameters detected, populating form:', {
-          title, topic, keywords, target_audience, word_count
-        });
+      if (title || topic || keywords || keyword || target_audience || word_count || search_type) {
+        // URL parameters detected, populating form
+        // console.log('🔍 URL parameters detected, populating form:', {
+        //   title, topic, keywords, keyword, search_type, niche, target_audience, word_count
+        // });
+
+        // Map search_type to template_type if provided
+        const templateType = search_type ? mapSearchTypeToTemplate(search_type) : formData.template_type;
 
         setFormData(prev => ({
           ...prev,
-          title: title || prev.title,
-          topic: topic || prev.topic,
-          keywords: keywords || prev.keywords,
-          target_audience: target_audience || prev.target_audience,
-          word_count: word_count ? parseInt(word_count) : prev.word_count
+          title: title || keyword || prev.title, // Use keyword if title not provided
+          topic: topic || keyword || prev.topic, // Use keyword as topic if not provided
+          keywords: keywords || keyword || prev.keywords, // Use keyword if keywords not provided
+          target_audience: target_audience || niche || prev.target_audience, // Use niche as target_audience
+          word_count: word_count ? parseInt(word_count) : prev.word_count,
+          template_type: templateType, // Set template based on search_type
         }));
 
         // Skip research panel since we already have the data
@@ -68,6 +93,7 @@ function NewDraftContent() {
         setShowContentSuggestions(true);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
   
   const [formData, setFormData] = useState({
@@ -104,6 +130,30 @@ function NewDraftContent() {
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
   const [queueId, setQueueId] = useState<string | null>(null);
   const [queueStatus, setQueueStatus] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState<{
+    percentage: number;
+    stage: string;
+    status: string | null;
+  }>({
+    percentage: 0,
+    stage: '',
+    status: null,
+  });
+  
+  // Use SSE for real-time progress updates when queueId is available
+  const { status: sseStatus, progress: sseProgress, stage: sseStage } = useQueueStatusSSE(queueId);
+  
+  // Update generation progress from SSE
+  useEffect(() => {
+    if (queueId && sseStatus) {
+      setQueueStatus(sseStatus);
+      setGenerationProgress({
+        percentage: sseProgress,
+        stage: sseStage || 'Processing...',
+        status: sseStatus,
+      });
+    }
+  }, [queueId, sseStatus, sseProgress, sseStage]);
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [showPlatformSelector, setShowPlatformSelector] = useState(false);
@@ -505,6 +555,35 @@ function NewDraftContent() {
                   approvalId={approvalId}
                   approvalStatus={approvalStatus as any}
                 />
+              </div>
+            )}
+            
+            {/* Generation Progress Display */}
+            {queueId && queueStatus === "generating" && (
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-900 dark:text-blue-300">
+                    {generationProgress.stage || "Generating blog..."}
+                  </span>
+                  <span className="text-sm text-blue-700 dark:text-blue-400">
+                    {generationProgress.percentage}%
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 mb-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${generationProgress.percentage}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
+                  <span>Queue ID: {queueId.substring(0, 8)}...</span>
+                  <button
+                    onClick={() => router.push(`/admin/blog-queue/${queueId}`)}
+                    className="hover:underline"
+                  >
+                    View Details →
+                  </button>
+                </div>
               </div>
             )}
           </div>

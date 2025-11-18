@@ -10,11 +10,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealthManager from '@/lib/cloud-run-health';
-import { logger } from '@/utils/logger';
+import { logger } from '@/lib/logger';
 import { parseJsonBody, handleApiError } from '@/lib/api-utils';
 
-const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
-  'https://blog-writer-api-dev-kq42l26tuq-ew.a.run.app';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 const BLOG_WRITER_API_KEY = process.env.BLOG_WRITER_API_KEY;
 
 export async function POST(request: NextRequest) {
@@ -41,10 +40,12 @@ export async function POST(request: NextRequest) {
     const { keywords, industry, existing_topics, target_audience, count } = body;
 
     // Build request payload
+    // Backend API expects 'seed_keywords' instead of 'keywords'
     const requestPayload: Record<string, unknown> = {};
 
     if (keywords && Array.isArray(keywords) && keywords.length > 0) {
-      requestPayload.keywords = keywords;
+      // Map 'keywords' to 'seed_keywords' for backend API
+      requestPayload.seed_keywords = keywords;
     }
 
     if (industry) requestPayload.industry = industry;
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // At least one parameter is required
-    if (!requestPayload.keywords && !requestPayload.industry && !requestPayload.existing_topics) {
+    if (!requestPayload.seed_keywords && !requestPayload.industry && !requestPayload.existing_topics) {
       return NextResponse.json(
         { error: 'At least one of keywords, industry, or existing_topics is required' },
         { status: 400 }
