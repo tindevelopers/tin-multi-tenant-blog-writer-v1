@@ -243,17 +243,31 @@ export default function ViewDraftPage() {
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 {/* Featured image */}
                 {(() => {
-                  const featuredImageUrl = metadata && typeof metadata === 'object' && 'featured_image' in metadata 
-                    ? String(metadata.featured_image) 
+                  // Check multiple sources for featured image URL
+                  const metadataFeaturedImage = metadata && typeof metadata === 'object' 
+                    ? (metadata.featured_image_url || 
+                       (metadata.featured_image && typeof metadata.featured_image === 'object' 
+                         ? metadata.featured_image.image_url || metadata.featured_image.url
+                         : typeof metadata.featured_image === 'string' 
+                           ? metadata.featured_image 
+                           : null))
                     : null;
                   
+                  // Check SEO data for Twitter/OG images
+                  const seoImageUrl = seoData && typeof seoData === 'object'
+                    ? (seoData.twitter_image || seoData.og_image || seoData.featured_image_url)
+                    : null;
+                  
+                  // Check content for embedded featured image
                   const contentImageMatch = draft.content?.match(/<figure class="(blog-featured-image|featured-image)">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i);
                   const embeddedImageUrl = contentImageMatch ? contentImageMatch[2] : null;
                   
+                  // Check for any image in content as fallback
                   const anyImageMatch = draft.content?.match(/<img[^>]+src="([^"]+)"[^>]*>/i);
                   const anyImageUrl = anyImageMatch ? anyImageMatch[1] : null;
                   
-                  const imageUrl = featuredImageUrl || embeddedImageUrl || anyImageUrl;
+                  // Priority: metadata > SEO data > embedded in content > any image in content
+                  const imageUrl = metadataFeaturedImage || seoImageUrl || embeddedImageUrl || anyImageUrl;
                   
                   return imageUrl ? (
                   <div className="w-full h-64 md:h-96 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 overflow-hidden relative">
@@ -566,14 +580,24 @@ export default function ViewDraftPage() {
     
     let html = String(draft.content);
     
-    const featuredImageUrl = metadata && typeof metadata === 'object' && 'featured_image' in metadata 
-      ? String(metadata.featured_image) 
+    // Check multiple sources for featured image URL (same logic as display)
+    const metadataFeaturedImage = metadata && typeof metadata === 'object' 
+      ? (metadata.featured_image_url || 
+         (metadata.featured_image && typeof metadata.featured_image === 'object' 
+           ? metadata.featured_image.image_url || metadata.featured_image.url
+           : typeof metadata.featured_image === 'string' 
+             ? metadata.featured_image 
+             : null))
       : null;
     
-    const contentImageMatch = html.match(/<figure class="featured-image">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/);
-    const embeddedImageUrl = contentImageMatch ? contentImageMatch[1] : null;
+    const seoImageUrl = seoData && typeof seoData === 'object'
+      ? (seoData.twitter_image || seoData.og_image || seoData.featured_image_url)
+      : null;
     
-    const imageUrl = featuredImageUrl || embeddedImageUrl;
+    const contentImageMatch = html.match(/<figure class="(blog-featured-image|featured-image)">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i);
+    const embeddedImageUrl = contentImageMatch ? contentImageMatch[2] : null;
+    
+    const imageUrl = metadataFeaturedImage || seoImageUrl || embeddedImageUrl;
     
     if (imageUrl && !html.includes(imageUrl)) {
       const imageHtml = `<figure class="featured-image"><img src="${imageUrl}" alt="${draft.title}" style="width: 100%; height: auto; border-radius: 8px; margin: 2rem 0;" /></figure>`;
