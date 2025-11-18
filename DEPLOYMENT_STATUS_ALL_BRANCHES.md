@@ -25,11 +25,11 @@
 
 ### ✅ Develop (develop branch)
 - **Status:** Ready
-- **Deployment URL:** https://tin-multi-tenant-blog-writer-v1-j1sdb3nyq-tindeveloper.vercel.app
+- **Deployment URL:** https://tin-multi-tenant-blog-writer-v1-cdba5wm0z-tindeveloper.vercel.app
 - **Environment:** Preview
 - **Duration:** 1m
-- **Alias:** https://tin-multi-tenant-blog-writer-v1-git-develop-tindeveloper.vercel.app
-- **Time:** ~3 minutes ago
+- **Alias:** https://blogwriter.develop.tinconnect.com
+- **Time:** ~1 minute ago
 
 ---
 

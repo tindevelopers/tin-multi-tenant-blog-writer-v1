@@ -492,7 +492,12 @@ export default function EditorPage() {
 
       // Extract featured image from content if present
       const imageMatch = formData.content.match(/<figure class="featured-image">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>[\s\S]*?<\/figure>/);
-      const featuredImageUrl = imageMatch ? imageMatch[1] : null;
+      const contentImageUrl = imageMatch ? imageMatch[1] : null;
+      
+      // Get featured image URL from various sources
+      const featuredImageUrl = formData.featuredImage?.image_url || 
+                               generationResult?.featured_image?.image_url || 
+                               contentImageUrl;
       
       // Ensure image is embedded in content if it exists
       let finalContent = formData.content;
@@ -506,22 +511,57 @@ export default function EditorPage() {
         }
       }
 
+      // Extract SEO metadata from generation result if available
+      const seoMetadata = generationResult?.seo_metadata || {};
+      
+      // Build comprehensive SEO data including Twitter OG tags
+      const seoData = {
+        ...seoMetadata,
+        // Include standard SEO fields
+        meta_title: generationResult?.meta_title || formData.title,
+        meta_description: generationResult?.meta_description || formData.excerpt || '',
+        // Include Twitter OG tags
+        twitter_card: seoMetadata.twitter_card || 'summary_large_image',
+        twitter_title: seoMetadata.twitter_title || formData.title,
+        twitter_description: seoMetadata.twitter_description || formData.excerpt || '',
+        twitter_image: seoMetadata.twitter_image || featuredImageUrl || null,
+        // Include Open Graph tags
+        og_title: seoMetadata.og_title || formData.title,
+        og_description: seoMetadata.og_description || formData.excerpt || '',
+        og_image: seoMetadata.og_image || featuredImageUrl || null,
+        og_type: seoMetadata.og_type || 'article',
+        // Include structured data
+        structured_data: generationResult?.structured_data || null,
+        // Include keywords and topic
+        keywords: formData.keywords ? formData.keywords.split(',').map(k => k.trim()).filter(k => k) : [],
+        topic: formData.topic,
+        target_audience: formData.target_audience,
+        tone: formData.tone,
+        // Include SEO scores
+        seo_score: generationResult?.seo_score || null,
+        readability_score: generationResult?.readability_score || null,
+        quality_score: generationResult?.quality_score || null,
+      };
+
       const draftResult = await createDraft({
         title: formData.title,
         content: finalContent,
         excerpt: formData.excerpt,
-        seo_data: {
-          topic: formData.topic,
-          keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
-          target_audience: formData.target_audience,
-          tone: formData.tone
-        },
+        seo_data: seoData, // Comprehensive SEO data including Twitter OG tags
         metadata: {
           preset_id: formData.preset_id || null,
           brand_voice_used: !!brandVoice,
-          quality_level: formData.quality_level
+          quality_level: formData.quality_level,
+          // Include generation result metadata
+          ...(generationResult?.metadata || {}),
+          // Include content metadata (H1, H2, H3 counts, etc.)
+          content_metadata: generationResult?.content_metadata || {},
+          // Include generated images
+          generated_images: generationResult?.generated_images || [],
+          // Include internal links
+          internal_links: generationResult?.internal_links || [],
         },
-        featured_image: formData.featuredImage
+        featured_image: formData.featuredImage || generationResult?.featured_image
       });
 
       if (draftResult) {

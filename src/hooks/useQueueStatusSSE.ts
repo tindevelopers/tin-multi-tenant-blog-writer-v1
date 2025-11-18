@@ -38,12 +38,33 @@ export function useQueueStatusSSE(queueId: string | null) {
 
     eventSource.onmessage = (event) => {
       try {
-        const data: QueueStatusUpdate = JSON.parse(event.data);
+        // SSE format: "data: {...}\n\n"
+        // Extract JSON from the data line
+        let jsonData = event.data;
+        if (jsonData.startsWith('data: ')) {
+          jsonData = jsonData.substring(6);
+        }
         
-        setStatus(data.status);
-        setProgress(data.progress_percentage || 0);
-        setStage(data.current_stage || "");
-        setError(null);
+        const data = JSON.parse(jsonData) as QueueStatusUpdate & { type?: string };
+        
+        // Handle different message types
+        if (data.type === 'status_update' || data.type === 'connected') {
+          setStatus(data.status);
+          setProgress(data.progress_percentage || 0);
+          setStage(data.current_stage || "");
+          setError(null);
+        } else if (data.type === 'error') {
+          setError((data as any).message || 'Connection error');
+        } else if (data.type === 'complete' || data.type === 'timeout') {
+          // Terminal states
+          setStatus(data.status);
+          eventSource.close();
+        } else {
+          // Fallback: assume it's a status update
+          setStatus(data.status);
+          setProgress(data.progress_percentage || 0);
+          setStage(data.current_stage || "");
+        }
 
         // Close connection if status is terminal
         const terminalStatuses: QueueStatus[] = [
@@ -51,11 +72,11 @@ export function useQueueStatusSSE(queueId: string | null) {
           "failed",
           "cancelled",
         ];
-        if (terminalStatuses.includes(data.status)) {
+        if (data.status && terminalStatuses.includes(data.status)) {
           eventSource.close();
         }
       } catch (err) {
-        logger.error("Error parsing SSE message:", err);
+        logger.error("Error parsing SSE message:", err, { rawData: event.data });
         setError("Failed to parse status update");
       }
     };

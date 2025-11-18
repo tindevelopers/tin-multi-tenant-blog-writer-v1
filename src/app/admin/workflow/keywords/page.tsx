@@ -729,6 +729,60 @@ export default function KeywordResearchPage() {
     setCurrentPage(1);
   }, [difficultyFilter, parentTopicFilter, categoryTypeFilter, minVolume, sortBy, sortOrder]);
 
+  // Calculate aggregate metrics for display cards
+  const aggregateMetrics = React.useMemo(() => {
+    if (keywords.length === 0) {
+      return {
+        totalSearchVolume: 0,
+        avgDifficulty: 'medium' as const,
+        avgCompetition: 0,
+        avgCPC: 0,
+        trafficPotential: 0,
+      };
+    }
+
+    const validVolumes = keywords
+      .map(k => k.search_volume)
+      .filter((v): v is number => v !== null && v !== undefined && typeof v === 'number');
+    
+    const totalSearchVolume = validVolumes.reduce((sum, v) => sum + v, 0);
+    
+    const difficultyValues = keywords.map(k => {
+      if (k.difficulty === 'easy' || k.difficulty === 'very_easy') return 0.33;
+      if (k.difficulty === 'medium') return 0.66;
+      return 1.0;
+    });
+    const avgDifficultyNum = difficultyValues.reduce((sum, v) => sum + v, 0) / difficultyValues.length;
+    const avgDifficulty = avgDifficultyNum < 0.4 ? 'easy' : avgDifficultyNum < 0.7 ? 'medium' : 'hard';
+    
+    const avgCompetition = keywords.reduce((sum, k) => sum + (k.competition || 0), 0) / keywords.length;
+    
+    const validCPCs = keywords
+      .map(k => k.cpc)
+      .filter((v): v is number => v !== null && v !== undefined && typeof v === 'number');
+    const avgCPC = validCPCs.length > 0 
+      ? validCPCs.reduce((sum, v) => sum + v, 0) / validCPCs.length 
+      : 0;
+    
+    // Traffic potential: estimate based on search volume and competition
+    // Lower competition = higher traffic potential
+    const trafficPotential = validVolumes.length > 0
+      ? validVolumes.reduce((sum, volume, idx) => {
+          const competition = keywords[idx]?.competition || 0.5;
+          // Estimate: volume * (1 - competition) * 0.1 (conservative CTR)
+          return sum + (volume * (1 - competition) * 0.1);
+        }, 0)
+      : 0;
+
+    return {
+      totalSearchVolume,
+      avgDifficulty,
+      avgCompetition,
+      avgCPC,
+      trafficPotential: Math.round(trafficPotential),
+    };
+  }, [keywords]);
+
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
@@ -809,6 +863,104 @@ export default function KeywordResearchPage() {
             title="Success!" 
             message={success}
           />
+        </div>
+      )}
+
+      {/* Keyword Metrics Cards */}
+      {keywords.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Keyword Difficulty Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Keyword Difficulty</h3>
+              <Target className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold ${
+                aggregateMetrics.avgDifficulty === 'easy' 
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                  : aggregateMetrics.avgDifficulty === 'medium'
+                  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400'
+                  : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+              }`}>
+                {aggregateMetrics.avgDifficulty === 'easy' ? '30' : aggregateMetrics.avgDifficulty === 'medium' ? '60' : '80'}
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-gray-900 dark:text-white capitalize">
+                  {aggregateMetrics.avgDifficulty}
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400 capitalize">
+                  {aggregateMetrics.avgDifficulty}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Search Volume Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Search Volume</h3>
+              <TrendingUp className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                {aggregateMetrics.totalSearchVolume > 0 
+                  ? aggregateMetrics.totalSearchVolume.toLocaleString() 
+                  : '0'}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {aggregateMetrics.totalSearchVolume > 0 ? 'Total monthly searches' : 'No trend data'}
+              </div>
+            </div>
+            {aggregateMetrics.totalSearchVolume === 0 && (
+              <div className="mt-2 text-xs text-red-500 dark:text-red-400">
+                0.0% trend
+              </div>
+            )}
+          </div>
+
+          {/* Traffic Potential Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Traffic Potential</h3>
+              <TrendingUp className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                {aggregateMetrics.trafficPotential > 0 
+                  ? aggregateMetrics.trafficPotential.toLocaleString() 
+                  : '0'}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Estimated monthly visits
+              </div>
+            </div>
+          </div>
+
+          {/* CPC & Competition Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">CPC & Competition</h3>
+              <Target className="w-5 h-5 text-gray-400" />
+            </div>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                ${aggregateMetrics.avgCPC > 0 ? aggregateMetrics.avgCPC.toFixed(2) : '0.00'}
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+                Cost per click
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{ width: `${(aggregateMetrics.avgCompetition * 100)}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Competition {(aggregateMetrics.avgCompetition * 100).toFixed(0)}%
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

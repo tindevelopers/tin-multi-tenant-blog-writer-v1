@@ -170,6 +170,100 @@ export async function PATCH(
       }
       if (body.status === 'generated' && !currentItem.generation_completed_at) {
         updates.generation_completed_at = new Date().toISOString();
+        
+        // Auto-create draft when generation completes
+        if (currentItem.generated_content && currentItem.generated_title) {
+          try {
+            // Extract SEO metadata from generation_metadata (includes Twitter OG tags, etc.)
+            const seoMetadata = currentItem.generation_metadata?.seo_metadata || {};
+            const structuredData = currentItem.generation_metadata?.structured_data || null;
+            
+            // Build comprehensive SEO data including Twitter OG tags
+            const seoData = {
+              ...seoMetadata,
+              // Include standard SEO fields
+              meta_title: currentItem.generation_metadata?.meta_title || currentItem.generated_title,
+              meta_description: currentItem.generation_metadata?.meta_description || currentItem.generation_metadata?.excerpt || '',
+              // Include Twitter OG tags from API response
+              twitter_card: seoMetadata.twitter_card || 'summary_large_image',
+              twitter_title: seoMetadata.twitter_title || currentItem.generated_title,
+              twitter_description: seoMetadata.twitter_description || currentItem.generation_metadata?.excerpt || '',
+              twitter_image: seoMetadata.twitter_image || currentItem.generation_metadata?.featured_image_url || null,
+              // Include Open Graph tags
+              og_title: seoMetadata.og_title || currentItem.generated_title,
+              og_description: seoMetadata.og_description || currentItem.generation_metadata?.excerpt || '',
+              og_image: seoMetadata.og_image || currentItem.generation_metadata?.featured_image_url || null,
+              og_type: seoMetadata.og_type || 'article',
+              // Include structured data
+              structured_data: structuredData,
+              // Include keywords and topic
+              keywords: currentItem.keywords || [],
+              topic: currentItem.topic,
+              // Include SEO scores
+              seo_score: currentItem.generation_metadata?.seo_score || null,
+              readability_score: currentItem.generation_metadata?.readability_score || null,
+              quality_score: currentItem.generation_metadata?.quality_score || null,
+            };
+            
+            const { data: draftPost, error: draftError } = await supabase
+              .from('blog_posts')
+              .insert({
+                org_id: userProfile.org_id,
+                created_by: currentItem.created_by || user.id,
+                title: currentItem.generated_title,
+                content: currentItem.generated_content, // This is now enhanced content with Cloudinary URLs and HTML structure
+                excerpt: currentItem.generation_metadata?.excerpt || null,
+                status: 'draft',
+                metadata: {
+                  ...currentItem.generation_metadata,
+                  queue_id: id,
+                  generated_at: new Date().toISOString(),
+                  topic: currentItem.topic,
+                  keywords: currentItem.keywords,
+                  target_audience: currentItem.target_audience,
+                  tone: currentItem.tone,
+                  word_count: currentItem.word_count,
+                  quality_level: currentItem.quality_level,
+                  // Include featured image metadata
+                  featured_image_url: currentItem.generation_metadata?.featured_image_url || null,
+                  featured_image_alt_text: currentItem.generation_metadata?.featured_image_alt_text || null,
+                  // Include generated images
+                  generated_images: currentItem.generation_metadata?.generated_images || [],
+                  // Include internal links
+                  internal_links: currentItem.generation_metadata?.internal_links || [],
+                  // Include content metadata (H1, H2, H3 counts, etc.)
+                  content_metadata: currentItem.generation_metadata?.content_metadata || {},
+                },
+                seo_data: seoData, // Comprehensive SEO data including Twitter OG tags
+              })
+              .select('post_id, title')
+              .single();
+
+            if (!draftError && draftPost) {
+              logger.info('Auto-created draft from queue item', {
+                queue_id: id,
+                post_id: draftPost.post_id,
+              });
+              
+              // Link draft to queue item in metadata
+              updates.metadata = {
+                ...(currentItem.metadata || {}),
+                draft_post_id: draftPost.post_id,
+              };
+            } else if (draftError) {
+              logger.error('Failed to auto-create draft', {
+                queue_id: id,
+                error: draftError.message,
+              });
+            }
+          } catch (draftErr) {
+            logger.error('Error auto-creating draft', {
+              queue_id: id,
+              error: draftErr instanceof Error ? draftErr.message : 'Unknown error',
+            });
+            // Don't fail the queue update if draft creation fails
+          }
+        }
       }
     }
 

@@ -1307,11 +1307,12 @@ export async function POST(request: NextRequest) {
     // Update queue entry with final results if queue exists
     if (queueId && transformedResult) {
       try {
-        const rawContent = result.blog_post?.content || result.content || transformedResult.content || '';
+        // Save ENHANCED content (with Cloudinary URLs and proper HTML structure) instead of raw content
+        // This ensures drafts have images, proper headings (H1, H2, H3), and all formatting
         await supabase
           .from('blog_generation_queue')
           .update({
-            generated_content: rawContent,
+            generated_content: enhancedContent, // Use enhanced content with Cloudinary URLs and HTML structure
             generated_title: transformedResult.title,
             generation_metadata: {
               ...transformedResult.metadata,
@@ -1320,12 +1321,26 @@ export async function POST(request: NextRequest) {
               quality_score: transformedResult.quality_score,
               word_count: transformedResult.word_count,
               total_cost: transformedResult.total_cost,
-              generation_time: transformedResult.generation_time
+              generation_time: transformedResult.generation_time,
+              // Include SEO metadata (Twitter OG tags, etc.) from API response
+              seo_metadata: transformedResult.seo_metadata || {},
+              structured_data: transformedResult.structured_data || null,
+              meta_title: transformedResult.meta_title,
+              meta_description: transformedResult.meta_description,
+              // Include featured image URL for draft creation
+              featured_image_url: featuredImage?.image_url || null,
+              featured_image_alt_text: `Featured image for ${transformedResult.title}`,
+              // Include generated images metadata
+              generated_images: transformedResult.generated_images || [],
+              // Include internal links
+              internal_links: transformedResult.internal_links || [],
+              // Include excerpt
+              excerpt: transformedResult.excerpt,
             }
           })
           .eq('queue_id', queueId);
         
-        logger.debug('✅ Queue entry updated with generated content');
+        logger.debug('✅ Queue entry updated with enhanced content (includes Cloudinary URLs and HTML structure)');
       } catch (error) {
         logger.warn('⚠️ Failed to update queue entry with content:', error);
       }
