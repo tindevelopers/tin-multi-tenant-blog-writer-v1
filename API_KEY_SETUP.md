@@ -1,78 +1,61 @@
-# Blog Writer API Key Setup Guide
+# Blog Writer API Configuration Guide
 
-## 🔐 Required: Set BLOG_WRITER_API_KEY in Vercel
+## 🌐 Open API - No Authentication Required
 
-The blog generation feature requires a valid API key to authenticate with the Blog Writer API. If you see a **401 Unauthorized** error, the API key is missing or invalid.
+The Blog Writer API is **open** and does **not require authentication**. The API key is **optional** and only needed for special features or future use.
 
 ## Quick Setup
 
-### 1. Get Your API Key
-Contact your API administrator or check your organization settings to obtain the `BLOG_WRITER_API_KEY`.
+**No API key is required!** The Blog Writer API is open and works without authentication.
 
-### 2. Set in Vercel Dashboard
+### Optional: API Key (For Future Use)
+
+If you have an API key for special features, you can optionally set it:
 
 1. Go to your Vercel project dashboard
 2. Navigate to **Settings** → **Environment Variables**
-3. Add a new variable:
+3. Add a new variable (optional):
    - **Name**: `BLOG_WRITER_API_KEY`
-   - **Value**: Your API key (e.g., `your-api-key-here`)
+   - **Value**: Your API key (if you have one)
    - **Environment**: Select all (Production, Preview, Development)
 
-4. Click **Save**
+4. Click **Save** (only if you have an API key)
 
-### 3. Redeploy
-
-After adding the environment variable, trigger a new deployment:
-- Go to **Deployments** tab
-- Click **Redeploy** on the latest deployment
-- Or push a new commit to trigger automatic deployment
-
-## Alternative: Organization-Level API Keys
-
-If you prefer organization-level API keys (multi-tenant setup):
-
-1. Update your organization's `settings` JSONB field in the `organizations` table:
-```sql
-UPDATE organizations 
-SET settings = jsonb_set(
-  COALESCE(settings, '{}'::jsonb),
-  '{blog_writer_api_key}',
-  '"your-api-key-here"'
-)
-WHERE org_id = 'your-org-id';
-```
-
-2. The system will automatically check organization settings if the environment variable is not set.
+**Note**: Leaving this unset is perfectly fine - the API will work without it.
 
 ## Verification
 
-After setting the API key, test blog generation:
+Test blog generation (no API key needed):
 1. Go to **Content Workflow** → **Editor**
 2. Enter a topic and keywords
 3. Click **Generate Blog**
-4. Check the browser console and Vercel logs for authentication status
+4. The API will work without authentication
 
 ## Troubleshooting
 
 ### Error: 401 Unauthorized
 
-**Cause**: API key is missing or invalid
+**Cause**: This should not happen with an open API. If you see this error:
+
+**Possible causes**:
+1. The API endpoint URL is incorrect
+2. Network/firewall issues
+3. The API service is down
 
 **Solution**:
-1. Verify `BLOG_WRITER_API_KEY` is set in Vercel environment variables
-2. Check that the key is correct (no extra spaces, correct format)
-3. Ensure the key is set for the correct environment (Production/Preview/Development)
-4. Redeploy after adding the variable
+1. Check Vercel logs for the actual API URL being called
+2. Verify the API endpoint is accessible
+3. Check network connectivity
+4. Contact API administrator if the issue persists
 
-### Error: API key not configured
+### Error: API endpoint not found
 
-**Cause**: Environment variable not found
+**Cause**: Incorrect API URL configuration
 
 **Solution**:
-1. Check Vercel dashboard → Settings → Environment Variables
-2. Verify the variable name is exactly `BLOG_WRITER_API_KEY` (case-sensitive)
-3. Ensure it's set for all environments you're using
-4. Redeploy the application
+1. Verify `BLOG_WRITER_API_URL` is set correctly (or uses default)
+2. Check that the API service is running
+3. Ensure the endpoint path is correct (`/api/v1/blog/generate-enhanced`)
 
 ### Check Logs
 
@@ -93,11 +76,15 @@ The system automatically selects the correct API endpoint based on your branch:
 
 You can override this by setting `BLOG_WRITER_API_URL` in environment variables.
 
-## Security Notes
+## Notes
 
-⚠️ **Important**: 
+✅ **Open API**: 
+- No authentication required
+- API key is optional (only for future features)
+- Works out of the box without configuration
+
+If you do set an API key in the future:
 - Never commit API keys to git
 - Use Vercel environment variables for production
-- Rotate keys regularly
-- Use different keys for different environments if possible
+- Keep keys secure
 

@@ -74,13 +74,17 @@ class BlogWriterAPI {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     
-    const headers = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      // Only add Authorization header if API key is provided (for open API, this is optional)
-      ...(this.apiKey && this.apiKey !== 'not-required-for-open-api' && { 'Authorization': `Bearer ${this.apiKey}` }),
       ...options.headers,
     };
+    
+    // Only add Authorization header if API key is explicitly provided and not empty
+    // API is open, so authentication is optional
+    if (this.apiKey && this.apiKey.trim() !== '' && this.apiKey !== 'not-required-for-open-api') {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
 
     logger.debug('Making API request', { url, method: options.method || 'GET' });
 

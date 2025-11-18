@@ -525,45 +525,16 @@ export async function POST(request: NextRequest) {
     const { BLOG_WRITER_API_URL: resolvedApiUrl } = await import('@/lib/blog-writer-api-url');
     const API_BASE_URL = process.env.BLOG_WRITER_API_URL || resolvedApiUrl || 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
     
-    // Try to get API key from organization settings first, then fall back to env var
-    let API_KEY = process.env.BLOG_WRITER_API_KEY;
+    // API is open - no authentication required, but check for optional API key
+    // Only use API key if explicitly provided (for future use or special endpoints)
+    const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
     
-    // Check organization settings for API key
-    if (orgId && !API_KEY) {
-      try {
-        const { data: orgData } = await supabase
-          .from('organizations')
-          .select('settings')
-          .eq('org_id', orgId)
-          .single();
-        
-        if (orgData?.settings && typeof orgData.settings === 'object') {
-          const settings = orgData.settings as Record<string, unknown>;
-          API_KEY = settings.blog_writer_api_key as string || 
-                   settings.BLOG_WRITER_API_KEY as string ||
-                   settings.api_key as string ||
-                   null;
-        }
-      } catch (error) {
-        logger.warn('Failed to retrieve API key from organization settings', { error });
-      }
-    }
-    
-    // Log API key status (without exposing the actual key)
+    // Log API call details
     logger.debug('🌐 Calling external API', { 
       url: `${API_BASE_URL}${endpoint}`,
       hasApiKey: !!API_KEY,
-      apiKeyLength: API_KEY ? API_KEY.length : 0,
-      apiKeySource: API_KEY ? (process.env.BLOG_WRITER_API_KEY ? 'env' : 'org_settings') : 'none'
+      authentication: API_KEY ? 'Bearer token' : 'Open API (no auth required)'
     });
-    
-    // Warn if no API key is found
-    if (!API_KEY) {
-      logger.warn('⚠️ No API key found - request may fail with 401', {
-        checkedEnv: !!process.env.BLOG_WRITER_API_KEY,
-        checkedOrgSettings: !!orgId
-      });
-    }
     
     logger.debug('🌐 Using endpoint (Enhanced - Always Enabled)', { endpoint });
     
@@ -900,12 +871,20 @@ export async function POST(request: NextRequest) {
       ? `${API_BASE_URL}${endpoint}?async_mode=true`
       : `${API_BASE_URL}${endpoint}`;
     
+    // Build headers - only include Authorization if API key is provided
+    // API is open, so authentication is optional
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Only add Authorization header if API key is explicitly provided
+    if (API_KEY && API_KEY.trim() !== '') {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` })
-      },
+      headers,
       body: JSON.stringify(requestPayload),
     });
     
@@ -918,20 +897,8 @@ export async function POST(request: NextRequest) {
         error: errorText,
         url: apiUrl,
         hasApiKey: !!API_KEY,
-        apiKeySource: API_KEY ? (process.env.BLOG_WRITER_API_KEY ? 'env' : 'org_settings') : 'none'
+        authentication: API_KEY ? 'Bearer token' : 'Open API (no auth)'
       });
-      
-      // Provide helpful error message for 401 errors
-      if (response.status === 401) {
-        const errorMessage = API_KEY 
-          ? `API authentication failed. Please verify your BLOG_WRITER_API_KEY is valid.`
-          : `API authentication required. Please set BLOG_WRITER_API_KEY in Vercel environment variables or organization settings.`;
-        
-        logger.error('🔐 Authentication Error', {
-          message: errorMessage,
-          suggestion: 'Set BLOG_WRITER_API_KEY in Vercel dashboard → Settings → Environment Variables'
-        });
-      }
       
       // Update queue entry with error if queue exists
       if (queueId) {
@@ -940,9 +907,7 @@ export async function POST(request: NextRequest) {
             .from('blog_generation_queue')
             .update({
               status: 'failed',
-              generation_error: response.status === 401 
-                ? `Authentication failed: ${API_KEY ? 'Invalid API key' : 'API key not configured'}. Please check BLOG_WRITER_API_KEY in Vercel environment variables.`
-                : `API error ${response.status}: ${errorText.substring(0, 500)}`,
+              generation_error: `API error ${response.status}: ${errorText.substring(0, 500)}`,
               generation_completed_at: new Date().toISOString()
             })
             .eq('queue_id', queueId);
