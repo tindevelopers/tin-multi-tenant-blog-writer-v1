@@ -521,12 +521,50 @@ export async function POST(request: NextRequest) {
     logger.debug('✅ Cloud Run is healthy, proceeding with blog generation...');
     
     // Call the external blog writer API
-    const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
-    const API_KEY = process.env.BLOG_WRITER_API_KEY;
+    // Use the blog-writer-api-url.ts helper to get the correct URL based on branch
+    const { BLOG_WRITER_API_URL: resolvedApiUrl } = await import('@/lib/blog-writer-api-url');
+    const API_BASE_URL = process.env.BLOG_WRITER_API_URL || resolvedApiUrl || 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
     
-    // shouldUseEnhanced and endpoint already declared above for queue entry
-    logger.debug('🌐 Calling external API', { url: `${API_BASE_URL}${endpoint}` });
-    logger.debug('🔑 API Key present', { hasKey: !!API_KEY });
+    // Try to get API key from organization settings first, then fall back to env var
+    let API_KEY = process.env.BLOG_WRITER_API_KEY;
+    
+    // Check organization settings for API key
+    if (orgId && !API_KEY) {
+      try {
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('settings')
+          .eq('org_id', orgId)
+          .single();
+        
+        if (orgData?.settings && typeof orgData.settings === 'object') {
+          const settings = orgData.settings as Record<string, unknown>;
+          API_KEY = settings.blog_writer_api_key as string || 
+                   settings.BLOG_WRITER_API_KEY as string ||
+                   settings.api_key as string ||
+                   null;
+        }
+      } catch (error) {
+        logger.warn('Failed to retrieve API key from organization settings', { error });
+      }
+    }
+    
+    // Log API key status (without exposing the actual key)
+    logger.debug('🌐 Calling external API', { 
+      url: `${API_BASE_URL}${endpoint}`,
+      hasApiKey: !!API_KEY,
+      apiKeyLength: API_KEY ? API_KEY.length : 0,
+      apiKeySource: API_KEY ? (process.env.BLOG_WRITER_API_KEY ? 'env' : 'org_settings') : 'none'
+    });
+    
+    // Warn if no API key is found
+    if (!API_KEY) {
+      logger.warn('⚠️ No API key found - request may fail with 401', {
+        checkedEnv: !!process.env.BLOG_WRITER_API_KEY,
+        checkedOrgSettings: !!orgId
+      });
+    }
+    
     logger.debug('🌐 Using endpoint (Enhanced - Always Enabled)', { endpoint });
     
     // Auto-enable quality features for premium/enterprise quality levels
@@ -875,7 +913,25 @@ export async function POST(request: NextRequest) {
     
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error('❌ External API error', { status: response.status, error: errorText });
+      logger.error('❌ External API error', { 
+        status: response.status, 
+        error: errorText,
+        url: apiUrl,
+        hasApiKey: !!API_KEY,
+        apiKeySource: API_KEY ? (process.env.BLOG_WRITER_API_KEY ? 'env' : 'org_settings') : 'none'
+      });
+      
+      // Provide helpful error message for 401 errors
+      if (response.status === 401) {
+        const errorMessage = API_KEY 
+          ? `API authentication failed. Please verify your BLOG_WRITER_API_KEY is valid.`
+          : `API authentication required. Please set BLOG_WRITER_API_KEY in Vercel environment variables or organization settings.`;
+        
+        logger.error('🔐 Authentication Error', {
+          message: errorMessage,
+          suggestion: 'Set BLOG_WRITER_API_KEY in Vercel dashboard → Settings → Environment Variables'
+        });
+      }
       
       // Update queue entry with error if queue exists
       if (queueId) {
@@ -884,7 +940,9 @@ export async function POST(request: NextRequest) {
             .from('blog_generation_queue')
             .update({
               status: 'failed',
-              generation_error: `API error ${response.status}: ${errorText.substring(0, 500)}`,
+              generation_error: response.status === 401 
+                ? `Authentication failed: ${API_KEY ? 'Invalid API key' : 'API key not configured'}. Please check BLOG_WRITER_API_KEY in Vercel environment variables.`
+                : `API error ${response.status}: ${errorText.substring(0, 500)}`,
               generation_completed_at: new Date().toISOString()
             })
             .eq('queue_id', queueId);
