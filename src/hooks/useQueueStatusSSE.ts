@@ -76,7 +76,7 @@ export function useQueueStatusSSE(queueId: string | null) {
           eventSource.close();
         }
       } catch (err) {
-        logger.error("Error parsing SSE message:", err, { rawData: event.data });
+        logger.error("Error parsing SSE message:", { error: err, rawData: event.data });
         setError("Failed to parse status update");
       }
     };
