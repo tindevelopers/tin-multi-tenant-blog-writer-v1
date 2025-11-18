@@ -74,11 +74,22 @@ class BlogWriterAPI {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     
+    // Build headers object - handle both Headers object and plain object
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      ...options.headers,
     };
+    
+    // Convert Headers object to plain object if needed
+    if (options.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((value, key) => {
+          headers[key] = value;
+        });
+      } else if (typeof options.headers === 'object') {
+        Object.assign(headers, options.headers);
+      }
+    }
     
     // Only add Authorization header if API key is explicitly provided and not empty
     // API is open, so authentication is optional
