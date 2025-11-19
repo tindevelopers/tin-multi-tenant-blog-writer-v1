@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     const limit = body.limit || 150;
     
     // Try enhanced endpoint first (returns search volume, CPC, difficulty, competition)
-    // If unavailable, fallback to suggest endpoint
+    // If unavailable or returns error, fallback to suggest endpoint
     let endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
     let requestBody: {
       keywords: string[];
@@ -104,9 +104,13 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // If enhanced endpoint returns 503 (not available), fallback to suggest endpoint
-    if (response.status === 503) {
-      logger.debug('⚠️ Enhanced endpoint unavailable, falling back to suggest endpoint');
+    // If enhanced endpoint returns 503 (not available) or 500 (error), fallback to suggest endpoint
+    if (response.status === 503 || response.status === 500) {
+      const errorText = response.status === 500 ? await response.text().catch(() => '') : '';
+      logger.debug(`⚠️ Enhanced endpoint unavailable (${response.status}), falling back to suggest endpoint`, {
+        error: errorText.substring(0, 200)
+      });
+      
       endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`;
       requestBody = {
         keyword: keyword,
@@ -145,6 +149,21 @@ export async function POST(request: NextRequest) {
       // Enhanced endpoint returns analysis for the keyword with metadata
       const keywordAnalysis = data.enhanced_analysis[keyword];
       
+      // Safely extract difficulty - backend may return 'difficulty' (string) or 'difficulty_score' (number)
+      // Convert to string format if needed
+      let difficultyValue: string | null = null;
+      if (keywordAnalysis) {
+        if (typeof keywordAnalysis.difficulty === 'string') {
+          difficultyValue = keywordAnalysis.difficulty;
+        } else if (typeof keywordAnalysis.difficulty_score === 'number') {
+          // Convert numeric difficulty_score to string
+          difficultyValue = keywordAnalysis.difficulty_score <= 30 ? 'easy' :
+                           keywordAnalysis.difficulty_score <= 60 ? 'medium' : 'hard';
+        } else if (keywordAnalysis.difficulty !== undefined) {
+          difficultyValue = String(keywordAnalysis.difficulty);
+        }
+      }
+      
       // Extract suggested keywords from related_keywords and long_tail_keywords
       const suggestedKeywords = [
         ...(keywordAnalysis?.related_keywords || []),
@@ -156,10 +175,10 @@ export async function POST(request: NextRequest) {
         const keywordText = typeof kw === 'string' ? kw : (kw.keyword || String(kw));
         return {
           keyword: keywordText,
-          search_volume: null, // Will need separate analysis for each suggestion
-          difficulty: keywordAnalysis?.difficulty || null,
-          competition: keywordAnalysis?.competition || null,
-          cpc: keywordAnalysis?.cpc || null
+          search_volume: keywordAnalysis?.search_volume ?? null,
+          difficulty: difficultyValue,
+          competition: keywordAnalysis?.competition ?? null,
+          cpc: keywordAnalysis?.cpc ?? null
         };
       });
       
