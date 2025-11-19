@@ -2,21 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealth from '@/lib/cloud-run-health';
-import BlogImageGenerator, { type GeneratedImage } from '@/lib/image-generation';
-import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload';
+import { type GeneratedImage } from '@/lib/image-generation';
 import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
 import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
-// Create server-side image generator (uses direct Cloud Run URL)
-// Use the blog-writer-api-url.ts helper to get the correct URL based on branch
-const imageGenerator = new BlogImageGenerator(
-  process.env.BLOG_WRITER_API_URL || BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west9.run.app',
-  process.env.BLOG_WRITER_API_KEY || '',
-  false // Don't use local route on server-side
-);
+// Image generation is now handled separately via /api/blog-writer/images/generate endpoint
 
 /**
  * Helper function to build the transformed blog generation response
@@ -93,6 +86,24 @@ function buildBlogResponse(
   progressUpdates: ProgressUpdate[],
   featuredImage: GeneratedImage | null,
   sectionImages: Array<{ position: number; image: GeneratedImage }>,
+  imagePlaceholders: {
+    featured_image: {
+      prompt: string;
+      style: string;
+      aspect_ratio: string;
+      quality: string;
+      type: string;
+      keywords: string[];
+    };
+    section_images: Array<{
+      position: number;
+      prompt: string;
+      style: string;
+      aspect_ratio: string;
+      quality: string;
+      type: string;
+    }>;
+  },
   options: {
     topic: string;
     brandVoice: BrandVoice | null;
@@ -159,34 +170,12 @@ function buildBlogResponse(
     // v1.3.1: Internal links (3-5 automatically generated)
     internal_links: result.internal_links || [],
     
-    // v1.3.1: Generated images (featured + section images)
-    generated_images: [
-      ...(featuredImage?.image_url ? [{
-        type: 'featured' as const,
-        image_url: featuredImage.image_url,
-        alt_text: `Featured image for ${title}`
-      }] : []),
-      ...sectionImages
-        .filter(img => img.image.image_url)
-        .map(img => ({
-          type: 'section' as const,
-          image_url: img.image.image_url!,
-          alt_text: (img.image as any).alt_text || `Section image`
-        }))
-    ],
+    // Image placeholders (images will be generated separately via frontend)
+    generated_images: null, // Images not generated during blog creation
+    image_placeholders: imagePlaceholders, // Placeholders for frontend-triggered generation
     
-    // Include generated featured image if available
-    featured_image: featuredImage ? {
-      image_id: featuredImage.image_id,
-      image_url: featuredImage.image_url,
-      image_data: featuredImage.image_data,
-      width: featuredImage.width,
-      height: featuredImage.height,
-      format: featuredImage.format,
-      alt_text: `Featured image for ${title}`,
-      quality_score: featuredImage.quality_score,
-      safety_score: featuredImage.safety_score
-    } : null,
+    // Featured image placeholder (will be generated separately)
+    featured_image: null,
     
     // Metadata about the generation process
     metadata: {
@@ -194,8 +183,8 @@ function buildBlogResponse(
       used_preset: !!contentPreset,
       endpoint_used: endpoint,
       enhanced: shouldUseEnhanced,
-      image_generated: !!featuredImage,
-      section_images_generated: sectionImages.length,
+      image_generated: false, // Images generated separately
+      section_images_generated: 0, // Images generated separately
       content_enhanced: true,
       content_format: 'rich_html',
       product_research_requested: requiresProductResearch,
@@ -204,17 +193,18 @@ function buildBlogResponse(
       total_progress_stages: progressUpdates.length > 0 
         ? progressUpdates[progressUpdates.length - 1].total_stages 
         : null,
+      image_placeholders_created: true, // Indicates placeholders are available
     },
     
-    // Image generation status
+    // Image generation status (images not generated yet)
     image_generation_status: {
-      featured_image: featuredImage ? 'success' : 'failed',
-      featured_image_url: featuredImage?.image_url || null,
-      section_images_count: sectionImages.length,
-      section_images: sectionImages.map(img => ({
+      featured_image: 'pending', // Will be generated separately
+      featured_image_url: null,
+      section_images_count: imagePlaceholders.section_images.length,
+      section_images: imagePlaceholders.section_images.map(img => ({
         position: img.position,
-        url: img.image.image_url || null,
-        status: img.image.image_url ? 'success' : 'failed'
+        url: null,
+        status: 'pending' as const
       }))
     }
   };
@@ -1062,212 +1052,52 @@ export async function POST(request: NextRequest) {
     const rawContent = result.blog_post?.content || result.blog_post?.body || result.content || '';
     const blogTitle = result.blog_post?.title || result.title || topic;
     
-    // Generate featured image (non-blocking, but wait for it)
-    let featuredImage: GeneratedImage | null = null;
-    const sectionImages: Array<{ position: number; image: GeneratedImage }> = [];
-    try {
-      logger.debug('🖼️ Starting featured image generation...');
-      const imageKeywords = Array.isArray(keywords) ? keywords : [];
-      const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
-      
-      // Generate image with timeout (don't block blog generation if it takes too long)
-      featuredImage = await Promise.race([
-        imageGenerator.generateFeaturedImage(
-          imageTopic,
-          imageKeywords,
-          {
-            style: 'photographic',
-            quality: 'high',
-            aspect_ratio: '16:9'
-          }
-        ),
-        new Promise<null>((resolve) => 
-          setTimeout(() => {
-            logger.warn('⏱️ Image generation timeout - continuing without image');
-            resolve(null);
-          }, 30000) // 30 second timeout
-        )
-      ]);
-      
-      if (featuredImage) {
-        logger.debug('✅ Featured image generated successfully:', {
-          imageId: featuredImage.image_id,
-          width: featuredImage.width,
-          height: featuredImage.height,
-          hasUrl: !!featuredImage.image_url,
-          imageUrl: featuredImage.image_url?.substring(0, 100) || 'No URL'
-        });
-      } else {
-        logger.error('❌ Featured image generation failed or returned null');
-        logger.error('   Topic:', imageTopic);
-        logger.error('   Keywords:', imageKeywords);
-        logger.error('   This may indicate:');
-        logger.error('   1. Stability AI API not configured');
-        logger.error('   2. Image generation endpoint not working');
-        logger.error('   3. Timeout (30 seconds exceeded)');
-        logger.error('   4. API returned error');
-      }
-
-      // Upload to Cloudinary if org has credentials configured
-      if (featuredImage) {
-        try {
-          const imageFileName = `blog-featured-${Date.now()}.${featuredImage.format || 'png'}`;
-          const folder = `blog-images/${orgId}`;
-          
-          logger.debug('☁️ Uploading featured image to Cloudinary...');
-          const cloudinaryResult = await uploadViaBlogWriterAPI(
-            featuredImage.image_url || '',
-            featuredImage.image_data || null,
-            orgId,
-            imageFileName,
-            folder
-          );
-
-          if (cloudinaryResult) {
-            logger.debug('✅ Featured image uploaded to Cloudinary:', {
-              publicId: cloudinaryResult.public_id,
-              secureUrl: cloudinaryResult.secure_url
-            });
-
-            // Save to media_assets table
-            const assetId = await saveMediaAsset(
-              orgId,
-              userId || null,
-              cloudinaryResult,
-              imageFileName,
-              {
-                source: 'ai_generated',
-                blog_topic: imageTopic,
-                keywords: imageKeywords,
-                original_image_id: featuredImage.image_id,
-                quality_score: featuredImage.quality_score,
-                safety_score: featuredImage.safety_score,
-                image_type: 'featured'
-              }
-            );
-
-            if (assetId) {
-              logger.debug('✅ Featured image saved to media_assets:', assetId);
-              // Update featuredImage to use Cloudinary URL
-              featuredImage.image_url = cloudinaryResult.secure_url;
-              featuredImage.image_data = undefined;
-            } else {
-              logger.warn('⚠️ Featured image uploaded to Cloudinary but failed to save to database');
-            }
-          }
-        } catch (uploadError) {
-          logger.warn('⚠️ Cloudinary upload error (non-critical):', uploadError);
-        }
-      }
-
-      // Generate section images for better visual engagement
-      try {
-        logger.debug('🖼️ Generating section images...');
-        const sections = extractSections(rawContent);
-        const imageKeywords = Array.isArray(keywords) ? keywords : [];
-        
-        // Generate images for every other section (to avoid too many images)
-        for (let i = 0; i < sections.length; i += 2) {
-          if (i >= 4) break; // Limit to 4 section images max
-          
-          const section = sections[i];
-          const sectionPrompt = `Professional blog image illustrating: ${section.title}, ${imageTopic}`;
-          
-          try {
-            const sectionImage = await imageGenerator.generateImage({
-              prompt: sectionPrompt,
-              style: 'photographic',
-              aspect_ratio: '16:9',
-              quality: 'high',
-              width: 1920,
-              height: 1080,
-              negative_prompt: 'blurry, low quality, watermark, text overlay'
-            });
-
-            if (sectionImage.success && sectionImage.images.length > 0) {
-              const img = sectionImage.images[0];
-              
-              // Upload to Cloudinary
-              const imageFileName = `blog-section-${i}-${Date.now()}.${img.format || 'png'}`;
-              const folder = `blog-images/${orgId}`;
-              
-              const cloudinaryResult = await uploadViaBlogWriterAPI(
-                img.image_url || '',
-                img.image_data || null,
-                orgId,
-                imageFileName,
-                folder
-              );
-
-              if (cloudinaryResult) {
-                img.image_url = cloudinaryResult.secure_url;
-                img.image_data = undefined;
-                
-                // Save to media_assets
-                const sectionAssetId = await saveMediaAsset(
-                  orgId,
-                  userId || null,
-                  cloudinaryResult,
-                  imageFileName,
-                  {
-                    source: 'ai_generated',
-                    blog_topic: imageTopic,
-                    section_title: section.title,
-                    original_image_id: img.image_id,
-                    image_type: 'section'
-                  }
-                );
-
-                if (sectionAssetId) {
-                  logger.debug(`✅ Section image ${i + 1} saved to media_assets:`, sectionAssetId);
-                } else {
-                  logger.warn(`⚠️ Section image ${i + 1} uploaded to Cloudinary but failed to save to database`);
-                }
-
-                sectionImages.push({
-                  position: section.wordPosition,
-                  image: img
-                });
-                
-                logger.debug(`✅ Section image ${i + 1} generated and uploaded`);
-              }
-            }
-          } catch (sectionImageError) {
-            logger.warn(`⚠️ Failed to generate section image ${i + 1}:`, sectionImageError);
-            // Continue with other sections
-          }
-        }
-      } catch (error) {
-        logger.warn('⚠️ Section image generation failed (non-critical):', error);
-      }
-    } catch (error) {
-      // Log detailed error information
-      const errorDetails = error instanceof Error ? {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      } : { error: String(error) };
-      
-      const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
-      const imageKeywords = Array.isArray(keywords) ? keywords : [];
-      
-      logger.error('❌ Image generation failed:', {
-        ...errorDetails,
-        topic: imageTopic,
-        keywords: imageKeywords,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Don't fail blog generation, but log the error for debugging
-      logger.warn('⚠️ Continuing blog generation without images');
-    }
+    // Image generation is now handled separately after blog creation
+    // Create placeholders for image generation that can be triggered from the frontend
+    const imageKeywords = Array.isArray(keywords) ? keywords : [];
+    const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
     
-    // Enhance content to rich HTML with images embedded
+    // Extract sections for potential section images
+    const sections = extractSections(rawContent);
+    const sectionImagePlaceholders = sections
+      .slice(0, 4) // Limit to 4 section images max
+      .map((section, index) => ({
+        position: section.wordPosition,
+        prompt: `Professional blog image illustrating: ${section.title}, ${imageTopic}`,
+        style: 'photographic' as const,
+        aspect_ratio: '16:9' as const,
+        quality: 'high' as const,
+        type: 'section' as const
+      }));
+    
+    // Create image generation placeholders
+    const imagePlaceholders = {
+      featured_image: {
+        prompt: `Professional product photography: ${imageTopic}. High quality, clean background, professional lighting`,
+        style: 'photographic' as const,
+        aspect_ratio: '16:9' as const,
+        quality: 'high' as const,
+        type: 'featured' as const,
+        keywords: imageKeywords
+      },
+      section_images: sectionImagePlaceholders
+    };
+    
+    logger.debug('📸 Image generation placeholders created:', {
+      featuredImagePrompt: imagePlaceholders.featured_image.prompt,
+      sectionImageCount: imagePlaceholders.section_images.length
+    });
+    
+    // Set featuredImage and sectionImages to null (images will be generated separately)
+    const featuredImage: GeneratedImage | null = null;
+    const sectionImages: Array<{ position: number; image: GeneratedImage }> = [];
+    
+    // Enhance content to rich HTML (without images - they'll be added later)
     logger.debug('✨ Enhancing content to rich HTML...');
     const enhancedContent = enhanceContentToRichHTML(rawContent, {
-      featuredImage,
-      sectionImages,
-      includeImages: true,
+      featuredImage: null, // Images will be generated separately
+      sectionImages: [], // Images will be generated separately
+      includeImages: false, // Don't include images in initial generation
       enhanceFormatting: true,
       addStructure: true
     });
@@ -1288,6 +1118,7 @@ export async function POST(request: NextRequest) {
       progressUpdates,
       featuredImage,
       sectionImages,
+      imagePlaceholders,
       {
         topic,
         brandVoice,
@@ -1323,8 +1154,9 @@ export async function POST(request: NextRequest) {
       seoScore: transformedResult.seo_score,
       enhanced: shouldUseEnhanced,
       productResearchRequested: requiresProductResearch,
-      imageGenerated: !!featuredImage,
-      sectionImagesCount: sectionImages.length,
+      imageGenerated: false, // Images generated separately
+      sectionImagesCount: 0, // Images generated separately
+      imagePlaceholdersCreated: true,
       progressUpdatesCount: transformedResult.progress_updates.length,
       hasProgressUpdates: transformedResult.progress_updates.length > 0
     });
@@ -1352,11 +1184,12 @@ export async function POST(request: NextRequest) {
               structured_data: transformedResult.structured_data || null,
               meta_title: transformedResult.meta_title,
               meta_description: transformedResult.meta_description,
-              // Include featured image URL for draft creation
-              featured_image_url: featuredImage?.image_url || null,
+              // Image placeholders (images generated separately)
+              featured_image_url: null, // Will be generated separately
               featured_image_alt_text: `Featured image for ${transformedResult.title}`,
-              // Include generated images metadata
-              generated_images: transformedResult.generated_images || [],
+              // Include image placeholders for frontend-triggered generation
+              image_placeholders: imagePlaceholders,
+              generated_images: null, // Images not generated during blog creation
               // Include internal links
               internal_links: transformedResult.internal_links || [],
               // Include excerpt
