@@ -77,6 +77,30 @@ export interface KeywordData {
   // Related Keywords
   related_keywords: string[];
   long_tail_keywords: string[];
+  // Enhanced Related Keywords (with full metrics) - v1.3.0+
+  related_keywords_enhanced?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  // Question-type keywords - v1.3.0+
+  questions?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  // Topic-type keywords - v1.3.0+
+  topics?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
   // Additional Data (v1.3.0)
   also_rank_for?: string[];                  // Keywords that pages ranking for this also rank for
   also_talk_about?: string[];                // Related topics/entities

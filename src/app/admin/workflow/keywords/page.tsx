@@ -29,6 +29,29 @@ interface KeywordWithMetrics extends KeywordData {
   cluster_score?: number;
   category_type?: 'topic' | 'question' | 'action' | 'entity';
   selected?: boolean;
+  // New enhanced fields
+  global_search_volume?: number;
+  related_keywords_enhanced?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  questions?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  topics?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
 }
 
 interface ParentTopicCluster {
@@ -71,6 +94,7 @@ export default function KeywordResearchPage() {
   const [minVolume, setMinVolume] = useState<number>(0);
   const [collectionName, setCollectionName] = useState('');
   const [location, setLocation] = useState<string>('United States');
+  const [expandedKeywords, setExpandedKeywords] = useState<Set<string>>(new Set());
   
   // Pagination for large keyword lists (150+)
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -333,7 +357,7 @@ export default function KeywordResearchPage() {
         // Extract search_volume from various possible locations
         const searchVolume = data?.search_volume 
           ?? data?.volume 
-          ?? data?.monthly_searches 
+          ?? data?.monthly_searches?.[0]?.search_volume
           ?? data?.metadata?.search_volume 
           ?? data?.metadata?.volume
           ?? null;
@@ -341,14 +365,20 @@ export default function KeywordResearchPage() {
         return {
         keyword,
           search_volume: searchVolume, // Preserve null from API, don't convert to 0
+          global_search_volume: data?.global_search_volume ?? null,
           difficulty: data?.difficulty || 'medium',
           competition: data?.competition ?? 0.5,
           cpc: data?.cpc ?? null,
-          trend_score: data?.trend_score ?? 0,
+          trend_score: data?.trend_score ?? null,
           recommended: data?.recommended ?? false,
           reason: data?.reason || '',
           related_keywords: data?.related_keywords || [],
           long_tail_keywords: data?.long_tail_keywords || [],
+          // Enhanced related keywords with metrics
+          related_keywords_enhanced: data?.related_keywords_enhanced || null,
+          // Question and topic keywords
+          questions: data?.questions || null,
+          topics: data?.topics || null,
           // Include clustering data from API
           parent_topic: data?.parent_topic,
           cluster_score: data?.cluster_score,
@@ -423,6 +453,17 @@ export default function KeywordResearchPage() {
       newSelected.add(keyword);
     }
     setSelectedKeywords(newSelected);
+  };
+
+  // Toggle keyword expansion
+  const toggleKeywordExpansion = (keyword: string) => {
+    const newExpanded = new Set(expandedKeywords);
+    if (newExpanded.has(keyword)) {
+      newExpanded.delete(keyword);
+    } else {
+      newExpanded.add(keyword);
+    }
+    setExpandedKeywords(newExpanded);
   };
 
   // Select all keywords
@@ -734,6 +775,7 @@ export default function KeywordResearchPage() {
     if (keywords.length === 0) {
       return {
         totalSearchVolume: 0,
+        totalGlobalVolume: null,
         avgDifficulty: 'medium' as const,
         avgCompetition: 0,
         avgCPC: 0,
@@ -746,6 +788,14 @@ export default function KeywordResearchPage() {
       .filter((v): v is number => v !== null && v !== undefined && typeof v === 'number');
     
     const totalSearchVolume = validVolumes.reduce((sum, v) => sum + v, 0);
+    
+    // Calculate global search volume if available
+    const globalVolumes = keywords
+      .map(k => k.global_search_volume)
+      .filter((v): v is number => v !== null && v !== undefined && typeof v === 'number');
+    const totalGlobalVolume = globalVolumes.length > 0
+      ? globalVolumes.reduce((sum, v) => sum + v, 0)
+      : null;
     
     const difficultyValues = keywords.map(k => {
       if (k.difficulty === 'easy' || k.difficulty === 'very_easy') return 0.33;
@@ -776,6 +826,7 @@ export default function KeywordResearchPage() {
 
     return {
       totalSearchVolume,
+      totalGlobalVolume,
       avgDifficulty,
       avgCompetition,
       avgCPC,
@@ -903,10 +954,17 @@ export default function KeywordResearchPage() {
               <TrendingUp className="w-5 h-5 text-gray-400" />
             </div>
             <div className="flex items-center gap-3">
-              <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                {aggregateMetrics.totalSearchVolume > 0 
-                  ? aggregateMetrics.totalSearchVolume.toLocaleString() 
-                  : '0'}
+              <div>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {aggregateMetrics.totalSearchVolume > 0 
+                    ? aggregateMetrics.totalSearchVolume.toLocaleString() 
+                    : '0'}
+                </div>
+                {aggregateMetrics.totalGlobalVolume && aggregateMetrics.totalGlobalVolume !== aggregateMetrics.totalSearchVolume && (
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    🌍 Global: {aggregateMetrics.totalGlobalVolume.toLocaleString()}
+                  </div>
+                )}
               </div>
               <div className="text-sm text-gray-500 dark:text-gray-400">
                 {aggregateMetrics.totalSearchVolume > 0 ? 'Total monthly searches' : 'No trend data'}
@@ -1214,12 +1272,15 @@ export default function KeywordResearchPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                     Parent Topic
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    Details
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {paginatedKeywords.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                       No keywords match your filters
                     </td>
                   </tr>
@@ -1248,9 +1309,32 @@ export default function KeywordResearchPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                      {kw.search_volume !== null && kw.search_volume !== undefined 
-                        ? kw.search_volume.toLocaleString() 
-                        : <span className="text-gray-400 italic">N/A</span>}
+                      <div className="flex flex-col gap-1">
+                        {kw.search_volume !== null && kw.search_volume !== undefined 
+                          ? (
+                            <>
+                              <span className="font-semibold">{kw.search_volume.toLocaleString()}</span>
+                              {kw.global_search_volume && kw.global_search_volume !== kw.search_volume && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  🌍 Global: {kw.global_search_volume.toLocaleString()}
+                                </span>
+                              )}
+                            </>
+                          )
+                          : <span className="text-gray-400 italic">N/A</span>}
+                        {kw.trend_score !== null && kw.trend_score !== undefined && (
+                          <span className={`text-xs flex items-center gap-1 ${
+                            kw.trend_score > 0 
+                              ? 'text-green-600 dark:text-green-400' 
+                              : kw.trend_score < 0
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            {kw.trend_score > 0 ? '↑' : kw.trend_score < 0 ? '↓' : '→'} 
+                            {Math.abs(kw.trend_score * 100).toFixed(0)}%
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1286,7 +1370,88 @@ export default function KeywordResearchPage() {
                         )}
                       </div>
                     </td>
+                    <td className="px-4 py-3">
+                      {(kw.related_keywords_enhanced?.length || kw.questions?.length || kw.topics?.length) ? (
+                        <button
+                          onClick={() => toggleKeywordExpansion(kw.keyword)}
+                          className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+                        >
+                          {expandedKeywords.has(kw.keyword) ? 'Hide' : 'Show'} Details
+                        </button>
+                      ) : null}
+                    </td>
                   </tr>
+                  {expandedKeywords.has(kw.keyword) && (kw.related_keywords_enhanced?.length || kw.questions?.length || kw.topics?.length) && (
+                    <tr key={`${kw.keyword}-details`} className="bg-gray-50 dark:bg-gray-900/50">
+                      <td colSpan={8} className="px-4 py-4">
+                        <div className="space-y-4">
+                          {/* Enhanced Related Keywords */}
+                          {kw.related_keywords_enhanced && kw.related_keywords_enhanced.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Enhanced Related Keywords ({kw.related_keywords_enhanced.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {kw.related_keywords_enhanced.map((rk, idx) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-white mb-1">{rk.keyword}</div>
+                                    <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                                      <span>Vol: {rk.search_volume.toLocaleString()}</span>
+                                      <span>CPC: ${rk.cpc.toFixed(2)}</span>
+                                      <span>Comp: {(rk.competition * 100).toFixed(0)}%</span>
+                                      <span>Diff: {rk.difficulty_score}/100</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Questions */}
+                          {kw.questions && kw.questions.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Questions ({kw.questions.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {kw.questions.map((q, idx) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-white mb-1">{q.keyword}</div>
+                                    <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                                      <span>Vol: {q.search_volume.toLocaleString()}</span>
+                                      <span>CPC: ${q.cpc.toFixed(2)}</span>
+                                      <span>Diff: {q.difficulty_score}/100</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Topics */}
+                          {kw.topics && kw.topics.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Topics ({kw.topics.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {kw.topics.map((t, idx) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-white mb-1">{t.keyword}</div>
+                                    <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                                      <span>Vol: {t.search_volume.toLocaleString()}</span>
+                                      <span>CPC: ${t.cpc.toFixed(2)}</span>
+                                      <span>Diff: {t.difficulty_score}/100</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   ))
                 )}
               </tbody>
