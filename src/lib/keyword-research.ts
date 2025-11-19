@@ -121,6 +121,95 @@ export interface KeywordData {
   serp_ai_summary?: SERPAISummary;
 }
 
+// Enhanced Keyword Analysis Request (v1.3.3)
+export interface EnhancedKeywordAnalysisRequest {
+  keywords: string[];
+  location?: string;
+  language?: string;
+  search_type?: 
+    | "competitor_analysis"
+    | "content_research"
+    | "quick_analysis"
+    | "comprehensive_analysis"
+    | "enhanced_keyword_analysis";
+  include_serp?: boolean;
+  max_suggestions_per_keyword?: number;
+  
+  // SERP Customization (v1.3.3)
+  serp_depth?: number;                    // Default: 20, Range: 5-100
+  serp_prompt?: string;                    // Custom prompt for AI summary
+  include_serp_features?: string[];        // Default: ["featured_snippet", "people_also_ask", "videos", "images"]
+  serp_analysis_type?: "basic" | "ai_summary" | "both";  // Default: "both"
+  
+  // Related Keywords Customization (v1.3.3)
+  related_keywords_depth?: number;        // Default: 1, Range: 1-4
+  related_keywords_limit?: number;        // Default: 20, Range: 5-100
+  
+  // Keyword Ideas Customization (v1.3.3)
+  keyword_ideas_limit?: number;            // Default: 50, Range: 10-200
+  keyword_ideas_type?: "all" | "questions" | "topics";  // Default: "all"
+  
+  // AI Volume Customization (v1.3.3)
+  include_ai_volume?: boolean;             // Default: true
+  ai_volume_timeframe?: number;            // Default: 12, Range: 1-24 (months)
+}
+
+// LLM Research Request (v1.3.3)
+export interface LLMResearchRequest {
+  keywords: string[];                      // Max 10 keywords
+  prompts?: string[];                      // Optional: Auto-generated if not provided
+  llm_models?: string[];                   // Default: ["chatgpt", "claude", "gemini"]
+  max_tokens?: number;                     // Default: 500, Range: 100-2000
+  location?: string;                       // Default: "United States"
+  language?: string;                       // Default: "en"
+  include_consensus?: boolean;             // Default: true
+  include_sources?: boolean;               // Default: true
+  research_type?: "quick" | "comprehensive" | "fact_check" | "content_research";  // Default: "comprehensive"
+}
+
+// Progress Update (for SSE streaming) (v1.3.3)
+export interface ProgressUpdate {
+  stage: string;
+  stage_number: number;
+  total_stages: number;
+  progress_percentage: number;
+  status: string;
+  details?: string;
+  metadata?: Record<string, any>;
+  timestamp: number;
+}
+
+// LLM Research Response (v1.3.3)
+export interface LLMResearchResponse {
+  llm_research: Record<string, {
+    prompts_used: string[];
+    responses: Record<string, Record<string, {
+      text: string;
+      tokens: number;
+      model: string;
+      timestamp: string;
+    }>>;
+    consensus?: string[];
+    differences?: string[];
+    sources?: Array<{ url: string; title: string }>;
+    confidence?: {
+      chatgpt: number;
+      claude: number;
+      gemini: number;
+      average: number;
+    };
+  }>;
+  summary: {
+    total_keywords_researched: number;
+    total_prompts: number;
+    total_llm_queries: number;
+    llm_models_used: string[];
+    average_confidence: number;
+    sources_found: number;
+    research_type: string;
+  };
+}
+
 export interface KeywordAnalysis {
   keyword_analysis: Record<string, KeywordData>;
   overall_score: number;

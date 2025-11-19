@@ -72,11 +72,23 @@ export async function POST(request: NextRequest) {
       competitor_domain?: string;
       // New fields for search persistence
       search_query?: string;
-      search_type?: 'how_to' | 'listicle' | 'product' | 'brand' | 'comparison' | 'qa' | 'evergreen' | 'seasonal' | 'general';
+      search_type?: 'how_to' | 'listicle' | 'product' | 'brand' | 'comparison' | 'qa' | 'evergreen' | 'seasonal' | 'general' 
+        | 'competitor_analysis' | 'content_research' | 'quick_analysis' | 'comprehensive_analysis' | 'enhanced_keyword_analysis';
       niche?: string;
       search_mode?: 'keywords' | 'matching_terms' | 'related_terms' | 'questions' | 'ads_ppc';
       save_search?: boolean;
       filters?: Record<string, unknown>;
+      // v1.3.3 Customization fields
+      serp_depth?: number;
+      serp_prompt?: string;
+      include_serp_features?: string[];
+      serp_analysis_type?: "basic" | "ai_summary" | "both";
+      related_keywords_depth?: number;
+      related_keywords_limit?: number;
+      keyword_ideas_limit?: number;
+      keyword_ideas_type?: "all" | "questions" | "topics";
+      include_ai_volume?: boolean;
+      ai_volume_timeframe?: number;
     }>(request);
     
     // Validate required fields per FRONTEND_API_INTEGRATION_GUIDE.md
@@ -146,6 +158,18 @@ export async function POST(request: NextRequest) {
       include_relevant_pages?: boolean;
       include_serp_ai_summary?: boolean;
       competitor_domain?: string;
+      // v1.3.3 Customization fields
+      search_type?: string;
+      serp_depth?: number;
+      serp_prompt?: string;
+      include_serp_features?: string[];
+      serp_analysis_type?: "basic" | "ai_summary" | "both";
+      related_keywords_depth?: number;
+      related_keywords_limit?: number;
+      keyword_ideas_limit?: number;
+      keyword_ideas_type?: "all" | "questions" | "topics";
+      include_ai_volume?: boolean;
+      ai_volume_timeframe?: number;
     } = {
       keywords: normalizedKeywords,
       location: body.location || 'United States',
@@ -159,6 +183,18 @@ export async function POST(request: NextRequest) {
       include_relevant_pages: body.include_relevant_pages,
       include_serp_ai_summary: body.include_serp_ai_summary,
       competitor_domain: body.competitor_domain,
+      // Forward v1.3.3 customization fields
+      search_type: body.search_type,
+      serp_depth: body.serp_depth,
+      serp_prompt: body.serp_prompt,
+      include_serp_features: body.include_serp_features,
+      serp_analysis_type: body.serp_analysis_type,
+      related_keywords_depth: body.related_keywords_depth,
+      related_keywords_limit: body.related_keywords_limit,
+      keyword_ideas_limit: body.keyword_ideas_limit,
+      keyword_ideas_type: body.keyword_ideas_type,
+      include_ai_volume: body.include_ai_volume,
+      ai_volume_timeframe: body.ai_volume_timeframe,
     };
     
     // Apply testing limits if in testing mode

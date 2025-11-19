@@ -96,6 +96,17 @@ export default function KeywordResearchPage() {
   const [location, setLocation] = useState<string>('United States');
   const [expandedKeywords, setExpandedKeywords] = useState<Set<string>>(new Set());
   
+  // v1.3.3 Customization options
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
+  const [searchType, setSearchType] = useState<string>('enhanced_keyword_analysis');
+  const [serpDepth, setSerpDepth] = useState<number>(20);
+  const [serpAnalysisType, setSerpAnalysisType] = useState<'basic' | 'ai_summary' | 'both'>('both');
+  const [relatedKeywordsDepth, setRelatedKeywordsDepth] = useState<number>(1);
+  const [relatedKeywordsLimit, setRelatedKeywordsLimit] = useState<number>(20);
+  const [keywordIdeasLimit, setKeywordIdeasLimit] = useState<number>(50);
+  const [keywordIdeasType, setKeywordIdeasType] = useState<'all' | 'questions' | 'topics'>('all');
+  const [includeAiVolume, setIncludeAiVolume] = useState<boolean>(true);
+  
   // Pagination for large keyword lists (150+)
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [keywordsPerPage, setKeywordsPerPage] = useState<number>(50);
@@ -226,7 +237,13 @@ export default function KeywordResearchPage() {
         const diff = k.difficulty === 'easy' ? 0.33 : k.difficulty === 'medium' ? 0.66 : 1.0;
         return sum + diff;
       }, 0) / kws.length;
-      const avgCompetition = kws.reduce((sum, k) => sum + k.competition, 0) / kws.length;
+      // Calculate average competition, excluding 0 values (which indicate no data)
+      const validCompetitions = kws
+        .map(k => k.competition)
+        .filter((c): c is number => c !== null && c !== undefined && c > 0);
+      const avgCompetition = validCompetitions.length > 0
+        ? validCompetitions.reduce((sum, c) => sum + c, 0) / validCompetitions.length
+        : 0;
       
       // Use API-provided cluster_score if available, otherwise calculate
       const apiClusterScore = kws[0]?.cluster_score;
@@ -283,6 +300,39 @@ export default function KeywordResearchPage() {
     }
   };
 
+  // Format competition percentage (handles 0.0 as "N/A")
+  const formatCompetition = (competition: number | null | undefined): string => {
+    if (competition === null || competition === undefined || competition === 0) {
+      return 'N/A';
+    }
+    return `${(competition * 100).toFixed(0)}%`;
+  };
+
+  // Get competition level (Low/Medium/High)
+  const getCompetitionLevel = (competition: number | null | undefined): 'Low' | 'Medium' | 'High' | 'N/A' => {
+    if (competition === null || competition === undefined || competition === 0) {
+      return 'N/A';
+    }
+    if (competition < 0.3) return 'Low';
+    if (competition < 0.7) return 'Medium';
+    return 'High';
+  };
+
+  // Get competition level color classes
+  const getCompetitionColorClasses = (competition: number | null | undefined): string => {
+    const level = getCompetitionLevel(competition);
+    switch (level) {
+      case 'Low':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'Medium':
+        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      case 'High':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+    }
+  };
+
   // Calculate cluster score (higher is better)
   const calculateClusterScore = (
     volume: number,
@@ -321,13 +371,42 @@ export default function KeywordResearchPage() {
       setCurrentPage(1); // Reset pagination
       setCollectionName(''); // Clear collection name
 
-      // Perform keyword research
-      const researchResults = await keywordResearchService.performBlogResearch(
-        searchQuery,
-        workflowSession?.target_audience || 'general',
-        undefined, // userId
-        location // Pass location parameter
-      );
+      // Build request with v1.3.3 customization options
+      const analysisRequest: any = {
+        keywords: [searchQuery],
+        location: location,
+        language: 'en',
+        search_type: searchType,
+        include_serp: searchType !== 'quick_analysis',
+        max_suggestions_per_keyword: searchType === 'quick_analysis' ? 10 : searchType === 'comprehensive_analysis' ? 150 : 75,
+      };
+      
+      // Add advanced options if enabled
+      if (showAdvancedOptions || searchType === 'comprehensive_analysis' || searchType === 'competitor_analysis') {
+        analysisRequest.serp_depth = serpDepth;
+        analysisRequest.serp_analysis_type = serpAnalysisType;
+        analysisRequest.related_keywords_depth = relatedKeywordsDepth;
+        analysisRequest.related_keywords_limit = relatedKeywordsLimit;
+        analysisRequest.keyword_ideas_limit = keywordIdeasLimit;
+        analysisRequest.keyword_ideas_type = keywordIdeasType;
+        analysisRequest.include_ai_volume = includeAiVolume;
+      }
+      
+      // Call the enhanced API directly with customization options
+      const response = await fetch('/api/keywords/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(analysisRequest),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(errorData.error || `Failed to analyze keywords: ${response.statusText}`);
+      }
+      
+      const researchResults = await response.json();
 
       // Extract keywords from research results
       const keywordAnalysis = researchResults.keyword_analysis?.keyword_analysis || {};
@@ -367,7 +446,7 @@ export default function KeywordResearchPage() {
           search_volume: searchVolume, // Preserve null from API, don't convert to 0
           global_search_volume: data?.global_search_volume ?? null,
           difficulty: data?.difficulty || 'medium',
-          competition: data?.competition ?? 0.5,
+          competition: data?.competition ?? 0,
           cpc: data?.cpc ?? null,
           trend_score: data?.trend_score ?? null,
           recommended: data?.recommended ?? false,
@@ -805,7 +884,13 @@ export default function KeywordResearchPage() {
     const avgDifficultyNum = difficultyValues.reduce((sum, v) => sum + v, 0) / difficultyValues.length;
     const avgDifficulty = avgDifficultyNum < 0.4 ? 'easy' : avgDifficultyNum < 0.7 ? 'medium' : 'hard';
     
-    const avgCompetition = keywords.reduce((sum, k) => sum + (k.competition || 0), 0) / keywords.length;
+    // Calculate average competition, excluding 0 values (which indicate no data)
+    const validCompetitions = keywords
+      .map(k => k.competition)
+      .filter((c): c is number => c !== null && c !== undefined && c > 0);
+    const avgCompetition = validCompetitions.length > 0
+      ? validCompetitions.reduce((sum, c) => sum + c, 0) / validCompetitions.length
+      : 0;
     
     const validCPCs = keywords
       .map(k => k.cpc)
@@ -818,9 +903,11 @@ export default function KeywordResearchPage() {
     // Lower competition = higher traffic potential
     const trafficPotential = validVolumes.length > 0
       ? validVolumes.reduce((sum, volume, idx) => {
-          const competition = keywords[idx]?.competition || 0.5;
+          const competition = keywords[idx]?.competition;
+          // Use competition if available (> 0), otherwise assume medium competition (0.5)
+          const effectiveCompetition = competition && competition > 0 ? competition : 0.5;
           // Estimate: volume * (1 - competition) * 0.1 (conservative CTR)
-          return sum + (volume * (1 - competition) * 0.1);
+          return sum + (volume * (1 - effectiveCompetition) * 0.1);
         }, 0)
       : 0;
 
@@ -1008,15 +1095,29 @@ export default function KeywordResearchPage() {
               <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
                 Cost per click
               </div>
-              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all"
-                  style={{ width: `${(aggregateMetrics.avgCompetition * 100)}%` }}
-                />
-              </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                Competition {(aggregateMetrics.avgCompetition * 100).toFixed(0)}%
-              </div>
+              {aggregateMetrics.avgCompetition > 0 ? (
+                <>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        aggregateMetrics.avgCompetition < 0.3
+                          ? 'bg-green-600'
+                          : aggregateMetrics.avgCompetition < 0.7
+                          ? 'bg-yellow-600'
+                          : 'bg-red-600'
+                      }`}
+                      style={{ width: `${(aggregateMetrics.avgCompetition * 100)}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    Competition {formatCompetition(aggregateMetrics.avgCompetition)} ({getCompetitionLevel(aggregateMetrics.avgCompetition)})
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Competition: N/A
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1050,6 +1151,134 @@ export default function KeywordResearchPage() {
             />
           </div>
         </div>
+        
+        {/* Search Type Preset Selector (v1.3.3) */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Analysis Type
+          </label>
+          <select
+            value={searchType}
+            onChange={(e) => setSearchType(e.target.value)}
+            className="w-full md:w-auto px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+          >
+            <option value="enhanced_keyword_analysis">Enhanced Analysis (Default)</option>
+            <option value="quick_analysis">Quick Analysis</option>
+            <option value="competitor_analysis">Competitor Analysis</option>
+            <option value="content_research">Content Research</option>
+            <option value="comprehensive_analysis">Comprehensive Analysis</option>
+          </select>
+        </div>
+        
+        {/* Advanced Options Toggle (v1.3.3) */}
+        <div className="mb-4">
+          <button
+            onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
+            className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+          >
+            {showAdvancedOptions ? '▼' : '▶'} Advanced Options
+          </button>
+        </div>
+        
+        {/* Advanced Options Panel (v1.3.3) */}
+        {showAdvancedOptions && (
+          <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  SERP Depth (5-100)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="100"
+                  value={serpDepth}
+                  onChange={(e) => setSerpDepth(parseInt(e.target.value) || 20)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  SERP Analysis Type
+                </label>
+                <select
+                  value={serpAnalysisType}
+                  onChange={(e) => setSerpAnalysisType(e.target.value as any)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="both">Both</option>
+                  <option value="basic">Basic</option>
+                  <option value="ai_summary">AI Summary</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Related Keywords Depth (1-4)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="4"
+                  value={relatedKeywordsDepth}
+                  onChange={(e) => setRelatedKeywordsDepth(parseInt(e.target.value) || 1)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Related Keywords Limit (5-100)
+                </label>
+                <input
+                  type="number"
+                  min="5"
+                  max="100"
+                  value={relatedKeywordsLimit}
+                  onChange={(e) => setRelatedKeywordsLimit(parseInt(e.target.value) || 20)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Keyword Ideas Limit (10-200)
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  max="200"
+                  value={keywordIdeasLimit}
+                  onChange={(e) => setKeywordIdeasLimit(parseInt(e.target.value) || 50)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Keyword Ideas Type
+                </label>
+                <select
+                  value={keywordIdeasType}
+                  onChange={(e) => setKeywordIdeasType(e.target.value as any)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="all">All</option>
+                  <option value="questions">Questions</option>
+                  <option value="topics">Topics</option>
+                </select>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-xs font-medium text-gray-700 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={includeAiVolume}
+                    onChange={(e) => setIncludeAiVolume(e.target.checked)}
+                    className="rounded"
+                  />
+                  Include AI Volume
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <button
           onClick={handleSearch}
           disabled={searching || !searchQuery.trim()}
@@ -1347,8 +1576,19 @@ export default function KeywordResearchPage() {
                         {kw.difficulty}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                      {(kw.competition * 100).toFixed(0)}%
+                    <td className="px-4 py-3">
+                      {kw.competition > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            {formatCompetition(kw.competition)}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium w-fit ${getCompetitionColorClasses(kw.competition)}`}>
+                            {getCompetitionLevel(kw.competition)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">N/A</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                       ${kw.cpc?.toFixed(2) || '0.00'}
@@ -1398,7 +1638,7 @@ export default function KeywordResearchPage() {
                                     <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
                                       <span>Vol: {rk.search_volume.toLocaleString()}</span>
                                       <span>CPC: ${rk.cpc.toFixed(2)}</span>
-                                      <span>Comp: {(rk.competition * 100).toFixed(0)}%</span>
+                                      <span>Comp: {formatCompetition(rk.competition)}</span>
                                       <span>Diff: {rk.difficulty_score}/100</span>
                                     </div>
                                   </div>
@@ -1554,8 +1794,13 @@ export default function KeywordResearchPage() {
                 <div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">Avg Competition</div>
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {(cluster.avg_competition * 100).toFixed(0)}%
+                    {formatCompetition(cluster.avg_competition)}
                   </div>
+                  {cluster.avg_competition > 0 && (
+                    <div className={`text-xs px-2 py-0.5 rounded-full w-fit mt-1 ${getCompetitionColorClasses(cluster.avg_competition)}`}>
+                      {getCompetitionLevel(cluster.avg_competition)}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">Keywords</div>
