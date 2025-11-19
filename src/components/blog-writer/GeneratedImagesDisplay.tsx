@@ -27,7 +27,7 @@ interface FeaturedImage {
 
 interface GeneratedImagesDisplayProps {
   featured_image?: FeaturedImage | null;
-  generated_images?: GeneratedImage[];
+  generated_images?: GeneratedImage[] | null;
   className?: string;
   showCount?: boolean;
 }

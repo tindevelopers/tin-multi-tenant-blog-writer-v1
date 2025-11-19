@@ -1352,10 +1352,10 @@ export default function EditorPage() {
           )}
 
           {/* v1.3.1 Feature Displays - Generated Images */}
-          {(generationResult?.featured_image || (generationResult?.generated_images && generationResult.generated_images.length > 0)) && (
+          {(generationResult?.featured_image || (generationResult?.generated_images && Array.isArray(generationResult.generated_images) && generationResult.generated_images.length > 0)) && (
             <GeneratedImagesDisplay 
               featured_image={generationResult.featured_image}
-              generated_images={generationResult.generated_images}
+              generated_images={generationResult.generated_images || undefined}
             />
           )}
 
