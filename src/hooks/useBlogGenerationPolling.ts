@@ -69,7 +69,7 @@ export function useBlogGenerationPolling({
   const [error, setError] = useState<string | null>(null);
   
   const lastUpdateCountRef = useRef(0);
-  const pollTimerRef = useRef<NodeJS.Timeout>();
+  const pollTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const isPollingRef = useRef(false);
 
   /**
