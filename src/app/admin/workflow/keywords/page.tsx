@@ -1286,8 +1286,8 @@ export default function KeywordResearchPage() {
                   </tr>
                 ) : (
                   paginatedKeywords.map((kw) => (
+                    <React.Fragment key={kw.keyword}>
                   <tr
-                    key={kw.keyword}
                     className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${
                       selectedKeywords.has(kw.keyword) ? 'bg-blue-50 dark:bg-blue-900/20' : ''
                     }`}
@@ -1382,7 +1382,7 @@ export default function KeywordResearchPage() {
                     </td>
                   </tr>
                   {expandedKeywords.has(kw.keyword) && (kw.related_keywords_enhanced?.length || kw.questions?.length || kw.topics?.length) && (
-                    <tr key={`${kw.keyword}-details`} className="bg-gray-50 dark:bg-gray-900/50">
+                    <tr className="bg-gray-50 dark:bg-gray-900/50">
                       <td colSpan={8} className="px-4 py-4">
                         <div className="space-y-4">
                           {/* Enhanced Related Keywords */}
@@ -1452,6 +1452,7 @@ export default function KeywordResearchPage() {
                       </td>
                     </tr>
                   )}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
