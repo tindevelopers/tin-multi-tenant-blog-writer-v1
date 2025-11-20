@@ -22,7 +22,11 @@ import {
   Target,
   Settings,
   ListOrdered,
-  CheckCircle
+  CheckCircle,
+  Building2,
+  Plug,
+  FileClock,
+  Shield
 } from "lucide-react";
 
 type NavItem = {
@@ -124,12 +128,12 @@ const adminPanelItems: NavItem[] = [
     icon: <span className="w-5 h-5 flex items-center justify-center text-xs font-bold bg-purple-600 text-white rounded">A</span>,
     new: true,
     subItems: [
-      { name: "Admin Dashboard", path: "/admin/panel" },
-      { name: "User Management", path: "/admin/panel/users" },
-      { name: "Organizations", path: "/admin/panel/organizations" },
-      { name: "Integrations", path: "/admin/panel/integrations" },
-      { name: "Usage Logs", path: "/admin/panel/usage-logs" },
-      { name: "System Settings", path: "/admin/panel/system-settings" },
+      { name: "Admin Dashboard", path: "/admin/panel", icon: <LayoutDashboard className="w-4 h-4" /> },
+      { name: "User Management", path: "/admin/panel/users", icon: <Users className="w-4 h-4" /> },
+      { name: "Organizations", path: "/admin/panel/organizations", icon: <Building2 className="w-4 h-4" /> },
+      { name: "Integrations", path: "/admin/panel/integrations", icon: <Plug className="w-4 h-4" /> },
+      { name: "Usage Logs", path: "/admin/panel/usage-logs", icon: <FileClock className="w-4 h-4" /> },
+      { name: "System Settings", path: "/admin/panel/system-settings", icon: <Settings className="w-4 h-4" /> },
     ],
   },
 ];
@@ -359,19 +363,19 @@ const AppSidebar: React.FC = () => {
                       isSubmenuOpen
                         ? "menu-item-text-active"
                         : "menu-item-text-inactive"
-                    }`}
+                    } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                   >
                     {nav.name}
                   </span>
                   {nav.new && (
-                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                    <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                       NEW
                     </span>
                   )}
                   <ChevronDownIcon
-                    className={`${
+                    className={`transition-transform duration-200 ${
                       isSubmenuOpen ? "rotate-180" : ""
-                    } transition-transform duration-200`}
+                    } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                   />
                 </button>
               ) : (
@@ -401,12 +405,12 @@ const AppSidebar: React.FC = () => {
                       isActive(nav.path || "")
                         ? "menu-item-text-active"
                         : "menu-item-text-inactive"
-                    }`}
+                    } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                   >
                     {nav.name}
                   </span>
                   {nav.new && (
-                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                    <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                       NEW
                     </span>
                   )}
@@ -445,9 +449,11 @@ const AppSidebar: React.FC = () => {
                                       {subItem.icon}
                                     </span>
                                   )}
-                                  {subItem.name}
+                                  <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
+                                    {subItem.name}
+                                  </span>
                                   {subItem.new && (
-                                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                                    <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                       NEW
                                     </span>
                                   )}
@@ -455,7 +461,7 @@ const AppSidebar: React.FC = () => {
                                 <ChevronDownIcon
                                   className={`w-4 h-4 transition-transform duration-200 ${
                                     isNestedSubmenuOpen ? "rotate-180" : ""
-                                  }`}
+                                  } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                                 />
                               </button>
                               {subItem.subItems && (
@@ -485,14 +491,16 @@ const AppSidebar: React.FC = () => {
                                                 {nestedItem.icon}
                                               </span>
                                             )}
-                                            {nestedItem.name}
+                                            <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
+                                              {nestedItem.name}
+                                            </span>
                                             {nestedItem.new && (
-                                              <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                                              <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                                 NEW
                                               </span>
                                             )}
                                             {nestedItem.pro && (
-                                              <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300">
+                                              <span className={`bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                                 PRO
                                               </span>
                                             )}
@@ -518,14 +526,21 @@ const AppSidebar: React.FC = () => {
                               }`}
                             >
                               <span className="flex items-center gap-2">
-                                {subItem.name}
+                                {subItem.icon && (
+                                  <span className={`${isActive(subItem.path || "") ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}>
+                                    {subItem.icon}
+                                  </span>
+                                )}
+                                <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
+                                  {subItem.name}
+                                </span>
                                 {subItem.new && (
-                                  <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                                  <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                     NEW
                                   </span>
                                 )}
                                 {subItem.pro && (
-                                  <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300">
+                                  <span className={`bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                     PRO
                                   </span>
                                 )}
@@ -585,7 +600,7 @@ const AppSidebar: React.FC = () => {
                 <h2
                   className={`mb-4 text-xs uppercase flex leading-5 text-gray-400 ${
                     !isExpanded && !isHovered
-                      ? "xl:justify-center"
+                      ? "xl:justify-center lg:hidden"
                       : "justify-start"
                   }`}
                 >
@@ -604,7 +619,7 @@ const AppSidebar: React.FC = () => {
                   <h2
                     className={`mb-4 text-xs uppercase flex leading-5 text-purple-400 ${
                       !isExpanded && !isHovered
-                        ? "xl:justify-center"
+                        ? "xl:justify-center lg:hidden"
                         : "justify-start"
                     }`}
                   >
