@@ -398,6 +398,237 @@ const response = await apiClient.post('/api/v1/blog/generate-local-business', {
 
 Comprehensive keyword research with DataForSEO integration.
 
+### 2. Streaming Keyword Analysis ⭐ NEW
+
+**Endpoint:** `POST /api/keywords/analyze/stream` (Next.js proxy)  
+**Backend Endpoint:** `POST /api/v1/keywords/enhanced/stream`
+
+Streaming version that provides real-time progress updates through Server-Sent Events (SSE).
+
+**Benefits:**
+- ✅ Real-time progress updates (0-100%)
+- ✅ Stage-by-stage feedback
+- ✅ Better UX with live status
+- ✅ Stage-specific data as it becomes available
+- ✅ Progressive keyword data loading
+
+**Important Notes:**
+- Use `/api/keywords/analyze/stream` (Next.js proxy) for frontend integration
+- The proxy forwards requests to the backend Cloud Run endpoint
+- Response structure uses `enhanced_analysis` or `keyword_analysis` (check both)
+- Related keywords are returned as strings without metrics - you must fetch metrics separately
+- Long-tail keywords are also strings - batch fetch metrics for all related/long-tail keywords
+
+**Example:**
+
+```typescript
+const response = await fetch('/api/keywords/analyze/stream', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    keywords: ['dog grooming'],
+    location: 'United States',
+    language: 'en',
+    search_type: 'enhanced_keyword_analysis',
+    include_serp: true,
+    max_suggestions_per_keyword: 75,
+    serp_depth: 20,
+    serp_analysis_type: 'both',
+    related_keywords_depth: 1,
+    related_keywords_limit: 20,
+    keyword_ideas_limit: 50,
+    keyword_ideas_type: 'all',
+    include_ai_volume: true,
+  })
+});
+
+const reader = response.body.getReader();
+const decoder = new TextDecoder();
+let buffer = '';
+
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  
+  buffer += decoder.decode(value, { stream: true });
+  const lines = buffer.split('\n');
+  buffer = lines.pop() || ''; // Keep incomplete line in buffer
+  
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      try {
+        const update = JSON.parse(line.slice(6));
+        
+        // Handle different update types
+        if (update.type === 'progress') {
+          console.log(`Stage: ${update.stage}, Progress: ${update.progress}%`);
+          updateProgressBar(update.progress);
+          updateStageLabel(update.stage);
+          
+          // Show stage-specific data if available
+          if (update.data) {
+            console.log('Stage data:', update.data);
+          }
+        } else if (update.type === 'result') {
+          // Final result received
+          handleFinalResult(update.data);
+        } else if (update.type === 'error') {
+          console.error('Streaming error:', update.error);
+          handleError(update.error);
+        }
+      } catch (e) {
+        console.error('Failed to parse SSE message:', e);
+      }
+    }
+  }
+}
+
+// Handle final result
+async function handleFinalResult(result: any) {
+  // Extract keywords from response
+  const keywordAnalysis = result.enhanced_analysis || result.keyword_analysis || {};
+  
+  // Step 1: Extract main keywords
+  const mainKeywords = Object.keys(keywordAnalysis);
+  
+  // Step 2: Extract related_keywords and long_tail_keywords (they are strings without metrics)
+  const relatedKeywordsNeedingMetrics: string[] = [];
+  
+  Object.entries(keywordAnalysis).forEach(([mainKeyword, kwData]: [string, any]) => {
+    // Collect related_keywords (strings)
+    if (kwData?.related_keywords && Array.isArray(kwData.related_keywords)) {
+      relatedKeywordsNeedingMetrics.push(...kwData.related_keywords);
+    }
+    
+    // Collect long_tail_keywords (strings)
+    if (kwData?.long_tail_keywords && Array.isArray(kwData.long_tail_keywords)) {
+      relatedKeywordsNeedingMetrics.push(...kwData.long_tail_keywords);
+    }
+  });
+  
+  // Step 3: Fetch metrics for related keywords in batch
+  if (relatedKeywordsNeedingMetrics.length > 0) {
+    const metricsResponse = await fetch('/api/keywords/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keywords: relatedKeywordsNeedingMetrics,
+        location: 'United States',
+        language: 'en',
+        include_search_volume: true,
+      }),
+    });
+    
+    if (metricsResponse.ok) {
+      const metricsData = await metricsResponse.json();
+      const metricsAnalysis = metricsData.enhanced_analysis || metricsData.keyword_analysis || {};
+      
+      // Merge metrics into your keyword list
+      // Now you have full metrics for all keywords
+      displayKeywordsWithMetrics(keywordAnalysis, metricsAnalysis);
+    }
+  } else {
+    // No related keywords, just display main keywords
+    displayKeywordsWithMetrics(keywordAnalysis, {});
+  }
+}
+```
+
+**Stages:**
+1. `initializing` (5%) - Starting search
+2. `detecting_location` (10-15%) - Detecting user location
+3. `analyzing_keywords` (20-30%) - Analyzing primary keywords
+4. `getting_suggestions` (40-45%) - Fetching suggestions
+5. `analyzing_suggestions` (50-55%) - Analyzing suggested keywords
+6. `clustering_keywords` (60-65%) - Clustering by topic
+7. `getting_ai_data` (70-75%) - Getting AI metrics
+8. `getting_related_keywords` (80-82%) - Finding related keywords (returns as strings)
+9. `getting_keyword_ideas` (85-88%) - Getting ideas (questions/topics)
+10. `analyzing_serp` (92-95%) - Analyzing SERP (if requested)
+11. `building_discovery` (98%) - Building final results
+12. `completed` (100%) - Final results
+
+**Response Structure:**
+
+```typescript
+interface StreamingProgressUpdate {
+  type: 'progress' | 'result' | 'error';
+  stage?: string;
+  progress?: number;
+  data?: any;
+  error?: string;
+}
+
+interface StreamingResult {
+  enhanced_analysis: Record<string, KeywordData>;
+  keyword_analysis?: Record<string, KeywordData>; // Fallback if enhanced_analysis not available
+  total_keywords: number;
+  cluster_summary?: {
+    total_keywords: number;
+    cluster_count: number;
+    unclustered_count: number;
+  };
+  suggested_keywords?: string[]; // Top-level suggestions
+}
+
+interface KeywordData {
+  search_volume: number;
+  global_search_volume: number;
+  monthly_searches: Array<{ year: number; month: number; search_volume: number }>;
+  difficulty: string; // "easy" | "medium" | "hard"
+  difficulty_score: number;
+  competition: number; // 0-1
+  cpc: number;
+  cpc_currency: string | null;
+  trend_score: number;
+  recommended: boolean;
+  reason: string;
+  related_keywords: string[]; // ⚠️ Array of strings - no metrics!
+  related_keywords_enhanced: Array<{ // ⚠️ Usually empty - use related_keywords instead
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  long_tail_keywords: string[]; // ⚠️ Array of strings - no metrics!
+  questions: Array<{ // ⚠️ Usually empty
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  topics: Array<{ // ⚠️ Usually empty
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  keyword_ideas: any[];
+  parent_topic?: string;
+  category_type?: 'topic' | 'question' | 'action' | 'entity';
+  cluster_score?: number;
+}
+```
+
+**⚠️ Important: Extracting All Keywords**
+
+The API returns:
+- **Main keywords** in `enhanced_analysis` with full metrics
+- **Related keywords** as strings in `related_keywords` array (no metrics)
+- **Long-tail keywords** as strings in `long_tail_keywords` array (no metrics)
+
+To display all keywords with proper metrics:
+
+1. Extract main keywords from `enhanced_analysis`
+2. Extract `related_keywords` and `long_tail_keywords` arrays (they're strings)
+3. Make a batch API call to `/api/keywords/analyze` to get metrics for all related/long-tail keywords
+4. Merge the results to display all keywords with proper search volume, CPC, competition, etc.
+
+See `FRONTEND_KEYWORD_STREAMING_GUIDE.md` for complete streaming documentation.
+
 #### Request
 
 ```typescript
@@ -405,56 +636,84 @@ interface EnhancedKeywordAnalysisRequest {
   keywords: string[]; // Up to 200 keywords
   location?: string; // Default: "United States"
   language?: string; // Default: "en"
-  search_type?: string; // Default: "enhanced_keyword_analysis"
+  search_type?: 
+    | 'competitor_analysis'
+    | 'content_research'
+    | 'quick_analysis'
+    | 'comprehensive_analysis'
+    | 'enhanced_keyword_analysis'; // Default
   include_serp?: boolean; // Include SERP analysis (slower)
-  max_suggestions_per_keyword?: number; // 5-150, default: 20
+  max_suggestions_per_keyword?: number; // 5-150, default: 75
+  
+  // SERP Customization (v1.3.3)
+  serp_depth?: number; // 5-100, default: 20
+  serp_prompt?: string; // Custom prompt for AI summary
+  include_serp_features?: string[]; // ["featured_snippet", "people_also_ask", "videos", "images"]
+  serp_analysis_type?: "basic" | "ai_summary" | "both"; // Default: "both"
+  
+  // Related Keywords Customization (v1.3.3)
+  related_keywords_depth?: number; // 1-4, default: 1
+  related_keywords_limit?: number; // 5-100, default: 20
+  
+  // Keyword Ideas Customization (v1.3.3)
+  keyword_ideas_limit?: number; // 10-200, default: 50
+  keyword_ideas_type?: "all" | "questions" | "topics"; // Default: "all"
+  
+  // AI Volume Customization (v1.3.3)
+  include_ai_volume?: boolean; // Default: true
+  ai_volume_timeframe?: number; // 1-24 months, default: 12
 }
 ```
 
-#### Example
+#### Example (Non-Streaming)
 
 ```typescript
-const response = await apiClient.post('/api/v1/keywords/enhanced', {
-  keywords: ['employees', 'employee search', 'hiring employees'],
+const response = await apiClient.post('/api/keywords/analyze', {
+  keywords: ['dog grooming'],
   location: 'United States',
   language: 'en',
-  max_suggestions_per_keyword: 10,
-  include_serp: false,
+  search_type: 'enhanced_keyword_analysis',
+  max_suggestions_per_keyword: 75,
+  include_serp: true,
+  serp_depth: 20,
+  serp_analysis_type: 'both',
+  related_keywords_depth: 1,
+  related_keywords_limit: 20,
+  keyword_ideas_limit: 50,
+  keyword_ideas_type: 'all',
+  include_ai_volume: true,
 });
 ```
 
-#### Response
+#### Response Structure
+
+**Important:** The response may contain `enhanced_analysis` OR `keyword_analysis` (or both). Always check both:
 
 ```typescript
 interface EnhancedKeywordAnalysisResponse {
-  enhanced_analysis: Record<string, {
-    search_volume: number;
-    global_search_volume: number;
-    monthly_searches: Array<{
-      year: number;
-      month: number;
-      search_volume: number;
-    }>;
-    difficulty: string;
-    difficulty_score: number;
-    competition: number;
-    cpc: number;
-    cpc_currency: string | null;
-    trend_score: number;
-    recommended: boolean;
-    reason: string;
-    related_keywords: string[];
-    related_keywords_enhanced: any[];
-    long_tail_keywords: string[];
-    questions: any[];
-    topics: any[];
-    keyword_ideas: any[];
+  // Primary response structure - check both locations
+  enhanced_analysis?: Record<string, KeywordData>;
+  keyword_analysis?: Record<string, KeywordData>; // Fallback if enhanced_analysis not available
+  
+  // Top-level arrays
+  suggested_keywords?: string[]; // Array of keyword strings
+  original_keywords?: string[]; // Original keywords searched
+  
+  // Clustering data
+  clusters?: Array<{
+    parent_topic: string;
+    keywords: string[];
+    cluster_score: number;
+    category_type?: 'topic' | 'question' | 'action' | 'entity';
+    keyword_count: number;
   }>;
-  cluster_summary: {
+  cluster_summary?: {
     total_keywords: number;
     cluster_count: number;
     unclustered_count: number;
   };
+  
+  // SERP Analysis (if include_serp: true)
   serp_analysis?: {
     organic_results: Array<{
       title: string;
@@ -473,13 +732,143 @@ interface EnhancedKeywordAnalysisResponse {
       url: string;
     };
   };
+  
+  // Discovery data
   discovery?: {
     matching_terms: any[];
     related_terms: any[];
   };
+  
   total_keywords: number;
+  location?: string;
+  saved_search_id?: string; // If search was saved to database
+}
+
+interface KeywordData {
+  // Core metrics
+  search_volume: number;
+  global_search_volume: number;
+  monthly_searches: Array<{
+    year: number;
+    month: number;
+    search_volume: number;
+  }>;
+  difficulty: string; // "easy" | "medium" | "hard"
+  difficulty_score: number; // 0-100
+  competition: number; // 0-1 decimal
+  cpc: number; // Cost per click
+  cpc_currency: string | null;
+  
+  // Trend data
+  trend_score: number; // -1 to 1, negative = declining
+  clicks?: number | null;
+  cps?: number | null;
+  
+  // Recommendations
+  recommended: boolean;
+  reason: string;
+  
+  // Related keywords - ⚠️ IMPORTANT: These are STRINGS without metrics
+  related_keywords: string[]; // Array of keyword strings
+  related_keywords_enhanced: Array<{ // Usually empty - use related_keywords instead
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  
+  // Long-tail keywords - ⚠️ IMPORTANT: These are STRINGS without metrics
+  long_tail_keywords: string[]; // Array of keyword strings
+  
+  // Questions and topics - Usually empty arrays
+  questions: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  topics: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  
+  // Keyword ideas
+  keyword_ideas: any[];
+  
+  // Clustering data
+  parent_topic?: string;
+  category_type?: 'topic' | 'question' | 'action' | 'entity';
+  cluster_score?: number;
+  
+  // AI metrics (if include_ai_volume: true)
+  ai_search_volume?: number;
+  ai_trend?: number;
+  ai_monthly_searches?: Array<{ year: number; month: number; search_volume: number }>;
+  
+  // Additional fields
+  traffic_potential?: number | null;
+  serp_features?: string[];
+  serp_feature_counts?: Record<string, number>;
+  also_rank_for?: string[];
+  also_talk_about?: string[];
+  top_competitors?: string[];
+  primary_intent?: string | null;
+  intent_probabilities?: Record<string, number>;
+  first_seen?: string | null;
+  last_updated?: string | null;
 }
 ```
+
+**⚠️ Critical: Extracting All Keywords with Metrics**
+
+The API response structure means you need to:
+
+1. **Extract main keywords** from `enhanced_analysis` or `keyword_analysis`:
+   ```typescript
+   const keywordAnalysis = response.enhanced_analysis || response.keyword_analysis || {};
+   const mainKeywords = Object.keys(keywordAnalysis); // These have full metrics
+   ```
+
+2. **Extract related/long-tail keywords** (they're strings without metrics):
+   ```typescript
+   const relatedKeywords: string[] = [];
+   const longTailKeywords: string[] = [];
+   
+   Object.values(keywordAnalysis).forEach((kwData: KeywordData) => {
+     relatedKeywords.push(...(kwData.related_keywords || []));
+     longTailKeywords.push(...(kwData.long_tail_keywords || []));
+   });
+   ```
+
+3. **Fetch metrics for related keywords** via batch API call:
+   ```typescript
+   const allKeywordsNeedingMetrics = [...relatedKeywords, ...longTailKeywords];
+   
+   if (allKeywordsNeedingMetrics.length > 0) {
+     const metricsResponse = await fetch('/api/keywords/analyze', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/json' },
+       body: JSON.stringify({
+         keywords: allKeywordsNeedingMetrics,
+         location: 'United States',
+         language: 'en',
+         include_search_volume: true,
+       }),
+     });
+     
+     const metricsData = await metricsResponse.json();
+     const metricsAnalysis = metricsData.enhanced_analysis || metricsData.keyword_analysis || {};
+     
+     // Now merge metricsAnalysis with your keyword list
+   }
+   ```
+
+4. **Display all keywords** with proper metrics (search volume, CPC, competition, difficulty)
 
 ### 2. Standard Keyword Analysis
 
