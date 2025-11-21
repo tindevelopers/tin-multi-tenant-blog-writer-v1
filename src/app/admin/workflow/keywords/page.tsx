@@ -468,6 +468,7 @@ export default function KeywordResearchPage() {
     let buffer = '';
     let finalResult: any = null;
     let lastProgressEvent: any = null;
+    let completedEventWithData: any = null; // Track the completed event that has data
     let progressReached100 = false;
 
     try {
@@ -498,6 +499,12 @@ export default function KeywordResearchPage() {
                 // Store the last progress event in case it contains result data
                 lastProgressEvent = data;
                 
+                // Track completed event WITH data (not the final "end" event)
+                if (stage === 'completed' && data.data?.result) {
+                  completedEventWithData = data;
+                  console.log('✅ Found completed event with result data');
+                }
+                
                 setStreamingProgress({
                   stage: formatStageName(stage),
                   progress: Math.min(Math.max(progress, 0), 100),
@@ -505,9 +512,9 @@ export default function KeywordResearchPage() {
                 });
                 
                 // Backend format: { stage: "completed", progress: 100, data: { result: { enhanced_analysis: {...}, total_keywords: 1 } } }
-                // When stage === 'completed', extract data.result immediately
+                // When stage === 'completed' AND has data.result, extract immediately
                 if (stage === 'completed' && data.data?.result) {
-                  console.log('✅ Received completed event with result data');
+                  console.log('✅ Extracting result from completed event');
                   finalResult = data.data.result;
                   await processSearchResults(finalResult);
                   setStreamingProgress(null);
@@ -517,6 +524,7 @@ export default function KeywordResearchPage() {
                 
                 // Also check if this progress event contains result data nested in data.result (for any stage)
                 if (data.data?.result) {
+                  console.log('✅ Found result data in progress event');
                   finalResult = data.data.result;
                   await processSearchResults(finalResult);
                   setStreamingProgress(null);
@@ -526,12 +534,21 @@ export default function KeywordResearchPage() {
                 
                 // Also check if data.data contains enhanced_analysis directly
                 if (data.data?.enhanced_analysis || data.data?.keyword_analysis) {
+                  console.log('✅ Found enhanced_analysis in data.data');
                   finalResult = data.data;
                   await processSearchResults(finalResult);
                   setStreamingProgress(null);
                   setSearching(false);
                   return;
                 }
+              }
+              
+              // Handle "end" event (type: "end", stage: "completed" but no data)
+              // This is sent AFTER the actual completed event with data
+              if (data.type === 'end' && data.stage === 'completed') {
+                console.log('📨 Received end event - stream closing');
+                // Don't update lastProgressEvent with this, keep the one with data
+                continue;
               }
               
               // Handle final result - check multiple formats
@@ -572,10 +589,22 @@ export default function KeywordResearchPage() {
         }
       }
       
-      // If stream completed and progress reached 100%, check last event for nested result data
-      // Backend format: { stage: "completed", progress: 100, data: { result: { enhanced_analysis: {...}, total_keywords: 1 } } }
+      // If stream completed and progress reached 100%, check for result data
+      // Backend sends: Event #N with { stage: "completed", progress: 100, data: { result: {...} } }
+      // Then Event #N+1 with { type: "end", stage: "completed" } (no data)
+      // So we need to check completedEventWithData first, not lastProgressEvent
       if (progressReached100 && !finalResult) {
-        // Check if last progress event has result data nested in data.result (primary check)
+        // First check the completed event that we tracked (has data.result)
+        if (completedEventWithData?.data?.result) {
+          console.log('✅ Found result in completedEventWithData.data.result');
+          finalResult = completedEventWithData.data.result;
+          await processSearchResults(finalResult);
+          setStreamingProgress(null);
+          setSearching(false);
+          return;
+        }
+        
+        // Check if last progress event has result data nested in data.result
         if (lastProgressEvent?.data?.result) {
           console.log('✅ Found result in lastProgressEvent.data.result');
           finalResult = lastProgressEvent.data.result;
@@ -607,14 +636,24 @@ export default function KeywordResearchPage() {
         
         // Last resort: fallback to regular API call
         console.warn('⚠️ Stream completed at 100% but no result found in any format. Falling back to regular API...');
-        console.warn('📋 Last event structure:', {
-          hasData: !!lastProgressEvent?.data,
-          hasDataResult: !!lastProgressEvent?.data?.result,
-          hasEnhancedAnalysis: !!lastProgressEvent?.data?.enhanced_analysis,
-          hasKeywordAnalysis: !!lastProgressEvent?.data?.keyword_analysis,
-          stage: lastProgressEvent?.stage,
-          progress: lastProgressEvent?.progress,
-          keys: lastProgressEvent ? Object.keys(lastProgressEvent) : [],
+        console.warn('📋 Event structures:', {
+          completedEventWithData: {
+            exists: !!completedEventWithData,
+            hasData: !!completedEventWithData?.data,
+            hasDataResult: !!completedEventWithData?.data?.result,
+            stage: completedEventWithData?.stage,
+            progress: completedEventWithData?.progress,
+          },
+          lastProgressEvent: {
+            hasData: !!lastProgressEvent?.data,
+            hasDataResult: !!lastProgressEvent?.data?.result,
+            hasEnhancedAnalysis: !!lastProgressEvent?.data?.enhanced_analysis,
+            hasKeywordAnalysis: !!lastProgressEvent?.data?.keyword_analysis,
+            stage: lastProgressEvent?.stage,
+            progress: lastProgressEvent?.progress,
+            type: lastProgressEvent?.type,
+            keys: lastProgressEvent ? Object.keys(lastProgressEvent) : [],
+          },
         });
         setStreamingProgress({
           stage: 'Fetching Results',
