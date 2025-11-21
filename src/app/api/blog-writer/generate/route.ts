@@ -15,18 +15,56 @@ import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
  * Helper function to build the transformed blog generation response
  * This centralizes response building to avoid duplication between response paths
  */
+// v1.3.4 unified endpoint response types
 interface BlogGenerationResult {
+  // Standard/Abstraction format: { success, blog_post: { title, content, meta_description }, ... }
+  success?: boolean;
   blog_post?: {
     title?: string;
+    content?: string;
+    meta_description?: string;
     excerpt?: string;
     summary?: string;
   };
+  // Enhanced format: { title, content, meta_description, ... }
   title?: string;
-  excerpt?: string;
-  meta_title?: string;
+  content?: string;
   meta_description?: string;
-  readability_score?: number;
+  excerpt?: string;
+  // Common fields across all formats
   seo_score?: number;
+  word_count?: number;
+  generation_time_seconds?: number;
+  error_message?: string;
+  // Enhanced-specific fields
+  quality_scores?: {
+    readability?: number;
+    seo?: number;
+    structure?: number;
+    factual?: number;
+    uniqueness?: number;
+    engagement?: number;
+  };
+  citations?: Array<{
+    text: string;
+    source: string;
+    url: string;
+  }>;
+  // Local Business-specific fields
+  businesses?: Array<{
+    name: string;
+    google_place_id?: string;
+    address?: string;
+    phone?: string;
+    website?: string;
+    rating?: number;
+    review_count?: number;
+    categories?: string[];
+  }>;
+  total_reviews_aggregated?: number;
+  metadata?: Record<string, unknown>;
+  // Legacy fields (for backward compatibility)
+  readability_score?: number;
   quality_score?: number | null;
   quality_dimensions?: Record<string, number>;
   stage_results?: Array<{
@@ -38,22 +76,14 @@ interface BlogGenerationResult {
   total_tokens?: number;
   total_cost?: number;
   generation_time?: number;
-  citations?: Array<{
-    text: string;
-    url: string;
-    title: string;
-  }>;
   semantic_keywords?: string[];
   structured_data?: Record<string, unknown> | null;
   knowledge_graph?: Record<string, unknown> | null;
   seo_metadata?: Record<string, unknown>;
   content_metadata?: Record<string, unknown>;
   warnings?: string[];
-  success?: boolean;
-  word_count?: number;
   suggestions?: string[];
-  quality_scores?: unknown;
-  // v1.3.2: Internal links and generated images
+  quality_scores_legacy?: unknown;
   internal_links?: Array<{
     anchor_text: string;
     url: string;
@@ -262,6 +292,13 @@ export async function POST(request: NextRequest) {
       include_buying_guide,
       include_faq_section,
       research_depth,
+      // v1.3.4: Local business blog fields
+      location,
+      max_businesses,
+      max_reviews_per_business,
+      include_business_details,
+      include_review_sentiment,
+      use_google,
     } = body;
     
     logger.debug('📝 Generation parameters:', {
@@ -290,9 +327,9 @@ export async function POST(request: NextRequest) {
     // Convert keywords to array format (needed for queue entry)
     const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
     
-    // Always use enhanced endpoint for better content quality
-    const shouldUseEnhanced = true; // Always use enhanced endpoint
-    const endpoint = '/api/v1/blog/generate-enhanced';
+    // Use unified endpoint (v1.3.4)
+    const shouldUseEnhanced = true; // Always use enhanced blog type
+    const endpoint = '/api/v1/blog/generate-unified';
     
     // Initialize variables that will be used in queue entry
     let brandVoice: BrandVoice | null = null;
@@ -636,17 +673,21 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Build request payload with optional external links parameters
+    // Build request payload for unified endpoint (v1.3.4)
+    // Determine blog_type based on requirements
+    const blogType: 'standard' | 'enhanced' | 'local_business' | 'abstraction' = 
+      shouldIncludeProductResearch && location ? 'local_business' :
+      isPremiumQuality || use_consensus_generation || use_knowledge_graph ? 'enhanced' :
+      'enhanced'; // Default to enhanced for better quality
+    
     const requestPayload: Record<string, unknown> = {
+      blog_type: blogType,
       topic,
       keywords: keywordsArray,
       target_audience: target_audience || brandVoice?.target_audience || 'general',
-      tone: tone || brandVoice?.tone || 'professional',
-      word_count: word_count || contentPreset?.word_count || 1000,
-      // Request rich HTML format
-      content_format: 'html',
-      include_formatting: true,
-      include_images: true, // Request API to include image placeholders
+      tone: (tone || brandVoice?.tone || 'professional') as 'professional' | 'casual' | 'academic' | 'conversational' | 'instructional',
+      length: length ? convertLengthToAPI(length) : convertLengthToAPI(mapWordCountToLength(word_count || contentPreset?.word_count || 1000)),
+      format: 'html' as 'markdown' | 'html' | 'json',
     };
 
     // Add custom instructions (use provided or default for premium)
@@ -658,17 +699,9 @@ export async function POST(request: NextRequest) {
       logger.debug('📝 Using default premium custom instructions');
     }
 
-    // Add template type if provided
-    if (template_type) {
+    // Add template type if provided (v1.3.4 supports template_type for enhanced blogs)
+    if (template_type && blogType === 'enhanced') {
       requestPayload.template_type = template_type;
-    }
-
-    // Add length preference (map word_count to length if not provided)
-    // Convert UI length ('very_long') to API length ('extended')
-    if (length) {
-      requestPayload.length = convertLengthToAPI(length);
-    } else if (word_count) {
-      requestPayload.length = convertLengthToAPI(mapWordCountToLength(word_count));
     }
 
     // Add quality features (enable automatically for premium, or use provided values)
@@ -698,147 +731,69 @@ export async function POST(request: NextRequest) {
       requestPayload.use_quality_scoring = use_quality_scoring !== undefined ? use_quality_scoring : recommendedQualityFeatures.use_quality_scoring;
     }
 
-    // Add enhanced keyword insights if available (v1.3.0)
-    if (enhancedKeywordInsights.serpAISummary) {
-      requestPayload.enhanced_keyword_insights = {
-        // SERP AI Summary for content structure
-        main_topics: enhancedKeywordInsights.mainTopics || [],
-        missing_topics: enhancedKeywordInsights.missingTopics || [],
-        common_questions: enhancedKeywordInsights.commonQuestions || [],
-        recommendations: enhancedKeywordInsights.recommendations || [],
-        content_summary: enhancedKeywordInsights.serpAISummary.summary,
-        // Trends data for timely content
-        is_trending: enhancedKeywordInsights.isTrending || false,
-        trend_score: enhancedKeywordInsights.trendsData?.trend_score,
-        related_topics: enhancedKeywordInsights.trendsData?.related_topics || [],
-        // Keyword ideas for content expansion
-        keyword_ideas: enhancedKeywordInsights.keywordIdeas?.slice(0, 10).map(idea => idea.keyword) || [],
-      };
-      
-      logger.debug('📊 Adding enhanced keyword insights to blog generation:', {
-        mainTopicsCount: enhancedKeywordInsights.mainTopics?.length || 0,
-        missingTopicsCount: enhancedKeywordInsights.missingTopics?.length || 0,
-        questionsCount: enhancedKeywordInsights.commonQuestions?.length || 0,
-        isTrending: enhancedKeywordInsights.isTrending,
-        keywordIdeasCount: enhancedKeywordInsights.keywordIdeas?.length || 0,
-      });
-    }
+    // Note: v1.3.4 unified endpoint doesn't support enhanced_keyword_insights
+    // These insights are handled internally by the API
     
-    // Add content goal prompt if available
-    // IMPORTANT: Ensure topic is always included in the prompt, even with content goal prompts
-    if (contentGoalPrompt?.system_prompt) {
-      // Combine content goal prompt with topic-specific instructions
-      // This ensures the AI knows what topic to write about
-      const topicSpecificInstruction = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
-      
-      // Combine system prompt with topic instruction
-      const systemPrompt = `${contentGoalPrompt.system_prompt}\n\n${topicSpecificInstruction}`;
-      requestPayload.system_prompt = systemPrompt;
-      requestPayload.content_goal = content_goal;
-      logger.debug('📝 Adding content goal prompt to API request:', {
-        content_goal,
-        prompt_length: systemPrompt.length,
-        has_user_template: !!contentGoalPrompt.user_prompt_template,
-        topic_included: systemPrompt.includes(topic)
-      });
-      
-      // Add user prompt template if available (should include {topic} placeholder)
-      if (contentGoalPrompt.user_prompt_template) {
-        // Replace {topic} placeholder if present, otherwise append topic
-        const userTemplate = contentGoalPrompt.user_prompt_template.includes('{topic}')
-          ? contentGoalPrompt.user_prompt_template.replace(/{topic}/g, topic)
-          : `${contentGoalPrompt.user_prompt_template}\n\nTopic: ${topic}`;
-        requestPayload.user_prompt_template = userTemplate;
+    // v1.3.4: Add fields specific to blog_type
+    if (blogType === 'local_business') {
+      // Local business blog requires location
+      if (location) {
+        requestPayload.location = location;
+        requestPayload.max_businesses = max_businesses || 10;
+        requestPayload.max_reviews_per_business = max_reviews_per_business || 20;
+        requestPayload.include_business_details = include_business_details !== undefined ? include_business_details : true;
+        requestPayload.include_review_sentiment = include_review_sentiment !== undefined ? include_review_sentiment : true;
+        requestPayload.use_google = use_google !== undefined ? use_google : true;
       } else {
-        // If no user template, create one with the topic
-        requestPayload.user_prompt_template = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
+        // If location not provided but product research detected, switch to enhanced
+        logger.warn('⚠️ Location required for local_business blog_type, switching to enhanced');
+        requestPayload.blog_type = 'enhanced';
+      }
+    }
+    
+    // v1.3.4: Enhanced blog supports additional fields
+    if (blogType === 'enhanced') {
+      // Add focus_keyword if available
+      if (keywordsArray.length > 0) {
+        requestPayload.focus_keyword = keywordsArray[0];
       }
       
-      // Add additional instructions if available
-      if (contentGoalPrompt.instructions && Object.keys(contentGoalPrompt.instructions).length > 0) {
-        requestPayload.additional_instructions = {
-          ...contentGoalPrompt.instructions,
-          topic: topic,
-          keywords: keywordsArray,
+      // Add include flags
+      requestPayload.include_introduction = true; // Default to true
+      requestPayload.include_conclusion = true; // Default to true
+      requestPayload.include_faq = include_faq_section !== undefined ? include_faq_section : false;
+      requestPayload.include_toc = false; // Default to false
+      
+      // Add word_count_target if word_count is provided
+      if (word_count) {
+        requestPayload.word_count_target = word_count;
+      }
+    }
+    
+    // v1.3.4: Abstraction blog supports content_strategy and quality_target
+    if (blogType === 'abstraction') {
+      // Map content_goal to content_strategy if available
+      if (content_goal) {
+        const strategyMap: Record<string, 'SEO_OPTIMIZED' | 'ENGAGEMENT_FOCUSED' | 'CONVERSION_OPTIMIZED'> = {
+          'seo': 'SEO_OPTIMIZED',
+          'engagement': 'ENGAGEMENT_FOCUSED',
+          'conversions': 'CONVERSION_OPTIMIZED',
+          'brand_awareness': 'ENGAGEMENT_FOCUSED'
         };
+        requestPayload.content_strategy = strategyMap[content_goal] || 'SEO_OPTIMIZED';
       }
-    } else {
-      // Even without content goal prompt, ensure topic is in user prompt template
-      requestPayload.user_prompt_template = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
-    }
-    
-    // Add web research and product research parameters
-    // Use explicit parameters if provided, otherwise auto-detect
-    const shouldIncludeProductResearch = include_product_research !== undefined 
-      ? include_product_research 
-      : requiresProductResearch;
-    
-    if (shouldIncludeProductResearch) {
-      logger.debug('📊 Adding product research parameters...');
-      requestPayload.include_web_research = true;
-      requestPayload.include_product_research = true;
       
-      // Use provided values or defaults
-      requestPayload.research_depth = research_depth || 'comprehensive';
-      requestPayload.include_brands = include_brands !== undefined ? include_brands : true;
-      requestPayload.include_models = include_models !== undefined ? include_models : true;
-      requestPayload.include_prices = include_prices !== undefined ? include_prices : true;
-      requestPayload.include_features = include_features !== undefined ? include_features : true;
-      requestPayload.include_specifications = true; // Always include specifications
-      requestPayload.include_reviews = include_reviews !== undefined ? include_reviews : true;
-      requestPayload.include_pros_cons = include_pros_cons !== undefined ? include_pros_cons : true;
-      
-      // Content structure options
-      requestPayload.content_structure = {
-        include_product_table: include_product_table !== undefined ? include_product_table : true,
-        include_comparison_section: include_comparison_section !== undefined ? include_comparison_section : true,
-        include_buying_guide: include_buying_guide !== undefined ? include_buying_guide : true,
-        include_faq_section: include_faq_section !== undefined ? include_faq_section : true
-      };
-    }
-    
-    // Add brand voice settings if available
-    if (brandVoice) {
-      requestPayload.brand_voice = {
-        tone: brandVoice.tone,
-        style_guidelines: brandVoice.style_guidelines,
-        vocabulary: brandVoice.vocabulary,
-        industry_terms: brandVoice.industry_specific_terms,
-        examples: brandVoice.examples
-      };
-    }
-    
-    // Add content preset settings if available
-    if (contentPreset) {
-      if (contentPreset.content_format) {
-        requestPayload.content_format = contentPreset.content_format;
+      // Map quality_level to quality_target
+      if (quality_level) {
+        const qualityMap: Record<string, 'GOOD' | 'HIGH_QUALITY' | 'PUBLICATION_READY'> = {
+          'low': 'GOOD',
+          'medium': 'GOOD',
+          'high': 'HIGH_QUALITY',
+          'premium': 'PUBLICATION_READY',
+          'enterprise': 'PUBLICATION_READY'
+        };
+        requestPayload.quality_target = qualityMap[quality_level] || 'GOOD';
       }
-      if (contentPreset.quality_level && !quality_level) {
-        requestPayload.quality_level = contentPreset.quality_level;
-      } else if (quality_level) {
-        requestPayload.quality_level = quality_level;
-      }
-      if (contentPreset.preset_config) {
-        Object.assign(requestPayload, contentPreset.preset_config);
-      }
-    } else if (quality_level) {
-      requestPayload.quality_level = quality_level;
-    }
-    
-    // Add preset string if provided (legacy support)
-    if (preset) {
-      requestPayload.preset = preset;
-    }
-    
-    // Add external links parameters if provided
-    if (include_external_links !== undefined) {
-      requestPayload.include_external_links = include_external_links;
-    }
-    if (include_backlinks !== undefined) {
-      requestPayload.include_backlinks = include_backlinks;
-    }
-    if (backlink_count !== undefined) {
-      requestPayload.backlink_count = backlink_count;
     }
     
     logger.debug('📤 Request payload', { payload: JSON.stringify(requestPayload, null, 2) });
@@ -1048,9 +1003,30 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Extract content for processing
-    const rawContent = result.blog_post?.content || result.blog_post?.body || result.content || '';
+    // Extract content for processing (v1.3.4 unified endpoint response formats)
+    // Handle Standard/Abstraction format: { success, blog_post: { title, content, meta_description }, ... }
+    // Handle Enhanced format: { title, content, meta_description, ... }
+    // Handle Local Business format: { title, content, businesses, ... }
+    const rawContent = result.blog_post?.content || result.content || '';
     const blogTitle = result.blog_post?.title || result.title || topic;
+    const metaDescription = result.blog_post?.meta_description || result.meta_description;
+    
+    // Map v1.3.4 response fields to our internal format
+    // Map generation_time_seconds to generation_time for backward compatibility
+    if (result.generation_time_seconds && !result.generation_time) {
+      result.generation_time = result.generation_time_seconds;
+    }
+    
+    // Map quality_scores structure if present
+    if (result.quality_scores && typeof result.quality_scores === 'object') {
+      const qs = result.quality_scores as Record<string, number>;
+      result.quality_dimensions = qs;
+      // Calculate overall quality_score as average
+      const scores = Object.values(qs).filter(v => typeof v === 'number');
+      if (scores.length > 0) {
+        result.quality_score = scores.reduce((a, b) => a + b, 0) / scores.length;
+      }
+    }
     
     // Image generation is now handled separately after blog creation
     // Create placeholders for image generation that can be triggered from the frontend
