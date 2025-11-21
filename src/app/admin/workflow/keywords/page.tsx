@@ -418,13 +418,16 @@ export default function KeywordResearchPage() {
                               {};
       
       // Debug: Log the structure to understand the response format
+      const allKeywordsBeforeFilter = Object.keys(keywordAnalysis);
       console.log('🔍 API Response structure:', {
         hasEnhancedAnalysis: !!researchResults.enhanced_analysis,
         hasKeywordAnalysis: !!researchResults.keyword_analysis,
-        enhancedAnalysisKeys: researchResults.enhanced_analysis ? Object.keys(researchResults.enhanced_analysis) : [],
-        keywordAnalysisKeys: researchResults.keyword_analysis ? Object.keys(researchResults.keyword_analysis) : [],
-        finalKeywordCount: Object.keys(keywordAnalysis).length,
+        enhancedAnalysisKeys: researchResults.enhanced_analysis ? Object.keys(researchResults.enhanced_analysis).slice(0, 10) : [],
+        keywordAnalysisKeys: researchResults.keyword_analysis ? Object.keys(researchResults.keyword_analysis).slice(0, 10) : [],
+        finalKeywordCount: allKeywordsBeforeFilter.length,
+        allKeywordsBeforeFilter: allKeywordsBeforeFilter.slice(0, 20), // Show first 20 keywords
         responseKeys: Object.keys(researchResults),
+        fullResponse: researchResults, // Log full response for debugging
       });
       
       // Debug: Log the structure of keyword analysis to understand search_volume location
@@ -440,6 +443,21 @@ export default function KeywordResearchPage() {
         console.warn('⚠️ No keywords found in keyword_analysis. Full response:', researchResults);
       }
       
+      // Log ALL keywords before filtering
+      console.log('📊 ALL keywords BEFORE filtering:', {
+        totalCount: allKeywordsBeforeFilter.length,
+        keywords: allKeywordsBeforeFilter,
+        sampleKeywords: allKeywordsBeforeFilter.slice(0, 10).map(kw => ({
+          keyword: kw,
+          wordCount: kw.trim().split(/\s+/).length,
+          length: kw.trim().length,
+          willPassFilter: (() => {
+            const wordCount = kw.trim().split(/\s+/).length;
+            return wordCount > 1 || kw.trim().length > 5;
+          })()
+        }))
+      });
+      
       // Filter out single-word keywords that don't make sense as standalone keywords
       // Keep only phrases (2+ words) or meaningful single words
       const filteredKeywordEntries = Object.entries(keywordAnalysis).filter(([keyword]) => {
@@ -448,7 +466,15 @@ export default function KeywordResearchPage() {
         return wordCount > 1 || keyword.trim().length > 5;
       });
       
-      console.log('📋 Filtered keywords (phrases preserved):', filteredKeywordEntries.map(([kw]) => kw));
+      console.log('📋 Filtered keywords (phrases preserved):', {
+        beforeFilter: allKeywordsBeforeFilter.length,
+        afterFilter: filteredKeywordEntries.length,
+        filteredKeywords: filteredKeywordEntries.map(([kw]) => kw),
+        removedKeywords: allKeywordsBeforeFilter.filter(kw => {
+          const wordCount = kw.trim().split(/\s+/).length;
+          return !(wordCount > 1 || kw.trim().length > 5);
+        })
+      });
       
       const keywordList: KeywordWithMetrics[] = filteredKeywordEntries.map(([keyword, data]: [string, any]) => {
         // Extract search_volume from various possible locations
