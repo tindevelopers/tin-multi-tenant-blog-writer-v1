@@ -52,6 +52,39 @@ interface KeywordWithMetrics extends KeywordData {
     competition: number;
     difficulty_score: number;
   }>;
+  // SERP data
+  serp_features?: string[];
+  serp_feature_counts?: Record<string, number>;
+  people_also_ask?: Array<{
+    question: string;
+    title?: string;
+    url?: string;
+    description?: string;
+  }>;
+  featured_snippet?: any;
+  organic_results?: any[];
+  video_results?: any[];
+  image_results?: any[];
+  related_searches?: string[];
+  top_domains?: Array<{
+    domain: string;
+    count: number;
+  }>;
+  content_gaps?: string[];
+  // Intent data
+  primary_intent?: string;
+  intent_probabilities?: Record<string, number>;
+  // Additional metrics
+  traffic_potential?: number;
+  clicks?: number;
+  cps?: number;
+  ai_search_volume?: number;
+  ai_trend?: number;
+  also_rank_for?: string[];
+  also_talk_about?: string[];
+  top_competitors?: string[];
+  first_seen?: string;
+  last_updated?: string;
 }
 
 interface ParentTopicCluster {
@@ -727,10 +760,24 @@ export default function KeywordResearchPage() {
       // v1.3.4: Response structure can be:
       // - { enhanced_analysis: { "keyword": {...data} }, ... } (from enhanced endpoint)
       // - { keyword_analysis: { "keyword": {...data} }, ... } (from regular endpoint)
-      // The API route merges both, so check both locations
+      // - Also includes: serp_analysis, discovery, suggested_keywords, clusters
       const keywordAnalysis = researchResults.enhanced_analysis || 
                               researchResults.keyword_analysis || 
                               {};
+      
+      // Extract SERP analysis and discovery data
+      const serpAnalysis = researchResults.serp_analysis || {};
+      const discovery = researchResults.discovery || {};
+      const suggestedKeywords = researchResults.suggested_keywords || [];
+      const clusters = researchResults.clusters || [];
+      
+      console.log('📊 Extracted data:', {
+        keywordsCount: Object.keys(keywordAnalysis).length,
+        hasSerpAnalysis: !!serpAnalysis && Object.keys(serpAnalysis).length > 0,
+        hasDiscovery: !!discovery && Object.keys(discovery).length > 0,
+        suggestedKeywordsCount: suggestedKeywords.length,
+        clustersCount: clusters.length,
+      });
       
       // IMPORTANT: Extract ALL keywords including nested related_keywords and long_tail_keywords
       // The API returns the main keyword in enhanced_analysis, but related keywords are nested
@@ -741,6 +788,24 @@ export default function KeywordResearchPage() {
       const keywordsNeedingMetrics: string[] = [];
       
       Object.entries(keywordAnalysis).forEach(([mainKeyword, kwData]: [string, any]) => {
+        // Merge SERP analysis data if available for this keyword
+        if (serpAnalysis[mainKeyword] || serpAnalysis.keyword === mainKeyword) {
+          const serpData = serpAnalysis[mainKeyword] || serpAnalysis;
+          kwData.serp_analysis = serpData;
+          kwData.people_also_ask = serpData.people_also_ask || kwData.people_also_ask;
+          kwData.featured_snippet = serpData.featured_snippet || kwData.featured_snippet;
+          kwData.organic_results = serpData.organic_results || kwData.organic_results;
+          kwData.video_results = serpData.video_results || kwData.video_results;
+          kwData.image_results = serpData.image_results || kwData.image_results;
+          kwData.related_searches = serpData.related_searches || kwData.related_searches;
+          kwData.top_domains = serpData.top_domains || kwData.top_domains;
+          kwData.content_gaps = serpData.content_gaps || kwData.content_gaps;
+          // Merge serp_features if available
+          if (serpData.serp_features) {
+            kwData.serp_features = serpData.serp_features;
+          }
+        }
+        
         // Collect related_keywords
         if (kwData?.related_keywords && Array.isArray(kwData.related_keywords)) {
           kwData.related_keywords.forEach((relatedKw: string) => {
@@ -888,7 +953,32 @@ export default function KeywordResearchPage() {
           // Include clustering data from API
           parent_topic: data?.parent_topic,
           cluster_score: data?.cluster_score,
-          category_type: data?.category_type
+          category_type: data?.category_type,
+          // SERP data
+          serp_features: data?.serp_features || [],
+          serp_feature_counts: data?.serp_feature_counts || {},
+          people_also_ask: data?.people_also_ask || [],
+          featured_snippet: data?.featured_snippet || null,
+          organic_results: data?.organic_results || [],
+          video_results: data?.video_results || [],
+          image_results: data?.image_results || [],
+          related_searches: data?.related_searches || [],
+          top_domains: data?.top_domains || [],
+          content_gaps: data?.content_gaps || [],
+          // Intent data
+          primary_intent: data?.primary_intent || null,
+          intent_probabilities: data?.intent_probabilities || {},
+          // Additional metrics
+          traffic_potential: data?.traffic_potential ?? null,
+          clicks: data?.clicks ?? null,
+          cps: data?.cps ?? null,
+          ai_search_volume: data?.ai_search_volume ?? null,
+          ai_trend: data?.ai_trend ?? null,
+          also_rank_for: data?.also_rank_for || [],
+          also_talk_about: data?.also_talk_about || [],
+          top_competitors: data?.top_competitors || [],
+          first_seen: data?.first_seen || null,
+          last_updated: data?.last_updated || null,
         };
       });
 
@@ -1985,6 +2075,12 @@ export default function KeywordResearchPage() {
                     CPC
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    Intent
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                    SERP Features
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                     Parent Topic
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -1995,7 +2091,7 @@ export default function KeywordResearchPage() {
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {paginatedKeywords.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={10} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                       No keywords match your filters
                     </td>
                   </tr>
@@ -2080,6 +2176,56 @@ export default function KeywordResearchPage() {
                       ${kw.cpc?.toFixed(2) || '0.00'}
                     </td>
                     <td className="px-4 py-3">
+                      {kw.primary_intent ? (
+                        <div className="flex flex-col gap-1">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium w-fit ${
+                            kw.primary_intent === 'informational' 
+                              ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                              : kw.primary_intent === 'commercial'
+                              ? 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'
+                              : kw.primary_intent === 'navigational'
+                              ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                              : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                          }`}>
+                            {kw.primary_intent.charAt(0).toUpperCase() + kw.primary_intent.slice(1)}
+                          </span>
+                          {kw.intent_probabilities && Object.keys(kw.intent_probabilities).length > 1 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {Object.keys(kw.intent_probabilities).length} intents
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {kw.serp_features && kw.serp_features.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {kw.serp_features.slice(0, 3).map((feature: string, idx: number) => (
+                            <span key={idx} className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs">
+                              {feature.substring(0, 3)}
+                            </span>
+                          ))}
+                          {kw.serp_features.length > 3 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              +{kw.serp_features.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : kw.serp_feature_counts && Object.keys(kw.serp_feature_counts).length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {Object.keys(kw.serp_feature_counts).slice(0, 3).map((feature: string) => (
+                            <span key={feature} className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded text-xs">
+                              {feature.substring(0, 3)}:{(kw.serp_feature_counts?.[feature] as number) || 0}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">None</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {kw.category_type && (
                           <span className="text-xs" title={kw.category_type}>
@@ -2097,7 +2243,9 @@ export default function KeywordResearchPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {(kw.related_keywords_enhanced?.length || kw.questions?.length || kw.topics?.length) ? (
+                      {(kw.related_keywords_enhanced?.length || kw.questions?.length || kw.topics?.length || 
+                        kw.serp_features?.length || kw.people_also_ask?.length || kw.long_tail_keywords?.length ||
+                        kw.related_searches?.length || kw.top_domains?.length || kw.content_gaps?.length) ? (
                         <button
                           onClick={() => toggleKeywordExpansion(kw.keyword)}
                           className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
@@ -2107,10 +2255,164 @@ export default function KeywordResearchPage() {
                       ) : null}
                     </td>
                   </tr>
-                  {expandedKeywords.has(kw.keyword) && (kw.related_keywords_enhanced?.length || kw.questions?.length || kw.topics?.length) && (
+                  {expandedKeywords.has(kw.keyword) && (
                     <tr className="bg-gray-50 dark:bg-gray-900/50">
-                      <td colSpan={8} className="px-4 py-4">
+                      <td colSpan={10} className="px-4 py-4">
                         <div className="space-y-4">
+                          {/* SERP Features */}
+                          {(kw.serp_features?.length > 0 || kw.serp_feature_counts) && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                SERP Features
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {kw.serp_features?.map((feature, idx) => (
+                                  <span key={idx} className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs">
+                                    {feature}
+                                  </span>
+                                ))}
+                                {kw.serp_feature_counts && Object.entries(kw.serp_feature_counts).map(([feature, count]) => (
+                                  <span key={feature} className="px-2 py-1 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded text-xs">
+                                    {feature}: {count as number}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* People Also Ask */}
+                          {kw.people_also_ask && kw.people_also_ask.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                People Also Ask ({kw.people_also_ask.length})
+                              </h4>
+                              <div className="space-y-2">
+                                {kw.people_also_ask.map((paa: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-white mb-1">
+                                      {paa.question || paa.title || paa}
+                                    </div>
+                                    {paa.description && (
+                                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">{paa.description}</p>
+                                    )}
+                                    {paa.url && (
+                                      <a href={paa.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1 block">
+                                        {paa.url}
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Intent Data */}
+                          {(kw.primary_intent || (kw.intent_probabilities && Object.keys(kw.intent_probabilities).length > 0)) && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Search Intent
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {kw.primary_intent && (
+                                  <span className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-xs font-medium">
+                                    Primary: {kw.primary_intent}
+                                  </span>
+                                )}
+                                {kw.intent_probabilities && Object.entries(kw.intent_probabilities).map(([intent, prob]) => (
+                                  <span key={intent} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs">
+                                    {intent}: {(Number(prob) * 100).toFixed(0)}%
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Additional Metrics */}
+                          {(kw.traffic_potential || kw.clicks || kw.cps || kw.ai_search_volume) && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Additional Metrics
+                              </h4>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                {kw.traffic_potential !== null && kw.traffic_potential !== undefined && (
+                                  <div className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                                    <div className="text-xs text-gray-600 dark:text-gray-400">Traffic Potential</div>
+                                    <div className="text-sm font-semibold text-gray-900 dark:text-white">{kw.traffic_potential.toLocaleString()}</div>
+                                  </div>
+                                )}
+                                {kw.clicks !== null && kw.clicks !== undefined && (
+                                  <div className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                                    <div className="text-xs text-gray-600 dark:text-gray-400">Clicks</div>
+                                    <div className="text-sm font-semibold text-gray-900 dark:text-white">{kw.clicks.toLocaleString()}</div>
+                                  </div>
+                                )}
+                                {kw.cps !== null && kw.cps !== undefined && (
+                                  <div className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                                    <div className="text-xs text-gray-600 dark:text-gray-400">CPS</div>
+                                    <div className="text-sm font-semibold text-gray-900 dark:text-white">{kw.cps.toFixed(2)}</div>
+                                  </div>
+                                )}
+                                {kw.ai_search_volume !== null && kw.ai_search_volume !== undefined && (
+                                  <div className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                                    <div className="text-xs text-gray-600 dark:text-gray-400">AI Volume</div>
+                                    <div className="text-sm font-semibold text-gray-900 dark:text-white">{kw.ai_search_volume.toLocaleString()}</div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Top Domains */}
+                          {kw.top_domains && kw.top_domains.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Top Competing Domains ({kw.top_domains.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {kw.top_domains.map((domain: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                    <span className="text-sm text-gray-900 dark:text-white">{domain.domain || domain}</span>
+                                    {domain.count !== undefined && (
+                                      <span className="text-xs text-gray-600 dark:text-gray-400">{domain.count} results</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Related Searches */}
+                          {kw.related_searches && kw.related_searches.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Related Searches ({kw.related_searches.length})
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {kw.related_searches.map((search: string, idx: number) => (
+                                  <span key={idx} className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs">
+                                    {search}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Content Gaps */}
+                          {kw.content_gaps && kw.content_gaps.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Content Opportunities ({kw.content_gaps.length})
+                              </h4>
+                              <div className="space-y-1">
+                                {kw.content_gaps.map((gap: string, idx: number) => (
+                                  <div key={idx} className="text-sm text-gray-700 dark:text-gray-300 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded">
+                                    {gap}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Enhanced Related Keywords */}
                           {kw.related_keywords_enhanced && kw.related_keywords_enhanced.length > 0 && (
                             <div>
@@ -2170,6 +2472,22 @@ export default function KeywordResearchPage() {
                                       <span>Diff: {t.difficulty_score}/100</span>
                                     </div>
                                   </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Long Tail Keywords */}
+                          {kw.long_tail_keywords && kw.long_tail_keywords.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Long Tail Keywords ({kw.long_tail_keywords.length})
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {kw.long_tail_keywords.map((lt: string, idx: number) => (
+                                  <span key={idx} className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 rounded text-xs">
+                                    {lt}
+                                  </span>
                                 ))}
                               </div>
                             </div>
