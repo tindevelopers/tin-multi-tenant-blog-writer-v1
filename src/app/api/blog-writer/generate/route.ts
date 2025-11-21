@@ -680,8 +680,9 @@ export async function POST(request: NextRequest) {
     
     // Build request payload for unified endpoint (v1.3.4)
     // Determine blog_type based on requirements
+    // v1.3.4: Use location to determine local_business type, otherwise default to enhanced
     const blogType: 'standard' | 'enhanced' | 'local_business' | 'abstraction' = 
-      shouldIncludeProductResearch && location ? 'local_business' :
+      location ? 'local_business' :
       isPremiumQuality || use_consensus_generation || use_knowledge_graph ? 'enhanced' :
       'enhanced'; // Default to enhanced for better quality
     
