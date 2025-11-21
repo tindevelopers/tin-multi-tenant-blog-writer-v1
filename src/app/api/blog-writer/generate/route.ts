@@ -776,31 +776,9 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // v1.3.4: Abstraction blog supports content_strategy and quality_target
-    if (blogType === 'abstraction') {
-      // Map content_goal to content_strategy if available
-      if (content_goal) {
-        const strategyMap: Record<string, 'SEO_OPTIMIZED' | 'ENGAGEMENT_FOCUSED' | 'CONVERSION_OPTIMIZED'> = {
-          'seo': 'SEO_OPTIMIZED',
-          'engagement': 'ENGAGEMENT_FOCUSED',
-          'conversions': 'CONVERSION_OPTIMIZED',
-          'brand_awareness': 'ENGAGEMENT_FOCUSED'
-        };
-        requestPayload.content_strategy = strategyMap[content_goal] || 'SEO_OPTIMIZED';
-      }
-      
-      // Map quality_level to quality_target
-      if (quality_level) {
-        const qualityMap: Record<string, 'GOOD' | 'HIGH_QUALITY' | 'PUBLICATION_READY'> = {
-          'low': 'GOOD',
-          'medium': 'GOOD',
-          'high': 'HIGH_QUALITY',
-          'premium': 'PUBLICATION_READY',
-          'enterprise': 'PUBLICATION_READY'
-        };
-        requestPayload.quality_target = qualityMap[quality_level] || 'GOOD';
-      }
-    }
+    // v1.3.4: Abstraction blog type is not currently used in this implementation
+    // If needed in the future, add logic to determine when blogType should be 'abstraction'
+    // Abstraction blogs support content_strategy and quality_target fields
     
     logger.debug('📤 Request payload', { payload: JSON.stringify(requestPayload, null, 2) });
     const systemPromptForLog = typeof requestPayload.system_prompt === 'string' ? requestPayload.system_prompt : '';
