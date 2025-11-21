@@ -504,8 +504,18 @@ export default function KeywordResearchPage() {
                   details: details,
                 });
                 
-                // Check if this progress event contains result data nested in data.result
-                // Backend sends result as: { stage: "completed", progress: 100, data: { result: { enhanced_analysis: {...} } } }
+                // Backend format: { stage: "completed", progress: 100, data: { result: { enhanced_analysis: {...}, total_keywords: 1 } } }
+                // When stage === 'completed', extract data.result immediately
+                if (stage === 'completed' && data.data?.result) {
+                  console.log('✅ Received completed event with result data');
+                  finalResult = data.data.result;
+                  await processSearchResults(finalResult);
+                  setStreamingProgress(null);
+                  setSearching(false);
+                  return;
+                }
+                
+                // Also check if this progress event contains result data nested in data.result (for any stage)
                 if (data.data?.result) {
                   finalResult = data.data.result;
                   await processSearchResults(finalResult);
@@ -563,9 +573,11 @@ export default function KeywordResearchPage() {
       }
       
       // If stream completed and progress reached 100%, check last event for nested result data
+      // Backend format: { stage: "completed", progress: 100, data: { result: { enhanced_analysis: {...}, total_keywords: 1 } } }
       if (progressReached100 && !finalResult) {
-        // Check if last progress event has result data nested in data.result
+        // Check if last progress event has result data nested in data.result (primary check)
         if (lastProgressEvent?.data?.result) {
+          console.log('✅ Found result in lastProgressEvent.data.result');
           finalResult = lastProgressEvent.data.result;
           await processSearchResults(finalResult);
           setStreamingProgress(null);
@@ -575,6 +587,7 @@ export default function KeywordResearchPage() {
         
         // Check if last progress event has result data nested in data.enhanced_analysis
         if (lastProgressEvent?.data?.enhanced_analysis || lastProgressEvent?.data?.keyword_analysis) {
+          console.log('✅ Found result in lastProgressEvent.data (enhanced_analysis/keyword_analysis)');
           finalResult = lastProgressEvent.data;
           await processSearchResults(finalResult);
           setStreamingProgress(null);
@@ -584,6 +597,7 @@ export default function KeywordResearchPage() {
         
         // Check if last progress event has result data at top level
         if (lastProgressEvent?.enhanced_analysis || lastProgressEvent?.keyword_analysis) {
+          console.log('✅ Found result in lastProgressEvent (top-level)');
           finalResult = lastProgressEvent;
           await processSearchResults(finalResult);
           setStreamingProgress(null);
@@ -593,6 +607,15 @@ export default function KeywordResearchPage() {
         
         // Last resort: fallback to regular API call
         console.warn('⚠️ Stream completed at 100% but no result found in any format. Falling back to regular API...');
+        console.warn('📋 Last event structure:', {
+          hasData: !!lastProgressEvent?.data,
+          hasDataResult: !!lastProgressEvent?.data?.result,
+          hasEnhancedAnalysis: !!lastProgressEvent?.data?.enhanced_analysis,
+          hasKeywordAnalysis: !!lastProgressEvent?.data?.keyword_analysis,
+          stage: lastProgressEvent?.stage,
+          progress: lastProgressEvent?.progress,
+          keys: lastProgressEvent ? Object.keys(lastProgressEvent) : [],
+        });
         setStreamingProgress({
           stage: 'Fetching Results',
           progress: 100,
