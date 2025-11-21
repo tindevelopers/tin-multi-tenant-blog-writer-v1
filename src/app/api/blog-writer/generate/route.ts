@@ -175,8 +175,12 @@ function buildBlogResponse(
     total_cost: result.total_cost || 0,
     generation_time: result.generation_time || 0,
     
-    // Citations and sources
-    citations: result.citations || [],
+    // Citations and sources - map API format to frontend format
+    citations: (result.citations || []).map((citation: { text: string; source?: string; url: string; title?: string }) => ({
+      text: citation.text,
+      url: citation.url,
+      title: citation.title || citation.source || citation.text.substring(0, 50), // Use source as fallback for title
+    })),
     
     // Enhanced features data
     semantic_keywords: result.semantic_keywords || [],
