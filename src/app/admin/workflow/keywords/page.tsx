@@ -54,23 +54,52 @@ interface KeywordWithMetrics extends KeywordData {
   }>;
   // SERP data
   serp_features?: string[];
+  serp_features_object?: {
+    has_featured_snippet?: boolean;
+    has_people_also_ask?: boolean;
+    has_videos?: boolean;
+    has_images?: boolean;
+  };
   serp_feature_counts?: Record<string, number>;
   people_also_ask?: Array<{
     question: string;
-    title?: string;
+    snippet?: string;
     url?: string;
+    title?: string;
     description?: string;
   }>;
-  featured_snippet?: any;
-  organic_results?: any[];
-  video_results?: any[];
-  image_results?: any[];
+  featured_snippet?: {
+    title: string;
+    snippet: string;
+    url: string;
+  };
+  organic_results?: Array<{
+    title: string;
+    url: string;
+    domain: string;
+    snippet: string;
+    position: number;
+  }>;
+  video_results?: Array<{
+    title: string;
+    url: string;
+    thumbnail: string;
+    duration?: string;
+  }>;
+  image_results?: Array<{
+    title: string;
+    url: string;
+    thumbnail: string;
+  }>;
   related_searches?: string[];
   top_domains?: Array<{
     domain: string;
-    count: number;
+    rank?: number;
+    count?: number;
+    backlinks?: number;
   }>;
   content_gaps?: string[];
+  competition_level?: string;
   // Intent data
   primary_intent?: string;
   intent_probabilities?: Record<string, number>;
@@ -85,6 +114,34 @@ interface KeywordWithMetrics extends KeywordData {
   top_competitors?: string[];
   first_seen?: string;
   last_updated?: string;
+  // Discovery data references (shared across keywords)
+  discovery_matching_terms?: Array<{
+    keyword: string;
+    search_volume: number;
+    keyword_difficulty: number;
+    cpc: number;
+    competition: number;
+    parent_topic?: string;
+    intent?: string;
+  }>;
+  discovery_questions?: Array<{
+    keyword: string;
+    search_volume: number;
+    keyword_difficulty: number;
+    cpc: number;
+    competition: number;
+    parent_topic?: string;
+    intent?: string;
+  }>;
+  discovery_related_terms?: Array<{
+    keyword: string;
+    search_volume: number;
+    keyword_difficulty: number;
+    cpc: number;
+    competition: number;
+    parent_topic?: string;
+    intent?: string;
+  }>;
 }
 
 interface ParentTopicCluster {
@@ -771,10 +828,20 @@ export default function KeywordResearchPage() {
       const suggestedKeywords = researchResults.suggested_keywords || [];
       const clusters = researchResults.clusters || [];
       
+      // Store discovery data globally for display (not per-keyword)
+      const discoveryData = {
+        matching_terms: discovery.matching_terms || [],
+        questions: discovery.questions || [],
+        related_terms: discovery.related_terms || [],
+      };
+      
       console.log('📊 Extracted data:', {
         keywordsCount: Object.keys(keywordAnalysis).length,
         hasSerpAnalysis: !!serpAnalysis && Object.keys(serpAnalysis).length > 0,
         hasDiscovery: !!discovery && Object.keys(discovery).length > 0,
+        matchingTermsCount: discoveryData.matching_terms.length,
+        discoveryQuestionsCount: discoveryData.questions.length,
+        relatedTermsCount: discoveryData.related_terms.length,
         suggestedKeywordsCount: suggestedKeywords.length,
         clustersCount: clusters.length,
       });
@@ -800,11 +867,28 @@ export default function KeywordResearchPage() {
           kwData.related_searches = serpData.related_searches || kwData.related_searches;
           kwData.top_domains = serpData.top_domains || kwData.top_domains;
           kwData.content_gaps = serpData.content_gaps || kwData.content_gaps;
-          // Merge serp_features if available
+          kwData.competition_level = serpData.competition_level || kwData.competition_level;
+          // Merge serp_features if available (can be object with boolean flags or array)
           if (serpData.serp_features) {
-            kwData.serp_features = serpData.serp_features;
+            // Handle both formats: object with boolean flags or array of strings
+            if (typeof serpData.serp_features === 'object' && !Array.isArray(serpData.serp_features)) {
+              // Object format: { has_featured_snippet: true, has_people_also_ask: true, ... }
+              kwData.serp_features_object = serpData.serp_features;
+              // Convert to array for display
+              kwData.serp_features = Object.entries(serpData.serp_features)
+                .filter(([_, value]) => value === true)
+                .map(([key]) => key.replace(/has_/g, '').replace(/_/g, ' '));
+            } else {
+              // Array format: ['featured_snippet', 'people_also_ask', ...]
+              kwData.serp_features = serpData.serp_features;
+            }
           }
         }
+        
+        // Add discovery data references (for display purposes)
+        kwData.discovery_matching_terms = discoveryData.matching_terms;
+        kwData.discovery_questions = discoveryData.questions;
+        kwData.discovery_related_terms = discoveryData.related_terms;
         
         // Collect related_keywords
         if (kwData?.related_keywords && Array.isArray(kwData.related_keywords)) {
@@ -979,6 +1063,12 @@ export default function KeywordResearchPage() {
           top_competitors: data?.top_competitors || [],
           first_seen: data?.first_seen || null,
           last_updated: data?.last_updated || null,
+          competition_level: data?.competition_level || null,
+          serp_features_object: data?.serp_features_object || null,
+          // Discovery data references
+          discovery_matching_terms: data?.discovery_matching_terms || [],
+          discovery_questions: data?.discovery_questions || [],
+          discovery_related_terms: data?.discovery_related_terms || [],
         };
       });
 
@@ -2245,7 +2335,10 @@ export default function KeywordResearchPage() {
                     <td className="px-4 py-3">
                       {(kw.related_keywords_enhanced?.length || kw.questions?.length || kw.topics?.length || 
                         kw.serp_features?.length || kw.people_also_ask?.length || kw.long_tail_keywords?.length ||
-                        kw.related_searches?.length || kw.top_domains?.length || kw.content_gaps?.length) ? (
+                        kw.related_searches?.length || kw.top_domains?.length || kw.content_gaps?.length ||
+                        kw.organic_results?.length || kw.video_results?.length || kw.image_results?.length ||
+                        kw.featured_snippet || kw.also_rank_for?.length || kw.also_talk_about?.length ||
+                        kw.discovery_matching_terms?.length || kw.discovery_questions?.length || kw.discovery_related_terms?.length) ? (
                         <button
                           onClick={() => toggleKeywordExpansion(kw.keyword)}
                           className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
@@ -2407,6 +2500,210 @@ export default function KeywordResearchPage() {
                                 {kw.content_gaps.map((gap: string, idx: number) => (
                                   <div key={idx} className="text-sm text-gray-700 dark:text-gray-300 bg-yellow-50 dark:bg-yellow-900/20 p-2 rounded">
                                     {gap}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Competition Level */}
+                          {kw.competition_level && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Competition Level
+                              </h4>
+                              <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-xs">
+                                {kw.competition_level}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Also Rank For */}
+                          {kw.also_rank_for && kw.also_rank_for.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Also Rank For ({kw.also_rank_for.length})
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {kw.also_rank_for.map((keyword: string, idx: number) => (
+                                  <span key={idx} className="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded text-xs">
+                                    {keyword}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Also Talk About */}
+                          {kw.also_talk_about && kw.also_talk_about.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Also Talk About ({kw.also_talk_about.length})
+                              </h4>
+                              <div className="flex flex-wrap gap-2">
+                                {kw.also_talk_about.map((topic: string, idx: number) => (
+                                  <span key={idx} className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs">
+                                    {topic}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Featured Snippet */}
+                          {kw.featured_snippet && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Featured Snippet
+                              </h4>
+                              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+                                <h5 className="font-medium text-sm text-gray-900 dark:text-white mb-2">
+                                  {kw.featured_snippet.title}
+                                </h5>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                  {kw.featured_snippet.snippet}
+                                </p>
+                                {kw.featured_snippet.url && (
+                                  <a href={kw.featured_snippet.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                                    {kw.featured_snippet.url}
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Organic Results */}
+                          {kw.organic_results && kw.organic_results.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Top Organic Results ({kw.organic_results.length})
+                              </h4>
+                              <div className="space-y-3">
+                                {kw.organic_results.slice(0, 10).map((result: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                                    <div className="flex items-start gap-2 mb-1">
+                                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-6">#{result.position || idx + 1}</span>
+                                      <div className="flex-1">
+                                        <h5 className="font-medium text-sm text-blue-600 dark:text-blue-400 hover:underline mb-1">
+                                          <a href={result.url} target="_blank" rel="noopener noreferrer">
+                                            {result.title}
+                                          </a>
+                                        </h5>
+                                        <p className="text-xs text-green-600 dark:text-green-400 mb-1">{result.domain || new URL(result.url).hostname}</p>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{result.snippet}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Video Results */}
+                          {kw.video_results && kw.video_results.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Video Results ({kw.video_results.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {kw.video_results.slice(0, 6).map((video: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    {video.thumbnail && (
+                                      <img src={video.thumbnail} alt={video.title} className="w-full h-32 object-cover" />
+                                    )}
+                                    <div className="p-2">
+                                      <h5 className="font-medium text-xs text-gray-900 dark:text-white mb-1 line-clamp-2">
+                                        <a href={video.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                          {video.title}
+                                        </a>
+                                      </h5>
+                                      {video.duration && (
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">{video.duration}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Image Results */}
+                          {kw.image_results && kw.image_results.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Image Results ({kw.image_results.length})
+                              </h4>
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {kw.image_results.slice(0, 8).map((image: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    {image.thumbnail && (
+                                      <img src={image.thumbnail} alt={image.title} className="w-full h-24 object-cover" />
+                                    )}
+                                    <div className="p-1">
+                                      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{image.title}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Discovery: Matching Terms */}
+                          {kw.discovery_matching_terms && kw.discovery_matching_terms.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Matching Terms ({kw.discovery_matching_terms.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {kw.discovery_matching_terms.map((term: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-white mb-1">{term.keyword}</div>
+                                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                      <span>Vol: {term.search_volume?.toLocaleString() || 'N/A'}</span>
+                                      <span>KD: {term.keyword_difficulty || 'N/A'}</span>
+                                      <span>CPC: ${term.cpc?.toFixed(2) || '0.00'}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Discovery: Questions */}
+                          {kw.discovery_questions && kw.discovery_questions.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Discovery Questions ({kw.discovery_questions.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {kw.discovery_questions.map((q: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-white mb-1">{q.keyword}</div>
+                                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                      <span>Vol: {q.search_volume?.toLocaleString() || 'N/A'}</span>
+                                      <span>KD: {q.keyword_difficulty || 'N/A'}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Discovery: Related Terms */}
+                          {kw.discovery_related_terms && kw.discovery_related_terms.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                                Discovery Related Terms ({kw.discovery_related_terms.length})
+                              </h4>
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {kw.discovery_related_terms.map((term: any, idx: number) => (
+                                  <div key={idx} className="bg-white dark:bg-gray-800 rounded-lg p-2 border border-gray-200 dark:border-gray-700">
+                                    <div className="font-medium text-sm text-gray-900 dark:text-white mb-1">{term.keyword}</div>
+                                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                      <span>Vol: {term.search_volume?.toLocaleString() || 'N/A'}</span>
+                                      <span>KD: {term.keyword_difficulty || 'N/A'}</span>
+                                      <span>CPC: ${term.cpc?.toFixed(2) || '0.00'}</span>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
