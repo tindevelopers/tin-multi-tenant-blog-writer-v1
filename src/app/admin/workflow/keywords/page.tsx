@@ -422,16 +422,19 @@ export default function KeywordResearchPage() {
       // We need to extract them and create separate keyword entries
       const allExtractedKeywords: Record<string, any> = { ...keywordAnalysis };
       
-      // Extract related keywords and long-tail keywords from each main keyword
+      // Step 1: Collect all related and long-tail keywords that need metrics
+      const keywordsNeedingMetrics: string[] = [];
+      
       Object.entries(keywordAnalysis).forEach(([mainKeyword, kwData]: [string, any]) => {
-        // Add related_keywords as separate entries (if they have data)
+        // Collect related_keywords
         if (kwData?.related_keywords && Array.isArray(kwData.related_keywords)) {
           kwData.related_keywords.forEach((relatedKw: string) => {
             if (relatedKw && !allExtractedKeywords[relatedKw]) {
-              // Create a keyword entry for related keyword with basic data
+              keywordsNeedingMetrics.push(relatedKw);
+              // Create placeholder entry (will be updated with metrics)
               allExtractedKeywords[relatedKw] = {
                 keyword: relatedKw,
-                search_volume: null, // Will be fetched if needed
+                search_volume: null,
                 difficulty: kwData.difficulty || 'medium',
                 competition: kwData.competition ?? 0,
                 cpc: kwData.cpc ?? null,
@@ -443,10 +446,11 @@ export default function KeywordResearchPage() {
           });
         }
         
-        // Add long_tail_keywords as separate entries
+        // Collect long_tail_keywords
         if (kwData?.long_tail_keywords && Array.isArray(kwData.long_tail_keywords)) {
           kwData.long_tail_keywords.forEach((longTailKw: string) => {
             if (longTailKw && !allExtractedKeywords[longTailKw]) {
+              keywordsNeedingMetrics.push(longTailKw);
               allExtractedKeywords[longTailKw] = {
                 keyword: longTailKw,
                 search_volume: null,
@@ -466,6 +470,7 @@ export default function KeywordResearchPage() {
       if (researchResults.suggested_keywords && Array.isArray(researchResults.suggested_keywords)) {
         researchResults.suggested_keywords.forEach((suggestedKw: string) => {
           if (suggestedKw && !allExtractedKeywords[suggestedKw]) {
+            keywordsNeedingMetrics.push(suggestedKw);
             allExtractedKeywords[suggestedKw] = {
               keyword: suggestedKw,
               search_volume: null,
@@ -476,6 +481,50 @@ export default function KeywordResearchPage() {
             };
           }
         });
+      }
+      
+      // Step 2: Fetch metrics for all related/long-tail keywords in batch
+      if (keywordsNeedingMetrics.length > 0) {
+        try {
+          console.log(`📊 Fetching metrics for ${keywordsNeedingMetrics.length} related keywords...`);
+          const metricsResponse = await fetch('/api/keywords/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              keywords: keywordsNeedingMetrics,
+              location: location,
+              language: 'en',
+              include_search_volume: true,
+            }),
+          });
+          
+          if (metricsResponse.ok) {
+            const metricsData = await metricsResponse.json();
+            const metricsAnalysis = metricsData.enhanced_analysis || metricsData.keyword_analysis || {};
+            
+            // Update extracted keywords with fetched metrics
+            Object.entries(metricsAnalysis).forEach(([keyword, kwMetrics]: [string, any]) => {
+              if (allExtractedKeywords[keyword]) {
+                allExtractedKeywords[keyword] = {
+                  ...allExtractedKeywords[keyword],
+                  search_volume: kwMetrics?.search_volume ?? null,
+                  difficulty: kwMetrics?.difficulty || allExtractedKeywords[keyword].difficulty,
+                  competition: kwMetrics?.competition ?? allExtractedKeywords[keyword].competition,
+                  cpc: kwMetrics?.cpc ?? allExtractedKeywords[keyword].cpc,
+                };
+              }
+            });
+            
+            console.log(`✅ Updated metrics for ${Object.keys(metricsAnalysis).length} keywords`);
+          } else {
+            console.warn('⚠️ Failed to fetch metrics for related keywords:', metricsResponse.statusText);
+          }
+        } catch (metricsError) {
+          console.error('❌ Error fetching metrics for related keywords:', metricsError);
+          // Continue without metrics - keywords will show with placeholder values
+        }
       }
       
       // Debug: Log the structure to understand the response format
