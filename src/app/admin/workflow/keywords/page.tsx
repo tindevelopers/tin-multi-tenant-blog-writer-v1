@@ -503,6 +503,25 @@ export default function KeywordResearchPage() {
                   progress: Math.min(Math.max(progress, 0), 100),
                   details: details,
                 });
+                
+                // Check if this progress event contains result data nested in data.result
+                // Backend sends result as: { stage: "completed", progress: 100, data: { result: { enhanced_analysis: {...} } } }
+                if (data.data?.result) {
+                  finalResult = data.data.result;
+                  await processSearchResults(finalResult);
+                  setStreamingProgress(null);
+                  setSearching(false);
+                  return;
+                }
+                
+                // Also check if data.data contains enhanced_analysis directly
+                if (data.data?.enhanced_analysis || data.data?.keyword_analysis) {
+                  finalResult = data.data;
+                  await processSearchResults(finalResult);
+                  setStreamingProgress(null);
+                  setSearching(false);
+                  return;
+                }
               }
               
               // Handle final result - check multiple formats
@@ -517,6 +536,15 @@ export default function KeywordResearchPage() {
               // Check if this event contains analysis data (even without type field)
               if (data.enhanced_analysis || data.keyword_analysis) {
                 finalResult = data;
+                await processSearchResults(finalResult);
+                setStreamingProgress(null);
+                setSearching(false);
+                return;
+              }
+              
+              // Check nested data.result for analysis data (backend format)
+              if (data.data?.result?.enhanced_analysis || data.data?.result?.keyword_analysis) {
+                finalResult = data.data.result;
                 await processSearchResults(finalResult);
                 setStreamingProgress(null);
                 setSearching(false);
