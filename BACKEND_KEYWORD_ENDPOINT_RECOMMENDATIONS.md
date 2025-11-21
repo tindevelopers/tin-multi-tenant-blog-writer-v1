@@ -421,6 +421,63 @@ For questions or clarifications, please refer to:
 
 ---
 
-**Last Updated:** 2025-11-20  
+**Last Updated:** 2025-11-21
+
+---
+
+## 🚨 CRITICAL: Streaming Endpoint Issue
+
+### Problem: Stream Completes Without Final Result
+
+**Endpoint:** `POST /api/v1/keywords/enhanced/stream`
+
+**Current Behavior:**
+- ✅ Backend sends progress events correctly (stage, progress, message, data)
+- ✅ Progress reaches 100%
+- ❌ **Stream completes WITHOUT sending a final result message**
+- ❌ No `enhanced_analysis` or `keyword_analysis` in any event
+- ❌ No `type: 'result'` or `type: 'complete'` event
+
+**Expected Behavior:**
+The streaming endpoint should send a final event with the complete analysis results:
+
+```json
+{
+  "type": "result",
+  "enhanced_analysis": {
+    "keyword": {
+      "search_volume": 301000,
+      "cpc": 2.74,
+      "competition": 0.0,
+      "difficulty": "medium",
+      ...
+    }
+  }
+}
+```
+
+**OR** at minimum, include `enhanced_analysis` or `keyword_analysis` in the final progress event when `progress: 100`.
+
+**Impact:**
+- Frontend cannot display results after streaming completes
+- Users see "Stream completed without result" error
+- Frontend must fallback to regular (non-streaming) API call, negating the streaming UX benefit
+
+**Recommendation:**
+1. **Immediate Fix:** Send a final event with `type: 'result'` containing the complete analysis data when progress reaches 100%
+2. **Alternative:** Include `enhanced_analysis` or `keyword_analysis` in the final progress event (when `progress: 100`)
+
+**Test Results:**
+- Tested endpoint: `https://blog-writer-api-dev-613248238610.europe-west9.run.app/api/v1/keywords/enhanced/stream`
+- Received 50+ progress events
+- Progress reached 100%
+- **No final result event received**
+- Stream closed without result data
+
+**Frontend Workaround:**
+- Frontend now falls back to regular API call when stream completes without result
+- This works but defeats the purpose of streaming (users see progress but then have to wait for regular API call)
+
+---  
 **Document Version:** 1.0
 
