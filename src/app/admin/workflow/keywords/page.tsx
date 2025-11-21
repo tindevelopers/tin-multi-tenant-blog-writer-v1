@@ -467,6 +467,8 @@ export default function KeywordResearchPage() {
 
     let buffer = '';
     let finalResult: any = null;
+    let lastProgressEvent: any = null;
+    let progressReached100 = false;
 
     try {
       while (true) {
@@ -486,7 +488,15 @@ export default function KeywordResearchPage() {
               if (data.type === 'progress' || data.stage) {
                 const progress = data.progress_percentage || data.progress || 0;
                 const stage = data.stage || 'processing';
-                const details = data.details || data.status || '';
+                const details = data.details || data.status || data.message || '';
+                
+                // Track if progress reached 100%
+                if (progress >= 100) {
+                  progressReached100 = true;
+                }
+                
+                // Store the last progress event in case it contains result data
+                lastProgressEvent = data;
                 
                 setStreamingProgress({
                   stage: formatStageName(stage),
@@ -495,9 +505,18 @@ export default function KeywordResearchPage() {
                 });
               }
               
-              // Handle final result
-              if (data.type === 'result' || data.type === 'complete' || (data.enhanced_analysis || data.keyword_analysis)) {
+              // Handle final result - check multiple formats
+              if (data.type === 'result' || data.type === 'complete') {
                 finalResult = data.result || data;
+                await processSearchResults(finalResult);
+                setStreamingProgress(null);
+                setSearching(false);
+                return;
+              }
+              
+              // Check if this event contains analysis data (even without type field)
+              if (data.enhanced_analysis || data.keyword_analysis) {
+                finalResult = data;
                 await processSearchResults(finalResult);
                 setStreamingProgress(null);
                 setSearching(false);
@@ -515,11 +534,41 @@ export default function KeywordResearchPage() {
         }
       }
       
-      // If we exit the loop without a result, process what we have
+      // If stream completed and progress reached 100%, try to use last event or fallback to regular API
+      if (progressReached100 && !finalResult) {
+        console.warn('⚠️ Stream completed at 100% but no result found. Checking last event...');
+        
+        // Check if last progress event has any result data
+        if (lastProgressEvent && (lastProgressEvent.enhanced_analysis || lastProgressEvent.keyword_analysis)) {
+          console.log('✅ Found result data in last progress event');
+          finalResult = lastProgressEvent;
+          await processSearchResults(finalResult);
+          setStreamingProgress(null);
+          setSearching(false);
+          return;
+        }
+        
+        // If still no result, fallback to regular API call
+        console.warn('⚠️ No result in stream. Falling back to regular API...');
+        setStreamingProgress({
+          stage: 'Fetching Results',
+          progress: 100,
+          details: 'Streaming completed, fetching final results...',
+        });
+        
+        // Fallback to regular API
+        await handleRegularSearch(analysisRequest);
+        setStreamingProgress(null);
+        return;
+      }
+      
+      // If we have a result, process it
       if (finalResult) {
         await processSearchResults(finalResult);
       } else {
-        throw new Error('Stream completed without result');
+        // Last resort: fallback to regular API
+        console.warn('⚠️ Stream completed without result. Falling back to regular API...');
+        await handleRegularSearch(analysisRequest);
       }
     } catch (error) {
       setStreamingProgress(null);

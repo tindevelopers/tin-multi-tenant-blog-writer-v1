@@ -5,6 +5,9 @@
 **Status:** Frontend Integration Feedback  
 **Priority:** High - Affects User Experience
 
+**Last Updated:** 2025-11-21  
+**Update:** Added streaming endpoint issue
+
 ---
 
 ## 📋 Executive Summary
