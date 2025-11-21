@@ -534,13 +534,28 @@ export default function KeywordResearchPage() {
         }
       }
       
-      // If stream completed and progress reached 100%, try to use last event or fallback to regular API
+      // If stream completed and progress reached 100%, check last event for nested result data
       if (progressReached100 && !finalResult) {
-        console.warn('⚠️ Stream completed at 100% but no result found. Checking last event...');
+        // Check if last progress event has result data nested in data.result
+        if (lastProgressEvent?.data?.result) {
+          finalResult = lastProgressEvent.data.result;
+          await processSearchResults(finalResult);
+          setStreamingProgress(null);
+          setSearching(false);
+          return;
+        }
         
-        // Check if last progress event has any result data
-        if (lastProgressEvent && (lastProgressEvent.enhanced_analysis || lastProgressEvent.keyword_analysis)) {
-          console.log('✅ Found result data in last progress event');
+        // Check if last progress event has result data nested in data.enhanced_analysis
+        if (lastProgressEvent?.data?.enhanced_analysis || lastProgressEvent?.data?.keyword_analysis) {
+          finalResult = lastProgressEvent.data;
+          await processSearchResults(finalResult);
+          setStreamingProgress(null);
+          setSearching(false);
+          return;
+        }
+        
+        // Check if last progress event has result data at top level
+        if (lastProgressEvent?.enhanced_analysis || lastProgressEvent?.keyword_analysis) {
           finalResult = lastProgressEvent;
           await processSearchResults(finalResult);
           setStreamingProgress(null);
@@ -548,8 +563,8 @@ export default function KeywordResearchPage() {
           return;
         }
         
-        // If still no result, fallback to regular API call
-        console.warn('⚠️ No result in stream. Falling back to regular API...');
+        // Last resort: fallback to regular API call
+        console.warn('⚠️ Stream completed at 100% but no result found in any format. Falling back to regular API...');
         setStreamingProgress({
           stage: 'Fetching Results',
           progress: 100,
