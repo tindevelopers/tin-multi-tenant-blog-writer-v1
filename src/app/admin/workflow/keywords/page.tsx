@@ -2266,7 +2266,7 @@ export default function KeywordResearchPage() {
                                 SERP Features
                               </h4>
                               <div className="flex flex-wrap gap-2">
-                                {kw.serp_features?.map((feature, idx) => (
+                                {(kw.serp_features || []).map((feature, idx) => (
                                   <span key={idx} className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded text-xs">
                                     {feature}
                                   </span>
