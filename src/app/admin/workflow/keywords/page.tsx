@@ -409,7 +409,23 @@ export default function KeywordResearchPage() {
       const researchResults = await response.json();
 
       // Extract keywords from research results
-      const keywordAnalysis = researchResults.keyword_analysis?.keyword_analysis || {};
+      // v1.3.4: Response structure can be:
+      // - { enhanced_analysis: { "keyword": {...data} }, ... } (from enhanced endpoint)
+      // - { keyword_analysis: { "keyword": {...data} }, ... } (from regular endpoint)
+      // The API route merges both, so check both locations
+      const keywordAnalysis = researchResults.enhanced_analysis || 
+                              researchResults.keyword_analysis || 
+                              {};
+      
+      // Debug: Log the structure to understand the response format
+      console.log('🔍 API Response structure:', {
+        hasEnhancedAnalysis: !!researchResults.enhanced_analysis,
+        hasKeywordAnalysis: !!researchResults.keyword_analysis,
+        enhancedAnalysisKeys: researchResults.enhanced_analysis ? Object.keys(researchResults.enhanced_analysis) : [],
+        keywordAnalysisKeys: researchResults.keyword_analysis ? Object.keys(researchResults.keyword_analysis) : [],
+        finalKeywordCount: Object.keys(keywordAnalysis).length,
+        responseKeys: Object.keys(researchResults),
+      });
       
       // Debug: Log the structure of keyword analysis to understand search_volume location
       const firstKeyword = Object.keys(keywordAnalysis)[0];
@@ -420,6 +436,8 @@ export default function KeywordResearchPage() {
           hasSearchVolume: 'search_volume' in (keywordAnalysis[firstKeyword] || {}),
           allKeys: Object.keys(keywordAnalysis[firstKeyword] || {})
         });
+      } else {
+        console.warn('⚠️ No keywords found in keyword_analysis. Full response:', researchResults);
       }
       
       // Filter out single-word keywords that don't make sense as standalone keywords
