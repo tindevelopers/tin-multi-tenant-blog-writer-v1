@@ -2260,7 +2260,7 @@ export default function KeywordResearchPage() {
                       <td colSpan={10} className="px-4 py-4">
                         <div className="space-y-4">
                           {/* SERP Features */}
-                          {(kw.serp_features?.length > 0 || kw.serp_feature_counts) && (
+                          {((kw.serp_features && kw.serp_features.length > 0) || kw.serp_feature_counts) && (
                             <div>
                               <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
                                 SERP Features
