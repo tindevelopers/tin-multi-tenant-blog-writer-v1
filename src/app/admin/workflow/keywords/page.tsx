@@ -417,17 +417,78 @@ export default function KeywordResearchPage() {
                               researchResults.keyword_analysis || 
                               {};
       
+      // IMPORTANT: Extract ALL keywords including nested related_keywords and long_tail_keywords
+      // The API returns the main keyword in enhanced_analysis, but related keywords are nested
+      // We need to extract them and create separate keyword entries
+      const allExtractedKeywords: Record<string, any> = { ...keywordAnalysis };
+      
+      // Extract related keywords and long-tail keywords from each main keyword
+      Object.entries(keywordAnalysis).forEach(([mainKeyword, kwData]: [string, any]) => {
+        // Add related_keywords as separate entries (if they have data)
+        if (kwData?.related_keywords && Array.isArray(kwData.related_keywords)) {
+          kwData.related_keywords.forEach((relatedKw: string) => {
+            if (relatedKw && !allExtractedKeywords[relatedKw]) {
+              // Create a keyword entry for related keyword with basic data
+              allExtractedKeywords[relatedKw] = {
+                keyword: relatedKw,
+                search_volume: null, // Will be fetched if needed
+                difficulty: kwData.difficulty || 'medium',
+                competition: kwData.competition ?? 0,
+                cpc: kwData.cpc ?? null,
+                parent_topic: mainKeyword,
+                related_to: mainKeyword,
+                is_related: true,
+              };
+            }
+          });
+        }
+        
+        // Add long_tail_keywords as separate entries
+        if (kwData?.long_tail_keywords && Array.isArray(kwData.long_tail_keywords)) {
+          kwData.long_tail_keywords.forEach((longTailKw: string) => {
+            if (longTailKw && !allExtractedKeywords[longTailKw]) {
+              allExtractedKeywords[longTailKw] = {
+                keyword: longTailKw,
+                search_volume: null,
+                difficulty: kwData.difficulty || 'medium',
+                competition: kwData.competition ?? 0,
+                cpc: kwData.cpc ?? null,
+                parent_topic: mainKeyword,
+                related_to: mainKeyword,
+                is_long_tail: true,
+              };
+            }
+          });
+        }
+      });
+      
+      // Also check for top-level suggested_keywords
+      if (researchResults.suggested_keywords && Array.isArray(researchResults.suggested_keywords)) {
+        researchResults.suggested_keywords.forEach((suggestedKw: string) => {
+          if (suggestedKw && !allExtractedKeywords[suggestedKw]) {
+            allExtractedKeywords[suggestedKw] = {
+              keyword: suggestedKw,
+              search_volume: null,
+              difficulty: 'medium',
+              competition: 0,
+              cpc: null,
+              is_suggested: true,
+            };
+          }
+        });
+      }
+      
       // Debug: Log the structure to understand the response format
-      const allKeywordsBeforeFilter = Object.keys(keywordAnalysis);
+      const allKeywordsBeforeFilter = Object.keys(allExtractedKeywords);
       console.log('🔍 API Response structure:', {
         hasEnhancedAnalysis: !!researchResults.enhanced_analysis,
         hasKeywordAnalysis: !!researchResults.keyword_analysis,
         enhancedAnalysisKeys: researchResults.enhanced_analysis ? Object.keys(researchResults.enhanced_analysis).slice(0, 10) : [],
         keywordAnalysisKeys: researchResults.keyword_analysis ? Object.keys(researchResults.keyword_analysis).slice(0, 10) : [],
-        finalKeywordCount: allKeywordsBeforeFilter.length,
+        mainKeywordsCount: Object.keys(keywordAnalysis).length,
+        extractedKeywordsCount: allKeywordsBeforeFilter.length,
         allKeywordsBeforeFilter: allKeywordsBeforeFilter.slice(0, 20), // Show first 20 keywords
         responseKeys: Object.keys(researchResults),
-        fullResponse: researchResults, // Log full response for debugging
       });
       
       // Debug: Log the structure of keyword analysis to understand search_volume location
@@ -437,6 +498,8 @@ export default function KeywordResearchPage() {
           keyword: firstKeyword,
           data: keywordAnalysis[firstKeyword],
           hasSearchVolume: 'search_volume' in (keywordAnalysis[firstKeyword] || {}),
+          relatedKeywordsCount: keywordAnalysis[firstKeyword]?.related_keywords?.length || 0,
+          longTailKeywordsCount: keywordAnalysis[firstKeyword]?.long_tail_keywords?.length || 0,
           allKeys: Object.keys(keywordAnalysis[firstKeyword] || {})
         });
       } else {
@@ -446,6 +509,8 @@ export default function KeywordResearchPage() {
       // Log ALL keywords before filtering
       console.log('📊 ALL keywords BEFORE filtering:', {
         totalCount: allKeywordsBeforeFilter.length,
+        mainKeywords: Object.keys(keywordAnalysis).length,
+        extractedKeywords: allKeywordsBeforeFilter.length,
         keywords: allKeywordsBeforeFilter,
         sampleKeywords: allKeywordsBeforeFilter.slice(0, 10).map(kw => ({
           keyword: kw,
@@ -460,7 +525,7 @@ export default function KeywordResearchPage() {
       
       // Filter out single-word keywords that don't make sense as standalone keywords
       // Keep only phrases (2+ words) or meaningful single words
-      const filteredKeywordEntries = Object.entries(keywordAnalysis).filter(([keyword]) => {
+      const filteredKeywordEntries = Object.entries(allExtractedKeywords).filter(([keyword]) => {
         const wordCount = keyword.trim().split(/\s+/).length;
         // Keep phrases (2+ words) or single words that are meaningful (length > 5)
         return wordCount > 1 || keyword.trim().length > 5;
