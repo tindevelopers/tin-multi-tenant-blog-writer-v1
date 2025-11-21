@@ -29,6 +29,7 @@ interface BlogGenerationResult {
   // Enhanced format: { title, content, meta_description, ... }
   title?: string;
   content?: string;
+  meta_title?: string; // For backward compatibility
   meta_description?: string;
   excerpt?: string;
   // Common fields across all formats
@@ -145,10 +146,10 @@ function buildBlogResponse(
 ): EnhancedBlogResponse {
   const { topic, brandVoice, contentPreset, endpoint, shouldUseEnhanced, requiresProductResearch } = options;
   
-  // v1.3.1: Title is guaranteed to be a valid string (never "**")
-  // Fallback chain: blog_post.title → title → meta_title → topic
+  // v1.3.4: Title extraction from unified endpoint response formats
+  // Fallback chain: blog_post.title → title → topic
   // All fallbacks ensure a valid string is always returned
-  const title = result.blog_post?.title || result.title || result.meta_title || topic;
+  const title = result.blog_post?.title || result.title || topic;
   const excerpt = result.blog_post?.excerpt || result.blog_post?.summary || result.excerpt || result.meta_description || '';
   
   return {
