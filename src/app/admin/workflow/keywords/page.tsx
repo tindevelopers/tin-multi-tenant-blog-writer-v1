@@ -73,6 +73,14 @@ export default function KeywordResearchPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   
+  // Streaming progress state
+  const [streamingProgress, setStreamingProgress] = useState<{
+    stage: string;
+    progress: number;
+    details?: string;
+  } | null>(null);
+  const [useStreaming, setUseStreaming] = useState<boolean>(true); // Enable streaming by default
+  
   // Cloud Run status tracking
   const cloudRunStatus = useCloudRunStatus();
   
@@ -352,7 +360,7 @@ export default function KeywordResearchPage() {
     return volumeScore + difficultyScore + competitionScore + countScore;
   };
 
-  // Search keywords
+  // Search keywords with streaming support
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
       setError('Please enter a search query');
@@ -363,6 +371,7 @@ export default function KeywordResearchPage() {
       setSearching(true);
       setError(null);
       setSuccess(null);
+      setStreamingProgress(null);
       
       // Clear old results when starting a new search
       setKeywords([]);
@@ -392,22 +401,174 @@ export default function KeywordResearchPage() {
         analysisRequest.include_ai_volume = includeAiVolume;
       }
       
-      // Call the enhanced API directly with customization options
-      const response = await fetch('/api/keywords/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(analysisRequest),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: response.statusText }));
-        throw new Error(errorData.error || `Failed to analyze keywords: ${response.statusText}`);
+      // Use streaming endpoint if enabled
+      if (useStreaming) {
+        await handleStreamingSearch(analysisRequest);
+      } else {
+        await handleRegularSearch(analysisRequest);
+      }
+    } catch (err: any) {
+      console.error('Error searching keywords:', err);
+      let errorMessage = 'Failed to search keywords';
+      if (err instanceof Error) {
+        errorMessage = err.message || errorMessage;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err === 'object' && 'message' in err) {
+        errorMessage = String(err.message);
+      }
+      setError(errorMessage);
+      setSearching(false);
+      setStreamingProgress(null);
+    }
+  };
+
+  // Regular (non-streaming) search
+  const handleRegularSearch = async (analysisRequest: any) => {
+    const response = await fetch('/api/keywords/analyze', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(analysisRequest),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(errorData.error || `Failed to analyze keywords: ${response.statusText}`);
+    }
+    
+    const researchResults = await response.json();
+    await processSearchResults(researchResults);
+    setSearching(false);
+  };
+
+  // Streaming search with real-time progress
+  const handleStreamingSearch = async (analysisRequest: any) => {
+    const response = await fetch('/api/keywords/analyze/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(analysisRequest),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: response.statusText }));
+      throw new Error(errorData.error || `Failed to analyze keywords: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    
+    if (!reader) {
+      throw new Error('No response body available');
+    }
+
+    let buffer = '';
+    let finalResult: any = null;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              // Handle progress updates
+              if (data.type === 'progress' || data.stage) {
+                const progress = data.progress_percentage || data.progress || 0;
+                const stage = data.stage || 'processing';
+                const details = data.details || data.status || '';
+                
+                setStreamingProgress({
+                  stage: formatStageName(stage),
+                  progress: Math.min(Math.max(progress, 0), 100),
+                  details: details,
+                });
+              }
+              
+              // Handle final result
+              if (data.type === 'result' || data.type === 'complete' || (data.enhanced_analysis || data.keyword_analysis)) {
+                finalResult = data.result || data;
+                await processSearchResults(finalResult);
+                setStreamingProgress(null);
+                setSearching(false);
+                return;
+              }
+              
+              // Handle errors
+              if (data.type === 'error') {
+                throw new Error(data.error || 'Streaming error occurred');
+              }
+            } catch (e) {
+              console.error('Failed to parse SSE data:', e, line);
+            }
+          }
+        }
       }
       
-      const researchResults = await response.json();
+      // If we exit the loop without a result, process what we have
+      if (finalResult) {
+        await processSearchResults(finalResult);
+      } else {
+        throw new Error('Stream completed without result');
+      }
+    } catch (error) {
+      setStreamingProgress(null);
+      throw error;
+    } finally {
+      setSearching(false);
+    }
+  };
 
+  // Format stage names for display with descriptions
+  const formatStageName = (stage: string): string => {
+    const stageMap: Record<string, string> = {
+      'initializing': 'Initializing Search',
+      'detecting_location': 'Detecting Location',
+      'analyzing_keywords': 'Analyzing Primary Keywords',
+      'getting_suggestions': 'Fetching Keyword Suggestions',
+      'analyzing_suggestions': 'Analyzing Suggested Keywords',
+      'clustering_keywords': 'Clustering by Topics',
+      'getting_ai_data': 'Getting AI Search Metrics',
+      'getting_related_keywords': 'Finding Related Keywords',
+      'getting_keyword_ideas': 'Generating Keyword Ideas',
+      'analyzing_serp': 'Analyzing Search Results',
+      'building_discovery': 'Building Final Results',
+      'completed': 'Completed',
+    };
+    return stageMap[stage] || stage.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  // Get stage description for better UX
+  const getStageDescription = (stage: string): string => {
+    const descriptions: Record<string, string> = {
+      'initializing': 'Preparing keyword analysis...',
+      'detecting_location': 'Determining search location...',
+      'analyzing_keywords': 'Analyzing search volume, competition, and difficulty...',
+      'getting_suggestions': 'Finding keyword suggestions from search engines...',
+      'analyzing_suggestions': 'Evaluating suggested keywords...',
+      'clustering_keywords': 'Grouping keywords by parent topics...',
+      'getting_ai_data': 'Fetching AI-powered search metrics...',
+      'getting_related_keywords': 'Discovering related keyword opportunities...',
+      'getting_keyword_ideas': 'Generating question and topic keywords...',
+      'analyzing_serp': 'Analyzing top search results...',
+      'building_discovery': 'Compiling final keyword recommendations...',
+      'completed': 'Analysis complete!',
+    };
+    return descriptions[stage] || 'Processing...';
+  };
+
+  // Process search results (extract keywords, fetch metrics, etc.)
+  const processSearchResults = async (researchResults: any) => {
       // Extract keywords from research results
       // v1.3.4: Response structure can be:
       // - { enhanced_analysis: { "keyword": {...data} }, ... } (from enhanced endpoint)
@@ -486,6 +647,15 @@ export default function KeywordResearchPage() {
       // Step 2: Fetch metrics for all related/long-tail keywords in batch
       if (keywordsNeedingMetrics.length > 0) {
         try {
+          // Update progress if streaming
+          if (useStreaming && streamingProgress) {
+            setStreamingProgress({
+              ...streamingProgress,
+              stage: 'Fetching Metrics',
+              details: `Getting metrics for ${keywordsNeedingMetrics.length} related keywords...`,
+            });
+          }
+          
           console.log(`📊 Fetching metrics for ${keywordsNeedingMetrics.length} related keywords...`);
           const metricsResponse = await fetch('/api/keywords/analyze', {
             method: 'POST',
@@ -527,67 +697,12 @@ export default function KeywordResearchPage() {
         }
       }
       
-      // Debug: Log the structure to understand the response format
-      const allKeywordsBeforeFilter = Object.keys(allExtractedKeywords);
-      console.log('🔍 API Response structure:', {
-        hasEnhancedAnalysis: !!researchResults.enhanced_analysis,
-        hasKeywordAnalysis: !!researchResults.keyword_analysis,
-        enhancedAnalysisKeys: researchResults.enhanced_analysis ? Object.keys(researchResults.enhanced_analysis).slice(0, 10) : [],
-        keywordAnalysisKeys: researchResults.keyword_analysis ? Object.keys(researchResults.keyword_analysis).slice(0, 10) : [],
-        mainKeywordsCount: Object.keys(keywordAnalysis).length,
-        extractedKeywordsCount: allKeywordsBeforeFilter.length,
-        allKeywordsBeforeFilter: allKeywordsBeforeFilter.slice(0, 20), // Show first 20 keywords
-        responseKeys: Object.keys(researchResults),
-      });
-      
-      // Debug: Log the structure of keyword analysis to understand search_volume location
-      const firstKeyword = Object.keys(keywordAnalysis)[0];
-      if (firstKeyword) {
-        console.log('🔍 Keyword analysis structure sample:', {
-          keyword: firstKeyword,
-          data: keywordAnalysis[firstKeyword],
-          hasSearchVolume: 'search_volume' in (keywordAnalysis[firstKeyword] || {}),
-          relatedKeywordsCount: keywordAnalysis[firstKeyword]?.related_keywords?.length || 0,
-          longTailKeywordsCount: keywordAnalysis[firstKeyword]?.long_tail_keywords?.length || 0,
-          allKeys: Object.keys(keywordAnalysis[firstKeyword] || {})
-        });
-      } else {
-        console.warn('⚠️ No keywords found in keyword_analysis. Full response:', researchResults);
-      }
-      
-      // Log ALL keywords before filtering
-      console.log('📊 ALL keywords BEFORE filtering:', {
-        totalCount: allKeywordsBeforeFilter.length,
-        mainKeywords: Object.keys(keywordAnalysis).length,
-        extractedKeywords: allKeywordsBeforeFilter.length,
-        keywords: allKeywordsBeforeFilter,
-        sampleKeywords: allKeywordsBeforeFilter.slice(0, 10).map(kw => ({
-          keyword: kw,
-          wordCount: kw.trim().split(/\s+/).length,
-          length: kw.trim().length,
-          willPassFilter: (() => {
-            const wordCount = kw.trim().split(/\s+/).length;
-            return wordCount > 1 || kw.trim().length > 5;
-          })()
-        }))
-      });
-      
       // Filter out single-word keywords that don't make sense as standalone keywords
       // Keep only phrases (2+ words) or meaningful single words
       const filteredKeywordEntries = Object.entries(allExtractedKeywords).filter(([keyword]) => {
         const wordCount = keyword.trim().split(/\s+/).length;
         // Keep phrases (2+ words) or single words that are meaningful (length > 5)
         return wordCount > 1 || keyword.trim().length > 5;
-      });
-      
-      console.log('📋 Filtered keywords (phrases preserved):', {
-        beforeFilter: allKeywordsBeforeFilter.length,
-        afterFilter: filteredKeywordEntries.length,
-        filteredKeywords: filteredKeywordEntries.map(([kw]) => kw),
-        removedKeywords: allKeywordsBeforeFilter.filter(kw => {
-          const wordCount = kw.trim().split(/\s+/).length;
-          return !(wordCount > 1 || kw.trim().length > 5);
-        })
       });
       
       const keywordList: KeywordWithMetrics[] = filteredKeywordEntries.map(([keyword, data]: [string, any]) => {
@@ -600,7 +715,7 @@ export default function KeywordResearchPage() {
           ?? null;
         
         return {
-        keyword,
+          keyword,
           search_volume: searchVolume, // Preserve null from API, don't convert to 0
           global_search_volume: data?.global_search_volume ?? null,
           difficulty: data?.difficulty || 'medium',
@@ -655,30 +770,6 @@ export default function KeywordResearchPage() {
         : `Found ${totalCount} keywords`;
       setSuccess(message);
       setTimeout(() => setSuccess(null), 5000);
-    } catch (err: any) {
-      console.error('Error searching keywords:', err);
-      // Extract error message properly, handling both Error objects and plain objects
-      let errorMessage = 'Failed to search keywords';
-      if (err instanceof Error) {
-        errorMessage = err.message || errorMessage;
-      } else if (typeof err === 'string') {
-        errorMessage = err;
-      } else if (err?.message) {
-        errorMessage = String(err.message);
-      } else if (err?.error) {
-        errorMessage = String(err.error);
-      } else if (typeof err === 'object') {
-        // Try to stringify the error object
-        try {
-          errorMessage = JSON.stringify(err);
-        } catch {
-          errorMessage = 'Unknown error occurred';
-        }
-      }
-      setError(errorMessage);
-    } finally {
-      setSearching(false);
-    }
   };
 
   // Toggle keyword selection
@@ -1437,6 +1528,89 @@ export default function KeywordResearchPage() {
           </div>
         )}
         
+        {/* Streaming Progress Indicator */}
+        {streamingProgress && searching && (
+          <div className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900 rounded-lg border-2 border-blue-200 dark:border-blue-800 p-5 mb-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Loader2 className="w-5 h-5 animate-spin text-blue-600 dark:text-blue-400" />
+                  <div className="absolute inset-0 border-2 border-blue-200 dark:border-blue-700 rounded-full animate-ping opacity-20"></div>
+                </div>
+                <div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white block">
+                    {streamingProgress.stage}
+                  </span>
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    {getStageDescription(streamingProgress.stage.toLowerCase().replace(/\s+/g, '_'))}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                  {streamingProgress.progress}%
+                </span>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {streamingProgress.progress < 100 ? 'In Progress' : 'Complete'}
+                </div>
+              </div>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-indigo-600 h-3 rounded-full transition-all duration-500 ease-out shadow-sm"
+                style={{ width: `${streamingProgress.progress}%` }}
+              >
+                <div className="h-full bg-white opacity-30 animate-pulse"></div>
+              </div>
+            </div>
+            {streamingProgress.details && (
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 italic">
+                {streamingProgress.details}
+              </p>
+            )}
+            {/* Stage indicator dots */}
+            <div className="flex items-center gap-1 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="text-xs text-gray-500 dark:text-gray-400 flex-1">
+                Stage {Math.floor(streamingProgress.progress / 10) + 1} of 12
+              </div>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => {
+                  const stageProgress = (num - 1) * 8.33;
+                  const isActive = streamingProgress.progress >= stageProgress;
+                  const isCurrent = streamingProgress.progress >= stageProgress && streamingProgress.progress < stageProgress + 8.33;
+                  return (
+                    <div
+                      key={num}
+                      className={`w-1.5 h-1.5 rounded-full transition-all ${
+                        isCurrent
+                          ? 'bg-blue-600 dark:bg-blue-400 scale-150'
+                          : isActive
+                          ? 'bg-blue-400 dark:bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Streaming Toggle */}
+        <div className="flex items-center gap-2 mb-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useStreaming}
+              onChange={(e) => setUseStreaming(e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Use real-time progress updates
+            </span>
+          </label>
+        </div>
+        
         <button
           onClick={handleSearch}
           disabled={searching || !searchQuery.trim()}
@@ -1444,8 +1618,8 @@ export default function KeywordResearchPage() {
         >
           {searching ? (
             <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              Searching...
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {streamingProgress ? streamingProgress.stage : 'Searching...'}
             </>
           ) : (
             <>
