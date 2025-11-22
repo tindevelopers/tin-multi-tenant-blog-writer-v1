@@ -197,59 +197,22 @@ export default function ObjectivePage() {
     setError(null);
     
     try {
-      // Extract keywords from objective if available
+      // Only extract keywords if objective is NOT provided
+      // When objective is provided, backend will extract keywords automatically from content_objective
       let keywords: string[] | undefined = undefined;
       
-      if (formData.objective) {
-        // Extract meaningful phrases (2-3 words) from objective - preserve phrases, don't split
-        const objectiveText = formData.objective.toLowerCase();
-        
-        // Common stop words to filter out
-        const stopWords = new Set(['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients', 'about', 'with', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'from', 'of', 'a', 'an']);
-        
-        // Extract 2-3 word phrases
-        const words = objectiveText
-          .replace(/[^\w\s]/g, ' ')
-          .split(/\s+/)
-          .filter((word: string) => word.length > 2 && !stopWords.has(word));
-        
-        // Create 2-word and 3-word phrases
-        const phrases: string[] = [];
-        for (let i = 0; i < words.length - 1; i++) {
-          const twoWord = `${words[i]} ${words[i + 1]}`;
-          if (twoWord.length > 5) phrases.push(twoWord);
-          
-          if (i < words.length - 2) {
-            const threeWord = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
-            if (threeWord.length > 8) phrases.push(threeWord);
-          }
-        }
-        
-        // Also include single important words (longer ones)
-        const importantWords = words.filter((word: string) => word.length > 4);
-        
-        keywords = [...phrases, ...importantWords].slice(0, 10);
-      }
-      
-      // Add industry as a keyword if provided (preserve as phrase)
-      if (formData.industry) {
-        const industryKeyword = formData.industry.toLowerCase();
-        if (keywords) {
-          // Add industry if not already included
-          if (!keywords.some(k => k.includes(industryKeyword) || industryKeyword.includes(k))) {
-            keywords = [industryKeyword, ...keywords].slice(0, 10);
-          }
-        } else {
-          keywords = [industryKeyword];
-        }
+      if (!formData.objective && formData.industry) {
+        // Fallback: Only extract keywords if we don't have an objective
+        // Use industry as a keyword (preserve as phrase)
+        keywords = [formData.industry.toLowerCase()];
       }
 
       await recommendTopics({
         industry: formData.industry || undefined,
         target_audience: formData.target_audience || undefined,
-        objective: formData.objective || undefined,
+        objective: formData.objective || undefined, // Backend will extract keywords from this
         content_goal: formData.content_goal || undefined,
-        keywords: keywords,
+        keywords: keywords, // Only used as fallback when objective is not provided
         count: 10
       });
     } catch (err: any) {

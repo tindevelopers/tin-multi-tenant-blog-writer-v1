@@ -630,21 +630,31 @@ class BlogWriterAPI {
               params.content_goal === 'brand_awareness' ? 'Brand Awareness' : params.content_goal]
           : undefined;
 
+        // Build request payload - prioritize content_objective over keywords
+        // Backend will extract keywords from content_objective automatically
+        const requestPayload: Record<string, unknown> = {
+          target_audience: params.target_audience,
+          industry: params.industry,
+          content_goals: contentGoals,
+          limit: params.count || 50,
+          include_ai_search_volume: true,
+          include_llm_mentions: true,
+        };
+
+        // If objective is provided, use it (backend will extract keywords)
+        if (params.objective) {
+          requestPayload.content_objective = params.objective;
+        } else if (params.keywords && params.keywords.length > 0) {
+          // Fallback: Only use keywords if objective is not provided
+          requestPayload.keywords = params.keywords;
+        }
+
         const aiTopicSuggestionsResponse = await fetch('/api/keywords/ai-topic-suggestions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            content_objective: params.objective,
-            target_audience: params.target_audience,
-            industry: params.industry,
-            content_goals: contentGoals,
-            keywords: params.keywords,
-            limit: params.count || 50,
-            include_ai_search_volume: true,
-            include_llm_mentions: true,
-          }),
+          body: JSON.stringify(requestPayload),
           signal: AbortSignal.timeout(60000), // 60 second timeout
         });
 
