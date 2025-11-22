@@ -276,12 +276,41 @@ export default function KeywordResearchPage() {
               
               // If there's a saved search query in workflow_data, use it
               const workflowData = session.workflow_data as Record<string, unknown> | null;
+              let initialSearchQuery = '';
+              
               if (workflowData?.search_query && typeof workflowData.search_query === 'string') {
-                setSearchQuery(workflowData.search_query);
+                initialSearchQuery = workflowData.search_query;
               } else {
-                // Clear search query if no saved query
-                setSearchQuery('');
+                // Check for topic keywords from objective page (AI recommendations)
+                if (typeof window !== 'undefined') {
+                  const topicKeywords = sessionStorage.getItem('topic_keywords');
+                  if (topicKeywords) {
+                    try {
+                      const keywords = JSON.parse(topicKeywords) as string[];
+                      // Use the first keyword as the search query
+                      if (keywords.length > 0) {
+                        initialSearchQuery = keywords[0];
+                        // Store all keywords in workflow_data for later use
+                        if (workflowData) {
+                          workflowData.topic_keywords = keywords;
+                        }
+                      }
+                    } catch (e) {
+                      console.error('Error parsing topic keywords:', e);
+                    }
+                  }
+                }
+                
+                // If still no search query, check workflow_data for topic_keywords
+                if (!initialSearchQuery && workflowData?.topic_keywords && Array.isArray(workflowData.topic_keywords)) {
+                  const topicKeywords = workflowData.topic_keywords as string[];
+                  if (topicKeywords.length > 0) {
+                    initialSearchQuery = topicKeywords[0];
+                  }
+                }
               }
+              
+              setSearchQuery(initialSearchQuery);
             } else {
               // No saved collection - clear everything to avoid artifacts
               setKeywords([]);

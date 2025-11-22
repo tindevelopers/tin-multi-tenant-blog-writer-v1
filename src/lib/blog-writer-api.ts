@@ -613,19 +613,40 @@ class BlogWriterAPI {
       logger.debug('Getting AI-optimized topic recommendations', { count: params.count });
       
       // Step 1: Extract keywords from objective/industry if keywords not provided
+      // Preserve multi-word phrases - don't split into individual words
       let keywordsToAnalyze = params.keywords || [];
       
       if (keywordsToAnalyze.length === 0) {
-        // Extract keywords from objective or use industry
+        // Extract key phrases from objective or use industry
         if (params.objective) {
-          // Extract key phrases from objective (simple extraction)
-          const objectiveWords = params.objective
-            .toLowerCase()
+          // Extract meaningful phrases (2-3 words) from objective
+          const objectiveText = params.objective.toLowerCase();
+          
+          // Common stop words to filter out
+          const stopWords = new Set(['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients', 'about', 'with', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'from', 'of', 'a', 'an']);
+          
+          // Extract 2-3 word phrases
+          const words = objectiveText
             .replace(/[^\w\s]/g, ' ')
             .split(/\s+/)
-            .filter((word: string) => word.length > 3 && !['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients'].includes(word))
-            .slice(0, 5);
-          keywordsToAnalyze = objectiveWords;
+            .filter((word: string) => word.length > 2 && !stopWords.has(word));
+          
+          // Create 2-word and 3-word phrases
+          const phrases: string[] = [];
+          for (let i = 0; i < words.length - 1; i++) {
+            const twoWord = `${words[i]} ${words[i + 1]}`;
+            if (twoWord.length > 5) phrases.push(twoWord);
+            
+            if (i < words.length - 2) {
+              const threeWord = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+              if (threeWord.length > 8) phrases.push(threeWord);
+            }
+          }
+          
+          // Also include single important words (longer ones)
+          const importantWords = words.filter((word: string) => word.length > 4);
+          
+          keywordsToAnalyze = [...phrases, ...importantWords].slice(0, 10);
         }
         
         if (keywordsToAnalyze.length === 0 && params.industry) {
@@ -636,6 +657,11 @@ class BlogWriterAPI {
           throw new Error('Please provide keywords, industry, or objective to get recommendations');
         }
       }
+      
+      // Ensure all keywords are trimmed and non-empty
+      keywordsToAnalyze = keywordsToAnalyze
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
 
       // Step 2: Use AI Optimization endpoint for targeted recommendations
       try {
@@ -663,47 +689,92 @@ class BlogWriterAPI {
           
           // Validate response structure
           if (!aiData || !aiData.ai_optimization_analysis) {
-            logger.warn('AI optimization response missing required fields, using fallback');
+            logger.warn('AI optimization response missing required fields, using fallback', {
+              responseKeys: aiData ? Object.keys(aiData) : [],
+              hasAnalysis: !!aiData?.ai_optimization_analysis
+            });
             throw new Error('Invalid response structure');
           }
+          
+          logger.debug('AI optimization response structure', {
+            analysisKeys: Object.keys(aiData.ai_optimization_analysis || {}),
+            firstKey: Object.keys(aiData.ai_optimization_analysis || {})[0],
+            firstAnalysis: aiData.ai_optimization_analysis ? 
+              aiData.ai_optimization_analysis[Object.keys(aiData.ai_optimization_analysis)[0]] : null
+          });
           
           // Transform AI optimization response to topic recommendations format
           const topics = Object.entries(aiData.ai_optimization_analysis || {})
             .map(([keyword, analysis]: [string, any]) => {
+              // Handle different possible response structures
               const aiAnalysis = analysis as {
-                ai_search_volume: number;
-                traditional_search_volume: number;
-                ai_optimization_score: number;
-                ai_recommended: boolean;
-                ai_reason: string;
-                comparison: {
-                  ai_growth_trend: 'increasing' | 'decreasing' | 'stable';
+                ai_search_volume?: number;
+                traditional_search_volume?: number;
+                ai_optimization_score?: number;
+                ai_recommended?: boolean;
+                ai_reason?: string;
+                comparison?: {
+                  ai_growth_trend?: 'increasing' | 'decreasing' | 'stable';
                 };
+                // Alternative field names
+                aiSearchVolume?: number;
+                traditionalSearchVolume?: number;
+                aiOptimizationScore?: number;
+                aiRecommended?: boolean;
+                aiReason?: string;
               };
 
+              // Extract values with fallbacks
+              const aiScore = aiAnalysis.ai_optimization_score ?? aiAnalysis.aiOptimizationScore ?? 0;
+              const aiSearchVol = aiAnalysis.ai_search_volume ?? aiAnalysis.aiSearchVolume ?? 0;
+              const traditionalSearchVol = aiAnalysis.traditional_search_volume ?? aiAnalysis.traditionalSearchVolume ?? 0;
+              const isRecommended = aiAnalysis.ai_recommended ?? aiAnalysis.aiRecommended ?? false;
+              const reason = aiAnalysis.ai_reason ?? aiAnalysis.aiReason ?? 'AI-optimized topic';
+              const growthTrend = aiAnalysis.comparison?.ai_growth_trend ?? 'stable';
+
               // Determine difficulty based on AI score
-              const difficulty = aiAnalysis.ai_optimization_score >= 70 ? 'easy' :
-                                aiAnalysis.ai_optimization_score >= 50 ? 'medium' : 'hard';
+              const difficulty = aiScore >= 70 ? 'easy' :
+                                aiScore >= 50 ? 'medium' : 'hard';
 
               // Create content angle based on AI reason and trend
-              const contentAngle = aiAnalysis.comparison.ai_growth_trend === 'increasing' 
-                ? `High AI visibility - ${aiAnalysis.ai_reason}`
-                : aiAnalysis.ai_recommended 
-                  ? `AI-optimized topic - ${aiAnalysis.ai_reason}`
+              const contentAngle = growthTrend === 'increasing' 
+                ? `High AI visibility - ${reason}`
+                : isRecommended 
+                  ? `AI-optimized topic - ${reason}`
                   : 'General content topic';
 
+              // Format keyword as title (capitalize first letter of each word)
+              const title = keyword
+                .split(/\s+/)
+                .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+
+              // Preserve keyword as a phrase, add related keywords
+              const keywordPhrases = [keyword];
+              if (params.keywords) {
+                // Add other keywords that are phrases (not single words)
+                params.keywords.forEach((kw: string) => {
+                  if (kw.includes(' ') && kw !== keyword) {
+                    keywordPhrases.push(kw);
+                  }
+                });
+              }
+              if (params.industry && !keywordPhrases.includes(params.industry.toLowerCase())) {
+                keywordPhrases.push(params.industry.toLowerCase());
+              }
+
               return {
-                title: keyword.charAt(0).toUpperCase() + keyword.slice(1),
-                description: `AI-optimized topic about ${keyword}${params.target_audience ? ` for ${params.target_audience}` : ''}${params.industry ? ` in the ${params.industry} industry` : ''}. ${aiAnalysis.ai_reason}`,
-                keywords: [keyword, ...(params.keywords || [])].slice(0, 5),
-                search_volume: aiAnalysis.traditional_search_volume || aiAnalysis.ai_search_volume,
+                title,
+                description: `AI-optimized topic about ${keyword}${params.target_audience ? ` for ${params.target_audience}` : ''}${params.industry ? ` in the ${params.industry} industry` : ''}. ${reason}`,
+                keywords: keywordPhrases.slice(0, 5), // Keep as phrases
+                search_volume: traditionalSearchVol || aiSearchVol,
                 difficulty,
                 content_angle: contentAngle,
-                estimated_traffic: Math.floor((aiAnalysis.ai_search_volume || aiAnalysis.traditional_search_volume) * 0.1),
-                aiScore: aiAnalysis.ai_optimization_score,
-                aiSearchVolume: aiAnalysis.ai_search_volume,
-                traditionalSearchVolume: aiAnalysis.traditional_search_volume,
-                recommended: aiAnalysis.ai_recommended,
+                estimated_traffic: Math.floor((aiSearchVol || traditionalSearchVol) * 0.1),
+                aiScore: aiScore,
+                aiSearchVolume: aiSearchVol,
+                traditionalSearchVolume: traditionalSearchVol,
+                recommended: isRecommended,
               };
             })
             .sort((a, b) => {

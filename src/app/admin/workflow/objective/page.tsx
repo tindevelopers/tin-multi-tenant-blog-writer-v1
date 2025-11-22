@@ -152,6 +152,37 @@ export default function ObjectivePage() {
       return;
     }
 
+    // Store topic keywords if available from selected topic
+    if (typeof window !== 'undefined') {
+      const storedTopicKeywords = sessionStorage.getItem('topic_keywords');
+      if (storedTopicKeywords) {
+        try {
+          const topicKeywords = JSON.parse(storedTopicKeywords);
+          // Store in workflow_data for keyword research page
+          const supabase = createClient();
+          const sessionId = localStorage.getItem('workflow_session_id');
+          if (sessionId) {
+            const { data: session } = await supabase
+              .from('workflow_sessions')
+              .select('workflow_data')
+              .eq('session_id', sessionId)
+              .maybeSingle();
+            
+            const workflowData = (session?.workflow_data as Record<string, unknown>) || {};
+            workflowData.topic_keywords = topicKeywords;
+            workflowData.selected_topic = sessionStorage.getItem('selected_topic') || formData.objective;
+            
+            await supabase
+              .from('workflow_sessions')
+              .update({ workflow_data: workflowData })
+              .eq('session_id', sessionId);
+          }
+        } catch (e) {
+          console.error('Error storing topic keywords:', e);
+        }
+      }
+    }
+
     await handleSave();
     router.push('/admin/workflow/keywords');
   };
@@ -170,25 +201,47 @@ export default function ObjectivePage() {
       let keywords: string[] | undefined = undefined;
       
       if (formData.objective) {
-        // Extract key phrases from objective
-        const objectiveKeywords = formData.objective
-          .toLowerCase()
+        // Extract meaningful phrases (2-3 words) from objective - preserve phrases, don't split
+        const objectiveText = formData.objective.toLowerCase();
+        
+        // Common stop words to filter out
+        const stopWords = new Set(['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients', 'about', 'with', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'from', 'of', 'a', 'an']);
+        
+        // Extract 2-3 word phrases
+        const words = objectiveText
           .replace(/[^\w\s]/g, ' ')
           .split(/\s+/)
-          .filter((word: string) => word.length > 3 && 
-            !['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients', 'about'].includes(word))
-          .slice(0, 5);
+          .filter((word: string) => word.length > 2 && !stopWords.has(word));
         
-        if (objectiveKeywords.length > 0) {
-          keywords = objectiveKeywords;
+        // Create 2-word and 3-word phrases
+        const phrases: string[] = [];
+        for (let i = 0; i < words.length - 1; i++) {
+          const twoWord = `${words[i]} ${words[i + 1]}`;
+          if (twoWord.length > 5) phrases.push(twoWord);
+          
+          if (i < words.length - 2) {
+            const threeWord = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+            if (threeWord.length > 8) phrases.push(threeWord);
+          }
         }
+        
+        // Also include single important words (longer ones)
+        const importantWords = words.filter((word: string) => word.length > 4);
+        
+        keywords = [...phrases, ...importantWords].slice(0, 10);
       }
       
-      // Add industry as a keyword if provided
-      if (formData.industry && keywords) {
-        keywords = [formData.industry.toLowerCase(), ...keywords].slice(0, 5);
-      } else if (formData.industry) {
-        keywords = [formData.industry.toLowerCase()];
+      // Add industry as a keyword if provided (preserve as phrase)
+      if (formData.industry) {
+        const industryKeyword = formData.industry.toLowerCase();
+        if (keywords) {
+          // Add industry if not already included
+          if (!keywords.some(k => k.includes(industryKeyword) || industryKeyword.includes(k))) {
+            keywords = [industryKeyword, ...keywords].slice(0, 10);
+          }
+        } else {
+          keywords = [industryKeyword];
+        }
       }
 
       await recommendTopics({
@@ -390,6 +443,17 @@ export default function ObjectivePage() {
                           : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600'
                       }`}
                       onClick={() => {
+                        // Store topic keywords for use in keyword research
+                        // Preserve keywords as phrases (not split)
+                        const topicKeywords = topic.keywords || [topic.title];
+                        
+                        // Store in sessionStorage for keyword research page
+                        if (typeof window !== 'undefined') {
+                          sessionStorage.setItem('topic_keywords', JSON.stringify(topicKeywords));
+                          sessionStorage.setItem('topic_ai_score', String(topic.aiScore || 0));
+                          sessionStorage.setItem('selected_topic', topic.title);
+                        }
+                        
                         setFormData({ ...formData, objective: topic.title });
                         setShowTopicRecommendations(false);
                       }}
