@@ -1508,18 +1508,31 @@ export default function KeywordResearchPage() {
     <div className="max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-            <Search className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3 flex-1">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+              <Search className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                Keyword Research
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                Discover high-value keywords for your content strategy
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              Keyword Research
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Discover high-value keywords for your content strategy
-            </p>
-          </div>
+          
+          {/* Error Alert - Positioned on the right */}
+          {error && (
+            <div className="flex-shrink-0">
+              <Alert 
+                variant="error"
+                title="Error"
+                message={error}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -1542,7 +1555,7 @@ export default function KeywordResearchPage() {
       
       {/* API Active Status Banner */}
       {cloudRunStatus.isHealthy && !cloudRunStatus.isWakingUp && (
-        <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+        <div className="mb-6 bg-green-50 dark:bg-green-900/20 border-2 border-purple-200 dark:border-purple-800 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0" />
@@ -1567,16 +1580,7 @@ export default function KeywordResearchPage() {
         </div>
       )}
 
-      {/* Alerts */}
-      {error && (
-        <div className="mb-6">
-          <Alert 
-            variant="error"
-            title="Error"
-            message={error}
-          />
-        </div>
-      )}
+      {/* Success Alert */}
       {success && (
         <div className="mb-6">
           <Alert 
