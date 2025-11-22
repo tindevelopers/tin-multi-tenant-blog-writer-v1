@@ -138,7 +138,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(data);
   } catch (error) {
-    return handleApiError(error, 'Failed to get AI topic suggestions');
+    logger.error('Failed to get AI topic suggestions', { error });
+    return handleApiError(error);
   }
 }
 
