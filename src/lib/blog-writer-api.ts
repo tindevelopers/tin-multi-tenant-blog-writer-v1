@@ -585,7 +585,7 @@ class BlogWriterAPI {
     }
   }
 
-  // Topic Recommendations API - Now uses AI Optimization for targeted recommendations
+  // Topic Recommendations API - Now uses AI Topic Suggestions endpoint first
   async recommendTopics(params: {
     keywords?: string[];
     industry?: string;
@@ -607,12 +607,118 @@ class BlogWriterAPI {
       aiSearchVolume?: number;
       traditionalSearchVolume?: number;
       recommended?: boolean;
+      // New fields from AI topic suggestions
+      ranking_score?: number;
+      opportunity_score?: number;
+      competition?: number;
+      cpc?: number;
+      reason?: string;
+      related_keywords?: string[];
+      source?: string;
     }>;
   }> {
     try {
       logger.debug('Getting AI-optimized topic recommendations', { count: params.count });
       
-      // Step 1: Extract keywords from objective/industry if keywords not provided
+      // Step 1: Try new AI Topic Suggestions endpoint first (recommended)
+      try {
+        // Map content_goal to content_goals array format
+        const contentGoals = params.content_goal 
+          ? [params.content_goal === 'seo' ? 'SEO & Rankings' : 
+              params.content_goal === 'engagement' ? 'Engagement' :
+              params.content_goal === 'conversions' ? 'Conversions' :
+              params.content_goal === 'brand_awareness' ? 'Brand Awareness' : params.content_goal]
+          : undefined;
+
+        const aiTopicSuggestionsResponse = await fetch('/api/keywords/ai-topic-suggestions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content_objective: params.objective,
+            target_audience: params.target_audience,
+            industry: params.industry,
+            content_goals: contentGoals,
+            keywords: params.keywords,
+            limit: params.count || 50,
+            include_ai_search_volume: true,
+            include_llm_mentions: true,
+          }),
+          signal: AbortSignal.timeout(60000), // 60 second timeout
+        });
+
+        if (aiTopicSuggestionsResponse.ok) {
+          const aiTopicData = await aiTopicSuggestionsResponse.json();
+          
+          logger.debug('AI topic suggestions response received', {
+            topicsCount: aiTopicData.topics?.length || 0,
+            hasTopics: !!aiTopicData.topics,
+          });
+
+          // Transform AI topic suggestions response to topic recommendations format
+          if (aiTopicData.topics && Array.isArray(aiTopicData.topics) && aiTopicData.topics.length > 0) {
+            const topics = aiTopicData.topics
+              .map((topic: any) => {
+                // Map response fields to our format
+                const title = topic.topic || topic.title || '';
+                const sourceKeyword = topic.source_keyword || '';
+                const aiSearchVol = topic.ai_search_volume || 0;
+                const searchVol = topic.search_volume || 0;
+                const difficultyNum = topic.difficulty || 0;
+                const difficulty = difficultyNum >= 70 ? 'hard' : difficultyNum >= 50 ? 'medium' : 'easy';
+                const rankingScore = topic.ranking_score || 0;
+                const opportunityScore = topic.opportunity_score || 0;
+                const competition = topic.competition || 0;
+                const cpc = topic.cpc || 0;
+                const reason = topic.reason || '';
+                const relatedKeywords = topic.related_keywords || [];
+                const source = topic.source || 'ai_generated';
+                const mentions = topic.mentions || 0;
+
+                // Calculate AI score from ranking_score or opportunity_score
+                const aiScore = rankingScore || opportunityScore || 0;
+
+                return {
+                  title,
+                  description: reason || `AI-generated topic about ${sourceKeyword}`,
+                  keywords: [sourceKeyword, ...relatedKeywords].filter(Boolean).slice(0, 5),
+                  search_volume: searchVol || aiSearchVol,
+                  difficulty,
+                  content_angle: reason || `AI-optimized topic with ${opportunityScore}/100 opportunity score`,
+                  estimated_traffic: Math.floor((searchVol || aiSearchVol) * 0.1),
+                  aiScore,
+                  aiSearchVolume: aiSearchVol,
+                  traditionalSearchVolume: searchVol,
+                  recommended: aiScore >= 50 || opportunityScore >= 50,
+                  ranking_score: rankingScore,
+                  opportunity_score: opportunityScore,
+                  competition,
+                  cpc,
+                  reason,
+                  related_keywords: relatedKeywords,
+                  source,
+                };
+              })
+              .sort((a: any, b: any) => {
+                // Sort by recommended first, then by ranking_score/opportunity_score
+                if (a.recommended !== b.recommended) {
+                  return a.recommended ? -1 : 1;
+                }
+                return (b.ranking_score || b.opportunity_score || 0) - (a.ranking_score || a.opportunity_score || 0);
+              })
+              .slice(0, params.count || 10);
+
+            logger.debug('AI topic suggestions transformed successfully', { topicsCount: topics.length });
+            return { topics };
+          }
+        }
+      } catch (aiTopicError) {
+        logger.warn('AI topic suggestions endpoint failed, falling back', { error: aiTopicError });
+      }
+
+      // Step 2: Fallback to AI Optimization endpoint for targeted recommendations
+      // Extract keywords from objective/industry if keywords not provided
       // Preserve multi-word phrases - don't split into individual words
       let keywordsToAnalyze = params.keywords || [];
       
@@ -663,7 +769,7 @@ class BlogWriterAPI {
         .map(k => k.trim())
         .filter(k => k.length > 0);
 
-      // Step 2: Use AI Optimization endpoint for targeted recommendations
+      // Step 3: Use AI Optimization endpoint for targeted recommendations
       try {
         const aiOptimizationResponse = await fetch('/api/keywords/ai-optimization', {
         method: 'POST',
@@ -819,7 +925,7 @@ class BlogWriterAPI {
         logger.warn('AI optimization failed, falling back to standard recommendations', { error: aiError });
       }
 
-      // Step 3: Fallback to original endpoints if AI optimization fails
+      // Step 4: Fallback to original endpoints if AI optimization fails
       let response = await fetch('/api/blog-writer/topics/recommend', {
         method: 'POST',
         headers: {

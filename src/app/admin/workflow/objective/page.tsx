@@ -472,54 +472,92 @@ export default function ObjectivePage() {
                         {topic.description}
                       </p>
                       
-                      {/* AI Optimization Score */}
-                      {topic.aiScore !== undefined && (
+                      {/* AI Optimization Score / Ranking Score */}
+                      {(topic.aiScore !== undefined || topic.ranking_score !== undefined || topic.opportunity_score !== undefined) && (
                         <div className="mb-3 p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                              AI Optimization Score
+                              {topic.ranking_score !== undefined ? 'Ranking Score' :
+                               topic.opportunity_score !== undefined ? 'Opportunity Score' :
+                               'AI Optimization Score'}
                             </span>
                             <span className={`text-sm font-bold ${
-                              topic.aiScore >= 70 ? 'text-green-600 dark:text-green-400' :
-                              topic.aiScore >= 50 ? 'text-blue-600 dark:text-blue-400' :
-                              topic.aiScore >= 30 ? 'text-amber-600 dark:text-amber-400' :
+                              ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 70) ? 'text-green-600 dark:text-green-400' :
+                              ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 50) ? 'text-blue-600 dark:text-blue-400' :
+                              ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 30) ? 'text-amber-600 dark:text-amber-400' :
                               'text-red-600 dark:text-red-400'
                             }`}>
-                              {topic.aiScore}/100
+                              {topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0}/100
+                              {((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) === 0) && (
+                                <span className="ml-1 text-xs">⚠️</span>
+                              )}
                             </span>
                           </div>
                           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                             <div
                               className={`h-2 rounded-full ${
-                                topic.aiScore >= 70 ? 'bg-green-500' :
-                                topic.aiScore >= 50 ? 'bg-blue-500' :
-                                topic.aiScore >= 30 ? 'bg-amber-500' :
+                                ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 70) ? 'bg-green-500' :
+                                ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 50) ? 'bg-blue-500' :
+                                ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 30) ? 'bg-amber-500' :
                                 'bg-red-500'
                               }`}
-                              style={{ width: `${topic.aiScore}%` }}
+                              style={{ width: `${Math.min((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0), 100)}%` }}
                             />
                           </div>
+                          {((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) === 0) && (
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic">
+                              No AI search volume detected - focus on traditional SEO
+                            </p>
+                          )}
                         </div>
                       )}
                       
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
-                        <div>
-                          <span className="font-medium">Volume:</span> {topic.search_volume?.toLocaleString() || 'N/A'}
-                        </div>
-                        {topic.aiSearchVolume !== undefined && (
+                        {topic.search_volume !== undefined && topic.search_volume > 0 && (
+                          <div>
+                            <span className="font-medium">Volume:</span> {topic.search_volume.toLocaleString()}
+                          </div>
+                        )}
+                        {topic.aiSearchVolume !== undefined && topic.aiSearchVolume > 0 && (
                           <div>
                             <span className="font-medium">AI Volume:</span> {topic.aiSearchVolume.toLocaleString()}
+                          </div>
+                        )}
+                        {topic.traditionalSearchVolume !== undefined && topic.traditionalSearchVolume > 0 && (
+                          <div>
+                            <span className="font-medium">Traditional:</span> {topic.traditionalSearchVolume.toLocaleString()}
                           </div>
                         )}
                         <div>
                           <span className="font-medium">Difficulty:</span> {topic.difficulty || 'N/A'}
                         </div>
+                        {topic.competition !== undefined && (
+                          <div>
+                            <span className="font-medium">Competition:</span> {(topic.competition * 100).toFixed(0)}%
+                          </div>
+                        )}
                         {topic.estimated_traffic && (
                           <div>
                             <span className="font-medium">Traffic:</span> {topic.estimated_traffic.toLocaleString()}
                           </div>
                         )}
                       </div>
+                      
+                      {/* Reason / Why this ranks */}
+                      {topic.reason && (
+                        <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                          <p className="text-xs text-blue-700 dark:text-blue-300">
+                            <span className="font-medium">Why this ranks:</span> {topic.reason}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Source */}
+                      {topic.source && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          Source: <span className="font-medium">{topic.source.replace(/_/g, ' ')}</span>
+                        </div>
+                      )}
                       {topic.keywords && topic.keywords.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {topic.keywords.slice(0, 5).map((keyword, kwIndex) => (

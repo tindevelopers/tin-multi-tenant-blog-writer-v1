@@ -20,6 +20,14 @@ export interface TopicRecommendation {
   aiSearchVolume?: number;
   traditionalSearchVolume?: number;
   recommended?: boolean;
+  // New fields from AI topic suggestions
+  ranking_score?: number;
+  opportunity_score?: number;
+  competition?: number;
+  cpc?: number;
+  reason?: string;
+  related_keywords?: string[];
+  source?: string;
 }
 
 export interface TopicRecommendationsResult {
