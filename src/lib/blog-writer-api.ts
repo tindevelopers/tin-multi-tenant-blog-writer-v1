@@ -585,12 +585,14 @@ class BlogWriterAPI {
     }
   }
 
-  // Topic Recommendations API
+  // Topic Recommendations API - Now uses AI Optimization for targeted recommendations
   async recommendTopics(params: {
     keywords?: string[];
     industry?: string;
     existing_topics?: string[];
     target_audience?: string;
+    objective?: string;
+    content_goal?: string;
     count?: number; // Default: 10, Max: 50
   }): Promise<{
     topics: Array<{
@@ -601,17 +603,158 @@ class BlogWriterAPI {
       difficulty: string;
       content_angle: string;
       estimated_traffic: number;
+      aiScore?: number;
+      aiSearchVolume?: number;
+      traditionalSearchVolume?: number;
+      recommended?: boolean;
     }>;
   }> {
     try {
-      logger.debug('Getting topic recommendations', { count: params.count });
-      const response = await fetch('/api/blog-writer/topics/recommend', {
+      logger.debug('Getting AI-optimized topic recommendations', { count: params.count });
+      
+      // Step 1: Extract keywords from objective/industry if keywords not provided
+      let keywordsToAnalyze = params.keywords || [];
+      
+      if (keywordsToAnalyze.length === 0) {
+        // Extract keywords from objective or use industry
+        if (params.objective) {
+          // Extract key phrases from objective (simple extraction)
+          const objectiveWords = params.objective
+            .toLowerCase()
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter((word: string) => word.length > 3 && !['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients'].includes(word))
+            .slice(0, 5);
+          keywordsToAnalyze = objectiveWords;
+        }
+        
+        if (keywordsToAnalyze.length === 0 && params.industry) {
+          keywordsToAnalyze = [params.industry.toLowerCase()];
+        }
+        
+        if (keywordsToAnalyze.length === 0) {
+          throw new Error('Please provide keywords, industry, or objective to get recommendations');
+        }
+      }
+
+      // Step 2: Use AI Optimization endpoint for targeted recommendations
+      try {
+        const aiOptimizationResponse = await fetch('/api/keywords/ai-optimization', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            keywords: keywordsToAnalyze.slice(0, 10), // AI optimization supports up to 10 keywords
+            location: 'United States',
+            language: 'en',
+          }),
+          signal: AbortSignal.timeout(30000), // 30 second timeout
+        });
+
+        if (aiOptimizationResponse.ok) {
+          let aiData;
+          try {
+            aiData = await aiOptimizationResponse.json();
+          } catch (parseError) {
+            logger.warn('Failed to parse AI optimization response, using fallback');
+            throw new Error('Invalid response format');
+          }
+          
+          // Validate response structure
+          if (!aiData || !aiData.ai_optimization_analysis) {
+            logger.warn('AI optimization response missing required fields, using fallback');
+            throw new Error('Invalid response structure');
+          }
+          
+          // Transform AI optimization response to topic recommendations format
+          const topics = Object.entries(aiData.ai_optimization_analysis || {})
+            .map(([keyword, analysis]: [string, any]) => {
+              const aiAnalysis = analysis as {
+                ai_search_volume: number;
+                traditional_search_volume: number;
+                ai_optimization_score: number;
+                ai_recommended: boolean;
+                ai_reason: string;
+                comparison: {
+                  ai_growth_trend: 'increasing' | 'decreasing' | 'stable';
+                };
+              };
+
+              // Determine difficulty based on AI score
+              const difficulty = aiAnalysis.ai_optimization_score >= 70 ? 'easy' :
+                                aiAnalysis.ai_optimization_score >= 50 ? 'medium' : 'hard';
+
+              // Create content angle based on AI reason and trend
+              const contentAngle = aiAnalysis.comparison.ai_growth_trend === 'increasing' 
+                ? `High AI visibility - ${aiAnalysis.ai_reason}`
+                : aiAnalysis.ai_recommended 
+                  ? `AI-optimized topic - ${aiAnalysis.ai_reason}`
+                  : 'General content topic';
+
+              return {
+                title: keyword.charAt(0).toUpperCase() + keyword.slice(1),
+                description: `AI-optimized topic about ${keyword}${params.target_audience ? ` for ${params.target_audience}` : ''}${params.industry ? ` in the ${params.industry} industry` : ''}. ${aiAnalysis.ai_reason}`,
+                keywords: [keyword, ...(params.keywords || [])].slice(0, 5),
+                search_volume: aiAnalysis.traditional_search_volume || aiAnalysis.ai_search_volume,
+                difficulty,
+                content_angle: contentAngle,
+                estimated_traffic: Math.floor((aiAnalysis.ai_search_volume || aiAnalysis.traditional_search_volume) * 0.1),
+                aiScore: aiAnalysis.ai_optimization_score,
+                aiSearchVolume: aiAnalysis.ai_search_volume,
+                traditionalSearchVolume: aiAnalysis.traditional_search_volume,
+                recommended: aiAnalysis.ai_recommended,
+              };
+            })
+            .sort((a, b) => {
+              // Sort by recommended first, then by AI score
+              if (a.recommended !== b.recommended) {
+                return a.recommended ? -1 : 1;
+              }
+              return (b.aiScore || 0) - (a.aiScore || 0);
+            })
+            .slice(0, params.count || 10);
+
+          logger.debug('AI optimization successful', { topicsCount: topics.length });
+          return { topics };
+        }
+      } catch (aiError) {
+        logger.warn('AI optimization failed, falling back to standard recommendations', { error: aiError });
+      }
+
+      // Step 3: Fallback to original endpoints if AI optimization fails
+      let response = await fetch('/api/blog-writer/topics/recommend', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(params),
+        body: JSON.stringify({
+          ...params,
+          keywords: keywordsToAnalyze,
+        }),
       });
+
+      // If original endpoint fails, try the AI-powered endpoint
+      if (!response.ok) {
+        logger.debug('Original topic recommendations endpoint failed, trying AI-powered endpoint', {
+          status: response.status
+        });
+        
+        response = await fetch('/api/blog-writer/topics/recommend-ai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            keywords: keywordsToAnalyze,
+            industry: params.industry,
+            target_audience: params.target_audience,
+            objective: params.objective,
+            content_goal: params.content_goal,
+            count: params.count,
+          }),
+        });
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -621,7 +764,8 @@ class BlogWriterAPI {
       return await response.json();
     } catch (error) {
       logger.logError(error instanceof Error ? error : new Error('Failed to get topic recommendations'), {
-        endpoint: '/api/blog-writer/topics/recommend'
+        endpoint: '/api/keywords/ai-optimization',
+        fallbackEndpoint: '/api/blog-writer/topics/recommend'
       });
       throw error;
     }

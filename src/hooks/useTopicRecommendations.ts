@@ -15,6 +15,11 @@ export interface TopicRecommendation {
   difficulty: string;
   content_angle: string;
   estimated_traffic: number;
+  // AI Optimization fields (optional)
+  aiScore?: number;
+  aiSearchVolume?: number;
+  traditionalSearchVolume?: number;
+  recommended?: boolean;
 }
 
 export interface TopicRecommendationsResult {

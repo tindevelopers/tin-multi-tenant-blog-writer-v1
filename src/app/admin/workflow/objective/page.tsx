@@ -163,12 +163,46 @@ export default function ObjectivePage() {
     }
 
     setShowTopicRecommendations(true);
-    await recommendTopics({
-      industry: formData.industry || undefined,
-      target_audience: formData.target_audience || undefined,
-      keywords: formData.objective ? [formData.objective] : undefined,
-      count: 10
-    });
+    setError(null);
+    
+    try {
+      // Extract keywords from objective if available
+      let keywords: string[] | undefined = undefined;
+      
+      if (formData.objective) {
+        // Extract key phrases from objective
+        const objectiveKeywords = formData.objective
+          .toLowerCase()
+          .replace(/[^\w\s]/g, ' ')
+          .split(/\s+/)
+          .filter((word: string) => word.length > 3 && 
+            !['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients', 'about'].includes(word))
+          .slice(0, 5);
+        
+        if (objectiveKeywords.length > 0) {
+          keywords = objectiveKeywords;
+        }
+      }
+      
+      // Add industry as a keyword if provided
+      if (formData.industry && keywords) {
+        keywords = [formData.industry.toLowerCase(), ...keywords].slice(0, 5);
+      } else if (formData.industry) {
+        keywords = [formData.industry.toLowerCase()];
+      }
+
+      await recommendTopics({
+        industry: formData.industry || undefined,
+        target_audience: formData.target_audience || undefined,
+        objective: formData.objective || undefined,
+        content_goal: formData.content_goal || undefined,
+        keywords: keywords,
+        count: 10
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to get topic recommendations');
+      setShowTopicRecommendations(false);
+    }
   };
 
   return (
@@ -336,30 +370,90 @@ export default function ObjectivePage() {
 
             {showTopicRecommendations && topics && topics.length > 0 && (
               <div className="mt-4 space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Recommended Topics ({topics.length})
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Recommended Topics ({topics.length})
+                  </h4>
+                  {topics.some(t => t.recommended) && (
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                      ⭐ {topics.filter(t => t.recommended).length} AI-optimized
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
                   {topics.map((topic, index) => (
                     <div
                       key={index}
-                      className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600 transition-colors cursor-pointer"
+                      className={`p-4 rounded-lg border transition-colors cursor-pointer ${
+                        topic.recommended
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 hover:border-green-300 dark:hover:border-green-700'
+                          : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600'
+                      }`}
                       onClick={() => {
                         setFormData({ ...formData, objective: topic.title });
                         setShowTopicRecommendations(false);
                       }}
                     >
-                      <h5 className="font-medium text-gray-900 dark:text-white mb-1">
-                        {topic.title}
-                      </h5>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                      <div className="flex items-start justify-between mb-2">
+                        <h5 className="font-medium text-gray-900 dark:text-white flex-1">
+                          {topic.title}
+                        </h5>
+                        {topic.recommended && (
+                          <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs font-medium">
+                            ⭐ Recommended
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                         {topic.description}
                       </p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                        <span>Volume: {topic.search_volume?.toLocaleString() || 'N/A'}</span>
-                        <span>Difficulty: {topic.difficulty || 'N/A'}</span>
+                      
+                      {/* AI Optimization Score */}
+                      {topic.aiScore !== undefined && (
+                        <div className="mb-3 p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                              AI Optimization Score
+                            </span>
+                            <span className={`text-sm font-bold ${
+                              topic.aiScore >= 70 ? 'text-green-600 dark:text-green-400' :
+                              topic.aiScore >= 50 ? 'text-blue-600 dark:text-blue-400' :
+                              topic.aiScore >= 30 ? 'text-amber-600 dark:text-amber-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                              {topic.aiScore}/100
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${
+                                topic.aiScore >= 70 ? 'bg-green-500' :
+                                topic.aiScore >= 50 ? 'bg-blue-500' :
+                                topic.aiScore >= 30 ? 'bg-amber-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${topic.aiScore}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        <div>
+                          <span className="font-medium">Volume:</span> {topic.search_volume?.toLocaleString() || 'N/A'}
+                        </div>
+                        {topic.aiSearchVolume !== undefined && (
+                          <div>
+                            <span className="font-medium">AI Volume:</span> {topic.aiSearchVolume.toLocaleString()}
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-medium">Difficulty:</span> {topic.difficulty || 'N/A'}
+                        </div>
                         {topic.estimated_traffic && (
-                          <span>Traffic: {topic.estimated_traffic.toLocaleString()}</span>
+                          <div>
+                            <span className="font-medium">Traffic:</span> {topic.estimated_traffic.toLocaleString()}
+                          </div>
                         )}
                       </div>
                       {topic.keywords && topic.keywords.length > 0 && (
