@@ -36,6 +36,8 @@ export function useTopicRecommendations() {
     industry?: string;
     existing_topics?: string[];
     target_audience?: string;
+    objective?: string;
+    content_goal?: string;
     count?: number;
   }) => {
     setLoading(true);
