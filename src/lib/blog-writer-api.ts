@@ -666,10 +666,10 @@ class BlogWriterAPI {
       // Step 2: Use AI Optimization endpoint for targeted recommendations
       try {
         const aiOptimizationResponse = await fetch('/api/keywords/ai-optimization', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
           body: JSON.stringify({
             keywords: keywordsToAnalyze.slice(0, 10), // AI optimization supports up to 10 keywords
             location: 'United States',
@@ -696,12 +696,38 @@ class BlogWriterAPI {
             throw new Error('Invalid response structure');
           }
           
+          // Log detailed response structure for debugging
+          const analysisKeys = Object.keys(aiData.ai_optimization_analysis || {});
+          const firstKey = analysisKeys[0];
+          const firstAnalysis = firstKey ? aiData.ai_optimization_analysis[firstKey] : null;
+          
           logger.debug('AI optimization response structure', {
-            analysisKeys: Object.keys(aiData.ai_optimization_analysis || {}),
-            firstKey: Object.keys(aiData.ai_optimization_analysis || {})[0],
-            firstAnalysis: aiData.ai_optimization_analysis ? 
-              aiData.ai_optimization_analysis[Object.keys(aiData.ai_optimization_analysis)[0]] : null
+            analysisKeys,
+            firstKey,
+            firstAnalysisKeys: firstAnalysis ? Object.keys(firstAnalysis) : [],
+            firstAnalysisSample: firstAnalysis ? {
+              ai_optimization_score: firstAnalysis.ai_optimization_score,
+              aiOptimizationScore: firstAnalysis.aiOptimizationScore,
+              ai_search_volume: firstAnalysis.ai_search_volume,
+              aiSearchVolume: firstAnalysis.aiSearchVolume,
+              ai_recommended: firstAnalysis.ai_recommended,
+              aiRecommended: firstAnalysis.aiRecommended,
+            } : null
           });
+          
+          // Log to console in development for easier debugging
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔍 AI Optimization Response Debug:', {
+              totalKeywords: analysisKeys.length,
+              keywords: analysisKeys,
+              sampleAnalysis: firstAnalysis,
+              responseStructure: {
+                has_ai_optimization_analysis: !!aiData.ai_optimization_analysis,
+                has_summary: !!aiData.summary,
+                topLevelKeys: Object.keys(aiData)
+              }
+            });
+          }
           
           // Transform AI optimization response to topic recommendations format
           const topics = Object.entries(aiData.ai_optimization_analysis || {})
