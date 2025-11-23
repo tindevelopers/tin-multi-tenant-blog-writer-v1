@@ -78,10 +78,11 @@ async function checkDatabase() {
 
         Object.entries(termsByResult).forEach(([resultId, terms]) => {
           const researchResult = researchResults.find(r => r.id === resultId);
+          const termsArray = Array.isArray(terms) ? terms : [];
           console.log(`\n  Research Result: "${researchResult?.keyword || resultId}"`);
-          console.log(`  Total Terms: ${terms.length}`);
+          console.log(`  Total Terms: ${termsArray.length}`);
           console.log(`  Sample terms:`);
-          terms.slice(0, 5).forEach((term, idx) => {
+          termsArray.slice(0, 5).forEach((term: any, idx) => {
             console.log(`    ${idx + 1}. "${term.keyword}" (SV: ${term.search_volume}, Difficulty: ${term.keyword_difficulty})`);
           });
         });
