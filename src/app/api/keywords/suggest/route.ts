@@ -135,9 +135,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
+      // Check if response is HTML (404 error page)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        logger.warn('Blog Writer API returned HTML 404 page', { 
+          endpoint, 
+          status: response.status,
+          keyword 
+        });
+        // Return empty suggestions instead of error
+        return NextResponse.json({
+          suggestions: [],
+          suggestions_with_topics: [],
+          keyword_suggestions: [],
+          total_suggestions: 0,
+          clusters: [],
+          cluster_summary: {},
+        });
+      }
+      
       const errorText = await response.text();
       return NextResponse.json(
-        { error: `Blog Writer API error: ${errorText}` },
+        { error: `Blog Writer API error: ${errorText.substring(0, 500)}` },
         { status: response.status }
       );
     }
