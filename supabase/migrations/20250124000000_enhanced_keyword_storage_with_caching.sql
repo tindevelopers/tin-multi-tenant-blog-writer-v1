@@ -32,10 +32,7 @@ CREATE TABLE IF NOT EXISTS keyword_cache (
   
   -- User/org context (optional - for user-specific caching)
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  org_id UUID,
-  
-  -- Unique constraint: same keyword + location + language + search_type
-  CONSTRAINT unique_keyword_cache UNIQUE (keyword, location, language, search_type, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::uuid))
+  org_id UUID
 );
 
 -- Indexes for fast cache lookups
@@ -45,6 +42,17 @@ CREATE INDEX IF NOT EXISTS idx_keyword_cache_expires_at ON keyword_cache(expires
 CREATE INDEX IF NOT EXISTS idx_keyword_cache_user_id ON keyword_cache(user_id);
 CREATE INDEX IF NOT EXISTS idx_keyword_cache_search_type ON keyword_cache(search_type);
 CREATE INDEX IF NOT EXISTS idx_keyword_cache_lookup ON keyword_cache(keyword, location, language, search_type, user_id) WHERE expires_at > NOW();
+
+-- Unique constraint using partial unique index (handles NULL user_id)
+-- For user-specific cache: unique per user
+-- For global cache (user_id IS NULL): unique globally
+CREATE UNIQUE INDEX IF NOT EXISTS idx_keyword_cache_unique_user 
+  ON keyword_cache(keyword, location, language, search_type, user_id) 
+  WHERE user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_keyword_cache_unique_global 
+  ON keyword_cache(keyword, location, language, search_type) 
+  WHERE user_id IS NULL;
 
 -- =====================================================
 -- Keyword Research Results Table (Full Storage)
