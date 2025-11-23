@@ -375,11 +375,29 @@ class EnhancedKeywordStorageService {
           language: result.language,
         }));
 
-        await supabase
+        const { data: relatedTermsResult, error: relatedTermsError } = await supabase
           .from('keyword_terms')
           .upsert(relatedTermsData, {
             onConflict: 'user_id,keyword_normalized,location,language,search_type',
+          })
+          .select('id');
+
+        if (relatedTermsError) {
+          logger.error('Error storing related terms', {
+            error: relatedTermsError,
+            keyword: result.keyword,
+            researchResultId,
+            count: relatedTermsData.length,
+            errorCode: relatedTermsError.code,
+            errorMessage: relatedTermsError.message,
           });
+        } else {
+          logger.debug('Related terms stored successfully', {
+            keyword: result.keyword,
+            count: relatedTermsResult?.length || 0,
+            researchResultId,
+          });
+        }
       }
 
       // Store matching terms
