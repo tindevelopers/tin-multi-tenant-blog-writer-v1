@@ -169,7 +169,7 @@ const AppSidebar: React.FC = () => {
     
     if (savedOpenSubmenus) {
       try {
-        const parsed = new Set(JSON.parse(savedOpenSubmenus));
+        const parsed = new Set<string>(JSON.parse(savedOpenSubmenus) as string[]);
         // Ensure Blog Writer menu (templates-0) is always open
         parsed.add('templates-0');
         setOpenSubmenus(parsed);
