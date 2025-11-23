@@ -5,3 +5,4 @@ check-database-storage.ts
 test-supabase-direct.ts
 verify-migration.ts
 check-migration-data.ts
+check-keyword-storage.ts

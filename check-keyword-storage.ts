@@ -94,19 +94,20 @@ async function checkKeywordStorage() {
         }
         acc[resultId].push(term);
         return acc;
-      }, {} as Record<string, typeof keywordTerms>);
+      }, {} as Record<string, Array<typeof keywordTerms[0]>>);
 
       Object.entries(termsByResult).forEach(([resultId, terms]) => {
         const researchResult = researchResults?.find(r => r.id === resultId);
-        console.log(`\n   📁 Research Result: "${researchResult?.keyword || resultId}" (${terms.length} terms)`);
+        const termsArray: Array<typeof keywordTerms[0]> = Array.isArray(terms) ? terms : [];
+        console.log(`\n   📁 Research Result: "${researchResult?.keyword || resultId}" (${termsArray.length} terms)`);
         
-        terms.slice(0, 10).forEach((term, idx) => {
+        termsArray.slice(0, 10).forEach((term, idx) => {
           console.log(`      ${idx + 1}. "${term.keyword}"`);
           console.log(`         └─ SV: ${term.search_volume || 0}, Difficulty: ${term.keyword_difficulty || 'N/A'}, AI SV: ${term.ai_search_volume || 0}`);
         });
         
-        if (terms.length > 10) {
-          console.log(`      ... and ${terms.length - 10} more terms`);
+        if (termsArray.length > 10) {
+          console.log(`      ... and ${termsArray.length - 10} more terms`);
         }
       });
     } else {
