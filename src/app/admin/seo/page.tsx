@@ -10,6 +10,7 @@ import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnha
 import { useContentIdeas } from "@/hooks/useContentIdeas";
 import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight } from "lucide-react";
 import Alert from "@/components/ui/alert/Alert";
+import StreamingProgress from "@/components/keywords/StreamingProgress";
 
 export default function SEOToolsPage() {
   const router = useRouter();

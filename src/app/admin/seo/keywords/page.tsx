@@ -123,13 +123,19 @@ export default function KeywordHistoryPage() {
       console.log('Setting research results state:', {
         resultsCount: results.length,
         firstResult: results[0],
-        researchResultsState: researchResults.length,
+        currentStateLength: researchResults.length,
       });
 
-      setResearchResults(results);
+      // Force state update
+      setResearchResults([...results]);
       setTotal(data.total || 0);
       
       console.log('State updated - researchResults should now have', results.length, 'items');
+      
+      // Force a re-render check
+      setTimeout(() => {
+        console.log('After state update - researchResults length:', researchResults.length);
+      }, 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load keyword history');
     } finally {
@@ -336,15 +342,6 @@ export default function KeywordHistoryPage() {
         )}
 
         {/* Results */}
-        {(() => {
-          console.log('Rendering results section:', {
-            loading,
-            researchResultsLength: researchResults.length,
-            researchResults,
-            total,
-          });
-          return null;
-        })()}
         {loading ? (
           <div className="text-center py-12">
             <RefreshCw className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-4" />
