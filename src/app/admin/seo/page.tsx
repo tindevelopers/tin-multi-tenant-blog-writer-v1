@@ -22,6 +22,7 @@ export default function SEOToolsPage() {
     clusters,
     primaryAnalysis,
     suggestions,
+    streamingProgress,
     researchKeyword,
     reset,
   } = useEnhancedKeywordResearch();
@@ -302,6 +303,16 @@ export default function SEOToolsPage() {
           {activeTab === 'research' && (
             <div className="space-y-4">
               <PrimaryKeywordInput onResearch={handleResearch} loading={loading} />
+              
+              {/* Streaming Progress */}
+              {streamingProgress && (
+                <StreamingProgress
+                  stage={streamingProgress.stage}
+                  progress={streamingProgress.progress}
+                  message={streamingProgress.message}
+                  isComplete={streamingProgress.progress === 100}
+                />
+              )}
               
               {primaryAnalysis && (
                 <Alert

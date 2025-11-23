@@ -23,6 +23,11 @@ export interface UseKeywordResearchResult {
   clusters: KeywordCluster[];
   primaryAnalysis: KeywordAnalysisResponse | null;
   suggestions: KeywordSuggestionResponse | null;
+  streamingProgress: {
+    stage: string;
+    progress: number;
+    message?: string;
+  } | null;
   
   // Actions
   researchKeyword: (
@@ -53,6 +58,11 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
   const [clusters, setClusters] = useState<KeywordCluster[]>([]);
   const [primaryAnalysis, setPrimaryAnalysis] = useState<KeywordAnalysisResponse | null>(null);
   const [suggestions, setSuggestions] = useState<KeywordSuggestionResponse | null>(null);
+  const [streamingProgress, setStreamingProgress] = useState<{
+    stage: string;
+    progress: number;
+    message?: string;
+  } | null>(null);
 
   /**
    * Comprehensive keyword research for a primary keyword
@@ -65,12 +75,15 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
   ) => {
     setLoading(true);
     setError(null);
+    setStreamingProgress(null);
 
     try {
       // Use keyword research with storage (includes caching)
       const keywordResearchWithStorage = (await import('@/lib/keyword-research-with-storage')).default;
       
       // Check cache first
+      setStreamingProgress({ stage: 'Checking cache', progress: 10, message: 'Looking for cached results...' });
+      
       const cachedResult = await keywordResearchWithStorage.researchKeyword(
         primaryKeyword,
         {
@@ -85,6 +98,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
 
       // If we got cached data, use it
       if (cachedResult.cached && cachedResult.traditionalData) {
+        setStreamingProgress({ stage: 'Cache hit', progress: 100, message: 'Using cached data' });
         logger.debug('Using cached keyword data', { keyword: primaryKeyword, source: cachedResult.source });
         
         // Convert competition number (0-1) to competition_level string
@@ -117,15 +131,59 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
         setClusters(newClusters);
         
         setLoading(false);
+        setTimeout(() => setStreamingProgress(null), 1000);
         return;
       }
 
-      // If not cached, proceed with full research
+      // If not cached, proceed with full research using streaming
+      setStreamingProgress({ stage: 'Starting research', progress: 20, message: 'Fetching keyword data...' });
+      
+      // Try streaming first for AI search types
+      if (searchType === 'ai' || searchType === 'both') {
+        try {
+          const { streamAITopicSuggestions } = await import('@/lib/api-streaming');
+          
+          setStreamingProgress({ stage: 'AI Analysis', progress: 30, message: 'Analyzing AI search volume...' });
+          
+          const aiResult = await streamAITopicSuggestions(
+            {
+              keywords: [primaryKeyword],
+              location,
+              language,
+              include_ai_search_volume: true,
+              include_llm_mentions: true,
+            },
+            {
+              onProgress: (update) => {
+                setStreamingProgress({
+                  stage: update.stage || 'Processing',
+                  progress: Math.min(update.progress || 50, 90),
+                  message: update.message,
+                });
+              },
+              onError: (err) => {
+                logger.warn('Streaming error, falling back to regular API', { error: err });
+                setStreamingProgress({ stage: 'Fallback', progress: 40, message: 'Using standard API...' });
+              },
+            }
+          );
+          
+          setStreamingProgress({ stage: 'Processing results', progress: 80, message: 'Organizing data...' });
+        } catch (streamError) {
+          logger.debug('Streaming not available, using regular API', { error: streamError });
+        }
+      }
+
+      // Proceed with comprehensive research
+      setStreamingProgress({ stage: 'Traditional Analysis', progress: 50, message: 'Analyzing traditional SEO metrics...' });
+      
       const result = await keywordResearchService.comprehensiveResearch(
         primaryKeyword,
         location,
         language
       );
+      
+      setStreamingProgress({ stage: 'Finalizing', progress: 90, message: 'Creating clusters...' });
 
       setPrimaryAnalysis(result.primary);
       setKeywords(result.variations);
@@ -134,6 +192,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       // Automatically create clusters
       const newClusters = await keywordResearchService.createClusters(result.variations);
       setClusters(newClusters);
+      
+      setStreamingProgress({ stage: 'Complete', progress: 100, message: 'Research completed successfully!' });
 
       // Save to database
       try {
@@ -406,6 +466,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     setClusters([]);
     setPrimaryAnalysis(null);
     setSuggestions(null);
+    setStreamingProgress(null);
   }, []);
 
   return {

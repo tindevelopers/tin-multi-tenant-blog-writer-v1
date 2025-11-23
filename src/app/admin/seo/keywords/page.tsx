@@ -71,6 +71,7 @@ export default function KeywordHistoryPage() {
   const [locationFilter, setLocationFilter] = useState('');
   const [languageFilter, setLanguageFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
   
   // Pagination
   const [page, setPage] = useState(1);
