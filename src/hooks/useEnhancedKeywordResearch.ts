@@ -476,6 +476,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     clusters,
     primaryAnalysis,
     suggestions,
+    streamingProgress,
     researchKeyword,
     analyzeKeywords,
     createClusters,
