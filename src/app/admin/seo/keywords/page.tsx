@@ -88,6 +88,7 @@ export default function KeywordHistoryPage() {
       
       if (!user) {
         setError('Please log in to view your keyword history');
+        setLoading(false);
         return;
       }
 
@@ -113,31 +114,32 @@ export default function KeywordHistoryPage() {
         throw new Error(data.error || 'Failed to load research results');
       }
 
+      const results = Array.isArray(data.results) ? data.results : [];
+      
       console.log('Loaded research results:', {
-        count: data.results?.length || 0,
+        count: results.length,
         total: data.total || 0,
-        results: data.results,
+        firstResult: results[0],
         success: data.success,
       });
 
-      const results = data.results || [];
-      console.log('Setting research results state:', {
-        resultsCount: results.length,
-        firstResult: results[0],
-        currentStateLength: researchResults.length,
+      // Use functional update to ensure we're setting the latest state
+      setResearchResults(() => {
+        console.log('Setting research results state - new count:', results.length);
+        return results;
       });
-
-      // Force state update
-      setResearchResults([...results]);
+      
       setTotal(data.total || 0);
       
-      console.log('State updated - researchResults should now have', results.length, 'items');
-      
-      // Force a re-render check
+      // Verify state update after a brief delay
       setTimeout(() => {
-        console.log('After state update - researchResults length:', researchResults.length);
+        setResearchResults(current => {
+          console.log('State verification - current length:', current.length);
+          return current; // Return unchanged to verify
+        });
       }, 100);
     } catch (err) {
+      console.error('Error loading research results:', err);
       setError(err instanceof Error ? err.message : 'Failed to load keyword history');
     } finally {
       setLoading(false);
