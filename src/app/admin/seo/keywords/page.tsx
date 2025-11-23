@@ -124,20 +124,9 @@ export default function KeywordHistoryPage() {
       });
 
       // Use functional update to ensure we're setting the latest state
-      setResearchResults(() => {
-        console.log('Setting research results state - new count:', results.length);
-        return results;
-      });
-      
+      console.log('Setting research results state - new count:', results.length);
+      setResearchResults(results);
       setTotal(data.total || 0);
-      
-      // Verify state update after a brief delay
-      setTimeout(() => {
-        setResearchResults(current => {
-          console.log('State verification - current length:', current.length);
-          return current; // Return unchanged to verify
-        });
-      }, 100);
     } catch (err) {
       console.error('Error loading research results:', err);
       setError(err instanceof Error ? err.message : 'Failed to load keyword history');
