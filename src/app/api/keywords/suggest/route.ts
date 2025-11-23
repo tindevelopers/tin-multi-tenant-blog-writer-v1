@@ -112,14 +112,10 @@ export async function POST(request: NextRequest) {
       });
       
       endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`;
+      // Backend expects: { keyword: string, limit?: number }
       requestBody = {
         keyword: keyword,
-        limit: limit,
-        include_search_volume: true,
-        include_difficulty: true,
-        include_competition: true,
-        include_cpc: true,
-        location: body.location || 'United States'
+        limit: limit
       } as unknown as typeof requestBody;
       
       response = await fetchWithRetry(
