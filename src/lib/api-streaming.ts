@@ -176,3 +176,111 @@ export async function streamEnhancedKeywordAnalysis(
   return streamKeywordResearch(endpoint, request, options);
 }
 
+/**
+ * Stream Server-Side Keyword Research with caching and storage
+ * This is the preferred method - all research happens server-side
+ */
+export async function streamServerSideKeywordResearch(
+  request: {
+    keyword: string;
+    location?: string;
+    language?: string;
+    searchType?: 'traditional' | 'ai' | 'both';
+    useCache?: boolean;
+    autoStore?: boolean;
+  },
+  options: StreamOptions = {}
+): Promise<any> {
+  const endpoint = '/api/keywords/research/stream';
+  
+  const { onProgress, onError, onComplete } = options;
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
+
+    let buffer = '';
+    let finalResult: any = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = line.slice(6);
+            
+            // Handle empty data (heartbeat)
+            if (data.trim() === '') continue;
+            
+            const update: any = JSON.parse(data);
+            
+            // Handle different event types
+            if (update.type === 'progress') {
+              // Emit progress update
+              if (onProgress) {
+                onProgress({
+                  stage: update.stage || 'processing',
+                  progress: update.progress || 0,
+                  message: update.message,
+                  data: update.data,
+                });
+              }
+            } else if (update.type === 'complete') {
+              // Handle completion
+              finalResult = update;
+              if (onComplete) {
+                onComplete(update);
+              }
+            } else if (update.type === 'error') {
+              // Handle errors
+              const error = new Error(update.error || 'Unknown error');
+              if (onError) {
+                onError(error);
+              } else {
+                throw error;
+              }
+            }
+          } catch (parseError) {
+            logger.warn('Failed to parse SSE data', { line, error: parseError });
+          }
+        }
+      }
+    }
+
+    if (!finalResult) {
+      throw new Error('Stream completed but no result data received');
+    }
+
+    return finalResult;
+  } catch (error) {
+    logger.error('Stream error', { error, endpoint });
+    if (onError) {
+      onError(error instanceof Error ? error : new Error('Unknown streaming error'));
+    }
+    throw error;
+  }
+}
+

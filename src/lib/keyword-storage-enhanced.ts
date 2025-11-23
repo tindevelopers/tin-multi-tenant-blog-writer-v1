@@ -1,10 +1,10 @@
 /**
  * Enhanced Keyword Storage Service
  * Handles storage and retrieval of traditional and AI keyword research results
- * with 7-day caching support
+ * with 90-day caching support
  */
 
-import { createClient } from '@/lib/supabase/client';
+import { createClient as createClientClient } from '@/lib/supabase/client';
 import { logger } from '@/utils/logger';
 
 export type SearchType = 'traditional' | 'ai' | 'both';
@@ -134,10 +134,12 @@ class EnhancedKeywordStorageService {
     keyword: string,
     data: Partial<KeywordResearchResult>,
     userId?: string,
-    orgId?: string
+    orgId?: string,
+    supabaseClient?: ReturnType<typeof createClientClient> | ReturnType<typeof createClientServer>
   ): Promise<boolean> {
     try {
-      const supabase = createClient();
+      // Use provided client or create client-side one as fallback
+      const supabase = supabaseClient || createClientClient();
       
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + this.CACHE_DURATION_DAYS);
@@ -156,14 +158,56 @@ class EnhancedKeywordStorageService {
         org_id: orgId || null,
       };
 
-      const { error } = await supabase
-        .from('keyword_cache')
-        .upsert(cacheData, {
-          onConflict: 'keyword,location,language,search_type,COALESCE(user_id, \'00000000-0000-0000-0000-000000000000\'::uuid)',
-        });
+      // Handle upsert based on whether user_id is present
+      // Partial unique indexes require different handling:
+      // - If user_id IS NOT NULL: use columns including user_id
+      // - If user_id IS NULL: manually check and update/insert (can't use partial index in onConflict)
+      let error;
+      if (userId) {
+        // User-specific cache: conflict on keyword, location, language, search_type, user_id
+        const { error: upsertError } = await supabase
+          .from('keyword_cache')
+          .upsert(cacheData, {
+            onConflict: 'keyword,location,language,search_type,user_id',
+          });
+        error = upsertError;
+      } else {
+        // Global cache: manually check and update/insert since partial index can't be used in onConflict
+        const { data: existing } = await supabase
+          .from('keyword_cache')
+          .select('id')
+          .eq('keyword', cacheData.keyword)
+          .eq('location', cacheData.location)
+          .eq('language', cacheData.language)
+          .eq('search_type', cacheData.search_type)
+          .is('user_id', null)
+          .maybeSingle();
+
+        if (existing?.id) {
+          // Update existing global cache
+          const { error: updateError } = await supabase
+            .from('keyword_cache')
+            .update(cacheData)
+            .eq('id', existing.id);
+          error = updateError;
+        } else {
+          // Insert new global cache
+          const { error: insertError } = await supabase
+            .from('keyword_cache')
+            .insert(cacheData);
+          error = insertError;
+        }
+      }
 
       if (error) {
-        logger.error('Error caching keyword', { error, keyword });
+        logger.error('Error caching keyword', { 
+          error, 
+          keyword,
+          userId,
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorDetails: error.details,
+        });
         return false;
       }
 
@@ -481,9 +525,19 @@ class EnhancedKeywordStorageService {
         .eq('search_type', searchType)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to avoid 406 when no rows found
 
-      if (error || !data) {
+      if (error) {
+        logger.warn('Error fetching keyword research', { 
+          error, 
+          keyword,
+          errorCode: error.code,
+          errorMessage: error.message,
+        });
+        return null;
+      }
+
+      if (!data) {
         return null;
       }
 

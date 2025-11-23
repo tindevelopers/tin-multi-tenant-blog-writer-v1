@@ -78,218 +78,78 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     setStreamingProgress(null);
 
     try {
-      // Use keyword research with storage (includes caching)
-      const keywordResearchWithStorage = (await import('@/lib/keyword-research-with-storage')).default;
+      // Use server-side SSE endpoint for all keyword research
+      const { streamServerSideKeywordResearch } = await import('@/lib/api-streaming');
       
-      // Check cache first
-      setStreamingProgress({ stage: 'Checking cache', progress: 10, message: 'Looking for cached results...' });
+      setStreamingProgress({ stage: 'Starting research', progress: 5, message: 'Initializing keyword research...' });
       
-      const cachedResult = await keywordResearchWithStorage.researchKeyword(
-        primaryKeyword,
+      const result = await streamServerSideKeywordResearch(
         {
-          searchType,
+          keyword: primaryKeyword,
           location,
           language,
-          autoStore: true,
+          searchType,
           useCache: true,
-          includeRelatedTerms: true,
+          autoStore: true,
+        },
+        {
+          onProgress: (update) => {
+            setStreamingProgress({
+              stage: update.stage || 'Processing',
+              progress: update.progress || 0,
+              message: update.message,
+            });
+          },
+          onError: (err) => {
+            logger.error('Server-side research error', { error: err });
+            setError(err.message);
+            setLoading(false);
+            setStreamingProgress(null);
+          },
+          onComplete: (data) => {
+            logger.debug('Server-side research complete', { keyword: primaryKeyword, source: data.source });
+            
+            // Transform server-side result to client format
+            if (data.traditionalData) {
+              // Convert competition number (0-1) to competition_level string
+              const competition = data.traditionalData.competition || 0;
+              let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+              if (competition >= 0.67) {
+                competition_level = 'HIGH';
+              } else if (competition >= 0.33) {
+                competition_level = 'MEDIUM';
+              }
+              
+              const keywordData: KeywordData = {
+                keyword: primaryKeyword,
+                search_volume: data.traditionalData.search_volume || 0,
+                keyword_difficulty: data.traditionalData.keyword_difficulty || 0,
+                competition_level,
+                cpc: data.traditionalData.cpc,
+                related_keywords: data.traditionalData.related_keywords || [],
+                easy_win_score: 0,
+                high_value_score: 0,
+              };
+
+              setPrimaryAnalysis({ keyword: primaryKeyword } as any);
+              setKeywords([keywordData]);
+              
+              // Create clusters
+              keywordResearchService.createClusters([keywordData]).then((newClusters) => {
+                setClusters(newClusters);
+              });
+            }
+            
+            setSuggestions({ keyword_suggestions: [] } as any);
+            setLoading(false);
+            setTimeout(() => setStreamingProgress(null), 1000);
+          },
         }
       );
 
-      // If we got cached data, use it
-      if (cachedResult.cached && cachedResult.traditionalData) {
-        setStreamingProgress({ stage: 'Cache hit', progress: 100, message: 'Using cached data' });
-        logger.debug('Using cached keyword data', { keyword: primaryKeyword, source: cachedResult.source });
-        
-        // Convert competition number (0-1) to competition_level string
-        const competition = cachedResult.traditionalData.competition || 0;
-        let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
-        if (competition >= 0.67) {
-          competition_level = 'HIGH';
-        } else if (competition >= 0.33) {
-          competition_level = 'MEDIUM';
-        }
-        
-        // Transform cached data to match expected format
-        const cachedKeywordData: KeywordData = {
-          keyword: primaryKeyword,
-          search_volume: cachedResult.traditionalData.search_volume || 0,
-          keyword_difficulty: cachedResult.traditionalData.keyword_difficulty || 0,
-          competition_level,
-          cpc: cachedResult.traditionalData.cpc,
-          related_keywords: cachedResult.traditionalData.related_keywords || [],
-          easy_win_score: 0,
-          high_value_score: 0,
-        };
-
-        setPrimaryAnalysis({ keyword: primaryKeyword } as any);
-        setKeywords([cachedKeywordData]);
-        setSuggestions({ keyword_suggestions: [] } as any);
-        
-        // Still create clusters from cached data
-        const newClusters = await keywordResearchService.createClusters([cachedKeywordData]);
-        setClusters(newClusters);
-        
-        setLoading(false);
-        setTimeout(() => setStreamingProgress(null), 1000);
-        return;
-      }
-
-      // If not cached, proceed with full research using streaming
-      setStreamingProgress({ stage: 'Starting research', progress: 20, message: 'Fetching keyword data...' });
-      
-      // Try streaming first for AI search types
-      if (searchType === 'ai' || searchType === 'both') {
-        try {
-          const { streamAITopicSuggestions } = await import('@/lib/api-streaming');
-          
-          setStreamingProgress({ stage: 'AI Analysis', progress: 30, message: 'Analyzing AI search volume...' });
-          
-          const aiResult = await streamAITopicSuggestions(
-            {
-              keywords: [primaryKeyword],
-              location,
-              language,
-              include_ai_search_volume: true,
-              include_llm_mentions: true,
-            },
-            {
-              onProgress: (update) => {
-                setStreamingProgress({
-                  stage: update.stage || 'Processing',
-                  progress: Math.min(update.progress || 50, 90),
-                  message: update.message,
-                });
-              },
-              onError: (err) => {
-                logger.warn('Streaming error, falling back to regular API', { error: err });
-                setStreamingProgress({ stage: 'Fallback', progress: 40, message: 'Using standard API...' });
-              },
-            }
-          );
-          
-          setStreamingProgress({ stage: 'Processing results', progress: 80, message: 'Organizing data...' });
-        } catch (streamError) {
-          logger.debug('Streaming not available, using regular API', { error: streamError });
-        }
-      }
-
-      // Proceed with comprehensive research
-      setStreamingProgress({ stage: 'Traditional Analysis', progress: 50, message: 'Analyzing traditional SEO metrics...' });
-      
-      const result = await keywordResearchService.comprehensiveResearch(
-        primaryKeyword,
-        location,
-        language
-      );
-      
-      setStreamingProgress({ stage: 'Finalizing', progress: 90, message: 'Creating clusters...' });
-
-      setPrimaryAnalysis(result.primary);
-      setKeywords(result.variations);
-      setSuggestions(result.suggestions);
-
-      // Automatically create clusters
-      const newClusters = await keywordResearchService.createClusters(result.variations);
-      setClusters(newClusters);
-      
-      setStreamingProgress({ stage: 'Complete', progress: 100, message: 'Research completed successfully!' });
-
-      // Save to database
-      try {
-        logger.debug('🔍 Attempting to save keywords to database...');
-        const supabase = createClient();
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
-        logger.debug('🔍 User auth result:', { user: user?.id, error: userError?.message });
-        
-        if (userError) {
-          logger.error('❌ Auth error when saving keywords:', userError);
-          throw userError;
-        }
-        
-        if (!user) {
-          logger.error('❌ No user authenticated when saving keywords');
-          throw new Error('User not authenticated');
-        }
-
-        logger.debug('✅ User authenticated:', user.id);
-        
-        // Use enhanced keyword storage with automatic caching
-        const enhancedKeywordStorage = (await import('@/lib/keyword-storage-enhanced')).default;
-        
-        // Store primary keyword research with full data
-        const primaryKeywordData = result.variations.find(k => 
-          k.keyword.toLowerCase() === primaryKeyword.toLowerCase()
-        ) || result.variations[0];
-        
-        if (primaryKeywordData) {
-          const storeResult = await enhancedKeywordStorage.storeKeywordResearch(
-            user.id,
-            {
-              keyword: primaryKeyword,
-              location,
-              language,
-              search_type: searchType,
-              traditional_data: {
-                keyword: primaryKeywordData.keyword,
-                search_volume: primaryKeywordData.search_volume || 0,
-                keyword_difficulty: primaryKeywordData.keyword_difficulty || 0,
-                competition: primaryKeywordData.competition_level === 'HIGH' ? 0.8 : 
-                            primaryKeywordData.competition_level === 'MEDIUM' ? 0.5 : 0.2,
-                cpc: primaryKeywordData.cpc,
-                related_keywords: primaryKeywordData.related_keywords || [],
-              },
-              related_terms: result.variations.slice(1, 51).map(k => ({
-                keyword: k.keyword,
-                search_volume: k.search_volume || 0,
-                keyword_difficulty: k.keyword_difficulty || 0,
-                competition: k.competition_level === 'HIGH' ? 0.8 : 
-                            k.competition_level === 'MEDIUM' ? 0.5 : 0.2,
-                cpc: k.cpc,
-              })),
-            }
-          );
-          
-          if (storeResult.success) {
-            logger.debug('✅ Keyword research stored with caching');
-          }
-        }
-        
-        // Also save to legacy storage for compatibility
-        const keywordStorage = new KeywordStorageService();
-        const storageKeywords = result.variations.map(k => ({
-          keyword: k.keyword,
-          search_volume: k.search_volume,
-          difficulty: (k.keyword_difficulty <= 30 ? 'easy' : k.keyword_difficulty <= 60 ? 'medium' : 'hard') as 'easy' | 'medium' | 'hard',
-          competition: k.competition_level === 'LOW' ? 0.2 : k.competition_level === 'MEDIUM' ? 0.5 : 0.8,
-          cpc: k.cpc,
-          trend_score: k.high_value_score,
-          recommended: k.easy_win_score >= 60 || k.high_value_score >= 60,
-          reason: k.easy_win_score >= 60 ? 'Easy win opportunity' : 'High value keyword',
-          related_keywords: k.related_keywords || [],
-          long_tail_keywords: (k.related_keywords || []).slice(0, 3)
-        }));
-
-        const saveResult = await keywordStorage.saveKeywords(
-          user.id,
-          primaryKeyword,
-          storageKeywords,
-          {
-            location,
-            language,
-            clusters: newClusters,
-            primaryAnalysis: result.primary
-          }
-        );
-        
-        if (saveResult.success) {
-          logger.debug('✅ Keywords saved to database successfully');
-        }
-      } catch (saveError) {
-        logger.error('⚠️ Failed to save keywords to database:', saveError);
-        // Don't fail the entire research if saving fails
-      }
+      // Server-side research handles everything (cache, storage, API calls)
+      // Results are processed in the onComplete callback above
+      // No additional processing needed here - the callback handles everything
 
     } catch (err) {
       let errorMessage = err instanceof Error ? err.message : 'Keyword research failed';

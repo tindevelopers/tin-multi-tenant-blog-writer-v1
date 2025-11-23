@@ -3,6 +3,7 @@ import { logger } from '@/lib/logger';
 import { parseJsonBody } from '@/lib/api-utils';
 import { createClient } from '@/lib/supabase/server';
 import { applyTestingLimits, limitResponseData, TESTING_MODE, getTestingModeIndicator } from '@/lib/testing-config';
+import cloudRunHealth from '@/lib/cloud-run-health';
 
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
@@ -13,7 +14,14 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 40000); // 40 second timeout for analyze
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout for analyze (handles Cloud Run cold starts)
+      
+      logger.debug('Fetching from backend', { 
+        url, 
+        attempt, 
+        retries,
+        method: options.method || 'GET',
+      });
       
       const response = await fetch(url, {
         ...options,
@@ -21,6 +29,41 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
       });
       
       clearTimeout(timeoutId);
+      
+      // Log response details
+      const contentType = response.headers.get('content-type') || '';
+      logger.debug('Backend response received', {
+        status: response.status,
+        ok: response.ok,
+        contentType,
+        attempt,
+        url,
+      });
+      
+      // Check for HTML 404 responses (backend cold start or endpoint not found)
+      if (!response.ok && contentType.includes('text/html')) {
+        // Clone response to read text without consuming body
+        const clonedResponse = response.clone();
+        try {
+          const text = await clonedResponse.text();
+          if (text.includes('<html>') || text.includes('404') || text.includes('Page not found')) {
+            logger.warn('Backend returned HTML 404 (possible cold start)', {
+              status: response.status,
+              attempt,
+              retries,
+              url,
+            });
+            // Retry on HTML 404 (might be cold start)
+            if (attempt < retries) {
+              logger.debug('Retrying after HTML 404', { attempt, retries });
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
+              continue;
+            }
+          }
+        } catch {
+          // If we can't read the text, continue with normal flow
+        }
+      }
       
       if (response.ok) {
         return response;
@@ -33,10 +76,25 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = MAX_R
         continue;
       }
       
+      // If it's a 404 and not HTML, might be endpoint issue - retry once
+      if (response.status === 404 && !contentType.includes('text/html') && attempt < retries) {
+        logger.debug('Backend returned 404 (non-HTML), retrying', { attempt, retries });
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt));
+        continue;
+      }
+      
       return response;
     } catch (error: unknown) {
       const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('timeout'));
       const isNetworkError = error instanceof TypeError;
+      
+      logger.debug('Fetch error occurred', {
+        error: error instanceof Error ? error.message : String(error),
+        isTimeout,
+        isNetworkError,
+        attempt,
+        retries,
+      });
       
       if ((isTimeout || isNetworkError) && attempt < retries) {
         logger.debug('Network error, retrying', { attempt, retries, isTimeout, isNetworkError });
@@ -138,8 +196,8 @@ export async function POST(request: NextRequest) {
     // Try enhanced endpoint first, fallback to regular if unavailable
     // Enhanced endpoint requires max_suggestions_per_keyword >= 5
     // Apply testing limits if in testing mode
-    const DEFAULT_MAX_SUGGESTIONS = TESTING_MODE ? 5 : 75; // Reduced to 5 in testing mode
-    const MAX_SUGGESTIONS_CAP = TESTING_MODE ? 5 : 150; // Reduced cap in testing mode
+    const DEFAULT_MAX_SUGGESTIONS = TESTING_MODE ? 5 : 5; // Minimum required by backend (backend requires >= 5)
+    const MAX_SUGGESTIONS_CAP = TESTING_MODE ? 5 : 5; // Minimum required by backend
     
     const maxSuggestions = body.max_suggestions_per_keyword !== undefined && body.max_suggestions_per_keyword >= 5
       ? Math.min(MAX_SUGGESTIONS_CAP, body.max_suggestions_per_keyword) // Cap at testing limit or API maximum
@@ -230,6 +288,34 @@ export async function POST(request: NextRequest) {
     });
     
     const enhancedEndpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
+    
+    // Wake up Cloud Run before making API call
+    logger.info('🌅 Checking Cloud Run health before API call...');
+    try {
+      const healthStatus = await cloudRunHealth.checkHealth();
+      logger.info('📊 Cloud Run Status:', {
+        isHealthy: healthStatus.isHealthy,
+        isWakingUp: healthStatus.isWakingUp,
+        error: healthStatus.error,
+        attempts: healthStatus.attempts,
+      });
+
+      if (!healthStatus.isHealthy && !healthStatus.isWakingUp) {
+        logger.info('⏳ Cloud Run not healthy, attempting wake-up...');
+        const wakeUpStatus = await cloudRunHealth.wakeUpAndWait();
+        logger.info('🌅 Wake-up result:', {
+          isHealthy: wakeUpStatus.isHealthy,
+          isWakingUp: wakeUpStatus.isWakingUp,
+          attempts: wakeUpStatus.attempts,
+          error: wakeUpStatus.error,
+        });
+      }
+    } catch (healthError) {
+      logger.warn('⚠️ Cloud Run health check failed, continuing anyway', {
+        error: healthError instanceof Error ? healthError.message : String(healthError),
+      });
+    }
+
     logger.error('🔍 Calling enhanced endpoint (DEBUG)', {
       endpoint: enhancedEndpoint,
       baseUrl: BLOG_WRITER_API_URL,
@@ -254,20 +340,103 @@ export async function POST(request: NextRequest) {
         }
       );
       
+      // Log response details for debugging
+      logger.info('Enhanced endpoint response received', {
+        status: enhancedResponse.status,
+        ok: enhancedResponse.ok,
+        contentType: enhancedResponse.headers.get('content-type'),
+        url: enhancedEndpoint,
+      });
+      
       if (enhancedResponse.ok) {
-        enhancedData = await enhancedResponse.json();
-        logger.debug('✅ Enhanced endpoint returned data', {
-          hasEnhancedAnalysis: !!enhancedData.enhanced_analysis,
-          keywordCount: Object.keys(enhancedData.enhanced_analysis || {}).length,
-        });
-      } else if (enhancedResponse.status !== 503) {
-        // If it's not 503, log the error but continue to try regular endpoint
-        logger.warn('Enhanced endpoint returned non-OK status', { 
-          status: enhancedResponse.status 
-        });
+        // Check for HTML 404 response before parsing JSON
+        const contentType = enhancedResponse.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          logger.warn('Enhanced endpoint returned HTML (likely 404)', { 
+            status: enhancedResponse.status 
+          });
+        } else {
+          try {
+            enhancedData = await enhancedResponse.json();
+            // Double-check for HTML in response text
+            if (typeof enhancedData === 'string' && (enhancedData.includes('<html>') || enhancedData.includes('404'))) {
+              logger.warn('Enhanced endpoint returned HTML in JSON response', { 
+                status: enhancedResponse.status 
+              });
+              enhancedData = null;
+            } else if (enhancedData && enhancedData.error && typeof enhancedData.error === 'string' && 
+                       (enhancedData.error.includes('<html>') || enhancedData.error.includes('404'))) {
+              // Backend returned HTML 404 wrapped in JSON error
+              logger.warn('Enhanced endpoint returned HTML 404 in error field', { 
+                status: enhancedResponse.status 
+              });
+              enhancedData = null;
+            } else {
+              logger.info('✅ Enhanced endpoint returned data', {
+                hasEnhancedAnalysis: !!enhancedData.enhanced_analysis,
+                keywordCount: Object.keys(enhancedData.enhanced_analysis || {}).length,
+                status: enhancedResponse.status,
+              });
+            }
+          } catch (parseError) {
+            logger.warn('Failed to parse enhanced endpoint response', { 
+              error: parseError,
+              status: enhancedResponse.status 
+            });
+            // Try to get text to check for HTML
+            try {
+              const text = await enhancedResponse.text();
+              if (text.includes('<html>') || text.includes('404') || text.includes('Page not found')) {
+                logger.warn('Enhanced endpoint returned HTML 404', { 
+                  status: enhancedResponse.status 
+                });
+              } else {
+                logger.warn('Enhanced endpoint response text (non-HTML)', { 
+                  status: enhancedResponse.status,
+                  textPreview: text.substring(0, 200)
+                });
+              }
+            } catch (textError) {
+              logger.error('Failed to read enhanced endpoint response text', { 
+                error: textError,
+                status: enhancedResponse.status 
+              });
+            }
+          }
+        }
+      } else {
+        // Response is not OK - check for HTML 404
+        const contentType = enhancedResponse.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          logger.warn('Enhanced endpoint returned HTML 404', { 
+            status: enhancedResponse.status 
+          });
+        } else if (enhancedResponse.status !== 503) {
+          // Try to read error response
+          try {
+            const errorText = await enhancedResponse.text();
+            if (errorText.includes('<html>') || errorText.includes('404') || errorText.includes('Page not found')) {
+              logger.warn('Enhanced endpoint returned HTML 404 in error response', { 
+                status: enhancedResponse.status 
+              });
+            } else {
+              logger.warn('Enhanced endpoint returned non-OK status', { 
+                status: enhancedResponse.status,
+                errorPreview: errorText.substring(0, 200)
+              });
+            }
+          } catch {
+            logger.warn('Enhanced endpoint returned non-OK status', { 
+              status: enhancedResponse.status 
+            });
+          }
+        }
       }
     } catch (error) {
-      logger.debug('Enhanced endpoint failed, will try regular endpoint', { error });
+      logger.error('Enhanced endpoint failed with exception', { 
+        error: error instanceof Error ? error.message : String(error),
+        endpoint: enhancedEndpoint,
+      });
     }
     
     // Always try regular endpoint to get baseline data and fill any gaps
@@ -320,23 +489,51 @@ export async function POST(request: NextRequest) {
       );
       
       if (regularResponse.ok) {
-        try {
-          regularData = await regularResponse.json();
-          logger.debug('✅ Regular endpoint returned data', {
-            hasKeywordAnalysis: !!regularData.keyword_analysis,
-            keywordCount: Object.keys(regularData.keyword_analysis || {}).length,
-            status: regularResponse.status,
-          });
-        } catch (parseError) {
-          logger.error('Failed to parse regular endpoint response', { 
-            error: parseError,
+        // Check for HTML 404 response before parsing JSON
+        const contentType = regularResponse.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          logger.warn('Regular endpoint returned HTML (likely 404)', { 
             status: regularResponse.status 
           });
-          // Try to get text response for debugging
-          const text = await regularResponse.text();
-          logger.error('Regular endpoint response text', { 
-            text: text.substring(0, 500) 
-          });
+        } else {
+          try {
+            regularData = await regularResponse.json();
+            // Double-check for HTML in response text
+            if (typeof regularData === 'string' && (regularData.includes('<html>') || regularData.includes('404'))) {
+              logger.warn('Regular endpoint returned HTML in JSON response', { 
+                status: regularResponse.status 
+              });
+              regularData = null;
+            } else if (regularData.error && typeof regularData.error === 'string' && (regularData.error.includes('<html>') || regularData.error.includes('404'))) {
+              // Backend returned HTML 404 wrapped in JSON error
+              logger.warn('Regular endpoint returned HTML 404 in error field', { 
+                status: regularResponse.status 
+              });
+              regularData = null;
+            } else {
+              logger.debug('✅ Regular endpoint returned data', {
+                hasKeywordAnalysis: !!regularData.keyword_analysis,
+                keywordCount: Object.keys(regularData.keyword_analysis || {}).length,
+                status: regularResponse.status,
+              });
+            }
+          } catch (parseError) {
+            logger.error('Failed to parse regular endpoint response', { 
+              error: parseError,
+              status: regularResponse.status 
+            });
+            // Try to get text response for debugging
+            const text = await regularResponse.text();
+            if (text.includes('<html>') || text.includes('404')) {
+              logger.warn('Regular endpoint returned HTML 404', { 
+                status: regularResponse.status 
+              });
+            } else {
+              logger.error('Regular endpoint response text', { 
+                text: text.substring(0, 500) 
+              });
+            }
+          }
         }
       } else {
         logger.warn('Regular endpoint returned non-OK status', { 
@@ -345,9 +542,15 @@ export async function POST(request: NextRequest) {
         });
         try {
           const errorText = await regularResponse.text();
-          logger.warn('Regular endpoint error response', { 
-            errorText: errorText.substring(0, 500) 
-          });
+          if (errorText.includes('<html>') || errorText.includes('404')) {
+            logger.warn('Regular endpoint returned HTML 404', { 
+              status: regularResponse.status 
+            });
+          } else {
+            logger.warn('Regular endpoint error response', { 
+              errorText: errorText.substring(0, 500) 
+            });
+          }
         } catch {
           // Ignore parse errors
         }
@@ -447,14 +650,21 @@ export async function POST(request: NextRequest) {
       let errorMessage = `Blog Writer API error: ${response.status} ${response.statusText}`;
       
       try {
+        // Check content-type header first
+        const contentType = response.headers.get('content-type') || '';
+        const isHtml = contentType.includes('text/html');
+        
         // Try to get the response text first
         const responseText = await response.text();
-        logger.error('Blog Writer API error response body', { 
-          status: response.status,
-          responseText 
-        });
         
-        if (responseText) {
+        // Check if response is HTML 404
+        if (isHtml || responseText.includes('<html>') || responseText.includes('404') || responseText.includes('Page not found')) {
+          logger.warn('Backend returned HTML 404 - endpoint may not exist', { 
+            status: response.status,
+            endpoint: enhancedResponse ? 'enhanced' : 'regular',
+          });
+          errorMessage = 'Backend keyword analysis endpoint is not available. Please check backend configuration or try again later.';
+        } else if (responseText) {
           try {
             // Try to parse as JSON
             const errorData = JSON.parse(responseText);
@@ -463,37 +673,51 @@ export async function POST(request: NextRequest) {
               errorData 
             });
             
-            // Per FRONTEND_API_INTEGRATION_GUIDE.md: errors can have 'detail', 'error', or 'message' fields
-            // Priority: detail > error > message (per guide's error handling pattern)
-            if (errorData.detail) {
-              errorMessage = typeof errorData.detail === 'object' 
-                ? JSON.stringify(errorData.detail) 
-                : String(errorData.detail);
-            } else if (errorData.error) {
-              // If error is an object, stringify it properly
-              if (typeof errorData.error === 'object' && errorData.error !== null) {
-                errorMessage = JSON.stringify(errorData.error);
-              } 
-              // If error is already a string but contains [object Object], try to get more details
-              else if (typeof errorData.error === 'string' && errorData.error.includes('[object Object]')) {
-                // Try to get message field or stringify the whole errorData
-                errorMessage = errorData.message || JSON.stringify(errorData);
-              } 
-              // Otherwise use the error string as-is
-              else {
-                errorMessage = String(errorData.error);
-              }
-            } else if (errorData.message) {
-              errorMessage = typeof errorData.message === 'object'
-                ? JSON.stringify(errorData.message)
-                : String(errorData.message);
+            // Check if error field contains HTML
+            if (errorData.error && typeof errorData.error === 'string' && 
+                (errorData.error.includes('<html>') || errorData.error.includes('404'))) {
+              logger.warn('Backend returned HTML 404 in error field', { 
+                status: response.status,
+              });
+              errorMessage = 'Backend keyword analysis endpoint is not available. Please check backend configuration or try again later.';
             } else {
-              // If it's a JSON object but no standard error fields, stringify it
-              errorMessage = JSON.stringify(errorData);
+              // Per FRONTEND_API_INTEGRATION_GUIDE.md: errors can have 'detail', 'error', or 'message' fields
+              // Priority: detail > error > message (per guide's error handling pattern)
+              if (errorData.detail) {
+                errorMessage = typeof errorData.detail === 'object' 
+                  ? JSON.stringify(errorData.detail) 
+                  : String(errorData.detail);
+              } else if (errorData.error) {
+                // If error is an object, stringify it properly
+                if (typeof errorData.error === 'object' && errorData.error !== null) {
+                  errorMessage = JSON.stringify(errorData.error);
+                } 
+                // If error is already a string but contains [object Object], try to get more details
+                else if (typeof errorData.error === 'string' && errorData.error.includes('[object Object]')) {
+                  // Try to get message field or stringify the whole errorData
+                  errorMessage = errorData.message || JSON.stringify(errorData);
+                } 
+                // Otherwise use the error string as-is
+                else {
+                  errorMessage = String(errorData.error);
+                }
+              } else if (errorData.message) {
+                errorMessage = typeof errorData.message === 'object'
+                  ? JSON.stringify(errorData.message)
+                  : String(errorData.message);
+              } else {
+                // If it's a JSON object but no standard error fields, stringify it
+                errorMessage = JSON.stringify(errorData);
+              }
             }
           } catch {
-            // If not JSON, use the text directly
-            errorMessage = responseText;
+            // If not JSON, check if it's HTML
+            if (responseText.includes('<html>') || responseText.includes('404')) {
+              errorMessage = 'Backend keyword analysis endpoint is not available. Please check backend configuration or try again later.';
+            } else {
+              // If not JSON and not HTML, use the text directly
+              errorMessage = responseText;
+            }
           }
         }
       } catch (parseError) {

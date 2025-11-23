@@ -573,8 +573,34 @@ export default function KeywordResearchPage() {
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
-      throw new Error(errorData.error || `Failed to analyze keywords: ${response.statusText}`);
+      // Check if response is HTML (404 page) - check content-type header first
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        // Backend streaming endpoint doesn't exist, fallback to regular search
+        console.warn('Streaming endpoint returned HTML 404, falling back to regular search');
+        await handleRegularSearch(analysisRequest);
+        return;
+      }
+      
+      // For non-HTML errors, try to parse JSON error message
+      let errorMessage = `Failed to analyze keywords: ${response.statusText}`;
+      try {
+        const responseText = await response.text();
+        // Double-check for HTML even if content-type wasn't set correctly
+        if (responseText.includes('<html>') || responseText.includes('404') || responseText.includes('Page not found')) {
+          console.warn('Streaming endpoint returned HTML 404, falling back to regular search');
+          await handleRegularSearch(analysisRequest);
+          return;
+        }
+        
+        // Try to parse as JSON
+        const errorData = JSON.parse(responseText);
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch {
+        // If parsing fails, use default error message
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const reader = response.body?.getReader();

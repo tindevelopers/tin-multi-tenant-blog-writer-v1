@@ -382,8 +382,8 @@ class KeywordResearchService {
       throw new Error(`Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
     }
 
-    // Reduced default to preserve credits (was 75, now 10)
-    const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 10);
+    // Reduced to minimum required by backend (backend requires >= 5, using 5 for testing)
+    const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 5);
     logger.debug(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
 
     return await this.retryApiCall(async () => {
@@ -714,7 +714,7 @@ class KeywordResearchService {
       
       // Step 3: Analyze keywords in batches (reduced for credit preservation)
       const BATCH_SIZE = 5; // Reduced from 20 to preserve credits
-      const MAX_SUGGESTIONS_PER_KEYWORD = 10; // Reduced from 75 to preserve credits
+      const MAX_SUGGESTIONS_PER_KEYWORD = 5; // Minimum required by backend (backend requires >= 5)
       
       let keywordAnalysis: KeywordAnalysis;
       

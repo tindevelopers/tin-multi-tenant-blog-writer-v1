@@ -73,6 +73,32 @@ export async function POST(request: NextRequest) {
       
       if (!response.ok) {
         const errorText = await response.text();
+        const contentType = response.headers.get('content-type') || '';
+        
+        // Check if backend returned HTML 404 (endpoint doesn't exist)
+        if (contentType.includes('text/html') || errorText.includes('<html>') || errorText.includes('404') || errorText.includes('Page not found')) {
+          logger.warn('Backend streaming endpoint not available (404 HTML)', {
+            endpoint,
+            status: response.status,
+          });
+          
+          // Return a graceful error that the frontend can handle
+          return new Response(
+            JSON.stringify({ 
+              type: 'error', 
+              error: 'Streaming endpoint not available. Please use regular search instead.',
+              fallback: true,
+            }),
+            { 
+              status: 404,
+              headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+              }
+            }
+          );
+        }
+        
         let errorMessage = `Keyword Analysis API error: ${response.status} ${response.statusText}`;
         
         try {

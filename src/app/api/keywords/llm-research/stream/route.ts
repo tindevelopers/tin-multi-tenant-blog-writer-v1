@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { logger } from '@/lib/logger';
 import { parseJsonBody } from '@/lib/api-utils';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+import cloudRunHealth from '@/lib/cloud-run-health';
 
 export async function POST(request: NextRequest) {
   logger.info('📥 LLM Research streaming request received', {
@@ -51,6 +52,27 @@ export async function POST(request: NextRequest) {
     };
     
     const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/llm-research/stream`;
+    
+    // Wake up Cloud Run before making API call
+    logger.info('🌅 Checking Cloud Run health before LLM research streaming call...');
+    try {
+      const healthStatus = await cloudRunHealth.checkHealth();
+      logger.info('📊 Cloud Run Status:', {
+        isHealthy: healthStatus.isHealthy,
+        isWakingUp: healthStatus.isWakingUp,
+        error: healthStatus.error,
+      });
+
+      if (!healthStatus.isHealthy && !healthStatus.isWakingUp) {
+        logger.info('⏳ Cloud Run not healthy, attempting wake-up...');
+        await cloudRunHealth.wakeUpAndWait();
+      }
+    } catch (healthError) {
+      logger.warn('⚠️ Cloud Run health check failed, continuing anyway', {
+        error: healthError instanceof Error ? healthError.message : String(healthError),
+      });
+    }
+    
     logger.info('🔍 Calling LLM research streaming endpoint', {
       endpoint,
       keywords: body.keywords,
@@ -66,8 +88,31 @@ export async function POST(request: NextRequest) {
       });
       
       if (!response.ok) {
+        const contentType = response.headers.get('content-type') || '';
         const errorText = await response.text();
         let errorMessage = `LLM Research API error: ${response.status} ${response.statusText}`;
+        
+        // Check if endpoint doesn't exist (404)
+        if (response.status === 404 || contentType.includes('text/html') || errorText.includes('Not Found')) {
+          logger.warn('⚠️ LLM Research streaming endpoint not found on backend (404)', {
+            endpoint,
+            status: response.status,
+          });
+          return new Response(
+            JSON.stringify({ 
+              type: 'error', 
+              error: 'LLM Research endpoint is not available on the backend. This feature may not be implemented yet.',
+              endpoint_not_found: true,
+            }),
+            { 
+              status: 404,
+              headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+              }
+            }
+          );
+        }
         
         try {
           const errorData = JSON.parse(errorText);
