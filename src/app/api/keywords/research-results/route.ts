@@ -32,10 +32,10 @@ export async function GET(request: NextRequest) {
     const language = searchParams.get('language') || undefined;
     const keyword = searchParams.get('keyword') || undefined;
 
-    // Build query
+    // Build query with proper error handling
     let query = supabase
       .from('keyword_research_results')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -50,7 +50,9 @@ export async function GET(request: NextRequest) {
       query = query.eq('language', language);
     }
     if (keyword) {
-      query = query.ilike('keyword', `%${keyword}%`);
+      // Use ilike for case-insensitive search, but ensure proper encoding
+      const encodedKeyword = decodeURIComponent(keyword);
+      query = query.ilike('keyword', `%${encodedKeyword}%`);
     }
 
     const { data: results, error } = await query;

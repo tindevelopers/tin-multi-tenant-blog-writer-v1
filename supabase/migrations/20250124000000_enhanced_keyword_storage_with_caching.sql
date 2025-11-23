@@ -319,7 +319,11 @@ RETURNS TABLE (
   comprehensive_data JSONB,
   cached_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ
-) AS $$
+) 
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
   RETURN QUERY
   SELECT 
@@ -332,25 +336,33 @@ BEGIN
     kc.cached_at,
     kc.expires_at
   FROM keyword_cache kc
-  WHERE kc.keyword = p_keyword
+  WHERE LOWER(TRIM(kc.keyword)) = LOWER(TRIM(p_keyword))
     AND kc.location = p_location
     AND kc.language = p_language
     AND kc.search_type = p_search_type
-    AND (kc.user_id = p_user_id OR (kc.user_id IS NULL AND p_user_id IS NULL))
+    AND (p_user_id IS NULL OR kc.user_id = p_user_id OR kc.user_id IS NULL)
     AND kc.expires_at > NOW();
   
-  -- Update hit count and last accessed
-  UPDATE keyword_cache
-  SET hit_count = hit_count + 1,
-      last_accessed_at = NOW()
-  WHERE keyword = p_keyword
-    AND location = p_location
-    AND language = p_language
-    AND search_type = p_search_type
-    AND (user_id = p_user_id OR (user_id IS NULL AND p_user_id IS NULL))
-    AND expires_at > NOW();
+  -- Update hit count and last accessed (only if we found a result)
+  IF FOUND THEN
+    UPDATE keyword_cache
+    SET hit_count = COALESCE(hit_count, 0) + 1,
+        last_accessed_at = NOW()
+    WHERE LOWER(TRIM(keyword)) = LOWER(TRIM(p_keyword))
+      AND location = p_location
+      AND language = p_language
+      AND search_type = p_search_type
+      AND (p_user_id IS NULL OR user_id = p_user_id OR user_id IS NULL)
+      AND expires_at > NOW();
+  END IF;
 END;
-$$ LANGUAGE plpgsql;
+$$;
+
+-- Grant execute permissions on functions
+GRANT EXECUTE ON FUNCTION get_cached_keyword TO authenticated;
+GRANT EXECUTE ON FUNCTION get_cached_keyword TO anon;
+GRANT EXECUTE ON FUNCTION flush_keyword_cache TO authenticated;
+GRANT EXECUTE ON FUNCTION clean_expired_keyword_cache TO authenticated;
 
 -- Comments for documentation
 COMMENT ON TABLE keyword_cache IS '90-day cache for keyword research results to reduce API calls';
