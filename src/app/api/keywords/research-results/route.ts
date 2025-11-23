@@ -14,7 +14,7 @@ import { SearchType } from '@/lib/keyword-storage-enhanced';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(request);
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
