@@ -312,8 +312,8 @@ export async function POST(request: NextRequest) {
                         keyword_difficulty: difficultyMap[kwData.difficulty || 'medium'] || 50,
                         competition: kwData.competition || 0,
                         cpc: kwData.cpc || 0,
-                        search_intent: kwData.primary_intent || kwData.search_intent,
-                        parent_topic: kwData.parent_topic,
+                        search_intent: kwData.primary_intent || kwData.search_intent || undefined,
+                        parent_topic: kwData.parent_topic || undefined,
                         trend_score: kwData.trend_score || 0,
                       });
                     }
@@ -336,9 +336,9 @@ export async function POST(request: NextRequest) {
                             keyword_difficulty: difficultyMap[foundKwData.difficulty || 'medium'] || 50,
                             competition: foundKwData.competition || 0,
                             cpc: foundKwData.cpc || 0,
-                            search_intent: foundKwData.primary_intent || foundKwData.search_intent,
-                            parent_topic: foundKwData.parent_topic,
-                            trend_score: foundKwData.trend_score || 0,
+                            search_intent: (foundKwData as any).primary_intent || (foundKwData as any).search_intent,
+                            parent_topic: (foundKwData as any).parent_topic,
+                            trend_score: (foundKwData as any).trend_score || 0,
                           });
                         } else {
                           // Keyword not in analysis response, add with minimal data
