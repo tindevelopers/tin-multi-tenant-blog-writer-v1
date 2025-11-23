@@ -8,7 +8,7 @@ import MasterKeywordTable from "@/components/keyword-research/MasterKeywordTable
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
 import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnhancedKeywordResearch";
 import { useContentIdeas } from "@/hooks/useContentIdeas";
-import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight } from "lucide-react";
+import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight, Save } from "lucide-react";
 import Alert from "@/components/ui/alert/Alert";
 import StreamingProgress from "@/components/keywords/StreamingProgress";
 
@@ -96,16 +96,18 @@ export default function SEOToolsPage() {
           <div>
             <h1 className="text-2xl font-bold mb-2">🔍 Advanced Keyword Research</h1>
               <p className="text-teal-100">
-                Discover high-value keywords, identify easy wins, and build content clusters for authority
+                Step 1: Research keywords → Step 2: Choose topics → Step 3: Create blogs
               </p>
           </div>
           <div className="flex items-center gap-4">
-            <Link
-              href="/admin/seo/keywords"
-              className="px-4 py-2 bg-white rounded-lg text-green-800 font-medium transition-colors border-2 border-green-600 hover:bg-green-50"
-            >
-              📊 Research History
-            </Link>
+            {keywords.length > 0 && (
+              <Link
+                href="/admin/content-clusters"
+                className="px-4 py-2 bg-white rounded-lg text-purple-800 font-medium transition-colors border-2 border-purple-600 hover:bg-purple-50"
+              >
+                Step 2: View Content Clusters →
+              </Link>
+            )}
             {keywords.length > 0 ? (
               <div className="hidden md:block">
                 <div className="bg-white rounded-lg p-4 text-center border-2 border-green-600">
@@ -383,8 +385,15 @@ export default function SEOToolsPage() {
                           className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 transition-colors inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Sparkles className="h-4 w-4" />
-                          {contentIdeasLoading ? 'Generating...' : `Generate Content Ideas (${selectedCount})`}
+                          {contentIdeasLoading ? 'Generating...' : `Save & Generate Content Ideas (${selectedCount})`}
                         </button>
+                        <Link
+                          href="/admin/content-clusters"
+                          className="px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-300 rounded-lg hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-600 dark:hover:bg-purple-900/50 transition-colors inline-flex items-center gap-2"
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                          View Content Clusters
+                        </Link>
                       </div>
                     </div>
                   )}
