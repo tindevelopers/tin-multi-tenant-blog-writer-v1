@@ -219,8 +219,18 @@ export class EnhancedKeywordResearchService {
     suggestions: KeywordSuggestionResponse;
   }> {
     try {
-      // Step 1: Get suggestions for the primary keyword
-      const suggestions = await this.suggestKeywords(primaryKeyword);
+      // Step 1: Get suggestions for the primary keyword (gracefully handle if endpoint doesn't exist)
+      let suggestions: KeywordSuggestionResponse;
+      try {
+        suggestions = await this.suggestKeywords(primaryKeyword);
+      } catch (error) {
+        logger.warn('Keyword suggestions endpoint unavailable, continuing without suggestions', { error });
+        suggestions = {
+          keyword_suggestions: [],
+          related_keywords: [],
+          long_tail_keywords: [],
+        };
+      }
 
       // Step 2: Collect all keyword variations (limited to preserve credits)
       const maxSuggestions = 5; // Reduced to preserve credits
