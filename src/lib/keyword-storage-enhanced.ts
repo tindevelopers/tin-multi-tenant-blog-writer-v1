@@ -272,8 +272,22 @@ class EnhancedKeywordStorageService {
 
       const researchResultId = researchResult?.id;
 
+      if (!researchResultId) {
+        logger.error('Failed to get research result ID after insert', {
+          keyword: result.keyword,
+          researchResult,
+        });
+        return { success: false, error: 'Failed to create research result record' };
+      }
+
       // Store individual keyword terms
       if (result.traditional_data || result.ai_data) {
+        logger.debug('Storing keyword term', {
+          researchResultId,
+          keyword: result.keyword,
+          hasTraditionalData: !!result.traditional_data,
+          hasAiData: !!result.ai_data,
+        });
         const termData = {
           research_result_id: researchResultId,
           user_id: userId,
@@ -312,11 +326,30 @@ class EnhancedKeywordStorageService {
           language: result.language,
         };
 
-        await supabase
+        const { data: termResult, error: termError } = await supabase
           .from('keyword_terms')
           .upsert(termData, {
             onConflict: 'user_id,keyword_normalized,location,language,search_type',
+          })
+          .select('id');
+
+        if (termError) {
+          logger.error('Error storing keyword term', {
+            error: termError,
+            keyword: result.keyword,
+            researchResultId,
+            errorCode: termError.code,
+            errorMessage: termError.message,
+            errorDetails: termError.details,
+            errorHint: termError.hint,
           });
+        } else {
+          logger.debug('Keyword term stored successfully', {
+            keyword: result.keyword,
+            termId: termResult?.[0]?.id,
+            researchResultId,
+          });
+        }
       }
 
       // Store related terms
@@ -372,11 +405,29 @@ class EnhancedKeywordStorageService {
           language: result.language,
         }));
 
-        await supabase
+        const { data: matchingTermsResult, error: matchingTermsError } = await supabase
           .from('keyword_terms')
           .upsert(matchingTermsData, {
             onConflict: 'user_id,keyword_normalized,location,language,search_type',
+          })
+          .select('id');
+
+        if (matchingTermsError) {
+          logger.error('Error storing matching terms', {
+            error: matchingTermsError,
+            keyword: result.keyword,
+            researchResultId,
+            count: matchingTermsData.length,
+            errorCode: matchingTermsError.code,
+            errorMessage: matchingTermsError.message,
           });
+        } else {
+          logger.debug('Matching terms stored successfully', {
+            keyword: result.keyword,
+            count: matchingTermsResult?.length || 0,
+            researchResultId,
+          });
+        }
       }
 
       logger.debug('Keyword research stored successfully', { keyword: result.keyword, id: researchResultId });
