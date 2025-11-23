@@ -431,17 +431,34 @@ class KeywordResearchService {
       });
 
       if (!response.ok) {
+        const contentType = response.headers.get('content-type') || '';
         const responseText = await response.text();
         let errorMessage = `API returned ${response.status}`;
+        
+        // Check if response is HTML (404 error page)
+        if (contentType.includes('text/html') || responseText.includes('<html>') || responseText.includes('404')) {
+          logger.warn(`⚠️ API returned HTML 404 page (${response.status}), endpoint may not exist`, {
+            url: apiUrl,
+            status: response.status
+          });
+          // Don't throw error for HTML 404 responses - return empty analysis instead
+          // This allows the research to continue with other data sources
+          return {
+            keyword_analysis: {}
+          };
+        }
         
         try {
           const errorData = JSON.parse(responseText);
           errorMessage = errorData.error || errorData.message || errorData.detail || errorMessage;
         } catch {
-          errorMessage = responseText || errorMessage;
+          // If parsing fails and it's not HTML, use sanitized error message
+          if (!responseText.includes('<html>')) {
+            errorMessage = responseText.substring(0, 200) || errorMessage;
+          }
         }
 
-        logger.error(`❌ API error (${response.status}):`, errorMessage);
+        logger.error(`❌ API error (${response.status}):`, errorMessage.substring(0, 200));
         logger.error(`❌ Request body:`, JSON.stringify(requestBody, null, 2));
         
         throw new Error(errorMessage);
@@ -631,12 +648,27 @@ class KeywordResearchService {
         });
 
         if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          // Check if response is HTML (404 error page)
+          if (contentType.includes('text/html')) {
+            logger.warn(`⚠️ Keyword suggestions API returned HTML (likely 404), skipping suggestions for "${keyword}"`);
+            continue;
+          }
+          
           const data = await response.json();
           const suggestions = data.keyword_suggestions || data.suggestions || [];
           allSuggestions.push(...suggestions);
         } else {
+          const contentType = response.headers.get('content-type') || '';
           const errorText = await response.text();
-          logger.warn(`Keyword suggestions API returned ${response.status}:`, errorText);
+          
+          // Check if response is HTML (404 error page)
+          if (contentType.includes('text/html') || errorText.includes('<html>')) {
+            logger.warn(`⚠️ Keyword suggestions API returned HTML 404, skipping suggestions for "${keyword}"`);
+            continue;
+          }
+          
+          logger.warn(`Keyword suggestions API returned ${response.status}:`, errorText.substring(0, 200));
         }
       }
 
