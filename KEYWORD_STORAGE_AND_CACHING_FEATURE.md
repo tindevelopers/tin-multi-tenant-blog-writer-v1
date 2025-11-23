@@ -5,7 +5,8 @@
 This feature adds comprehensive keyword research storage and caching capabilities, allowing users to:
 - Choose between Traditional SEO search, AI search, or Both
 - Automatically store all keyword research results in Supabase
-- Cache results for 7 days to reduce API calls
+- Cache results for 90 days to reduce API calls
+- Flush cache manually when needed
 - Store related terms and matching terms for traditional search
 - Retrieve stored keywords with full metrics (Ahrefs/SpyFu style)
 
@@ -13,11 +14,12 @@ This feature adds comprehensive keyword research storage and caching capabilitie
 
 ### Tables Created
 
-1. **keyword_cache** - 7-day cache for keyword research results
+1. **keyword_cache** - 90-day cache for keyword research results
    - Stores traditional and AI data
    - Includes related terms
-   - Auto-expires after 7 days
+   - Auto-expires after 90 days
    - Tracks hit count and last accessed
+   - Can be manually flushed by users
 
 2. **keyword_research_results** - Full storage of keyword research
    - Stores complete research results
@@ -82,6 +84,22 @@ Retrieve keyword research from cache or database.
     "related_terms": [ ... ]
   },
   "source": "cache" // or "database" or "api"
+}
+```
+
+### DELETE /api/keywords/flush-cache
+Flush keyword cache entries for the authenticated user.
+
+**Query Parameters:**
+- `keyword` (optional) - Flush cache for specific keyword only
+- `search_type` (optional) - Flush cache for specific search type only
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Cache flushed successfully. 15 entries deleted.",
+  "deletedCount": 15
 }
 ```
 
@@ -181,15 +199,34 @@ const listResponse = await fetch(
   '/api/keywords/list?search_type=traditional&min_search_volume=100'
 );
 const keywords = await listResponse.json();
+
+// Flush cache (all entries for user)
+const flushResponse = await fetch('/api/keywords/flush-cache', {
+  method: 'DELETE',
+});
+const flushResult = await flushResponse.json();
+
+// Flush cache for specific keyword
+const flushKeywordResponse = await fetch(
+  '/api/keywords/flush-cache?keyword=pet+groomers+in+miami',
+  { method: 'DELETE' }
+);
+
+// Flush cache for specific search type
+const flushTypeResponse = await fetch(
+  '/api/keywords/flush-cache?search_type=traditional',
+  { method: 'DELETE' }
+);
 ```
 
 ## Features
 
-### 7-Day Caching
-- Results are cached for 7 days
+### 90-Day Caching
+- Results are cached for 90 days
 - Cache is checked before making API calls
-- Cache automatically expires after 7 days
+- Cache automatically expires after 90 days
 - Hit count and last accessed are tracked
+- Users can manually flush their cache when needed
 
 ### Automatic Storage
 - All keyword research is automatically stored in database
@@ -225,10 +262,27 @@ SELECT * FROM get_cached_keyword(
 ```
 
 ### clean_expired_keyword_cache()
-Removes expired cache entries (older than 7 days).
+Removes expired cache entries (older than 90 days).
 
 ```sql
 SELECT clean_expired_keyword_cache();
+```
+
+### flush_keyword_cache()
+Flushes cache entries for a user (or all users if user_id is NULL).
+
+```sql
+-- Flush all cache for a specific user
+SELECT flush_keyword_cache('user-uuid');
+
+-- Flush cache for a specific keyword
+SELECT flush_keyword_cache('user-uuid', 'pet groomers in miami');
+
+-- Flush cache for a specific search type
+SELECT flush_keyword_cache('user-uuid', NULL, 'traditional');
+
+-- Flush all cache (admin only)
+SELECT flush_keyword_cache();
 ```
 
 ## Migration
@@ -244,7 +298,7 @@ Or apply via Supabase Dashboard SQL Editor.
 
 ## Benefits
 
-1. **Reduced API Costs** - 7-day cache reduces redundant API calls
+1. **Reduced API Costs** - 90-day cache reduces redundant API calls
 2. **Faster Results** - Cached results return instantly
 3. **Data Persistence** - All research stored for future reference
 4. **Comprehensive Metrics** - Full Ahrefs/SpyFu-style data storage

@@ -1,9 +1,9 @@
--- Enhanced Keyword Storage with Traditional/AI Search Results and 7-Day Caching
+-- Enhanced Keyword Storage with Traditional/AI Search Results and 90-Day Caching
 -- Supports both traditional SEO keywords and AI-generated search results
 -- Stores full keyword data similar to Ahrefs/SpyFu format
 
 -- =====================================================
--- Keyword Cache Table (7-day cache)
+-- Keyword Cache Table (90-day cache)
 -- =====================================================
 CREATE TABLE IF NOT EXISTS keyword_cache (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS keyword_cache (
   
   -- Cache metadata
   cached_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '7 days'),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '90 days'),
   hit_count INTEGER DEFAULT 0,
   last_accessed_at TIMESTAMPTZ DEFAULT NOW(),
   
@@ -255,6 +255,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Function to flush cache for a specific user (or all users if user_id is NULL)
+CREATE OR REPLACE FUNCTION flush_keyword_cache(
+  p_user_id UUID DEFAULT NULL,
+  p_keyword TEXT DEFAULT NULL,
+  p_search_type TEXT DEFAULT NULL
+)
+RETURNS INTEGER AS $$
+DECLARE
+  deleted_count INTEGER;
+BEGIN
+  DELETE FROM keyword_cache
+  WHERE (p_user_id IS NULL OR user_id = p_user_id)
+    AND (p_keyword IS NULL OR keyword = p_keyword)
+    AND (p_search_type IS NULL OR search_type = p_search_type);
+  
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Function to update accessed_at timestamp
 CREATE OR REPLACE FUNCTION update_keyword_access()
 RETURNS TRIGGER AS $$
@@ -323,9 +343,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Comments for documentation
-COMMENT ON TABLE keyword_cache IS '7-day cache for keyword research results to reduce API calls';
+COMMENT ON TABLE keyword_cache IS '90-day cache for keyword research results to reduce API calls';
 COMMENT ON TABLE keyword_research_results IS 'Full storage of keyword research results with traditional and AI data';
 COMMENT ON TABLE keyword_terms IS 'Individual keyword terms with comprehensive metrics (Ahrefs/SpyFu style)';
-COMMENT ON FUNCTION get_cached_keyword IS 'Retrieves cached keyword data if not expired (7 days)';
-COMMENT ON FUNCTION clean_expired_keyword_cache IS 'Removes expired cache entries (older than 7 days)';
+COMMENT ON FUNCTION get_cached_keyword IS 'Retrieves cached keyword data if not expired (90 days)';
+COMMENT ON FUNCTION clean_expired_keyword_cache IS 'Removes expired cache entries (older than 90 days)';
+COMMENT ON FUNCTION flush_keyword_cache IS 'Flushes keyword cache entries. If user_id is NULL, flushes all cache. Can optionally filter by keyword and search_type.';
 

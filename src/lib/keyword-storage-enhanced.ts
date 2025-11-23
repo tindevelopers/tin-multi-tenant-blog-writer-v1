@@ -67,7 +67,7 @@ export interface KeywordResearchResult {
 }
 
 class EnhancedKeywordStorageService {
-  private readonly CACHE_DURATION_DAYS = 7;
+  private readonly CACHE_DURATION_DAYS = 90;
 
   /**
    * Check if keyword data exists in cache (not expired)
@@ -412,6 +412,41 @@ class EnhancedKeywordStorageService {
     } catch (error) {
       logger.error('Error retrieving keyword research', { error, keyword });
       return null;
+    }
+  }
+
+  /**
+   * Flush cache for a user (or all cache if userId is not provided)
+   */
+  async flushCache(
+    userId?: string,
+    keyword?: string,
+    searchType?: SearchType
+  ): Promise<{ success: boolean; deletedCount?: number; error?: string }> {
+    try {
+      const supabase = createClient();
+
+      const { data, error } = await supabase.rpc('flush_keyword_cache', {
+        p_user_id: userId || null,
+        p_keyword: keyword ? keyword.toLowerCase().trim() : null,
+        p_search_type: searchType || null,
+      });
+
+      if (error) {
+        logger.error('Error flushing cache', { error, userId, keyword });
+        return { success: false, error: error.message };
+      }
+
+      const deletedCount = data || 0;
+      logger.debug('Cache flushed successfully', { userId, keyword, deletedCount });
+      
+      return { success: true, deletedCount };
+    } catch (error) {
+      logger.error('Error flushing cache', { error, userId, keyword });
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
     }
   }
 
