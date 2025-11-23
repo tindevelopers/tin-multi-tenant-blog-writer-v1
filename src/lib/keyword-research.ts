@@ -385,9 +385,22 @@ class KeywordResearchService {
     logger.debug(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
 
     return await this.retryApiCall(async () => {
-      const apiUrl = this.useApiRoutes 
-        ? '/api/keywords/analyze'
-        : `${this.baseURL}/api/v1/keywords/enhanced`;
+      // Construct absolute URL for server-side requests
+      let apiUrl: string;
+      if (this.useApiRoutes) {
+        // Server-side: need absolute URL, client-side: relative URL works
+        const isServerSide = typeof window === 'undefined';
+        if (isServerSide) {
+          // When server-side and using API routes, use the Next.js app URL (not Cloud Run API URL)
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
+            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+          apiUrl = `${appUrl}/api/keywords/analyze`;
+        } else {
+          apiUrl = '/api/keywords/analyze';
+        }
+      } else {
+        apiUrl = `${this.baseURL}/api/v1/keywords/enhanced`;
+      }
       
       const requestBody: Record<string, unknown> = {
         keywords,
