@@ -98,7 +98,7 @@ export class EnhancedKeywordResearchService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          keywords: keywords.slice(0, 75), // Optimized API limit
+          keywords: keywords.slice(0, 10), // Reduced from 75 to preserve credits
           location,
           language,
         }),
@@ -206,18 +206,25 @@ export class EnhancedKeywordResearchService {
       // Step 1: Get suggestions for the primary keyword
       const suggestions = await this.suggestKeywords(primaryKeyword);
 
-      // Step 2: Collect all keyword variations
+      // Step 2: Collect all keyword variations (limited to preserve credits)
+      const maxSuggestions = 5; // Reduced to preserve credits
       const allKeywords = [
         primaryKeyword,
-        ...(suggestions.keyword_suggestions || []),
+        ...(suggestions.keyword_suggestions || []).slice(0, maxSuggestions),
       ];
 
-      // Step 3: Analyze all keywords in batches of 50
+      // Step 3: Analyze all keywords in smaller batches (reduced for credit preservation)
+      // Limit to first 10 keywords max to preserve credits
+      const limitedKeywords = allKeywords.slice(0, 10);
       const analysisResults: KeywordAnalysisResponse[] = [];
-      for (let i = 0; i < allKeywords.length; i += 50) {
-        const batch = allKeywords.slice(i, i + 50);
+      const BATCH_SIZE = 5; // Reduced batch size
+      
+      for (let i = 0; i < limitedKeywords.length; i += BATCH_SIZE) {
+        const batch = limitedKeywords.slice(i, i + BATCH_SIZE);
         const batchResults = await this.analyzeKeywords(batch, location, language);
-        analysisResults.push(...batchResults);
+        if (batchResults && Array.isArray(batchResults)) {
+          analysisResults.push(...batchResults.filter(r => r && r.keyword));
+        }
       }
 
       // Step 4: Transform to KeywordData format with scoring
@@ -227,8 +234,12 @@ export class EnhancedKeywordResearchService {
 
       // Step 5: Find primary keyword analysis
       const primaryAnalysis = analysisResults.find(
-        (a) => a.keyword.toLowerCase() === primaryKeyword.toLowerCase()
+        (a) => a && a.keyword && a.keyword.toLowerCase() === primaryKeyword.toLowerCase()
       ) || analysisResults[0];
+      
+      if (!primaryAnalysis || !primaryAnalysis.keyword) {
+        throw new Error(`Failed to analyze primary keyword: ${primaryKeyword}`);
+      }
 
       return {
         primary: primaryAnalysis,

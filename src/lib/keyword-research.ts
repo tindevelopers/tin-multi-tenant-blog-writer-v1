@@ -382,8 +382,8 @@ class KeywordResearchService {
       throw new Error(`Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
     }
 
-    // Ensure maxSuggestionsPerKeyword is at least 5 (API requirement) and defaults to 75
-    const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 75);
+    // Reduced default to preserve credits (was 75, now 10)
+    const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 10);
     logger.debug(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
 
     return await this.retryApiCall(async () => {
@@ -677,9 +677,9 @@ class KeywordResearchService {
       // Combine keywords
       const allKeywords = [...new Set([...extractedKeywords, ...suggestedKeywords, topic])];
       
-      // Step 3: Analyze keywords in batches
-      const BATCH_SIZE = 20;
-      const MAX_SUGGESTIONS_PER_KEYWORD = 75; // Optimal for long-tail research
+      // Step 3: Analyze keywords in batches (reduced for credit preservation)
+      const BATCH_SIZE = 5; // Reduced from 20 to preserve credits
+      const MAX_SUGGESTIONS_PER_KEYWORD = 10; // Reduced from 75 to preserve credits
       
       let keywordAnalysis: KeywordAnalysis;
       
@@ -688,12 +688,12 @@ class KeywordResearchService {
         
         const batches: KeywordAnalysis[] = [];
         
-        // Enhanced options for better content quality
-        const enhancedOptions = useEnhancedFeatures ? {
-          include_trends: true, // Google Trends for trending topics
-          include_keyword_ideas: true, // Keyword ideas for content expansion
-          include_relevant_pages: true, // Competitor analysis
-          include_serp_ai_summary: true, // AI-powered SERP summary
+        // Enhanced options disabled in development to preserve credits
+        const enhancedOptions = false ? { // Disabled: useEnhancedFeatures
+          include_trends: false, // Disabled to preserve credits
+          include_keyword_ideas: false, // Disabled to preserve credits
+          include_relevant_pages: false, // Disabled to preserve credits
+          include_serp_ai_summary: false, // Disabled to preserve credits
         } : undefined;
         
         for (let i = 0; i < allKeywords.length; i += BATCH_SIZE) {
@@ -731,12 +731,12 @@ class KeywordResearchService {
         
         logger.debug(`✅ Merged ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords`);
       } else {
-        // Enhanced options for better content quality
-        const enhancedOptions = useEnhancedFeatures ? {
-          include_trends: true,
-          include_keyword_ideas: true,
-          include_relevant_pages: true,
-          include_serp_ai_summary: true,
+        // Enhanced options disabled in development to preserve credits
+        const enhancedOptions = false ? { // Disabled: useEnhancedFeatures
+          include_trends: false, // Disabled to preserve credits
+          include_keyword_ideas: false, // Disabled to preserve credits
+          include_relevant_pages: false, // Disabled to preserve credits
+          include_serp_ai_summary: false, // Disabled to preserve credits
         } : undefined;
         
         keywordAnalysis = await this.analyzeKeywords(allKeywords, MAX_SUGGESTIONS_PER_KEYWORD, location, enhancedOptions);

@@ -123,16 +123,22 @@ class KeywordResearchWithStorageService {
       try {
         const traditionalAnalysis = await keywordResearchService.analyzeKeywords(
           [keyword],
-          50, // max suggestions
+          10, // Reduced from 50 to preserve credits
           location,
           {
-            include_trends: true,
-            include_keyword_ideas: includeRelatedTerms,
+            include_trends: false, // Disabled to preserve credits
+            include_keyword_ideas: includeRelatedTerms && false, // Disabled to preserve credits
           }
         );
 
-        if (traditionalAnalysis.keyword_analysis && Object.keys(traditionalAnalysis.keyword_analysis).length > 0) {
-          const keywordData = traditionalAnalysis.keyword_analysis[keyword.toLowerCase()];
+        if (traditionalAnalysis?.keyword_analysis && Object.keys(traditionalAnalysis.keyword_analysis).length > 0) {
+          const keywordLower = keyword?.toLowerCase();
+          if (!keywordLower) {
+            logger.warn('Invalid keyword provided', { keyword });
+            return result;
+          }
+          
+          const keywordData = traditionalAnalysis.keyword_analysis[keywordLower];
           
           if (keywordData) {
             // Convert difficulty string to number (0-100 scale)
@@ -174,9 +180,15 @@ class KeywordResearchWithStorageService {
             if (includeRelatedTerms && traditionalAnalysis.keyword_analysis) {
               const relatedTerms: RelatedTerm[] = [];
               
-              // Get related keywords from analysis
+              // Get related keywords from analysis (limited to preserve credits)
+              const relatedKeywordsLimit = 10; // Limit related terms
+              let relatedCount = 0;
+              
               Object.entries(traditionalAnalysis.keyword_analysis).forEach(([kw, data]: [string, any]) => {
-                if (kw.toLowerCase() !== keyword.toLowerCase() && data.search_volume > 0) {
+                if (relatedCount >= relatedKeywordsLimit) return;
+                
+                if (kw && data && kw.toLowerCase() !== keywordLower && (data.search_volume || 0) > 0) {
+                  relatedCount++;
                   relatedTerms.push({
                     keyword: kw,
                     search_volume: data.search_volume || 0,
@@ -205,7 +217,7 @@ class KeywordResearchWithStorageService {
                 });
               }
 
-              result.relatedTerms = relatedTerms.slice(0, 50); // Limit to 50
+              result.relatedTerms = relatedTerms.slice(0, 10); // Reduced from 50 to preserve credits
             }
           }
         }
