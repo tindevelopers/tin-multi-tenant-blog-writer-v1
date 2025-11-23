@@ -52,6 +52,8 @@ export interface KeywordAnalysisResponse {
 
 export interface KeywordSuggestionResponse {
   keyword_suggestions: string[];
+  related_keywords?: string[];
+  long_tail_keywords?: string[];
 }
 
 export interface KeywordCluster {

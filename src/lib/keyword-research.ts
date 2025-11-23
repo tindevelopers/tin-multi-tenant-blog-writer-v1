@@ -444,7 +444,10 @@ class KeywordResearchService {
           // Don't throw error for HTML 404 responses - return empty analysis instead
           // This allows the research to continue with other data sources
           return {
-            keyword_analysis: {}
+            keyword_analysis: {},
+            overall_score: 0,
+            recommendations: [],
+            cluster_groups: []
           };
         }
         
