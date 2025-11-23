@@ -41,7 +41,7 @@ jobs:
       - name: Deploy Preview to Vercel
         run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
 
-  deploy-production:
+  deploy-preview-develop:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     steps:
@@ -57,22 +57,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run build
-        run: npm run build
-
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
       - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project Artifacts
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy Production to Vercel
+      - name: Deploy Preview to Vercel (Develop Branch)
         id: deploy
         run: |
-          url=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
           echo "deployment_url=$url" >> $GITHUB_OUTPUT
 
       - name: Comment deployment URL
@@ -81,9 +78,9 @@ jobs:
         with:
           script: |
             const deploymentUrl = '${{ steps.deploy.outputs.deployment_url }}';
-            const message = `✅ Successfully deployed to Vercel!
+            const message = `✅ Successfully deployed to Vercel Preview (develop branch)!
 
-🔗 **Deployment URL**: ${deploymentUrl}`;
+🔗 **Preview URL**: ${deploymentUrl}`;
             
             // Create a commit status
             github.rest.repos.createCommitStatus({
@@ -92,6 +89,6 @@ jobs:
               sha: context.sha,
               state: 'success',
               target_url: deploymentUrl,
-              description: 'Deployed to Vercel',
-              context: 'vercel/deployment'
+              description: 'Deployed to Vercel Preview',
+              context: 'vercel/preview-deployment'
             });
