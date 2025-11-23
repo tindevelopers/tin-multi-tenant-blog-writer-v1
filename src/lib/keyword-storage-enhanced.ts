@@ -4,7 +4,7 @@
  * with 90-day caching support
  */
 
-import { createClient as createClientClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 
 export type SearchType = 'traditional' | 'ai' | 'both';
@@ -80,7 +80,7 @@ class EnhancedKeywordStorageService {
     userId?: string
   ): Promise<KeywordResearchResult | null> {
     try {
-      const supabase = createClient();
+      const supabase = await createClient();
       
       const { data, error } = await supabase
         .rpc('get_cached_keyword', {
@@ -135,11 +135,11 @@ class EnhancedKeywordStorageService {
     data: Partial<KeywordResearchResult>,
     userId?: string,
     orgId?: string,
-    supabaseClient?: ReturnType<typeof createClientClient> | ReturnType<typeof createClientServer>
+    supabaseClient?: Awaited<ReturnType<typeof createClient>>
   ): Promise<boolean> {
     try {
-      // Use provided client or create client-side one as fallback
-      const supabase = supabaseClient || createClientClient();
+      // Use provided client or create server-side one as fallback
+      const supabase = supabaseClient || await createClient();
       
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + this.CACHE_DURATION_DAYS);
@@ -226,10 +226,10 @@ class EnhancedKeywordStorageService {
     userId: string,
     result: KeywordResearchResult,
     orgId?: string,
-    supabaseClient?: ReturnType<typeof createClient>
+    supabaseClient?: Awaited<ReturnType<typeof createClient>>
   ): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
-      const supabase = supabaseClient || createClient();
+      const supabase = supabaseClient || await createClient();
 
       // Store main research result
       // Normalize keyword to lowercase for consistent storage/retrieval
@@ -513,7 +513,7 @@ class EnhancedKeywordStorageService {
     searchType: SearchType = 'traditional'
   ): Promise<KeywordResearchResult | null> {
     try {
-      const supabase = createClient();
+      const supabase = await createClient();
 
       const { data, error } = await supabase
         .from('keyword_research_results')
@@ -574,7 +574,7 @@ class EnhancedKeywordStorageService {
     searchType?: SearchType
   ): Promise<{ success: boolean; deletedCount?: number; error?: string }> {
     try {
-      const supabase = createClient();
+      const supabase = await createClient();
 
       const { data, error } = await supabase.rpc('flush_keyword_cache', {
         p_user_id: userId || null,
@@ -616,10 +616,10 @@ class EnhancedKeywordStorageService {
       minSearchVolume?: number;
       maxDifficulty?: number;
     },
-    supabaseClient?: ReturnType<typeof createClient>
+    supabaseClient?: Awaited<ReturnType<typeof createClient>>
   ): Promise<any[]> {
     try {
-      const supabase = supabaseClient || createClient();
+      const supabase = supabaseClient || await createClient();
 
       let query = supabase
         .from('keyword_terms')
