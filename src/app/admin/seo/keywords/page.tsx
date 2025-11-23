@@ -200,6 +200,14 @@ export default function KeywordHistoryPage() {
     console.log('useEffect triggered - loading research results', { page });
     loadResearchResults(page);
   }, [page, loadResearchResults]);
+  
+  // Debug effect to track state changes
+  useEffect(() => {
+    console.log('Research results state changed:', {
+      length: researchResults.length,
+      items: researchResults.map(r => ({ id: r.id, keyword: r.keyword })),
+    });
+  }, [researchResults]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
