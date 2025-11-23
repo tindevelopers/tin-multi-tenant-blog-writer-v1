@@ -135,11 +135,23 @@ class KeywordResearchWithStorageService {
           const keywordData = traditionalAnalysis.keyword_analysis[keyword.toLowerCase()];
           
           if (keywordData) {
+            // Convert difficulty string to number (0-100 scale)
+            const difficultyMap: Record<string, number> = {
+              'very_easy': 10,
+              'easy': 30,
+              'medium': 50,
+              'hard': 70,
+              'very_hard': 90,
+            };
+            const keyword_difficulty = keywordData.difficulty 
+              ? (difficultyMap[keywordData.difficulty] || 50)
+              : 50;
+
             result.traditionalData = {
               keyword,
               search_volume: keywordData.search_volume || 0,
               global_search_volume: keywordData.global_search_volume,
-              keyword_difficulty: keywordData.keyword_difficulty || 0,
+              keyword_difficulty,
               competition: keywordData.competition || 0,
               cpc: keywordData.cpc,
               cps: keywordData.cps,
