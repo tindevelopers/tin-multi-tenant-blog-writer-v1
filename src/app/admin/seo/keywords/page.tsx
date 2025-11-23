@@ -225,9 +225,15 @@ export default function KeywordHistoryPage() {
     const selectedKeywordList = Array.from(selectedKeywords);
     const primaryKeyword = selectedResult?.keyword || selectedKeywordList[0];
 
-    // Navigate to SEO page with selected keywords
-    // We'll pass keywords via URL params or state
-    router.push(`/admin/seo?keywords=${encodeURIComponent(JSON.stringify(selectedKeywordList))}&primary=${encodeURIComponent(primaryKeyword)}`);
+    // Navigate to SEO page with selected keywords and research result ID
+    const params = new URLSearchParams({
+      keywords: JSON.stringify(selectedKeywordList),
+      primary: primaryKeyword,
+      research_result_id: selectedResult?.id || '',
+      action: 'generate',
+    });
+    
+    router.push(`/admin/seo?${params.toString()}`);
   };
 
   const handleUseForContentGeneration = async () => {
@@ -239,8 +245,14 @@ export default function KeywordHistoryPage() {
     const selectedKeywordList = Array.from(selectedKeywords);
     const primaryKeyword = selectedResult?.keyword || selectedKeywordList[0];
 
-    // Navigate to content clusters page with selected keywords
-    router.push(`/admin/content-clusters?keywords=${encodeURIComponent(JSON.stringify(selectedKeywordList))}&primary=${encodeURIComponent(primaryKeyword)}`);
+    // Navigate to content clusters page with selected keywords and research result ID
+    const params = new URLSearchParams({
+      keywords: JSON.stringify(selectedKeywordList),
+      primary: primaryKeyword,
+      research_result_id: selectedResult?.id || '',
+    });
+    
+    router.push(`/admin/content-clusters?${params.toString()}`);
   };
 
   const handleFlushCache = async () => {

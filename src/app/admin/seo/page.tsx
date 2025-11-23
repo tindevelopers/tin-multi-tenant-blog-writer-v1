@@ -29,29 +29,79 @@ export default function SEOToolsPage() {
     reset,
   } = useEnhancedKeywordResearch();
 
+  // Track if we've loaded keywords from URL to prevent re-loading
+  const [keywordsLoadedFromUrl, setKeywordsLoadedFromUrl] = useState(false);
+
   // Load keywords from URL params if present (from keyword history page)
   useEffect(() => {
     const keywordsParam = searchParams?.get('keywords');
     const primaryParam = searchParams?.get('primary');
+    const researchResultId = searchParams?.get('research_result_id');
     
-    if (keywordsParam && primaryParam) {
+    if (!researchResultId && !keywordsParam) return;
+    if (keywordsLoadedFromUrl) return; // Already loaded
+    
+    const loadKeywordsFromResult = async () => {
       try {
-        const keywordList = JSON.parse(decodeURIComponent(keywordsParam));
-        const primaryKeyword = decodeURIComponent(primaryParam);
+        let keywordList: string[] = [];
+        let primaryKeyword = '';
+        let location = 'United States';
+        let language = 'en';
+        let searchType: 'traditional' | 'ai' | 'both' = 'traditional';
         
-        // Transform keyword list to KeywordData format
-        // We'll need to load the full keyword data from the API
-        // For now, set the primary keyword and trigger research
-        if (keywordList.length > 0 && !keywords.length) {
-          // Navigate to keywords tab and show selection
+        if (researchResultId) {
+          // Load from research result ID
+          const resultResponse = await fetch(`/api/keywords/research-results?id=${researchResultId}`);
+          const resultData = await resultResponse.json();
+          
+          if (resultData.success && resultData.results && resultData.results.length > 0) {
+            const result = resultData.results[0];
+            primaryKeyword = primaryParam || result.keyword || '';
+            location = result.location || 'United States';
+            language = result.language || 'en';
+            searchType = result.search_type || 'traditional';
+            
+            // Load keyword terms
+            const termsResponse = await fetch(`/api/keywords/list?research_result_id=${researchResultId}`);
+            const termsData = await termsResponse.json();
+            
+            if (termsData.success && termsData.terms) {
+              if (keywordsParam) {
+                keywordList = JSON.parse(decodeURIComponent(keywordsParam));
+              } else {
+                keywordList = termsData.terms.map((t: any) => t.keyword);
+              }
+            }
+          }
+        } else if (keywordsParam && primaryParam) {
+          // Fallback: use keywords from params
+          keywordList = JSON.parse(decodeURIComponent(keywordsParam));
+          primaryKeyword = decodeURIComponent(primaryParam);
+        }
+        
+        if (primaryKeyword && keywordList.length > 0) {
+          setKeywordsLoadedFromUrl(true);
+          
+          // Trigger research to load keywords
+          await researchKeyword(primaryKeyword, location, language, searchType);
+          
+          // After research completes, select the keywords
+          setTimeout(() => {
+            keywordList.forEach((kw: string) => {
+              toggleKeyword(kw);
+            });
+          }, 2000); // Wait for keywords to be loaded
+          
           setActiveTab('keywords');
-          // The keywords will be loaded when user views the details
         }
       } catch (err) {
-        console.error('Failed to parse keywords from URL:', err);
+        console.error('Failed to load keywords from URL params:', err);
+        setKeywordsLoadedFromUrl(true); // Mark as attempted even on error
       }
-    }
-  }, [searchParams, keywords.length]);
+    };
+    
+    loadKeywordsFromResult();
+  }, [searchParams, researchKeyword, toggleKeyword, keywordsLoadedFromUrl]);
 
   const {
     selectedKeywords,
