@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { logger } from '@/lib/logger';
 import { parseJsonBody } from '@/lib/api-utils';
 import { createClient } from '@/lib/supabase/server';
-import keywordResearchService from '@/lib/keyword-research';
+import { keywordResearchService } from '@/lib/keyword-research';
 import enhancedKeywordStorage, { SearchType } from '@/lib/keyword-storage-enhanced';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
@@ -186,6 +186,11 @@ export async function POST(request: NextRequest) {
             try {
               // Add a small delay to allow Cloud Run to wake up if needed
               await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              // Ensure service is properly initialized
+              if (!keywordResearchService || typeof keywordResearchService.analyzeKeywords !== 'function') {
+                throw new Error(`keywordResearchService.analyzeKeywords is not a function. Service type: ${typeof keywordResearchService}`);
+              }
               
               const traditionalAnalysis = await keywordResearchService.analyzeKeywords(
                 [keyword],

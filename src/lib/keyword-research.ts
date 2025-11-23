@@ -1,5 +1,3 @@
-"use client";
-
 import cloudRunHealth from './cloud-run-health';
 import keywordStorageService from './keyword-storage';
 import { logger } from '@/utils/logger';
@@ -958,4 +956,5 @@ class KeywordResearchService {
 // Export singleton instance
 const keywordResearchService = new KeywordResearchService();
 export default keywordResearchService;
+export { keywordResearchService };
 
