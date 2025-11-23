@@ -4,8 +4,7 @@ import { parseJsonBody } from '@/lib/api-utils';
 import { createClient } from '@/lib/supabase/server';
 import keywordResearchService from '@/lib/keyword-research';
 import enhancedKeywordStorage, { SearchType } from '@/lib/keyword-storage-enhanced';
-import { blogWriterAPI } from '@/lib/blog-writer-api';
-import cloudRunHealth from '@/lib/cloud-run-health';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
 /**
  * Server-Side Keyword Research with SSE Streaming
@@ -284,12 +283,37 @@ export async function POST(request: NextRequest) {
             });
 
             try {
-              const aiTopicData = await blogWriterAPI.getAITopicSuggestions({
-                keywords: [keyword],
-                location,
-                language,
-                objective: `Analyze keyword: ${keyword}`,
-              });
+              // Call the backend API directly for AI topic suggestions
+              const aiTopicSuggestionsResponse = await fetch(
+                `${BLOG_WRITER_API_URL}/api/v1/keywords/ai-topic-suggestions`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(process.env.BLOG_WRITER_API_KEY && {
+                      'X-API-Key': process.env.BLOG_WRITER_API_KEY,
+                    }),
+                  },
+                  body: JSON.stringify({
+                    keywords: [keyword],
+                    location,
+                    language,
+                    objective: `Analyze keyword: ${keyword}`,
+                  }),
+                }
+              );
+
+              if (!aiTopicSuggestionsResponse.ok) {
+                const errorText = await aiTopicSuggestionsResponse.text();
+                // Check if it's an HTML 404 page
+                if (aiTopicSuggestionsResponse.headers.get('content-type')?.includes('text/html')) {
+                  logger.warn('AI topic suggestions endpoint returned HTML 404, skipping AI analysis');
+                  throw new Error('AI topic suggestions endpoint not available');
+                }
+                throw new Error(`AI topic suggestions failed: ${aiTopicSuggestionsResponse.statusText}`);
+              }
+
+              const aiTopicData = await aiTopicSuggestionsResponse.json();
 
               if (aiTopicData?.topic_suggestions && aiTopicData.topic_suggestions.length > 0) {
                 const aiTopic = aiTopicData.topic_suggestions[0];
