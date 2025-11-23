@@ -57,7 +57,20 @@ class Logger {
         // In production, you might want to send to error tracking service
         break;
       case 'error':
-        console.error(`[ERROR] ${entry.message}`, data || '');
+        // Sanitize HTML error messages to prevent raw HTML in console
+        let sanitizedMessage = entry.message;
+        let sanitizedData = data;
+        
+        if (typeof sanitizedMessage === 'string' && (sanitizedMessage.includes('<html>') || sanitizedMessage.includes('404'))) {
+          sanitizedMessage = sanitizedMessage.replace(/<[^>]*>/g, '').substring(0, 200);
+          sanitizedMessage = `API endpoint unavailable (404) - ${sanitizedMessage}`;
+        }
+        
+        if (typeof sanitizedData === 'string' && (sanitizedData.includes('<html>') || sanitizedData.includes('404'))) {
+          sanitizedData = sanitizedData.replace(/<[^>]*>/g, '').substring(0, 200);
+        }
+        
+        console.error(`[ERROR] ${sanitizedMessage}`, sanitizedData || '');
         // In production, send to error tracking service (e.g., Sentry)
         if (this.isProduction && typeof window !== 'undefined') {
           // Sentry integration - uncomment when Sentry is configured
