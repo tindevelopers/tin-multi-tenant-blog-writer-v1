@@ -189,9 +189,9 @@ class KeywordResearchWithStorageService {
                 }
               });
 
-              // Also get from keyword ideas if available
-              if (traditionalAnalysis.keyword_ideas) {
-                traditionalAnalysis.keyword_ideas.forEach((idea: any) => {
+              // Also get from keyword ideas if available (keyword_ideas is on KeywordData, not KeywordAnalysis)
+              if (keywordData.keyword_ideas) {
+                keywordData.keyword_ideas.forEach((idea: any) => {
                   if (idea.keyword && idea.keyword.toLowerCase() !== keyword.toLowerCase()) {
                     relatedTerms.push({
                       keyword: idea.keyword,
