@@ -221,8 +221,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
             });
             
             setKeywords(allKeywords);
-            
-            // Create clusters
+              
+              // Create clusters
             if (allKeywords.length > 0) {
               keywordResearchService.createClusters(allKeywords).then((newClusters) => {
                 setClusters(newClusters);

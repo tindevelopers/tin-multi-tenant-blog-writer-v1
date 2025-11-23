@@ -1,21 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { History, Search, X, Calendar, Globe, Filter, RefreshCw, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { History, Search, X, Calendar, Globe, Filter, RefreshCw, Trash2, Eye } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 interface SavedSearch {
   id: string;
-  search_query: string;
+  keyword: string;
+  search_query?: string; // For backward compatibility
   location: string;
   language: string;
-  search_type: string;
+  search_type: 'traditional' | 'ai' | 'both' | string;
   niche?: string;
   keyword_count: number;
-  total_search_volume: number;
+  total_search_volume?: number;
   avg_difficulty?: string;
   created_at: string;
   full_api_response?: any;
+  traditional_keyword_data?: any;
+  ai_keyword_data?: any;
 }
 
 interface SavedSearchesPanelProps {
@@ -37,35 +41,64 @@ export function SavedSearchesPanel({ onRerunSearch, userId }: SavedSearchesPanel
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    if (userId) {
-      loadSearches();
-    }
-  }, [userId, filters]);
+    loadSearches();
+  }, [filters]);
 
   const loadSearches = async () => {
-    if (!userId) return;
-    
     setLoading(true);
     setError(null);
     
     try {
-      const params = new URLSearchParams();
-      if (filters.query) params.append('query', filters.query);
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user && !userId) {
+        setError('Please log in to view saved searches');
+        setLoading(false);
+        return;
+      }
+
+      const params = new URLSearchParams({
+        limit: '20',
+        offset: '0',
+      });
+      
+      if (filters.query) params.append('keyword', filters.query);
       if (filters.location) params.append('location', filters.location);
       if (filters.searchType) params.append('search_type', filters.searchType);
-      if (filters.dateFrom) params.append('date_from', filters.dateFrom);
-      if (filters.dateTo) params.append('date_to', filters.dateTo);
       
-      const response = await fetch(`/api/keywords/history?${params.toString()}`);
+      const response = await fetch(`/api/keywords/research-results?${params.toString()}`);
       
       if (!response.ok) {
         throw new Error('Failed to load search history');
       }
       
       const data = await response.json();
-      setSearches(data.searches || []);
+      
+      if (data.success && data.results) {
+        // Transform results to SavedSearch format
+        const transformedSearches: SavedSearch[] = data.results.map((result: any) => ({
+          id: result.id,
+          keyword: result.keyword,
+          search_query: result.keyword, // For backward compatibility
+          location: result.location || 'United States',
+          language: result.language || 'en',
+          search_type: result.search_type || 'traditional',
+          keyword_count: result.keyword_count || 0,
+          total_search_volume: result.traditional_keyword_data?.search_volume || 0,
+          avg_difficulty: result.traditional_keyword_data?.keyword_difficulty?.toString() || undefined,
+          created_at: result.created_at,
+          traditional_keyword_data: result.traditional_keyword_data,
+          ai_keyword_data: result.ai_keyword_data,
+        }));
+        
+        setSearches(transformedSearches);
+      } else {
+        setSearches([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load searches');
+      setSearches([]);
     } finally {
       setLoading(false);
     }
@@ -77,8 +110,8 @@ export function SavedSearchesPanel({ onRerunSearch, userId }: SavedSearchesPanel
     try {
       const supabase = createClient();
       const { error } = await supabase
-        .from('keyword_research_sessions')
-        .update({ save_search: false })
+        .from('keyword_research_results')
+        .delete()
         .eq('id', searchId);
       
       if (error) throw error;
@@ -208,7 +241,7 @@ export function SavedSearchesPanel({ onRerunSearch, userId }: SavedSearchesPanel
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h4 className="font-medium text-gray-900 dark:text-white">
-                      {search.search_query}
+                      {search.keyword || search.search_query}
                     </h4>
                     {search.search_type && search.search_type !== 'general' && (
                       <span className="px-2 py-0.5 text-xs bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300 rounded">
@@ -226,7 +259,7 @@ export function SavedSearchesPanel({ onRerunSearch, userId }: SavedSearchesPanel
                       <Search className="h-3 w-3" />
                       {search.keyword_count} keywords
                     </div>
-                    {search.total_search_volume > 0 && (
+                    {search.total_search_volume && search.total_search_volume > 0 && (
                       <div>
                         Volume: {formatNumber(search.total_search_volume)}
                       </div>
@@ -244,6 +277,13 @@ export function SavedSearchesPanel({ onRerunSearch, userId }: SavedSearchesPanel
                 </div>
                 
                 <div className="flex items-center gap-2 ml-4">
+                  <Link
+                    href={`/admin/seo/keywords?id=${search.id}`}
+                    className="p-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
+                    title="View keywords from this search"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Link>
                   <button
                     onClick={() => onRerunSearch(search)}
                     className="p-2 text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded"

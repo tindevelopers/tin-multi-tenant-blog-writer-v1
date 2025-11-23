@@ -343,10 +343,10 @@ export async function POST(request: NextRequest) {
                         } else {
                           // Keyword not in analysis response, add with minimal data
                           keywordMap.set(normalizedKw, {
-                            keyword: kw,
+                      keyword: kw,
                             search_volume: 0,
-                            keyword_difficulty: 0,
-                            competition: 0,
+                      keyword_difficulty: 0,
+                      competition: 0,
                             cpc: 0,
                           });
                         }

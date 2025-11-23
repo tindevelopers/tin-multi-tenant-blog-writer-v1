@@ -8,9 +8,10 @@ import MasterKeywordTable from "@/components/keyword-research/MasterKeywordTable
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
 import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnhancedKeywordResearch";
 import { useContentIdeas } from "@/hooks/useContentIdeas";
-import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight } from "lucide-react";
+import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight, BookOpen } from "lucide-react";
 import Alert from "@/components/ui/alert/Alert";
 import StreamingProgress from "@/components/keywords/StreamingProgress";
+import { SavedSearchesPanel } from "@/components/keyword-research/SavedSearchesPanel";
 
 export default function SEOToolsPage() {
   const router = useRouter();
@@ -45,6 +46,7 @@ export default function SEOToolsPage() {
 
   const [activeTab, setActiveTab] = useState('research');
   const [showContentIdeasModal, setShowContentIdeasModal] = useState(false);
+  const [showSavedSearches, setShowSavedSearches] = useState(false);
 
   const handleResearch = async (keyword: string, location: string, language: string, searchType?: 'traditional' | 'ai' | 'both') => {
     await researchKeyword(keyword, location, language, searchType);
@@ -100,6 +102,13 @@ export default function SEOToolsPage() {
               </p>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              href="/admin/seo/keywords"
+              className="px-4 py-2 bg-white rounded-lg text-blue-800 font-medium transition-colors border-2 border-blue-600 hover:bg-blue-50 dark:bg-gray-800 dark:text-blue-300 dark:border-blue-500 dark:hover:bg-gray-700"
+            >
+              <History className="h-4 w-4 inline mr-2" />
+              Saved Searches
+            </Link>
             {keywords.length > 0 && (
               <Link
                 href="/admin/content-clusters"
@@ -141,13 +150,22 @@ export default function SEOToolsPage() {
               <History className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recent Research</h3>
             </div>
-            <button 
-              onClick={() => setActiveTab('keywords')}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
-            >
-              <Eye className="h-4 w-4" />
-              View All Results
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setActiveTab('keywords')}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-brand-600 hover:text-brand-700 dark:text-brand-400 dark:hover:text-brand-300"
+              >
+                <Eye className="h-4 w-4" />
+                View All Results
+              </button>
+              <Link
+                href="/admin/seo/keywords"
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                <History className="h-4 w-4" />
+                View Saved Searches
+              </Link>
+            </div>
           </div>
           
           {primaryAnalysis && (
@@ -304,6 +322,39 @@ export default function SEOToolsPage() {
         <div className="space-y-4">
           {activeTab === 'research' && (
             <div className="space-y-4">
+              {/* Saved Searches Panel */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Saved Keyword Searches</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowSavedSearches(!showSavedSearches)}
+                    className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                  >
+                    {showSavedSearches ? 'Hide' : 'Show'} Saved Searches
+                  </button>
+                </div>
+                {showSavedSearches && (
+                  <SavedSearchesPanel
+                    onRerunSearch={async (search) => {
+                      // Load keywords from saved search
+                      const keyword = search.keyword || search.search_query;
+                      if (keyword) {
+                        await researchKeyword(
+                          keyword,
+                          search.location || 'United States',
+                          search.language || 'en',
+                          search.search_type as 'traditional' | 'ai' | 'both' || 'traditional'
+                        );
+                        setActiveTab('keywords');
+                      }
+                    }}
+                  />
+                )}
+              </div>
+
               <PrimaryKeywordInput onResearch={handleResearch} loading={loading} />
               
               {/* Streaming Progress */}
