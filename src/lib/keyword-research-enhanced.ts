@@ -489,3 +489,6 @@ export class EnhancedKeywordResearchService {
 // Export singleton instance
 export const keywordResearchService = new EnhancedKeywordResearchService();
 
+// Also export as default for compatibility
+export default keywordResearchService;
+
