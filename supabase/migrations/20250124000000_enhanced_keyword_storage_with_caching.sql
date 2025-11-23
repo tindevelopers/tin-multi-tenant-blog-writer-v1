@@ -41,7 +41,9 @@ CREATE INDEX IF NOT EXISTS idx_keyword_cache_location ON keyword_cache(location)
 CREATE INDEX IF NOT EXISTS idx_keyword_cache_expires_at ON keyword_cache(expires_at);
 CREATE INDEX IF NOT EXISTS idx_keyword_cache_user_id ON keyword_cache(user_id);
 CREATE INDEX IF NOT EXISTS idx_keyword_cache_search_type ON keyword_cache(search_type);
-CREATE INDEX IF NOT EXISTS idx_keyword_cache_lookup ON keyword_cache(keyword, location, language, search_type, user_id) WHERE expires_at > NOW();
+-- Note: Cannot use NOW() in index predicate (not immutable)
+-- Filter expires_at > NOW() in queries instead
+CREATE INDEX IF NOT EXISTS idx_keyword_cache_lookup ON keyword_cache(keyword, location, language, search_type, user_id);
 
 -- Unique constraint using partial unique index (handles NULL user_id)
 -- For user-specific cache: unique per user
