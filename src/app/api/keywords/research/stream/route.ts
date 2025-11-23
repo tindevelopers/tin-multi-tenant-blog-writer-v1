@@ -251,11 +251,11 @@ export async function POST(request: NextRequest) {
               
               const traditionalAnalysis = await keywordResearchService.analyzeKeywords(
                 [keyword],
-                5, // Minimum required by backend (backend requires >= 5)
+                20, // Get more keyword suggestions
                 location,
                 {
                   include_trends: false,
-                  include_keyword_ideas: false,
+                  include_keyword_ideas: true, // Enable to get related keywords
                 }
               );
 
@@ -298,15 +298,81 @@ export async function POST(request: NextRequest) {
                     related_keywords: keywordData.related_keywords || [],
                   };
 
-                  // Extract related terms
-                  if (keywordData.related_keywords) {
-                    result.relatedTerms = keywordData.related_keywords.map((kw: string) => ({
-                      keyword: kw,
-                      search_volume: 0, // Will be filled if available
-                      keyword_difficulty: 0,
-                      competition: 0,
-                    }));
+                  // Extract ALL keywords from the analysis response (not just the primary)
+                  const allKeywords: any[] = [];
+                  const keywordMap = new Map<string, any>();
+                  
+                  // First, extract all keywords from the analysis response with full data
+                  Object.entries(traditionalAnalysis.keyword_analysis).forEach(([kw, kwData]: [string, any]) => {
+                    if (kwData) {
+                      const normalizedKw = kw.toLowerCase();
+                      keywordMap.set(normalizedKw, {
+                        keyword: kw,
+                        search_volume: kwData.search_volume || 0,
+                        keyword_difficulty: difficultyMap[kwData.difficulty || 'medium'] || 50,
+                        competition: kwData.competition || 0,
+                        cpc: kwData.cpc || 0,
+                        search_intent: kwData.primary_intent || kwData.search_intent,
+                        parent_topic: kwData.parent_topic,
+                        trend_score: kwData.trend_score || 0,
+                      });
+                    }
+                  });
+
+                  // Extract related terms from primary keyword's related_keywords array
+                  // These might be strings that aren't in the analysis response yet
+                  if (keywordData.related_keywords && Array.isArray(keywordData.related_keywords)) {
+                    keywordData.related_keywords.forEach((kw: string) => {
+                      const normalizedKw = kw.toLowerCase();
+                      if (!keywordMap.has(normalizedKw)) {
+                        // Try to find this keyword in the analysis response
+                        const foundKwData = traditionalAnalysis.keyword_analysis[normalizedKw] || 
+                                          traditionalAnalysis.keyword_analysis[kw];
+                        
+                        if (foundKwData) {
+                          keywordMap.set(normalizedKw, {
+                            keyword: kw,
+                            search_volume: foundKwData.search_volume || 0,
+                            keyword_difficulty: difficultyMap[foundKwData.difficulty || 'medium'] || 50,
+                            competition: foundKwData.competition || 0,
+                            cpc: foundKwData.cpc || 0,
+                            search_intent: foundKwData.primary_intent || foundKwData.search_intent,
+                            parent_topic: foundKwData.parent_topic,
+                            trend_score: foundKwData.trend_score || 0,
+                          });
+                        } else {
+                          // Keyword not in analysis response, add with minimal data
+                          keywordMap.set(normalizedKw, {
+                            keyword: kw,
+                            search_volume: 0,
+                            keyword_difficulty: 0,
+                            competition: 0,
+                            cpc: 0,
+                          });
+                        }
+                      }
+                    });
                   }
+                  
+                  // Convert map to array
+                  allKeywords.push(...Array.from(keywordMap.values()));
+
+                  // Separate primary keyword from related keywords
+                  const primaryKeywordData = allKeywords.find(k => k.keyword.toLowerCase() === keywordLower);
+                  const relatedKeywords = allKeywords.filter(k => k.keyword.toLowerCase() !== keywordLower);
+                  
+                  result.relatedTerms = relatedKeywords;
+                  result.matchingTerms = relatedKeywords; // Use same array for matching terms
+                  
+                  logger.debug('Extracted keywords from analysis', {
+                    primary: keyword,
+                    totalKeywords: allKeywords.length,
+                    primaryKeywordData: primaryKeywordData ? {
+                      keyword: primaryKeywordData.keyword,
+                      search_volume: primaryKeywordData.search_volume,
+                    } : null,
+                    relatedTerms: result.relatedTerms.length,
+                  });
                 } else {
                   logger.warn('Keyword data not found in analysis response', {
                     keyword,
@@ -407,6 +473,31 @@ export async function POST(request: NextRequest) {
             });
 
             try {
+              // Collect all keywords (excluding primary keyword to avoid duplication)
+              const keywordLower = keyword.toLowerCase();
+              const allKeywordsToStore = [
+                ...(result.relatedTerms || []),
+                ...(result.matchingTerms || []),
+              ].filter(term => term.keyword.toLowerCase() !== keywordLower);
+              
+              // Remove duplicates based on keyword (case-insensitive)
+              const uniqueKeywords = new Map<string, any>();
+              allKeywordsToStore.forEach(term => {
+                const key = term.keyword.toLowerCase();
+                if (!uniqueKeywords.has(key)) {
+                  uniqueKeywords.set(key, term);
+                }
+              });
+              
+              const uniqueRelatedTerms = Array.from(uniqueKeywords.values());
+              
+              logger.debug('Storing keyword research with all keywords', {
+                keyword,
+                totalKeywords: uniqueRelatedTerms.length + 1, // +1 for primary
+                relatedTermsCount: uniqueRelatedTerms.length,
+                primaryKeyword: keyword,
+              });
+              
               const storeResult = await enhancedKeywordStorage.storeKeywordResearch(
                 userId,
                 {
@@ -416,13 +507,21 @@ export async function POST(request: NextRequest) {
                   search_type: searchType,
                   traditional_data: result.traditionalData,
                   ai_data: result.aiData,
-                  related_terms: result.relatedTerms || [],
-                  matching_terms: result.matchingTerms || [],
-                }
+                  related_terms: uniqueRelatedTerms, // All keywords except primary
+                  matching_terms: [], // Don't duplicate - all keywords are in related_terms
+                },
+                orgId || undefined,
+                supabase
               );
               
               if (!storeResult.success) {
                 logger.warn('Storage returned unsuccessful', { error: storeResult.error, keyword });
+              } else {
+                logger.debug('Successfully stored keyword research', {
+                  keyword,
+                  researchResultId: storeResult.id,
+                  keywordsStored: uniqueRelatedTerms.length + 1, // +1 for primary keyword
+                });
               }
             } catch (error) {
               logger.error('Error storing results', { error, keyword });

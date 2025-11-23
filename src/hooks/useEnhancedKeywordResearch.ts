@@ -109,6 +109,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
           onComplete: (data) => {
             logger.debug('Server-side research complete', { keyword: primaryKeyword, source: data.source });
             
+            const allKeywords: KeywordData[] = [];
+            
             // Transform server-side result to client format
             if (data.traditionalData) {
               // Convert competition number (0-1) to competition_level string
@@ -120,7 +122,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
                 competition_level = 'MEDIUM';
               }
               
-              const keywordData: KeywordData = {
+              const primaryKeywordData: KeywordData = {
                 keyword: primaryKeyword,
                 search_volume: data.traditionalData.search_volume || 0,
                 keyword_difficulty: data.traditionalData.keyword_difficulty || 0,
@@ -131,11 +133,98 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
                 high_value_score: 0,
               };
 
+              allKeywords.push(primaryKeywordData);
               setPrimaryAnalysis({ keyword: primaryKeyword } as any);
-              setKeywords([keywordData]);
-              
-              // Create clusters
-              keywordResearchService.createClusters([keywordData]).then((newClusters) => {
+            }
+            
+            // Process related terms
+            if (data.relatedTerms && Array.isArray(data.relatedTerms)) {
+              data.relatedTerms.forEach((term: any) => {
+                if (term.keyword && term.keyword !== primaryKeyword) {
+                  const competition = term.competition || 0;
+                  let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+                  if (competition >= 0.67) {
+                    competition_level = 'HIGH';
+                  } else if (competition >= 0.33) {
+                    competition_level = 'MEDIUM';
+                  }
+                  
+                  allKeywords.push({
+                    keyword: term.keyword,
+                    search_volume: term.search_volume || 0,
+                    keyword_difficulty: term.keyword_difficulty || 0,
+                    competition_level,
+                    cpc: term.cpc,
+                    related_keywords: [],
+                    easy_win_score: 0,
+                    high_value_score: 0,
+                  });
+                }
+              });
+            }
+            
+            // Process matching terms
+            if (data.matchingTerms && Array.isArray(data.matchingTerms)) {
+              data.matchingTerms.forEach((term: any) => {
+                if (term.keyword && term.keyword !== primaryKeyword) {
+                  // Check if we already have this keyword
+                  const exists = allKeywords.some(k => k.keyword === term.keyword);
+                  if (!exists) {
+                    const competition = term.competition || 0;
+                    let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+                    if (competition >= 0.67) {
+                      competition_level = 'HIGH';
+                    } else if (competition >= 0.33) {
+                      competition_level = 'MEDIUM';
+                    }
+                    
+                    allKeywords.push({
+                      keyword: term.keyword,
+                      search_volume: term.search_volume || 0,
+                      keyword_difficulty: term.keyword_difficulty || 0,
+                      competition_level,
+                      cpc: term.cpc,
+                      related_keywords: [],
+                      easy_win_score: 0,
+                      high_value_score: 0,
+                    });
+                  }
+                }
+              });
+            }
+            
+            // Also process related_keywords from traditionalData if they're strings
+            if (data.traditionalData?.related_keywords && Array.isArray(data.traditionalData.related_keywords)) {
+              data.traditionalData.related_keywords.forEach((relatedKw: string) => {
+                if (typeof relatedKw === 'string' && relatedKw !== primaryKeyword) {
+                  const exists = allKeywords.some(k => k.keyword === relatedKw);
+                  if (!exists) {
+                    allKeywords.push({
+                      keyword: relatedKw,
+                      search_volume: 0,
+                      keyword_difficulty: 0,
+                      competition_level: 'LOW',
+                      related_keywords: [],
+                      easy_win_score: 0,
+                      high_value_score: 0,
+                    });
+                  }
+                }
+              });
+            }
+            
+            logger.debug('Processed keywords', { 
+              total: allKeywords.length, 
+              primary: allKeywords[0]?.keyword,
+              relatedCount: data.relatedTerms?.length || 0,
+              matchingCount: data.matchingTerms?.length || 0,
+            });
+            
+            setKeywords(allKeywords);
+            
+            // Create clusters
+            if (allKeywords.length > 0) {
+              keywordResearchService.createClusters(allKeywords).then((newClusters) => {
                 setClusters(newClusters);
               });
             }

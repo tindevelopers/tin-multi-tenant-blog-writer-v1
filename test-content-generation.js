@@ -1,156 +1,107 @@
 /**
- * Test Content Generation with Keyword Storage
- * 
- * Tests the full flow:
- * 1. Keyword research with caching
- * 2. Content generation
- * 3. Storage verification
+ * Test content generation from DataForSEO keywords
+ * Tests the /api/blog-writer/generate endpoint with keywords
  */
 
-const { createClient } = require('@supabase/supabase-js');
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ Missing Supabase credentials');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+const fetch = require('node-fetch');
 
 async function testContentGeneration() {
-  console.log('🧪 Testing Content Generation Flow...\n');
+  console.log('🧪 Testing Content Generation from Keywords\n');
   
-  // Test 1: Keyword Research with Storage
-  console.log('📊 Test 1: Keyword Research with Storage...');
-  
-  const testKeyword = 'content marketing strategies';
-  
-  try {
-    // Check if keyword exists in cache
-    const { data: cached, error: cacheError } = await supabase.rpc('get_cached_keyword', {
-      p_keyword: testKeyword.toLowerCase(),
-      p_location: 'United States',
-      p_language: 'en',
-      p_search_type: 'traditional',
-      p_user_id: null,
-    });
-    
-    if (cached && cached.length > 0) {
-      console.log(`  ✅ Keyword '${testKeyword}' found in cache`);
-      console.log(`     Cached at: ${cached[0].cached_at}`);
-      console.log(`     Expires at: ${cached[0].expires_at}`);
-    } else {
-      console.log(`  ⚠️  Keyword '${testKeyword}' not in cache (will be fetched on research)`);
-    }
-  } catch (err) {
-    console.log(`  ⚠️  Could not check cache:`, err.message);
-  }
-  
-  // Test 2: Check Stored Research Results
-  console.log('\n💾 Test 2: Checking Stored Research Results...');
-  
-  try {
-    const { data: stored, error: storedError } = await supabase
-      .from('keyword_research_results')
-      .select('keyword, search_type, created_at')
-      .eq('keyword', testKeyword.toLowerCase())
-      .order('created_at', { ascending: false })
-      .limit(5);
-    
-    if (stored && stored.length > 0) {
-      console.log(`  ✅ Found ${stored.length} stored research result(s) for '${testKeyword}'`);
-      stored.forEach((result, idx) => {
-        console.log(`     ${idx + 1}. Type: ${result.search_type}, Created: ${result.created_at}`);
-      });
-    } else {
-      console.log(`  ⚠️  No stored research results found (will be created on research)`);
-    }
-  } catch (err) {
-    console.log(`  ⚠️  Could not check stored results:`, err.message);
-  }
-  
-  // Test 3: Check Keyword Terms
-  console.log('\n📝 Test 3: Checking Keyword Terms...');
-  
-  try {
-    const { data: terms, error: termsError } = await supabase
-      .from('keyword_terms')
-      .select('keyword, search_volume, keyword_difficulty, search_type')
-      .ilike('keyword', `%${testKeyword.split(' ')[0]}%`)
-      .limit(10);
-    
-    if (terms && terms.length > 0) {
-      console.log(`  ✅ Found ${terms.length} keyword term(s)`);
-      terms.slice(0, 5).forEach((term, idx) => {
-        console.log(`     ${idx + 1}. ${term.keyword} - Volume: ${term.search_volume}, Difficulty: ${term.keyword_difficulty}`);
-      });
-    } else {
-      console.log(`  ⚠️  No keyword terms found`);
-    }
-  } catch (err) {
-    console.log(`  ⚠️  Could not check keyword terms:`, err.message);
-  }
-  
-  // Test 4: Test Cache Flush
-  console.log('\n🗑️  Test 4: Testing Cache Flush...');
-  
-  try {
-    const { data: flushResult, error: flushError } = await supabase.rpc('flush_keyword_cache', {
-      p_user_id: null,
-      p_keyword: 'test_keyword_that_does_not_exist',
-      p_search_type: null,
-    });
-    
-    if (flushError) {
-      console.log(`  ⚠️  Cache flush test: ${flushError.message}`);
-    } else {
-      console.log(`  ✅ Cache flush function works (deleted ${flushResult || 0} test entries)`);
-    }
-  } catch (err) {
-    console.log(`  ⚠️  Could not test cache flush:`, err.message);
-  }
-  
-  // Test 5: Verify API Endpoints
-  console.log('\n🌐 Test 5: Verifying API Endpoints...');
-  
-  const endpoints = [
-    '/api/keywords/store',
-    '/api/keywords/retrieve',
-    '/api/keywords/list',
-    '/api/keywords/flush-cache',
+  // Test with sample keywords from DataForSEO research
+  const testKeywords = [
+    'dog groomers',
+    'pet grooming services',
+    'dog grooming near me',
+    'professional dog grooming',
+    'mobile dog grooming'
   ];
   
-  for (const endpoint of endpoints) {
-    try {
-      // Just check if endpoint exists (will fail without auth, but that's expected)
-      const response = await fetch(`http://localhost:3000${endpoint}`, {
-        method: endpoint.includes('flush') ? 'DELETE' : 'GET',
-      });
-      
-      if (response.status === 401 || response.status === 404) {
-        console.log(`  ✅ Endpoint '${endpoint}' exists (auth required)`);
-      } else {
-        console.log(`  ⚠️  Endpoint '${endpoint}' returned status ${response.status}`);
-      }
-    } catch (err) {
-      console.log(`  ⚠️  Could not test endpoint '${endpoint}': ${err.message}`);
-    }
-  }
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const endpoint = `${baseUrl}/api/blog-writer/generate`;
   
-  console.log('\n' + '='.repeat(50));
-  console.log('✅ Content Generation Test Complete!');
-  console.log('='.repeat(50));
-  console.log('\nNext Steps:');
-  console.log('1. Run keyword research in UI (/admin/seo)');
-  console.log('2. Verify results are cached');
-  console.log('3. Generate content ideas');
-  console.log('4. Check stored keyword terms');
+  console.log(`Endpoint: ${endpoint}\n`);
+  console.log(`Keywords: ${testKeywords.join(', ')}\n`);
+  
+  const requestBody = {
+    topic: 'Professional Dog Grooming Services: A Complete Guide',
+    keywords: testKeywords,
+    target_audience: 'pet owners',
+    tone: 'professional',
+    word_count: 1000,
+    quality_level: 'standard',
+    use_semantic_keywords: true,
+  };
+  
+  console.log('Request Body:');
+  console.log(JSON.stringify(requestBody, null, 2));
+  console.log('\n---\n');
+  
+  try {
+    console.log('Sending request...\n');
+    
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log(`Status: ${response.status} ${response.statusText}`);
+    console.log(`Headers:`, Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('\n❌ Error response:');
+      console.error(errorText.substring(0, 1000));
+      return;
+    }
+
+    const data = await response.json();
+    console.log('\n✅ Success! Response structure:');
+    console.log('Keys:', Object.keys(data));
+    console.log('\n---\n');
+    
+    // Check for content
+    if (data.content || data.blog_post?.content) {
+      const content = data.content || data.blog_post?.content;
+      console.log('✅ Content generated!');
+      console.log(`Content length: ${content.length} characters`);
+      console.log(`Content preview (first 500 chars):\n${content.substring(0, 500)}...\n`);
+    } else {
+      console.log('⚠️ No content found in response');
+    }
+    
+    // Check for title
+    if (data.title || data.blog_post?.title) {
+      console.log(`✅ Title: ${data.title || data.blog_post?.title}`);
+    }
+    
+    // Check for meta description
+    if (data.meta_description || data.blog_post?.meta_description) {
+      console.log(`✅ Meta Description: ${data.meta_description || data.blog_post?.meta_description}`);
+    }
+    
+    // Check for semantic keywords usage
+    if (data.semantic_keywords) {
+      console.log(`✅ Semantic Keywords Used: ${data.semantic_keywords.length} keywords`);
+      console.log(`   ${data.semantic_keywords.slice(0, 10).join(', ')}...`);
+    }
+    
+    // Check for SEO score
+    if (data.seo_score !== undefined) {
+      console.log(`✅ SEO Score: ${data.seo_score}`);
+    }
+    
+    console.log('\n---\n');
+    console.log('Full Response (truncated):');
+    console.log(JSON.stringify(data, null, 2).substring(0, 2000));
+    
+  } catch (error) {
+    console.error('❌ Error:', error.message);
+    console.error(error.stack);
+  }
 }
 
-testContentGeneration().catch(err => {
-  console.error('\n❌ Test failed:', err);
-  process.exit(1);
-});
-
+testContentGeneration();

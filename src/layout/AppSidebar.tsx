@@ -28,7 +28,7 @@ import {
   FileClock,
   Shield,
   History,
-  Layers
+  Layers2
 } from "lucide-react";
 
 type NavItem = {
@@ -72,7 +72,7 @@ const blogWriterItems: NavItem[] = [
         isAccordionHeader: true,
         new: true,
         subItems: [
-          { name: "Content Clusters", path: "/admin/content-clusters", icon: <Layers className="w-4 h-4" />, new: true },
+          { name: "Content Clusters", path: "/admin/content-clusters", icon: <Layers2 className="w-4 h-4" />, new: true },
           { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
           { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
           { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },

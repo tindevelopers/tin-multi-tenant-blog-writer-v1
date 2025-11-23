@@ -36,6 +36,7 @@ interface KeywordResearchResult {
   keyword_count: number;
   created_at: string;
   accessed_at?: string;
+  keyword_preview?: KeywordTerm[]; // Preview of keywords for display
 }
 
 interface KeywordTerm {
@@ -116,16 +117,40 @@ export default function KeywordHistoryPage() {
 
       const results = Array.isArray(data.results) ? data.results : [];
       
+      // Load keyword previews for each result
+      const resultsWithPreviews = await Promise.all(
+        results.map(async (result: KeywordResearchResult) => {
+          if (result.keyword_count > 0) {
+            try {
+              const previewParams = new URLSearchParams({
+                research_result_id: result.id,
+                limit: '10', // Load first 10 keywords for preview
+              });
+              const previewResponse = await fetch(`/api/keywords/list?${previewParams.toString()}`);
+              if (previewResponse.ok) {
+                const previewData = await previewResponse.json();
+                if (previewData.success && previewData.terms) {
+                  return { ...result, keyword_preview: previewData.terms };
+                }
+              }
+            } catch (err) {
+              console.warn('Failed to load keyword preview for result', result.id, err);
+            }
+          }
+          return result;
+        })
+      );
+      
       console.log('Loaded research results:', {
-        count: results.length,
+        count: resultsWithPreviews.length,
         total: data.total || 0,
-        firstResult: results[0],
+        firstResult: resultsWithPreviews[0],
         success: data.success,
       });
 
       // Use functional update to ensure we're setting the latest state
-      console.log('Setting research results state - new count:', results.length);
-      setResearchResults(results);
+      console.log('Setting research results state - new count:', resultsWithPreviews.length);
+      setResearchResults(resultsWithPreviews);
       setTotal(data.total || 0);
     } catch (err) {
       console.error('Error loading research results:', err);
@@ -404,7 +429,7 @@ export default function KeywordHistoryPage() {
                   </div>
 
                   {/* Quick Stats */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                     {result.traditional_keyword_data && (
                       <>
                         <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
@@ -438,6 +463,73 @@ export default function KeywordHistoryPage() {
                       </>
                     )}
                   </div>
+
+                  {/* Keywords Preview */}
+                  {result.keyword_count > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Keywords ({result.keyword_count})
+                        </h4>
+                        <button
+                          onClick={() => handleViewDetails(result)}
+                          className="text-xs text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 font-medium"
+                        >
+                          View All →
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {/* Show primary keyword */}
+                        <span className="px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-xs font-medium rounded">
+                          {result.keyword}
+                        </span>
+                        {/* Show keyword preview if available */}
+                        {result.keyword_preview && result.keyword_preview.length > 0 ? (
+                          <>
+                            {result.keyword_preview.slice(0, 9).map((term: KeywordTerm) => (
+                              <span 
+                                key={term.id}
+                                className={`px-2 py-1 text-xs rounded ${
+                                  term.is_related_term 
+                                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
+                                    : term.is_matching_term
+                                    ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200'
+                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                                }`}
+                                title={`Volume: ${formatNumber(term.search_volume)} | Difficulty: ${term.keyword_difficulty || 'N/A'}`}
+                              >
+                                {term.keyword}
+                              </span>
+                            ))}
+                            {result.keyword_count > result.keyword_preview.length + 1 && (
+                              <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded">
+                                +{result.keyword_count - result.keyword_preview.length - 1} more
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          /* Fallback: show related_terms from JSONB if preview not loaded */
+                          result.related_terms && result.related_terms.length > 0 && (
+                            <>
+                              {result.related_terms.slice(0, 9).map((term: any, idx: number) => (
+                                <span 
+                                  key={idx}
+                                  className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-xs rounded"
+                                >
+                                  {typeof term === 'string' ? term : term.keyword}
+                                </span>
+                              ))}
+                              {result.keyword_count > result.related_terms.length + 1 && (
+                                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded">
+                                  +{result.keyword_count - result.related_terms.length - 1} more
+                                </span>
+                              )}
+                            </>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
