@@ -4,10 +4,17 @@ import "swiper/swiper-bundle.css";
 import "simplebar-react/dist/simplebar.min.css";
 import { SidebarProvider } from "@/context/SidebarContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import type { Metadata } from "next";
 
 const outfit = Outfit({
   subsets: ["latin"],
 });
+
+export const metadata: Metadata = {
+  icons: {
+    icon: '/favicon.ico',
+  },
+};
 
 export default function RootLayout({
   children,
