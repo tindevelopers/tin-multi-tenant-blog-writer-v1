@@ -308,9 +308,9 @@ export default function KeywordHistoryPage() {
 
         {/* Error Alert */}
         {error && (
-          <Alert variant="error" className="mb-6">
-            {error}
-          </Alert>
+          <div className="mb-6">
+            <Alert variant="error" title="Error" message={error} />
+          </div>
         )}
 
         {/* Results */}
