@@ -28,7 +28,8 @@ export interface UseKeywordResearchResult {
   researchKeyword: (
     primaryKeyword: string,
     location?: string,
-    language?: string
+    language?: string,
+    searchType?: 'traditional' | 'ai' | 'both'
   ) => Promise<void>;
   analyzeKeywords: (
     keywords: string[],
