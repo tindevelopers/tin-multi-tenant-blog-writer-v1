@@ -19,9 +19,14 @@ import {
   X,
   ChevronDown,
   ChevronUp,
-  ExternalLink
+  ExternalLink,
+  ArrowRight,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import Alert from '@/components/ui/alert/Alert';
+import { useRouter } from 'next/navigation';
+import Checkbox from '@/components/form/input/Checkbox';
 
 interface KeywordResearchResult {
   id: string;
@@ -59,9 +64,11 @@ interface KeywordTerm {
 }
 
 export default function KeywordHistoryPage() {
+  const router = useRouter();
   const [researchResults, setResearchResults] = useState<KeywordResearchResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<KeywordResearchResult | null>(null);
   const [keywordTerms, setKeywordTerms] = useState<KeywordTerm[]>([]);
+  const [selectedKeywords, setSelectedKeywords] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [loadingTerms, setLoadingTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -185,7 +192,55 @@ export default function KeywordHistoryPage() {
 
   const handleViewDetails = async (result: KeywordResearchResult) => {
     setSelectedResult(result);
+    setSelectedKeywords(new Set()); // Clear selection when opening new details
     await loadKeywordTerms(result.id);
+  };
+
+  const toggleKeywordSelection = (keyword: string) => {
+    setSelectedKeywords(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(keyword)) {
+        newSet.delete(keyword);
+      } else {
+        newSet.add(keyword);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllKeywords = () => {
+    setSelectedKeywords(new Set(keywordTerms.map(term => term.keyword)));
+  };
+
+  const clearSelection = () => {
+    setSelectedKeywords(new Set());
+  };
+
+  const handleGenerateContentIdeas = async () => {
+    if (selectedKeywords.size === 0) {
+      alert('Please select at least one keyword');
+      return;
+    }
+
+    const selectedKeywordList = Array.from(selectedKeywords);
+    const primaryKeyword = selectedResult?.keyword || selectedKeywordList[0];
+
+    // Navigate to SEO page with selected keywords
+    // We'll pass keywords via URL params or state
+    router.push(`/admin/seo?keywords=${encodeURIComponent(JSON.stringify(selectedKeywordList))}&primary=${encodeURIComponent(primaryKeyword)}`);
+  };
+
+  const handleUseForContentGeneration = async () => {
+    if (selectedKeywords.size === 0) {
+      alert('Please select at least one keyword');
+      return;
+    }
+
+    const selectedKeywordList = Array.from(selectedKeywords);
+    const primaryKeyword = selectedResult?.keyword || selectedKeywordList[0];
+
+    // Navigate to content clusters page with selected keywords
+    router.push(`/admin/content-clusters?keywords=${encodeURIComponent(JSON.stringify(selectedKeywordList))}&primary=${encodeURIComponent(primaryKeyword)}`);
   };
 
   const handleFlushCache = async () => {
@@ -568,24 +623,71 @@ export default function KeywordHistoryPage() {
         {selectedResult && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {selectedResult.keyword}
-                  </h2>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Research Details • {formatDate(selectedResult.created_at)}
-                  </p>
+              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {selectedResult.keyword}
+                    </h2>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Research Details • {formatDate(selectedResult.created_at)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedResult(null);
+                      setKeywordTerms([]);
+                      setSelectedKeywords(new Set());
+                    }}
+                    className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X className="h-6 w-6" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => {
-                    setSelectedResult(null);
-                    setKeywordTerms([]);
-                  }}
-                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                >
-                  <X className="h-6 w-6" />
-                </button>
+                
+                {/* Selection Actions Bar */}
+                {keywordTerms.length > 0 && (
+                  <div className="flex items-center justify-between p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={selectAllKeywords}
+                          className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                        >
+                          Select All
+                        </button>
+                        <span className="text-gray-400">|</span>
+                        <button
+                          onClick={clearSelection}
+                          className="text-sm text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 font-medium"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                        {selectedKeywords.size} of {keywordTerms.length} keywords selected
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleGenerateContentIdeas}
+                        disabled={selectedKeywords.size === 0}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        Generate Content Ideas ({selectedKeywords.size})
+                      </button>
+                      <button
+                        onClick={handleUseForContentGeneration}
+                        disabled={selectedKeywords.size === 0}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 border border-purple-300 rounded-lg hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-600 dark:hover:bg-purple-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        Use for Content Generation
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-6">
@@ -603,6 +705,18 @@ export default function KeywordHistoryPage() {
                     <table className="w-full">
                       <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-12">
+                            <Checkbox
+                              checked={selectedKeywords.size === keywordTerms.length && keywordTerms.length > 0}
+                              onChange={(checked) => {
+                                if (checked) {
+                                  selectAllKeywords();
+                                } else {
+                                  clearSelection();
+                                }
+                              }}
+                            />
+                          </th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Keyword</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Search Volume</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">AI Volume</th>
@@ -615,7 +729,18 @@ export default function KeywordHistoryPage() {
                       </thead>
                       <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                         {keywordTerms.map((term) => (
-                          <tr key={term.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                          <tr 
+                            key={term.id} 
+                            className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                              selectedKeywords.has(term.keyword) ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                            }`}
+                          >
+                            <td className="px-4 py-3">
+                              <Checkbox
+                                checked={selectedKeywords.has(term.keyword)}
+                                onChange={() => toggleKeywordSelection(term.keyword)}
+                              />
+                            </td>
                             <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
                               {term.keyword}
                             </td>

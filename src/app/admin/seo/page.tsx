@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PrimaryKeywordInput } from "@/components/keyword-research/PrimaryKeywordInput";
 import MasterKeywordTable from "@/components/keyword-research/MasterKeywordTable";
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
@@ -15,6 +15,7 @@ import { SavedSearchesPanel } from "@/components/keyword-research/SavedSearchesP
 
 export default function SEOToolsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   const {
     loading,
@@ -27,6 +28,30 @@ export default function SEOToolsPage() {
     researchKeyword,
     reset,
   } = useEnhancedKeywordResearch();
+
+  // Load keywords from URL params if present (from keyword history page)
+  useEffect(() => {
+    const keywordsParam = searchParams?.get('keywords');
+    const primaryParam = searchParams?.get('primary');
+    
+    if (keywordsParam && primaryParam) {
+      try {
+        const keywordList = JSON.parse(decodeURIComponent(keywordsParam));
+        const primaryKeyword = decodeURIComponent(primaryParam);
+        
+        // Transform keyword list to KeywordData format
+        // We'll need to load the full keyword data from the API
+        // For now, set the primary keyword and trigger research
+        if (keywordList.length > 0 && !keywords.length) {
+          // Navigate to keywords tab and show selection
+          setActiveTab('keywords');
+          // The keywords will be loaded when user views the details
+        }
+      } catch (err) {
+        console.error('Failed to parse keywords from URL:', err);
+      }
+    }
+  }, [searchParams, keywords.length]);
 
   const {
     selectedKeywords,
