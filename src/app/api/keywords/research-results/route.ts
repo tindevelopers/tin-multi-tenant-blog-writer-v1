@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       keyword,
     });
 
-    // Get count for pagination
+    // Get count for pagination (use the same query but with count only)
     let countQuery = supabase
       .from('keyword_research_results')
       .select('*', { count: 'exact', head: true })
@@ -97,10 +97,19 @@ export async function GET(request: NextRequest) {
       countQuery = countQuery.eq('language', language);
     }
     if (keyword) {
-      countQuery = countQuery.ilike('keyword', `%${keyword}%`);
+      const encodedKeyword = decodeURIComponent(keyword);
+      countQuery = countQuery.ilike('keyword', `%${encodedKeyword}%`);
     }
 
-    const { count } = await countQuery;
+    const { count, error: countError } = await countQuery;
+    
+    if (countError) {
+      logger.error('Error counting research results', {
+        error: countError,
+        errorCode: countError.code,
+        errorMessage: countError.message,
+      });
+    }
 
     // Get related keyword terms count for each result
     const resultIds = (results || []).map(r => r.id);
