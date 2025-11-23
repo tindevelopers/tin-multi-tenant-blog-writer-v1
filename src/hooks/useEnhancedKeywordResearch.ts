@@ -292,7 +292,18 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       }
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Keyword research failed';
+      let errorMessage = err instanceof Error ? err.message : 'Keyword research failed';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        // Don't display HTML errors to users - these are handled gracefully by the API
+        logger.warn('HTML error response detected, suppressing user-facing error', { 
+          error: errorMessage.substring(0, 200) 
+        });
+        // Set a user-friendly message instead
+        errorMessage = 'Some keyword suggestions are unavailable, but research completed successfully.';
+      }
+      
       setError(errorMessage);
       logger.error('Keyword research error:', err);
     } finally {
@@ -347,7 +358,14 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
 
       setKeywords(keywordData);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Keyword analysis failed';
+      let errorMessage = err instanceof Error ? err.message : 'Keyword analysis failed';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        logger.warn('HTML error response detected in analysis, suppressing user-facing error');
+        errorMessage = 'Some keyword analysis data is unavailable, but partial results are available.';
+      }
+      
       setError(errorMessage);
       logger.error('Keyword analysis error:', err);
     } finally {
@@ -371,7 +389,14 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       const newClusters = await keywordResearchService.createClusters(keywords);
       setClusters(newClusters);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Clustering failed';
+      let errorMessage = err instanceof Error ? err.message : 'Clustering failed';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        logger.warn('HTML error response detected in clustering, suppressing user-facing error');
+        errorMessage = 'Clustering completed with partial data.';
+      }
+      
       setError(errorMessage);
       logger.error('Clustering error:', err);
     } finally {
@@ -448,7 +473,14 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       setClusters(keywordClusters);
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load research history';
+      let errorMessage = err instanceof Error ? err.message : 'Failed to load research history';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        logger.warn('HTML error response detected in history load, suppressing user-facing error');
+        errorMessage = 'Unable to load some research history data.';
+      }
+      
       setError(errorMessage);
       logger.error('Load history error:', err);
     } finally {
