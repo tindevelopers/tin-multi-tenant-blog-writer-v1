@@ -101,11 +101,22 @@ export default function KeywordHistoryPage() {
       if (languageFilter) params.append('language', languageFilter);
 
       const response = await fetch(`/api/keywords/research-results?${params.toString()}`);
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+      
       const data = await response.json();
 
       if (!data.success) {
         throw new Error(data.error || 'Failed to load research results');
       }
+
+      console.log('Loaded research results:', {
+        count: data.results?.length || 0,
+        total: data.total || 0,
+        results: data.results,
+      });
 
       setResearchResults(data.results || []);
       setTotal(data.total || 0);
