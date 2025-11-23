@@ -561,10 +561,11 @@ class EnhancedKeywordStorageService {
       isMatchingTerm?: boolean;
       minSearchVolume?: number;
       maxDifficulty?: number;
-    }
+    },
+    supabaseClient?: ReturnType<typeof createClient>
   ): Promise<any[]> {
     try {
-      const supabase = createClient();
+      const supabase = supabaseClient || createClient();
 
       let query = supabase
         .from('keyword_terms')

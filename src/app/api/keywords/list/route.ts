@@ -14,7 +14,7 @@ import enhancedKeywordStorage, { SearchType } from '@/lib/keyword-storage-enhanc
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(request);
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       maxDifficulty,
     };
 
-    const terms = await enhancedKeywordStorage.getUserKeywordTerms(user.id, filters);
+    const terms = await enhancedKeywordStorage.getUserKeywordTerms(user.id, filters, supabase);
 
     logger.debug('Retrieved user keyword terms', {
       userId: user.id,
