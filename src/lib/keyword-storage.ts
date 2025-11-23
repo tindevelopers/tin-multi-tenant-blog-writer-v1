@@ -214,31 +214,74 @@ class KeywordStorageService {
   async getUserResearchSessions(userId: string, limit: number = 20): Promise<KeywordHistory[]> {
     try {
       const supabase = createClient();
+      
+      // First, verify user is authenticated
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        logger.error('Failed to retrieve research sessions: User not authenticated', { authError });
+        return [];
+      }
+
+      // Try to query without the relationship first to see if table exists
       const { data, error } = await supabase
         .from('keyword_research_sessions')
-        .select(`
-          *,
-          user_keywords (*)
-        `)
+        .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(limit);
 
       if (error) {
-        logger.error('Failed to retrieve research sessions:', error);
+        logger.error('Failed to retrieve research sessions:', {
+          error: error.message || error,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          userId,
+        });
+        
+        // If table doesn't exist or RLS issue, return empty array gracefully
+        if (error.code === '42P01' || error.code === '42501') {
+          logger.warn('keyword_research_sessions table may not exist or RLS is blocking access');
+          return [];
+        }
+        
         return [];
       }
 
-      return data?.map(session => ({
-        id: session.id,
-        user_id: session.user_id,
-        topic: session.topic,
-        keywords: session.user_keywords || [],
-        research_results: session.research_results || {},
-        created_at: session.created_at,
-      })) || [];
+      // If we have sessions, try to get keywords for each
+      if (data && data.length > 0) {
+        const sessionIds = data.map(s => s.id);
+        const { data: keywordsData } = await supabase
+          .from('user_keywords')
+          .select('*')
+          .in('research_session_id', sessionIds);
+
+        // Group keywords by session_id
+        const keywordsBySession = (keywordsData || []).reduce((acc, kw) => {
+          if (!acc[kw.research_session_id]) {
+            acc[kw.research_session_id] = [];
+          }
+          acc[kw.research_session_id].push(kw);
+          return acc;
+        }, {} as Record<string, any[]>);
+
+        return data.map(session => ({
+          id: session.id,
+          user_id: session.user_id,
+          topic: session.topic,
+          keywords: keywordsBySession[session.id] || [],
+          research_results: session.research_results || {},
+          created_at: session.created_at,
+        }));
+      }
+
+      return [];
     } catch (error: unknown) {
-      logger.error('Error retrieving research sessions:', error);
+      logger.error('Error retrieving research sessions:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        userId,
+      });
       return [];
     }
   }
