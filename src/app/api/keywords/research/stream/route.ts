@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { keywordResearchService } from '@/lib/keyword-research';
 import enhancedKeywordStorage, { SearchType } from '@/lib/keyword-storage-enhanced';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+import cloudRunHealth from '@/lib/cloud-run-health';
 
 /**
  * Server-Side Keyword Research with SSE Streaming
@@ -162,10 +163,68 @@ export async function POST(request: NextRequest) {
             return;
           }
 
-          // Step 3: Fetch from API
+          // Step 3: Check backend health and wake up if needed
+          sendEvent('progress', {
+            stage: 'checking_backend',
+            progress: 40,
+            message: 'Checking backend service health...',
+          });
+
+          try {
+            const healthStatus = await cloudRunHealth.checkHealth();
+            logger.debug('Backend health check result', {
+              isHealthy: healthStatus.isHealthy,
+              isWakingUp: healthStatus.isWakingUp,
+              error: healthStatus.error,
+            });
+
+            if (!healthStatus.isHealthy && healthStatus.isWakingUp) {
+              sendEvent('progress', {
+                stage: 'waking_backend',
+                progress: 45,
+                message: 'Backend service is starting up, please wait...',
+              });
+              
+              // Wait for backend to wake up
+              const wakeUpStatus = await cloudRunHealth.wakeUpAndWait();
+              logger.debug('Backend wake-up result', {
+                isHealthy: wakeUpStatus.isHealthy,
+                attempts: wakeUpStatus.attempts,
+                error: wakeUpStatus.error,
+              });
+
+              if (!wakeUpStatus.isHealthy) {
+                logger.warn('Backend service failed to wake up', {
+                  error: wakeUpStatus.error,
+                  attempts: wakeUpStatus.attempts,
+                });
+                sendEvent('progress', {
+                  stage: 'backend_warning',
+                  progress: 45,
+                  message: 'Backend may be slow to respond, continuing anyway...',
+                });
+              }
+            } else if (!healthStatus.isHealthy) {
+              logger.warn('Backend service is not healthy', {
+                error: healthStatus.error,
+              });
+              sendEvent('progress', {
+                stage: 'backend_warning',
+                progress: 45,
+                message: 'Backend service may be unavailable, continuing anyway...',
+              });
+            }
+          } catch (healthError) {
+            logger.warn('Health check failed, continuing anyway', {
+              error: healthError instanceof Error ? healthError.message : String(healthError),
+            });
+            // Don't block the request if health check fails
+          }
+
+          // Step 4: Fetch from API
           sendEvent('progress', {
             stage: 'fetching_api',
-            progress: 40,
+            progress: 50,
             message: 'Fetching keyword data from API...',
           });
 
@@ -179,13 +238,11 @@ export async function POST(request: NextRequest) {
           if (searchType === 'traditional' || searchType === 'both') {
             sendEvent('progress', {
               stage: 'analyzing_traditional',
-              progress: 50,
+              progress: 60,
               message: 'Analyzing traditional SEO metrics...',
             });
 
             try {
-              // Add a small delay to allow Cloud Run to wake up if needed
-              await new Promise(resolve => setTimeout(resolve, 1000));
               
               // Ensure service is properly initialized
               if (!keywordResearchService || typeof keywordResearchService.analyzeKeywords !== 'function') {
