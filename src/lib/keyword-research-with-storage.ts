@@ -220,31 +220,49 @@ class KeywordResearchWithStorageService {
         });
 
         if (aiResponse.ok) {
-          const aiData = await aiResponse.json();
+          const contentType = aiResponse.headers.get('content-type');
           
-          // Extract AI metrics for the keyword
-          const keywordLower = keyword.toLowerCase();
-          const llmMentions = aiData.ai_metrics?.llm_mentions?.[keywordLower];
-          const searchVolume = aiData.ai_metrics?.search_volume?.[keywordLower];
-          
-          if (llmMentions || searchVolume) {
-            result.aiData = {
-              keyword,
-              ai_search_volume: searchVolume?.ai_search_volume || llmMentions?.ai_search_volume || 0,
-              ai_optimization_score: 0, // Will be calculated or fetched separately
-              ai_recommended: (llmMentions?.mentions_count || 0) > 100,
-              ai_mentions_count: llmMentions?.mentions_count || 0,
-              ai_platform: llmMentions?.platform || 'chat_gpt',
-              ai_trend: searchVolume?.ai_trend,
-              ai_monthly_searches: searchVolume?.ai_monthly_searches?.map((m: any) => ({
-                month: `${m.year}-${String(m.month).padStart(2, '0')}`,
-                volume: m.search_volume,
-              })),
-            };
+          // Check if response is HTML (404 error page)
+          if (contentType && contentType.includes('text/html')) {
+            logger.warn('AI topic suggestions endpoint returned HTML (likely 404)', { keyword });
+            // Skip AI data, continue with traditional data only
+          } else {
+            const aiData = await aiResponse.json();
+            
+            // Extract AI metrics for the keyword
+            const keywordLower = keyword.toLowerCase();
+            const llmMentions = aiData.ai_metrics?.llm_mentions?.[keywordLower];
+            const searchVolume = aiData.ai_metrics?.search_volume?.[keywordLower];
+            
+            if (llmMentions || searchVolume) {
+              result.aiData = {
+                keyword,
+                ai_search_volume: searchVolume?.ai_search_volume || llmMentions?.ai_search_volume || 0,
+                ai_optimization_score: 0, // Will be calculated or fetched separately
+                ai_recommended: (llmMentions?.mentions_count || 0) > 100,
+                ai_mentions_count: llmMentions?.mentions_count || 0,
+                ai_platform: llmMentions?.platform || 'chat_gpt',
+                ai_trend: searchVolume?.ai_trend,
+                ai_monthly_searches: searchVolume?.ai_monthly_searches?.map((m: any) => ({
+                  month: `${m.year}-${String(m.month).padStart(2, '0')}`,
+                  volume: m.search_volume,
+                })),
+              };
+            }
           }
+        } else {
+          // Handle non-OK responses
+          const errorText = await aiResponse.text();
+          logger.warn('AI topic suggestions endpoint returned error', { 
+            status: aiResponse.status, 
+            keyword,
+            error: errorText.substring(0, 200) // Limit error text length
+          });
+          // Continue without AI data - traditional data will still be available
         }
       } catch (error) {
         logger.error('Error fetching AI keyword data', { error, keyword });
+        // Don't throw - allow traditional data to still be returned
       }
     }
 

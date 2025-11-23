@@ -118,13 +118,32 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Check if it's a 404 (endpoint doesn't exist)
+      if (response.status === 404) {
+        logger.warn('AI topic suggestions endpoint not found on backend', {
+          url: `${BLOG_WRITER_API_URL}/api/v1/keywords/ai-topic-suggestions`,
+          error: errorText.substring(0, 200),
+        });
+        
+        // Return empty response instead of error to allow fallback
+        return NextResponse.json({
+          topic_suggestions: [],
+          ai_metrics: {
+            search_volume: {},
+            llm_mentions: {},
+          },
+          message: 'AI topic suggestions endpoint not available, using traditional search only',
+        });
+      }
+      
       logger.error('Backend API error for /ai-topic-suggestions', {
         status: response.status,
-        error: errorText,
+        error: errorText.substring(0, 200),
       });
       
       return NextResponse.json(
-        { error: `Backend API error: ${response.status} ${errorText}` },
+        { error: `Backend API error: ${response.status} ${errorText.substring(0, 200)}` },
         { status: response.status }
       );
     }
