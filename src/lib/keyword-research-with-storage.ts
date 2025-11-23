@@ -281,13 +281,33 @@ class KeywordResearchWithStorageService {
     // Step 4: Store results if autoStore is enabled
     if (autoStore && userId && (result.traditionalData || result.aiData)) {
       try {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('org_id')
-          .eq('user_id', userId)
-          .single();
+        logger.debug('Auto-storing keyword research result', {
+          keyword,
+          userId,
+          hasTraditionalData: !!result.traditionalData,
+          hasAiData: !!result.aiData,
+        });
 
-        await enhancedKeywordStorage.storeKeywordResearch(
+        // Try to get org_id from users table, but don't fail if it doesn't exist
+        let orgId: string | undefined;
+        try {
+          const { data: userData, error: userDataError } = await supabase
+            .from('users')
+            .select('org_id')
+            .eq('user_id', userId)
+            .single();
+
+          if (!userDataError && userData) {
+            orgId = userData.org_id;
+          } else {
+            logger.debug('Could not fetch org_id from users table', { error: userDataError?.message });
+          }
+        } catch (userTableError) {
+          logger.debug('Users table query failed, continuing without org_id', { error: userTableError });
+          // Continue without org_id - it's optional
+        }
+
+        const storeResult = await enhancedKeywordStorage.storeKeywordResearch(
           userId,
           {
             keyword,
@@ -299,11 +319,23 @@ class KeywordResearchWithStorageService {
             related_terms: result.relatedTerms,
             matching_terms: result.matchingTerms,
           },
-          userData?.org_id
+          orgId
         );
 
+        if (!storeResult.success) {
+          logger.error('Failed to store keyword research', {
+            keyword,
+            error: storeResult.error,
+          });
+        } else {
+          logger.debug('Keyword research stored successfully', {
+            keyword,
+            researchResultId: storeResult.id,
+          });
+        }
+
         // Cache the result
-        if (useCache) {
+        if (useCache && storeResult.success) {
           await enhancedKeywordStorage.cacheKeyword(
             keyword,
             {
@@ -317,11 +349,9 @@ class KeywordResearchWithStorageService {
               matching_terms: result.matchingTerms,
             },
             userId,
-            userData?.org_id
+            orgId
           );
         }
-
-        logger.debug('Keyword research stored successfully', { keyword });
       } catch (error) {
         logger.error('Error storing keyword research', { error, keyword });
         // Don't throw - storage failure shouldn't break the flow
