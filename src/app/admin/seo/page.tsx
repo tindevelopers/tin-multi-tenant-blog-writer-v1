@@ -44,8 +44,8 @@ export default function SEOToolsPage() {
   const [activeTab, setActiveTab] = useState('research');
   const [showContentIdeasModal, setShowContentIdeasModal] = useState(false);
 
-  const handleResearch = async (keyword: string, location: string, language: string) => {
-    await researchKeyword(keyword, location, language);
+  const handleResearch = async (keyword: string, location: string, language: string, searchType?: 'traditional' | 'ai' | 'both') => {
+    await researchKeyword(keyword, location, language, searchType);
     setActiveTab('keywords');
   };
 

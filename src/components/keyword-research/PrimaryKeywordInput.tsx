@@ -5,9 +5,10 @@ import InputField from '@/components/form/input/InputField';
 import Label from '@/components/form/Label';
 import Select from '@/components/form/Select';
 import { Search, Loader2 } from 'lucide-react';
+import SearchTypeSelector, { SearchType } from '@/components/keywords/SearchTypeSelector';
 
 interface PrimaryKeywordInputProps {
-  onResearch: (keyword: string, location: string, language: string) => void;
+  onResearch: (keyword: string, location: string, language: string, searchType?: SearchType) => void;
   loading?: boolean;
 }
 
@@ -45,11 +46,12 @@ export function PrimaryKeywordInput({ onResearch, loading = false }: PrimaryKeyw
   const [keyword, setKeyword] = useState('');
   const [location, setLocation] = useState('United States');
   const [language, setLanguage] = useState('en');
+  const [searchType, setSearchType] = useState<SearchType>('traditional');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (keyword.trim()) {
-      onResearch(keyword.trim(), location, language);
+      onResearch(keyword.trim(), location, language, searchType);
     }
   };
 
@@ -107,6 +109,15 @@ export function PrimaryKeywordInput({ onResearch, loading = false }: PrimaryKeyw
               placeholder="Select language"
             />
           </div>
+        </div>
+
+        <div className="mt-4">
+          <SearchTypeSelector
+            value={searchType}
+            onChange={setSearchType}
+            disabled={loading}
+            showBothOption={true}
+          />
         </div>
 
         <button

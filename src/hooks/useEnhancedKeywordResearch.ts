@@ -59,12 +59,58 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
   const researchKeyword = useCallback(async (
     primaryKeyword: string,
     location: string = 'United States',
-    language: string = 'en'
+    language: string = 'en',
+    searchType: 'traditional' | 'ai' | 'both' = 'traditional'
   ) => {
     setLoading(true);
     setError(null);
 
     try {
+      // Use keyword research with storage (includes caching)
+      const keywordResearchWithStorage = (await import('@/lib/keyword-research-with-storage')).default;
+      
+      // Check cache first
+      const cachedResult = await keywordResearchWithStorage.researchKeyword(
+        primaryKeyword,
+        {
+          searchType,
+          location,
+          language,
+          autoStore: true,
+          useCache: true,
+          includeRelatedTerms: true,
+        }
+      );
+
+      // If we got cached data, use it
+      if (cachedResult.cached && cachedResult.traditionalData) {
+        logger.debug('Using cached keyword data', { keyword: primaryKeyword, source: cachedResult.source });
+        
+        // Transform cached data to match expected format
+        const cachedKeywordData: KeywordData = {
+          keyword: primaryKeyword,
+          search_volume: cachedResult.traditionalData.search_volume || 0,
+          keyword_difficulty: cachedResult.traditionalData.keyword_difficulty || 0,
+          competition: cachedResult.traditionalData.competition || 0,
+          cpc: cachedResult.traditionalData.cpc,
+          related_keywords: cachedResult.traditionalData.related_keywords || [],
+          recommended: false,
+          reason: 'Cached data',
+        };
+
+        setPrimaryAnalysis({ keyword: primaryKeyword } as any);
+        setKeywords([cachedKeywordData]);
+        setSuggestions({ keyword_suggestions: [] } as any);
+        
+        // Still create clusters from cached data
+        const newClusters = await keywordResearchService.createClusters([cachedKeywordData]);
+        setClusters(newClusters);
+        
+        setLoading(false);
+        return;
+      }
+
+      // If not cached, proceed with full research
       const result = await keywordResearchService.comprehensiveResearch(
         primaryKeyword,
         location,
@@ -99,9 +145,47 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
 
         logger.debug('✅ User authenticated:', user.id);
         
-        const keywordStorage = new KeywordStorageService();
+        // Use enhanced keyword storage with automatic caching
+        const enhancedKeywordStorage = (await import('@/lib/keyword-storage-enhanced')).default;
         
-        // Transform keyword data to storage format
+        // Store primary keyword research with full data
+        const primaryKeywordData = result.variations.find(k => 
+          k.keyword.toLowerCase() === primaryKeyword.toLowerCase()
+        ) || result.variations[0];
+        
+        if (primaryKeywordData) {
+          const storeResult = await enhancedKeywordStorage.storeKeywordResearch(
+            user.id,
+            {
+              keyword: primaryKeyword,
+              location,
+              language,
+              search_type: searchType,
+              traditional_data: {
+                keyword: primaryKeywordData.keyword,
+                search_volume: primaryKeywordData.search_volume || 0,
+                keyword_difficulty: primaryKeywordData.keyword_difficulty || 0,
+                competition: primaryKeywordData.competition || 0,
+                cpc: primaryKeywordData.cpc,
+                related_keywords: primaryKeywordData.related_keywords || [],
+              },
+              related_terms: result.variations.slice(1, 51).map(k => ({
+                keyword: k.keyword,
+                search_volume: k.search_volume || 0,
+                keyword_difficulty: k.keyword_difficulty || 0,
+                competition: k.competition || 0,
+                cpc: k.cpc,
+              })),
+            }
+          );
+          
+          if (storeResult.success) {
+            logger.debug('✅ Keyword research stored with caching');
+          }
+        }
+        
+        // Also save to legacy storage for compatibility
+        const keywordStorage = new KeywordStorageService();
         const storageKeywords = result.variations.map(k => ({
           keyword: k.keyword,
           search_volume: k.search_volume,
@@ -112,14 +196,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
           recommended: k.easy_win_score >= 60 || k.high_value_score >= 60,
           reason: k.easy_win_score >= 60 ? 'Easy win opportunity' : 'High value keyword',
           related_keywords: k.related_keywords || [],
-          long_tail_keywords: (k.related_keywords || []).slice(0, 3) // Use first 3 as long-tail
+          long_tail_keywords: (k.related_keywords || []).slice(0, 3)
         }));
-
-        logger.debug('🔍 Saving keywords:', { 
-          userId: user.id, 
-          primaryKeyword, 
-          keywordCount: storageKeywords.length 
-        });
 
         const saveResult = await keywordStorage.saveKeywords(
           user.id,
@@ -133,12 +211,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
           }
         );
         
-        logger.debug('💾 Save result:', saveResult);
-        
         if (saveResult.success) {
           logger.debug('✅ Keywords saved to database successfully');
-        } else {
-          logger.error('❌ Failed to save keywords:', saveResult.error);
         }
       } catch (saveError) {
         logger.error('⚠️ Failed to save keywords to database:', saveError);
