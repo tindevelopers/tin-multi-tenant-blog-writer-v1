@@ -175,7 +175,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
                 keyword: primaryKeywordData.keyword,
                 search_volume: primaryKeywordData.search_volume || 0,
                 keyword_difficulty: primaryKeywordData.keyword_difficulty || 0,
-                competition: primaryKeywordData.competition || 0,
+                competition: primaryKeywordData.competition_level === 'HIGH' ? 0.8 : 
+                            primaryKeywordData.competition_level === 'MEDIUM' ? 0.5 : 0.2,
                 cpc: primaryKeywordData.cpc,
                 related_keywords: primaryKeywordData.related_keywords || [],
               },
@@ -183,7 +184,8 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
                 keyword: k.keyword,
                 search_volume: k.search_volume || 0,
                 keyword_difficulty: k.keyword_difficulty || 0,
-                competition: k.competition || 0,
+                competition: k.competition_level === 'HIGH' ? 0.8 : 
+                            k.competition_level === 'MEDIUM' ? 0.5 : 0.2,
                 cpc: k.cpc,
               })),
             }
