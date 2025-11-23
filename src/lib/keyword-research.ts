@@ -323,6 +323,21 @@ class KeywordResearchService {
   }
 
   /**
+   * Get absolute URL for API routes when server-side
+   */
+  private getApiUrl(relativePath: string): string {
+    const isServerSide = typeof window === 'undefined';
+    if (isServerSide) {
+      // When server-side, construct absolute URL
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      return `${appUrl}${relativePath}`;
+    }
+    // Client-side: relative URL works fine
+    return relativePath;
+  }
+
+  /**
    * Retry API call with exponential backoff
    */
   private async retryApiCall<T>(
@@ -385,22 +400,9 @@ class KeywordResearchService {
     logger.debug(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
 
     return await this.retryApiCall(async () => {
-      // Construct absolute URL for server-side requests
-      let apiUrl: string;
-      if (this.useApiRoutes) {
-        // Server-side: need absolute URL, client-side: relative URL works
-        const isServerSide = typeof window === 'undefined';
-        if (isServerSide) {
-          // When server-side and using API routes, use the Next.js app URL (not Cloud Run API URL)
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
-            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-          apiUrl = `${appUrl}/api/keywords/analyze`;
-        } else {
-          apiUrl = '/api/keywords/analyze';
-        }
-      } else {
-        apiUrl = `${this.baseURL}/api/v1/keywords/enhanced`;
-      }
+      const apiUrl = this.useApiRoutes 
+        ? this.getApiUrl('/api/keywords/analyze')
+        : `${this.baseURL}/api/v1/keywords/enhanced`;
       
       const requestBody: Record<string, unknown> = {
         keywords,
@@ -614,7 +616,7 @@ class KeywordResearchService {
 
     try {
       const apiUrl = this.useApiRoutes 
-        ? '/api/keywords/extract'
+        ? this.getApiUrl('/api/keywords/extract')
         : `${this.baseURL}/api/v1/keywords/extract`;
 
       const response = await fetch(apiUrl, {
@@ -646,7 +648,7 @@ class KeywordResearchService {
   ): Promise<string[]> {
     try {
       const apiUrl = this.useApiRoutes 
-        ? '/api/keywords/suggest'
+        ? this.getApiUrl('/api/keywords/suggest')
         : `${this.baseURL}/api/v1/keywords/suggest`;
     
       const allSuggestions: string[] = [];
