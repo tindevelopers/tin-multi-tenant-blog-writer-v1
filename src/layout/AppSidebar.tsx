@@ -157,21 +157,30 @@ const AppSidebar: React.FC = () => {
   const pathname = usePathname();
 
   // Smart state management with auto-expand and persistence
-  const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
+  // Default Blog Writer menu to open
+  const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set(['templates-0']));
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
-  // Load persisted state from localStorage
+  // Load persisted state from localStorage, default Blog Writer menu to open
   useEffect(() => {
     const savedOpenSubmenus = localStorage.getItem('sidebar-open-submenus');
     const savedOpenNestedSubmenus = localStorage.getItem('sidebar-open-nested-submenus');
     
     if (savedOpenSubmenus) {
       try {
-        setOpenSubmenus(new Set(JSON.parse(savedOpenSubmenus)));
+        const parsed = new Set(JSON.parse(savedOpenSubmenus));
+        // Ensure Blog Writer menu (templates-0) is always open
+        parsed.add('templates-0');
+        setOpenSubmenus(parsed);
       } catch (e) {
         console.warn('Failed to parse saved open submenus:', e);
+        // Default Blog Writer menu to open
+        setOpenSubmenus(new Set(['templates-0']));
       }
+    } else {
+      // Default Blog Writer menu to open if no saved state
+      setOpenSubmenus(new Set(['templates-0']));
     }
     
     if (savedOpenNestedSubmenus) {
