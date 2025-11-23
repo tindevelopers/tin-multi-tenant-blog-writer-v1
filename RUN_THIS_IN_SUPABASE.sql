@@ -358,15 +358,15 @@ BEGIN
   
   -- Update hit count and last accessed (only if we found a result)
   IF FOUND THEN
-    UPDATE keyword_cache
-    SET hit_count = COALESCE(hit_count, 0) + 1,
+    UPDATE keyword_cache kc2
+    SET hit_count = COALESCE(kc2.hit_count, 0) + 1,
         last_accessed_at = NOW()
-    WHERE LOWER(TRIM(keyword)) = LOWER(TRIM(p_keyword))
-      AND location = p_location
-      AND language = p_language
-      AND search_type = p_search_type
-      AND (p_user_id IS NULL OR user_id = p_user_id OR user_id IS NULL)
-      AND expires_at > NOW();
+    WHERE LOWER(TRIM(kc2.keyword)) = LOWER(TRIM(p_keyword))
+      AND kc2.location = p_location
+      AND kc2.language = p_language
+      AND kc2.search_type = p_search_type
+      AND (p_user_id IS NULL OR kc2.user_id = p_user_id OR kc2.user_id IS NULL)
+      AND kc2.expires_at > NOW();
   END IF;
 END;
 $$;

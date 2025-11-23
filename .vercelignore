@@ -3,3 +3,5 @@ node_modules
 .next
 check-database-storage.ts
 test-supabase-direct.ts
+verify-migration.ts
+check-migration-data.ts
