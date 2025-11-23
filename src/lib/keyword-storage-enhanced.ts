@@ -181,10 +181,11 @@ class EnhancedKeywordStorageService {
   async storeKeywordResearch(
     userId: string,
     result: KeywordResearchResult,
-    orgId?: string
+    orgId?: string,
+    supabaseClient?: ReturnType<typeof createClient>
   ): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
-      const supabase = createClient();
+      const supabase = supabaseClient || createClient();
 
       // Store main research result
       // Normalize keyword to lowercase for consistent storage/retrieval

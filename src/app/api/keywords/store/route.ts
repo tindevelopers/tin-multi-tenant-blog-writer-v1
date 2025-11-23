@@ -14,7 +14,7 @@ import enhancedKeywordStorage, { KeywordResearchResult, SearchType } from '@/lib
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(request);
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -82,11 +82,12 @@ export async function POST(request: NextRequest) {
       full_api_response,
     };
 
-    // Store in database
+    // Store in database (pass supabase client to use authenticated session)
     const storeResult = await enhancedKeywordStorage.storeKeywordResearch(
       user.id,
       researchResult,
-      orgId
+      orgId,
+      supabase
     );
 
     if (!storeResult.success) {
