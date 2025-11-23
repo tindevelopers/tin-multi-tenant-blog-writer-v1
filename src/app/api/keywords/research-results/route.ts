@@ -56,12 +56,28 @@ export async function GET(request: NextRequest) {
     const { data: results, error } = await query;
 
     if (error) {
-      logger.error('Error fetching research results', { error, userId: user.id });
+      logger.error('Error fetching research results', { 
+        error, 
+        userId: user.id,
+        errorCode: error.code,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+      });
       return NextResponse.json(
-        { error: 'Failed to fetch research results' },
+        { error: 'Failed to fetch research results', details: error.message },
         { status: 500 }
       );
     }
+
+    logger.debug('Fetched research results', {
+      userId: user.id,
+      count: results?.length || 0,
+      searchType,
+      location,
+      language,
+      keyword,
+    });
 
     // Get count for pagination
     let countQuery = supabase

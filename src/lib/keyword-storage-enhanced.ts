@@ -187,10 +187,13 @@ class EnhancedKeywordStorageService {
       const supabase = createClient();
 
       // Store main research result
+      // Normalize keyword to lowercase for consistent storage/retrieval
+      const normalizedKeyword = result.keyword.toLowerCase().trim();
+      
       const researchData = {
         user_id: userId,
         org_id: orgId || null,
-        keyword: result.keyword.toLowerCase().trim(),
+        keyword: normalizedKeyword,
         location: result.location,
         language: result.language,
         search_type: result.search_type,
@@ -231,6 +234,17 @@ class EnhancedKeywordStorageService {
         full_api_response: result.full_api_response || null,
       };
 
+      logger.debug('Storing keyword research result', {
+        keyword: result.keyword,
+        normalizedKeyword,
+        userId,
+        location: result.location,
+        language: result.language,
+        searchType: result.search_type,
+        hasTraditionalData: !!result.traditional_data,
+        hasAiData: !!result.ai_data,
+      });
+
       const { data: researchResult, error: researchError } = await supabase
         .from('keyword_research_results')
         .upsert(researchData, {
@@ -240,9 +254,21 @@ class EnhancedKeywordStorageService {
         .single();
 
       if (researchError) {
-        logger.error('Error storing research result', { error: researchError, keyword: result.keyword });
+        logger.error('Error storing research result', { 
+          error: researchError, 
+          keyword: result.keyword,
+          errorCode: researchError.code,
+          errorMessage: researchError.message,
+          errorDetails: researchError.details,
+          errorHint: researchError.hint,
+        });
         return { success: false, error: researchError.message };
       }
+
+      logger.debug('Research result stored successfully', {
+        keyword: result.keyword,
+        researchResultId: researchResult?.id,
+      });
 
       const researchResultId = researchResult?.id;
 
