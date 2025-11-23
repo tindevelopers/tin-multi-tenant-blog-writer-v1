@@ -27,7 +27,8 @@ import {
   Plug,
   FileClock,
   Shield,
-  History
+  History,
+  Layers
 } from "lucide-react";
 
 type NavItem = {

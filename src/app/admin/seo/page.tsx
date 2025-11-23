@@ -8,7 +8,7 @@ import MasterKeywordTable from "@/components/keyword-research/MasterKeywordTable
 import { KeywordClusterView } from "@/components/keyword-research/KeywordClusterView";
 import { useEnhancedKeywordResearch, useKeywordSelection } from "@/hooks/useEnhancedKeywordResearch";
 import { useContentIdeas } from "@/hooks/useContentIdeas";
-import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight, Save } from "lucide-react";
+import { TrendingUp, Target, Layers, Search, History, Eye, Sparkles, ArrowRight } from "lucide-react";
 import Alert from "@/components/ui/alert/Alert";
 import StreamingProgress from "@/components/keywords/StreamingProgress";
 
