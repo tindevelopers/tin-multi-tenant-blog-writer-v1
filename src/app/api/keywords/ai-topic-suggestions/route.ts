@@ -131,9 +131,23 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     
+    // According to FRONTEND_INTEGRATION_TESTING_GUIDE.md, response structure is:
+    // - topic_suggestions: Array of topic objects
+    // - ai_metrics.llm_mentions: Record<string, LLMMentionsData>
+    // - ai_metrics.search_volume: Record<string, any>
+    const topicSuggestions = data.topic_suggestions || data.topics || [];
+    const aiMetrics = data.ai_metrics || {};
+    const llmMentions = aiMetrics.llm_mentions || {};
+    
     logger.debug('AI topic suggestions response received', {
-      topicsCount: data.topics?.length || 0,
-      hasTopics: !!data.topics,
+      topicsCount: topicSuggestions.length,
+      hasTopics: topicSuggestions.length > 0,
+      hasLLMMentions: Object.keys(llmMentions).length > 0,
+      sampleLLMMention: Object.keys(llmMentions).length > 0 ? {
+        keyword: Object.keys(llmMentions)[0],
+        mentions_count: llmMentions[Object.keys(llmMentions)[0]]?.mentions_count,
+        platform: llmMentions[Object.keys(llmMentions)[0]]?.platform,
+      } : null,
     });
 
     return NextResponse.json(data);

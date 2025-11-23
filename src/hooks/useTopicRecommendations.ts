@@ -28,6 +28,9 @@ export interface TopicRecommendation {
   reason?: string;
   related_keywords?: string[];
   source?: string;
+  // LLM Mentions fields (from ai_metrics.llm_mentions)
+  mentions_count?: number;
+  platform?: string; // "chat_gpt" or "google"
 }
 
 export interface TopicRecommendationsResult {

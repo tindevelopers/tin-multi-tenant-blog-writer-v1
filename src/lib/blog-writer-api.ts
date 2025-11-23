@@ -615,6 +615,9 @@ class BlogWriterAPI {
       reason?: string;
       related_keywords?: string[];
       source?: string;
+      // LLM Mentions fields (from ai_metrics.llm_mentions)
+      mentions_count?: number;
+      platform?: string; // "chat_gpt" or "google"
     }>;
   }> {
     try {
@@ -661,14 +664,25 @@ class BlogWriterAPI {
         if (aiTopicSuggestionsResponse.ok) {
           const aiTopicData = await aiTopicSuggestionsResponse.json();
           
+          // According to FRONTEND_INTEGRATION_TESTING_GUIDE.md, response structure is:
+          // - topic_suggestions: Array of topic objects
+          // - ai_metrics.llm_mentions: Record<string, LLMMentionsData>
+          // - ai_metrics.search_volume: Record<string, any>
+          const topicSuggestions = aiTopicData.topic_suggestions || aiTopicData.topics || [];
+          const aiMetrics = aiTopicData.ai_metrics || {};
+          const llmMentions = aiMetrics.llm_mentions || {};
+          const searchVolume = aiMetrics.search_volume || {};
+          
           logger.debug('AI topic suggestions response received', {
-            topicsCount: aiTopicData.topics?.length || 0,
-            hasTopics: !!aiTopicData.topics,
+            topicsCount: topicSuggestions.length,
+            hasTopics: topicSuggestions.length > 0,
+            hasLLMMentions: Object.keys(llmMentions).length > 0,
+            hasSearchVolume: Object.keys(searchVolume).length > 0,
           });
 
           // Transform AI topic suggestions response to topic recommendations format
-          if (aiTopicData.topics && Array.isArray(aiTopicData.topics) && aiTopicData.topics.length > 0) {
-            const topics = aiTopicData.topics
+          if (topicSuggestions.length > 0) {
+            const topics = topicSuggestions
               .map((topic: any) => {
                 // Map response fields to our format
                 const title = topic.topic || topic.title || '';
@@ -684,7 +698,20 @@ class BlogWriterAPI {
                 const reason = topic.reason || '';
                 const relatedKeywords = topic.related_keywords || [];
                 const source = topic.source || 'ai_generated';
-                const mentions = topic.mentions || 0;
+                
+                // Extract LLM mentions data for this keyword from ai_metrics.llm_mentions
+                const keywordLower = sourceKeyword.toLowerCase();
+                const llmMentionData = llmMentions[keywordLower] || llmMentions[sourceKeyword] || {};
+                const mentionsCount = llmMentionData.mentions_count || llmMentionData.total_count || topic.mentions || 0;
+                const platform = llmMentionData.platform || 'chat_gpt';
+                const aiSearchVolumeFromMentions = llmMentionData.ai_search_volume || 0;
+                
+                // Also check ai_metrics.search_volume for additional AI search volume data
+                const searchVolumeData = searchVolume[keywordLower] || searchVolume[sourceKeyword] || {};
+                const aiSearchVolumeFromVolume = searchVolumeData.ai_search_volume || 0;
+                
+                // Use the highest AI search volume value available
+                const finalAiSearchVol = aiSearchVol || aiSearchVolumeFromMentions || aiSearchVolumeFromVolume || 0;
 
                 // Calculate AI score from ranking_score or opportunity_score
                 const aiScore = rankingScore || opportunityScore || 0;
@@ -693,12 +720,12 @@ class BlogWriterAPI {
                   title,
                   description: reason || `AI-generated topic about ${sourceKeyword}`,
                   keywords: [sourceKeyword, ...relatedKeywords].filter(Boolean).slice(0, 5),
-                  search_volume: searchVol || aiSearchVol,
+                  search_volume: searchVol || finalAiSearchVol,
                   difficulty,
                   content_angle: reason || `AI-optimized topic with ${opportunityScore}/100 opportunity score`,
-                  estimated_traffic: Math.floor((searchVol || aiSearchVol) * 0.1),
+                  estimated_traffic: Math.floor((searchVol || finalAiSearchVol) * 0.1),
                   aiScore,
-                  aiSearchVolume: aiSearchVol,
+                  aiSearchVolume: finalAiSearchVol,
                   traditionalSearchVolume: searchVol,
                   recommended: aiScore >= 50 || opportunityScore >= 50,
                   ranking_score: rankingScore,
@@ -708,6 +735,9 @@ class BlogWriterAPI {
                   reason,
                   related_keywords: relatedKeywords,
                   source,
+                  // Additional LLM mentions data
+                  mentions_count: mentionsCount,
+                  platform: platform,
                 };
               })
               .sort((a: any, b: any) => {
@@ -719,7 +749,15 @@ class BlogWriterAPI {
               })
               .slice(0, params.count || 10);
 
-            logger.debug('AI topic suggestions transformed successfully', { topicsCount: topics.length });
+            logger.debug('AI topic suggestions transformed successfully', { 
+              topicsCount: topics.length,
+              sampleTopic: topics[0] ? {
+                title: topics[0].title,
+                aiScore: topics[0].aiScore,
+                mentions_count: topics[0].mentions_count,
+                platform: topics[0].platform,
+              } : null,
+            });
             return { topics };
           }
         }
