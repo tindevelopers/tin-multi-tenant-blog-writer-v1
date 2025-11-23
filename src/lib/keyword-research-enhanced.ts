@@ -140,6 +140,22 @@ export class EnhancedKeywordResearchService {
       });
 
       if (!response.ok) {
+        // Check if response is HTML (404 error page)
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          logger.warn('Keyword suggestions endpoint returned HTML (likely 404)', { 
+            keyword, 
+            status: response.status,
+            url: `${this.baseUrl}/suggest`
+          });
+          // Return empty suggestions instead of throwing error
+          return {
+            keyword_suggestions: [],
+            related_keywords: [],
+            long_tail_keywords: [],
+          };
+        }
+        
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
         throw new Error(errorData.error || `Keyword suggestions failed: ${response.statusText}`);
       }
