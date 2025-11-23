@@ -87,16 +87,25 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       if (cachedResult.cached && cachedResult.traditionalData) {
         logger.debug('Using cached keyword data', { keyword: primaryKeyword, source: cachedResult.source });
         
+        // Convert competition number (0-1) to competition_level string
+        const competition = cachedResult.traditionalData.competition || 0;
+        let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+        if (competition >= 0.67) {
+          competition_level = 'HIGH';
+        } else if (competition >= 0.33) {
+          competition_level = 'MEDIUM';
+        }
+        
         // Transform cached data to match expected format
         const cachedKeywordData: KeywordData = {
           keyword: primaryKeyword,
           search_volume: cachedResult.traditionalData.search_volume || 0,
           keyword_difficulty: cachedResult.traditionalData.keyword_difficulty || 0,
-          competition: cachedResult.traditionalData.competition || 0,
+          competition_level,
           cpc: cachedResult.traditionalData.cpc,
           related_keywords: cachedResult.traditionalData.related_keywords || [],
-          recommended: false,
-          reason: 'Cached data',
+          easy_win_score: 0,
+          high_value_score: 0,
         };
 
         setPrimaryAnalysis({ keyword: primaryKeyword } as any);
