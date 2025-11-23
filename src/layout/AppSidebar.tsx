@@ -26,7 +26,8 @@ import {
   Building2,
   Plug,
   FileClock,
-  Shield
+  Shield,
+  History
 } from "lucide-react";
 
 type NavItem = {
@@ -56,6 +57,20 @@ const blogWriterItems: NavItem[] = [
         name: "Dashboard", 
         path: "/admin",
         icon: <LayoutDashboard className="w-4 h-4" />
+      },
+      { 
+        name: "SEO Tools", 
+        path: "/admin/seo",
+        icon: <Target className="w-4 h-4" />,
+        pro: true,
+        new: true,
+      },
+      { 
+        name: "Keyword Storage", 
+        path: "/admin/seo/keywords",
+        icon: <History className="w-4 h-4" />,
+        pro: true,
+        new: true,
       },
       { 
         name: "Content Workflow", 
@@ -107,13 +122,12 @@ const blogWriterItems: NavItem[] = [
         ]
       },
       { 
-        name: "Analytics & SEO", 
+        name: "Analytics & Insights", 
         icon: <BarChart className="w-4 h-4" />,
         isAccordionHeader: true,
         pro: true,
         subItems: [
           { name: "Analytics", path: "/admin/analytics", icon: <TrendingUp className="w-4 h-4" />, pro: true },
-          { name: "SEO", path: "/admin/seo", icon: <Target className="w-4 h-4" />, pro: true },
           { name: "Content Clusters", path: "/admin/content-clusters", icon: <LayoutDashboard className="w-4 h-4" />, new: true },
         ]
       },

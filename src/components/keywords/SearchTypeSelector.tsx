@@ -83,7 +83,7 @@ export default function SearchTypeSelector({
         ))}
       </div>
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        Results are automatically cached for 7 days and stored in your database
+        Results are automatically cached for 90 days and stored in your database
       </p>
     </div>
   );

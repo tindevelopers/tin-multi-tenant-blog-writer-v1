@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
+    const researchResultId = searchParams.get('research_result_id') || undefined;
     const searchType = searchParams.get('search_type') as SearchType | undefined;
     const location = searchParams.get('location') || undefined;
     const language = searchParams.get('language') || undefined;
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
                          parseInt(searchParams.get('max_difficulty')!) : undefined;
 
     const filters = {
+      researchResultId,
       searchType,
       location,
       language,

@@ -456,6 +456,7 @@ class EnhancedKeywordStorageService {
   async getUserKeywordTerms(
     userId: string,
     filters?: {
+      researchResultId?: string;
       searchType?: SearchType;
       location?: string;
       language?: string;
@@ -475,6 +476,9 @@ class EnhancedKeywordStorageService {
         .eq('user_id', userId)
         .order('search_volume', { ascending: false });
 
+      if (filters?.researchResultId) {
+        query = query.eq('research_result_id', filters.researchResultId);
+      }
       if (filters?.searchType) {
         query = query.eq('search_type', filters.searchType);
       }
