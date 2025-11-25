@@ -715,74 +715,118 @@ export default function QueueItemDetailPage() {
 
       {/* Edit Mode - Full Page Editor */}
       {isEditing && canEdit && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                Editing: {item.generated_title || item.topic}
-              </h2>
-              <div className="flex items-center gap-3">
-                {/* Image Placeholders Indicator */}
-                {imagePlaceholders.length > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                    <span className="text-sm text-blue-700 dark:text-blue-300">
-                      {imagePlaceholders.length} image placeholder{imagePlaceholders.length !== 1 ? 's' : ''} found
-                    </span>
-                    <button
-                      onClick={handleGenerateImages}
-                      disabled={generatingImages}
-                      className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {generatingImages ? "Generating..." : "Generate Images"}
-                    </button>
-                  </div>
-                )}
-                {/* Save Status Indicator */}
-                {saveStatus === "saving" && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    <span>Saving...</span>
-                  </div>
-                )}
-                {saveStatus === "saved" && (
-                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                    <CheckIcon className="w-4 h-4" />
-                    <span>Saved</span>
-                  </div>
-                )}
-                {saveStatus === "error" && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-                    <XCircleIcon className="w-4 h-4" />
-                    <span>Save failed</span>
-                  </div>
-                )}
-                
-                {/* Manual Save Button */}
-                <button
-                  onClick={handleManualSave}
-                  disabled={saveStatus === "saving"}
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Save Now
-                </button>
+        <div className="fixed inset-0 z-50 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    Editing: {item.generated_title || item.topic}
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Make your changes and they&apos;ll be auto-saved
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Image Placeholders Indicator */}
+                  {imagePlaceholders.length > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                        {imagePlaceholders.length} image placeholder{imagePlaceholders.length !== 1 ? 's' : ''}
+                      </span>
+                      <button
+                        onClick={handleGenerateImages}
+                        disabled={generatingImages}
+                        className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {generatingImages ? "Generating..." : "Generate"}
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Save Status Indicator */}
+                  {saveStatus === "saving" && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      <span>Saving...</span>
+                    </div>
+                  )}
+                  {saveStatus === "saved" && (
+                    <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                      <CheckIcon className="w-4 h-4" />
+                      <span>Saved</span>
+                    </div>
+                  )}
+                  {saveStatus === "error" && (
+                    <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                      <XCircleIcon className="w-4 h-4" />
+                      <span>Save failed</span>
+                    </div>
+                  )}
+                  
+                  {/* Manual Save Button */}
+                  <button
+                    onClick={handleManualSave}
+                    disabled={saveStatus === "saving"}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    Save Now
+                  </button>
+                  
+                  {/* Close Button */}
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+                  >
+                    Close Editor
+                  </button>
+                </div>
               </div>
+              
+              {saveError && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                  <p className="text-sm text-red-800 dark:text-red-200">{saveError}</p>
+                </div>
+              )}
             </div>
             
-            {saveError && (
-              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                <p className="text-sm text-red-800 dark:text-red-200">{saveError}</p>
+            {/* Editor - Full Height */}
+            <div className="flex-1 overflow-hidden p-6">
+              <div className="h-full flex flex-col">
+                <TipTapEditor
+                  key={`editor-${queueId}`}
+                  content={currentContent}
+                  onChange={handleContentChange}
+                  editable={true}
+                  placeholder="Start editing your blog content..."
+                  onImageUpload={async (file) => {
+                    try {
+                      const formData = new FormData();
+                      formData.append('file', file);
+
+                      const response = await fetch('/api/images/upload', {
+                        method: 'POST',
+                        body: formData,
+                      });
+
+                      if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Upload failed');
+                      }
+
+                      const result = await response.json();
+                      return result.url;
+                    } catch (error) {
+                      logger.error('Error uploading image:', error);
+                      alert('Failed to upload image. Please try again.');
+                      return null;
+                    }
+                  }}
+                  className="flex-1"
+                />
               </div>
-            )}
-          </div>
-          
-          {/* Editor */}
-          <div className="p-6">
-            <TipTapEditor
-              content={currentContent}
-              onChange={handleContentChange}
-              editable={true}
-              className="min-h-[600px]"
-            />
+            </div>
           </div>
         </div>
       )}

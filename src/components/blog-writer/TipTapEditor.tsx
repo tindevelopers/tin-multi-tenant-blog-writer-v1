@@ -27,7 +27,7 @@ import {
   AlignRight,
   AlignJustify
 } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { logger } from '@/utils/logger';
 
 interface TipTapEditorProps {
@@ -85,6 +85,13 @@ export default function TipTapEditor({
       },
     },
   });
+
+  // Sync content when it changes externally
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content);
+    }
+  }, [content, editor]);
 
   const handleImageUpload = useCallback(async () => {
     if (!editor || !onImageUpload) return;
