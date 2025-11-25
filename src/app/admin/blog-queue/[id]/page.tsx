@@ -15,7 +15,7 @@ import {
   ChevronUpIcon,
   CheckIcon,
 } from "@heroicons/react/24/outline";
-import { BlogGenerationQueueItem } from "@/types/blog-queue";
+import { BlogGenerationQueueItem, type ProgressUpdate } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
@@ -45,7 +45,6 @@ export default function QueueItemDetailPage() {
   const lastSavedContentRef = useRef<string>("");
   const [imagePlaceholders, setImagePlaceholders] = useState<ImagePlaceholder[]>([]);
   const [generatingImages, setGeneratingImages] = useState(false);
-  const [generatedImages, setGeneratedImages] = useState<Record<number, { image_url: string; alt_text: string }>>({});
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -249,18 +248,6 @@ export default function QueueItemDetailPage() {
       const result = await response.json();
       
       if (result.images && result.images.length > 0) {
-        // Store generated images
-        const newGeneratedImages: Record<number, { image_url: string; alt_text: string }> = {};
-        
-        result.images.forEach((item: { placeholder: ImagePlaceholder; image: { image_url: string } }) => {
-          newGeneratedImages[item.placeholder.position] = {
-            image_url: item.image.image_url,
-            alt_text: item.placeholder.description,
-          };
-        });
-
-        setGeneratedImages(prev => ({ ...prev, ...newGeneratedImages }));
-
         // Insert images into content
         let updatedContent = editedContent;
         result.images.forEach((item: { placeholder: ImagePlaceholder; image: { image_url: string } }) => {
@@ -394,7 +381,7 @@ export default function QueueItemDetailPage() {
     }));
   };
 
-  const postId = item?.post_id || (item?.metadata as any)?.post_id;
+  const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
   const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
   const canEdit = hasGeneratedContent && item?.status !== "published" && item?.status !== "scheduled";
   const currentContent = isEditing && editedContent ? editedContent : (item?.generated_content || "");
@@ -696,7 +683,7 @@ export default function QueueItemDetailPage() {
             Progress History
           </h2>
           <div className="space-y-3">
-            {item.progress_updates.map((update: any, idx: number) => (
+            {item.progress_updates.map((update: ProgressUpdate, idx: number) => (
               <div
                 key={idx}
                 className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
