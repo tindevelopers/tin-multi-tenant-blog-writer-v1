@@ -474,7 +474,7 @@ export default function QueueItemDetailPage() {
               />
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
-              💡 To edit content, add images, and format your blog, use the "Edit in Drafts" button above.
+              💡 To edit content, add images, and format your blog, use the &quot;Edit in Drafts&quot; button above.
             </p>
           </div>
         </div>

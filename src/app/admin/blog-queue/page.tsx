@@ -9,7 +9,6 @@ import {
   ArrowPathIcon,
   XMarkIcon,
   ClockIcon,
-  CheckCircleIcon,
   ExclamationCircleIcon,
   EyeIcon,
   PencilIcon,
@@ -119,14 +118,6 @@ export default function BlogQueuePage() {
     fetchStats();
   }, [fetchQueueItems, fetchStats]);
 
-  const handleStatusChange = (queueId: string, newStatus: QueueStatus) => {
-    // Update local state optimistically
-    setQueueItems((items) =>
-      items.map((item) =>
-        item.queue_id === queueId ? { ...item, status: newStatus } : item
-      )
-    );
-  };
 
   const handleCancel = async (queueId: string) => {
     try {
@@ -702,8 +693,6 @@ function QueueItemRow({
   onView,
   onCancel,
   onRetry,
-  onViewBlog,
-  onEditBlog,
   onRegenerate,
 }: {
   item: BlogGenerationQueueItem;
@@ -712,8 +701,6 @@ function QueueItemRow({
   onView: () => void;
   onCancel: () => void;
   onRetry: () => void;
-  onViewBlog?: () => void;
-  onEditBlog?: () => void;
   onRegenerate?: () => void;
 }) {
   const router = useRouter();
