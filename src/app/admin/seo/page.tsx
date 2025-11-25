@@ -29,6 +29,14 @@ export default function SEOToolsPage() {
     reset,
   } = useEnhancedKeywordResearch();
 
+  const {
+    selectedKeywords,
+    toggleKeyword,
+    selectAll,
+    clearSelection,
+    selectedCount,
+  } = useKeywordSelection();
+
   // Track if we've loaded keywords from URL to prevent re-loading
   const [keywordsLoadedFromUrl, setKeywordsLoadedFromUrl] = useState(false);
 
@@ -102,14 +110,6 @@ export default function SEOToolsPage() {
     
     loadKeywordsFromResult();
   }, [searchParams, researchKeyword, toggleKeyword, keywordsLoadedFromUrl]);
-
-  const {
-    selectedKeywords,
-    toggleKeyword,
-    selectAll,
-    clearSelection,
-    selectedCount,
-  } = useKeywordSelection();
 
   const {
     generateContentIdeas,
