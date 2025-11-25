@@ -513,21 +513,21 @@ export default function DraftsPage() {
         </div>
         
         {selectedDrafts.length > 0 && (
-          <div className="bg-blue-50 dark:bg-blue-900/20 border-t border-blue-200 dark:border-blue-800 px-6 py-3">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border-t border-blue-200 dark:border-blue-800 px-6 py-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-blue-800 dark:text-blue-200">
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
                 {selectedDrafts.length} draft{selectedDrafts.length !== 1 ? 's' : ''} selected
               </span>
-              <div className="flex gap-2">
-                <button className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium">
-                  Bulk Edit
-                </button>
-                <button className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium">
-                  Export
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => setSelectedDrafts([])}
+                  className="px-4 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  Clear Selection
                 </button>
                 <button 
                   onClick={handleBatchDelete}
-                  className="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 font-medium flex items-center gap-1"
+                  className="px-4 py-1.5 text-sm font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center gap-2"
                 >
                   <TrashIcon className="w-4 h-4" />
                   Delete Selected
