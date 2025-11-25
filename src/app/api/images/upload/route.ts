@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 import { getAuthenticatedUser, handleApiError } from '@/lib/api-utils';
+import { getCloudinaryCredentials } from '@/lib/cloudinary-upload';
 
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
@@ -46,13 +47,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if organization has Cloudinary credentials configured
+    const cloudinaryCredentials = await getCloudinaryCredentials(user.org_id);
+    if (!cloudinaryCredentials) {
+      logger.warn('No Cloudinary credentials configured for organization', {
+        orgId: user.org_id,
+      });
+      return NextResponse.json(
+        { 
+          error: 'Cloudinary is not configured for your organization. Please configure Cloudinary credentials in Settings → Integrations.',
+          code: 'CLOUDINARY_NOT_CONFIGURED'
+        },
+        { status: 400 }
+      );
+    }
+
     // Convert file to base64
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64 = buffer.toString('base64');
     const dataUri = `data:${file.type};base64,${base64}`;
 
-    // Upload via Blog Writer API
+    logger.debug('Uploading image to Cloudinary via backend API', {
+      fileName: file.name,
+      fileSize: file.size,
+      orgId: user.org_id,
+      hasCredentials: !!cloudinaryCredentials,
+    });
+
+    // Upload via Blog Writer API with explicit Cloudinary credentials
     const uploadResponse = await fetch(`${API_BASE_URL}/api/v1/media/upload/cloudinary`, {
       method: 'POST',
       headers: {
@@ -63,19 +86,78 @@ export async function POST(request: NextRequest) {
         image_data: dataUri,
         file_name: file.name,
         folder: `blog-images/${user.org_id}`,
-        // Note: Blog Writer API will fetch Cloudinary credentials from organization settings
+        cloudinary_credentials: {
+          cloud_name: cloudinaryCredentials.cloud_name,
+          api_key: cloudinaryCredentials.api_key,
+          api_secret: cloudinaryCredentials.api_secret,
+        },
       }),
       signal: AbortSignal.timeout(60000), // 60 second timeout
     });
 
     if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
+      let errorMessage = `Upload failed: ${uploadResponse.statusText}`;
+      let errorDetails: unknown = null;
+      
+      try {
+        const errorText = await uploadResponse.text();
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorJson.error || errorJson.message || errorMessage;
+          errorDetails = errorJson;
+        } catch {
+          // If parsing fails, use the text as-is
+          if (errorText) {
+            errorMessage = errorText.length > 200 ? `${errorText.substring(0, 200)}...` : errorText;
+          }
+        }
+      } catch (readError) {
+        logger.error('Error reading error response', { error: readError });
+      }
+
       logger.error('Blog Writer API upload error', {
         status: uploadResponse.status,
-        error: errorText,
+        statusText: uploadResponse.statusText,
+        error: errorMessage,
+        details: errorDetails,
+        orgId: user.org_id,
       });
+
+      // Provide user-friendly error messages
+      if (uploadResponse.status === 400) {
+        return NextResponse.json(
+          { 
+            error: errorMessage || 'Invalid image file or request. Please check the file format and try again.',
+            code: 'INVALID_REQUEST',
+            details: errorDetails
+          },
+          { status: 400 }
+        );
+      } else if (uploadResponse.status === 401 || uploadResponse.status === 403) {
+        return NextResponse.json(
+          { 
+            error: 'Authentication failed. Please check your API credentials.',
+            code: 'AUTH_ERROR'
+          },
+          { status: uploadResponse.status }
+        );
+      } else if (uploadResponse.status === 500 || uploadResponse.status >= 500) {
+        return NextResponse.json(
+          { 
+            error: 'Server error during upload. Please try again later.',
+            code: 'SERVER_ERROR',
+            details: errorDetails
+          },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json(
-        { error: `Upload failed: ${uploadResponse.statusText}` },
+        { 
+          error: errorMessage,
+          code: 'UPLOAD_FAILED',
+          details: errorDetails
+        },
         { status: uploadResponse.status }
       );
     }
