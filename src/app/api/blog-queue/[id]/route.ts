@@ -387,15 +387,47 @@ export async function DELETE(
       );
     }
 
-    // Only allow cancellation if not already published or cancelled
-    if (['published', 'cancelled'].includes(currentItem.status)) {
+    // Determine if we should hard delete or soft delete
+    const unsuccessfulStatuses = ['failed', 'cancelled'];
+    const isUnsuccessful = unsuccessfulStatuses.includes(currentItem.status);
+    
+    // Prevent deletion of published items (they should remain for audit trail)
+    if (currentItem.status === 'published') {
       return NextResponse.json(
-        { error: `Cannot delete queue item with status: ${currentItem.status}` },
+        { error: 'Cannot delete published queue items. They must remain for audit trail.' },
         { status: 400 }
       );
     }
 
-    // Update status to cancelled instead of deleting (for audit trail)
+    // Hard delete failed/cancelled items (not successfully generated)
+    if (isUnsuccessful) {
+      const { error: deleteError } = await supabase
+        .from('blog_generation_queue')
+        .delete()
+        .eq('queue_id', id)
+        .eq('org_id', userProfile.org_id);
+
+      if (deleteError) {
+        logger.error('Error deleting queue item:', deleteError);
+        return NextResponse.json(
+          { error: 'Failed to delete queue item', details: deleteError.message },
+          { status: 500 }
+        );
+      }
+
+      logger.info('Deleted unsuccessful queue item', {
+        queue_id: id,
+        status: currentItem.status,
+        user_id: user.id
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Queue item deleted successfully'
+      });
+    }
+
+    // Soft delete (set to cancelled) for items that are still in progress
     const { data: updatedItem, error: updateError } = await supabase
       .from('blog_generation_queue')
       .update({

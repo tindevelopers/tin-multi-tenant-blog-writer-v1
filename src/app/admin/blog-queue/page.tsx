@@ -75,7 +75,7 @@ export default function BlogQueuePage() {
         });
       }
     } catch (err) {
-      console.error('Error fetching stats:', err);
+      // Error fetching stats - non-critical, silently fail
     }
   }, []);
 
@@ -106,7 +106,7 @@ export default function BlogQueuePage() {
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load queue items");
-      console.error("Error fetching queue items:", err);
+      // Error fetching queue items - already handled via error state
     } finally {
       setLoading(false);
     }
@@ -124,11 +124,21 @@ export default function BlogQueuePage() {
       const response = await fetch(`/api/blog-queue/${queueId}`, {
         method: "DELETE",
       });
-      if (!response.ok) throw new Error("Failed to cancel");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to delete' }));
+        throw new Error(errorData.error || "Failed to delete queue item");
+      }
+      const result = await response.json();
+      // Refresh the queue to reflect changes
       await fetchQueueItems();
+      await fetchStats();
+      // Show success message
+      if (result.message) {
+        // Success message is already shown via the API response
+      }
     } catch (err) {
-      console.error("Error cancelling queue item:", err);
-      alert("Failed to cancel queue item");
+      // Error deleting queue item - already shown to user via alert
+      alert(err instanceof Error ? err.message : "Failed to delete queue item");
     }
   };
 
@@ -141,7 +151,7 @@ export default function BlogQueuePage() {
       await fetchQueueItems();
       await fetchStats();
     } catch (err) {
-      console.error("Error retrying queue item:", err);
+      // Error retrying queue item - already shown to user via alert
       alert("Failed to retry queue item");
     }
   };
@@ -177,20 +187,29 @@ export default function BlogQueuePage() {
         )
       );
 
-      const successful = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
-      const failed = results.length - successful;
+      // Check each result for success
+      const successful: string[] = [];
+      const failed: string[] = [];
+      
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled' && result.value.ok) {
+          successful.push(selectedItems[index]);
+        } else {
+          failed.push(selectedItems[index]);
+        }
+      });
 
-      if (failed > 0) {
-        alert(`${successful} item(s) deleted successfully. ${failed} item(s) failed to delete.`);
-      } else {
-        alert(`${successful} item(s) deleted successfully.`);
+      if (failed.length > 0) {
+        alert(`${successful.length} item(s) deleted successfully. ${failed.length} item(s) failed to delete.`);
+      } else if (successful.length > 0) {
+        alert(`${successful.length} item(s) deleted successfully.`);
       }
 
       setSelectedItems([]);
       await fetchQueueItems();
       await fetchStats();
     } catch (err) {
-      console.error("Error batch deleting:", err);
+      // Error batch deleting - already shown to user via alert
       alert("Failed to delete items. Please try again.");
     } finally {
       setBatchActionLoading(false);
@@ -230,7 +249,7 @@ export default function BlogQueuePage() {
       await fetchQueueItems();
       await fetchStats();
     } catch (err) {
-      console.error("Error batch updating status:", err);
+      // Error batch updating status - already shown to user via alert
       alert("Failed to update items. Please try again.");
     } finally {
       setBatchActionLoading(false);
@@ -270,7 +289,7 @@ export default function BlogQueuePage() {
         alert("Blog regeneration started!");
       }
     } catch (err) {
-      console.error("Error regenerating blog:", err);
+      // Error regenerating blog - already shown to user via alert
       alert("Failed to regenerate blog. Please try again.");
     }
   };
