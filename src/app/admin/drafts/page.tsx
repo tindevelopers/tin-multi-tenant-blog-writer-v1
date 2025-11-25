@@ -46,12 +46,13 @@ export default function DraftsPage() {
 
   // All drafts are from Supabase database - no mock fallback
 
+  // Use consistent colors with blog queue status machine
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "draft": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
-      case "scheduled": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
-      case "archived": return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
-      case "published": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      case "draft": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300"; // Yellow for draft (ready to edit)
+      case "scheduled": return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"; // Purple for scheduled (matches queue)
+      case "archived": return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"; // Gray for archived
+      case "published": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"; // Green for published
       default: return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
     }
   };
@@ -146,7 +147,7 @@ export default function DraftsPage() {
               Draft Management
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Manage your content drafts, collaborate with your team, and track your writing progress
+              Edit your blog content, add images, and format your posts
             </p>
           </div>
           <button 

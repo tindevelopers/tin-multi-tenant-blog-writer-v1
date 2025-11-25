@@ -39,6 +39,7 @@ export default function BlogQueuePage() {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [batchActionLoading, setBatchActionLoading] = useState(false);
   const [stats, setStats] = useState({
     queued: 0,
     generating: 0,
@@ -151,6 +152,97 @@ export default function BlogQueuePage() {
     } catch (err) {
       console.error("Error retrying queue item:", err);
       alert("Failed to retry queue item");
+    }
+  };
+
+  const handleSelectItem = (queueId: string) => {
+    setSelectedItems(prev => 
+      prev.includes(queueId) 
+        ? prev.filter(id => id !== queueId)
+        : [...prev, queueId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    setSelectedItems(
+      selectedItems.length === filteredItems.length 
+        ? [] 
+        : filteredItems.map(item => item.queue_id)
+    );
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedItems.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedItems.length} item(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    setBatchActionLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedItems.map(queueId => 
+          fetch(`/api/blog-queue/${queueId}`, { method: "DELETE" })
+        )
+      );
+
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+      const failed = results.length - successful;
+
+      if (failed > 0) {
+        alert(`${successful} item(s) deleted successfully. ${failed} item(s) failed to delete.`);
+      } else {
+        alert(`${successful} item(s) deleted successfully.`);
+      }
+
+      setSelectedItems([]);
+      await fetchQueueItems();
+      await fetchStats();
+    } catch (err) {
+      console.error("Error batch deleting:", err);
+      alert("Failed to delete items. Please try again.");
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
+  const handleBatchStatusChange = async (newStatus: QueueStatus) => {
+    if (selectedItems.length === 0) return;
+
+    const confirmMessage = `Are you sure you want to change status of ${selectedItems.length} item${selectedItems.length !== 1 ? 's' : ''} to ${newStatus}?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setBatchActionLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedItems.map(queueId => 
+          fetch(`/api/blog-queue/${queueId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: newStatus }),
+          })
+        )
+      );
+
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+      const failed = results.length - successful;
+
+      if (failed > 0) {
+        alert(`${successful} item(s) updated successfully. ${failed} item(s) failed to update.`);
+      } else {
+        alert(`${successful} item(s) updated successfully.`);
+      }
+
+      setSelectedItems([]);
+      await fetchQueueItems();
+      await fetchStats();
+    } catch (err) {
+      console.error("Error batch updating status:", err);
+      alert("Failed to update items. Please try again.");
+    } finally {
+      setBatchActionLoading(false);
     }
   };
 
@@ -474,6 +566,14 @@ export default function BlogQueuePage() {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
+                <th className="px-6 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
+                    onChange={handleSelectAll}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Topic
                 </th>
@@ -499,6 +599,8 @@ export default function BlogQueuePage() {
                 <QueueItemRow
                   key={item.queue_id}
                   item={item}
+                  selected={selectedItems.includes(item.queue_id)}
+                  onSelect={() => handleSelectItem(item.queue_id)}
                   onView={() => router.push(`/admin/blog-queue/${item.queue_id}`)}
                   onCancel={() => handleCancel(item.queue_id)}
                   onRetry={() => handleRetry(item.queue_id)}
@@ -508,6 +610,51 @@ export default function BlogQueuePage() {
             </tbody>
           </table>
           </div>
+          
+          {/* Batch Actions Bar */}
+          {selectedItems.length > 0 && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border-t border-blue-200 dark:border-blue-800 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
+                </span>
+                <div className="flex items-center gap-3">
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleBatchStatusChange(e.target.value as QueueStatus);
+                        e.target.value = ''; // Reset select
+                      }
+                    }}
+                    disabled={batchActionLoading}
+                    className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Change Status...</option>
+                    <option value="queued">Queued</option>
+                    <option value="generated">Generated</option>
+                    <option value="in_review">In Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                  <button
+                    onClick={handleBatchDelete}
+                    disabled={batchActionLoading}
+                    className="px-4 py-1.5 text-sm font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <XMarkIcon className="w-4 h-4" />
+                    Delete Selected
+                  </button>
+                  <button
+                    onClick={() => setSelectedItems([])}
+                    className="px-4 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -550,6 +697,8 @@ function StatCard({
 
 function QueueItemRow({
   item,
+  selected,
+  onSelect,
   onView,
   onCancel,
   onRetry,
@@ -558,6 +707,8 @@ function QueueItemRow({
   onRegenerate,
 }: {
   item: BlogGenerationQueueItem;
+  selected: boolean;
+  onSelect: () => void;
   onView: () => void;
   onCancel: () => void;
   onRetry: () => void;
@@ -581,7 +732,15 @@ function QueueItemRow({
   const hasGeneratedContent = item.status === "generated" && (item.generated_content || postId);
 
   return (
-    <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+    <tr className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${selected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onSelect}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+      </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <div>
           <p className="text-sm font-medium text-gray-900 dark:text-white">
