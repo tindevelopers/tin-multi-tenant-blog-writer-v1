@@ -694,17 +694,17 @@ export default function QueueItemDetailPage() {
                     {update.stage || "Update"}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {update.details || update.message || "No details"}
+                    {update.details || "No details"}
                   </p>
                   {update.timestamp && (
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      {formatDate(update.timestamp)}
+                      {formatDate(new Date(update.timestamp).toISOString())}
                     </p>
                   )}
                 </div>
-                {update.percentage !== undefined && (
+                {update.progress_percentage !== undefined && (
                   <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                    {update.percentage}%
+                    {update.progress_percentage}%
                   </span>
                 )}
               </div>

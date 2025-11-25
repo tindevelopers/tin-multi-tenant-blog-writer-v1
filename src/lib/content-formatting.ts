@@ -38,7 +38,6 @@ export function detectImagePlaceholders(content: string): ImagePlaceholder[] {
   // Markdown style: !Description or ![alt text](url)
   const markdownPattern = /!\[([^\]]*)\]\(([^)]+)\)|!([^\s\n]+)/g;
   let match;
-  let position = 0;
   
   while ((match = markdownPattern.exec(content)) !== null) {
     const description = match[1] || match[3] || 'Image';
