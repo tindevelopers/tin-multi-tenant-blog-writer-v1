@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeftIcon,
   ClockIcon,
-  CheckCircleIcon,
   XCircleIcon,
   ArrowPathIcon,
   XMarkIcon,
@@ -14,12 +13,15 @@ import {
   EyeIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  CheckIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueueItem } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 import { Modal } from "@/components/ui/modal/index";
+import { formatContent, detectImagePlaceholders, type ImagePlaceholder } from "@/lib/content-formatting";
+import { logger } from "@/utils/logger";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -35,6 +37,15 @@ export default function QueueItemDetailPage() {
     metadata: false,
   });
   const [showViewBlogModal, setShowViewBlogModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState<string>("");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedContentRef = useRef<string>("");
+  const [imagePlaceholders, setImagePlaceholders] = useState<ImagePlaceholder[]>([]);
+  const [generatingImages, setGeneratingImages] = useState(false);
+  const [generatedImages, setGeneratedImages] = useState<Record<number, { image_url: string; alt_text: string }>>({});
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -67,6 +78,227 @@ export default function QueueItemDetailPage() {
       setItem((prevItem) => prevItem ? { ...prevItem, status: status as QueueStatus, progress_percentage: progress, current_stage: stage } : null);
     }
   }, [status, progress, stage, item]);
+
+  // Initialize edited content when item loads
+  useEffect(() => {
+    if (item?.generated_content && !editedContent) {
+      setEditedContent(item.generated_content);
+      lastSavedContentRef.current = item.generated_content;
+    }
+  }, [item?.generated_content, editedContent]);
+
+  // Detect image placeholders when content changes
+  useEffect(() => {
+    if (editedContent) {
+      const placeholders = detectImagePlaceholders(editedContent);
+      setImagePlaceholders(placeholders);
+    }
+  }, [editedContent]);
+
+  // Auto-save functionality with debouncing
+  const autoSave = useCallback(async (content: string) => {
+    if (!item || !queueId) return;
+    
+    // Don't save if content hasn't changed
+    if (content === lastSavedContentRef.current) {
+      return;
+    }
+
+    // Clear existing timeout
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Set saving status
+    setSaveStatus("saving");
+
+    // Debounce: wait 2 seconds before saving
+    autoSaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Format content before saving
+        const formattingResult = formatContent(content, {
+          fixPunctuation: true,
+          addSemanticHTML: true,
+          improveTypography: true,
+          addStructure: true,
+          detectImagePlaceholders: true,
+        });
+
+        const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: formattingResult.formattedContent,
+            title: item.generated_title || item.topic,
+            excerpt: item.metadata?.excerpt || "",
+            queue_item_id: queueId,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to save content");
+        }
+
+        const result = await response.json();
+        
+        // Update item with post_id if it was created
+        if (result.post_id && !item.post_id) {
+          setItem((prevItem) => prevItem ? { ...prevItem, post_id: result.post_id } : null);
+        }
+
+        lastSavedContentRef.current = formattingResult.formattedContent;
+        setSaveStatus("saved");
+        setSaveError(null);
+
+        // Reset saved status after 3 seconds
+        setTimeout(() => {
+          if (saveStatus === "saved") {
+            setSaveStatus("idle");
+          }
+        }, 3000);
+
+        logger.debug("✅ Content auto-saved successfully", {
+          queueId,
+          postId: result.post_id,
+          wordCount: formattingResult.wordCount,
+        });
+      } catch (err) {
+        logger.error("❌ Error auto-saving content:", err);
+        setSaveStatus("error");
+        setSaveError(err instanceof Error ? err.message : "Failed to save content");
+      }
+    }, 2000);
+  }, [item, queueId, saveStatus]);
+
+  // Handle content changes
+  const handleContentChange = useCallback((content: string) => {
+    setEditedContent(content);
+    autoSave(content);
+  }, [autoSave]);
+
+  // Manual save button handler
+  const handleManualSave = useCallback(async () => {
+    if (!editedContent || !item || !queueId) return;
+    
+    setSaveStatus("saving");
+    try {
+      const formattingResult = formatContent(editedContent, {
+        fixPunctuation: true,
+        addSemanticHTML: true,
+        improveTypography: true,
+        addStructure: true,
+        detectImagePlaceholders: true,
+      });
+
+      const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: formattingResult.formattedContent,
+          title: item.generated_title || item.topic,
+          excerpt: item.metadata?.excerpt || "",
+          queue_item_id: queueId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save content");
+      }
+
+      const result = await response.json();
+      
+      if (result.post_id && !item.post_id) {
+        setItem((prevItem) => prevItem ? { ...prevItem, post_id: result.post_id } : null);
+      }
+
+      lastSavedContentRef.current = formattingResult.formattedContent;
+      setSaveStatus("saved");
+      setSaveError(null);
+
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (err) {
+      logger.error("❌ Error saving content:", err);
+      setSaveStatus("error");
+      setSaveError(err instanceof Error ? err.message : "Failed to save content");
+    }
+  }, [editedContent, item, queueId]);
+
+  // Generate images for placeholders
+  const handleGenerateImages = useCallback(async () => {
+    if (!editedContent || !item || !queueId || imagePlaceholders.length === 0) return;
+
+    setGeneratingImages(true);
+    try {
+      const response = await fetch(`/api/blog-queue/${queueId}/generate-images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: editedContent,
+          topic: item.topic,
+          keywords: item.keywords || [],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate images");
+      }
+
+      const result = await response.json();
+      
+      if (result.images && result.images.length > 0) {
+        // Store generated images
+        const newGeneratedImages: Record<number, { image_url: string; alt_text: string }> = {};
+        
+        result.images.forEach((item: { placeholder: ImagePlaceholder; image: { image_url: string } }) => {
+          newGeneratedImages[item.placeholder.position] = {
+            image_url: item.image.image_url,
+            alt_text: item.placeholder.description,
+          };
+        });
+
+        setGeneratedImages(prev => ({ ...prev, ...newGeneratedImages }));
+
+        // Insert images into content
+        let updatedContent = editedContent;
+        result.images.forEach((item: { placeholder: ImagePlaceholder; image: { image_url: string } }) => {
+          const placeholder = item.placeholder;
+          const imageHtml = `<figure class="my-6"><img src="${item.image.image_url}" alt="${placeholder.description}" class="w-full rounded-lg" /></figure>`;
+          
+          // Replace placeholder with image HTML
+          updatedContent = updatedContent.replace(placeholder.originalText, imageHtml);
+        });
+
+        setEditedContent(updatedContent);
+        autoSave(updatedContent);
+        
+        logger.debug("✅ Images generated and inserted", {
+          count: result.images.length,
+        });
+      }
+
+      if (result.failed && result.failed.length > 0) {
+        logger.warn("Some images failed to generate", result.failed);
+        alert(`${result.failed.length} image(s) failed to generate. Please try again.`);
+      }
+    } catch (err) {
+      logger.error("❌ Error generating images:", err);
+      alert(err instanceof Error ? err.message : "Failed to generate images");
+    } finally {
+      setGeneratingImages(false);
+    }
+  }, [editedContent, item, queueId, imagePlaceholders, autoSave]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel this queue item?")) return;
@@ -164,6 +396,8 @@ export default function QueueItemDetailPage() {
 
   const postId = item?.post_id || (item?.metadata as any)?.post_id;
   const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
+  const canEdit = hasGeneratedContent && item?.status !== "published" && item?.status !== "scheduled";
+  const currentContent = isEditing && editedContent ? editedContent : (item?.generated_content || "");
 
   if (loading) {
     return (
@@ -210,14 +444,39 @@ export default function QueueItemDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* View Blog button - show when blog is generated */}
+          {/* Edit/View toggle button */}
           {hasGeneratedContent && (
             <button
-              onClick={() => setShowViewBlogModal(true)}
+              onClick={() => {
+                if (isEditing) {
+                  setIsEditing(false);
+                } else {
+                  setShowViewBlogModal(true);
+                }
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
             >
               <EyeIcon className="w-5 h-5" />
-              View Blog
+              {isEditing ? "View Mode" : "View Blog"}
+            </button>
+          )}
+          {/* Edit Mode toggle button */}
+          {canEdit && (
+            <button
+              onClick={() => {
+                setIsEditing(!isEditing);
+                if (!isEditing && item?.generated_content) {
+                  setEditedContent(item.generated_content);
+                }
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                isEditing
+                  ? "bg-green-500 text-white hover:bg-green-600"
+                  : "bg-purple-500 text-white hover:bg-purple-600"
+              }`}
+            >
+              <PencilIcon className="w-5 h-5" />
+              {isEditing ? "Exit Edit" : "Edit Blog"}
             </button>
           )}
           {/* Edit Blog button - show when blog is generated and has post_id */}
@@ -467,8 +726,82 @@ export default function QueueItemDetailPage() {
         </div>
       )}
 
+      {/* Edit Mode - Full Page Editor */}
+      {isEditing && canEdit && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Editing: {item.generated_title || item.topic}
+              </h2>
+              <div className="flex items-center gap-3">
+                {/* Image Placeholders Indicator */}
+                {imagePlaceholders.length > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <span className="text-sm text-blue-700 dark:text-blue-300">
+                      {imagePlaceholders.length} image placeholder{imagePlaceholders.length !== 1 ? 's' : ''} found
+                    </span>
+                    <button
+                      onClick={handleGenerateImages}
+                      disabled={generatingImages}
+                      className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {generatingImages ? "Generating..." : "Generate Images"}
+                    </button>
+                  </div>
+                )}
+                {/* Save Status Indicator */}
+                {saveStatus === "saving" && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <span>Saving...</span>
+                  </div>
+                )}
+                {saveStatus === "saved" && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+                    <CheckIcon className="w-4 h-4" />
+                    <span>Saved</span>
+                  </div>
+                )}
+                {saveStatus === "error" && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
+                    <XCircleIcon className="w-4 h-4" />
+                    <span>Save failed</span>
+                  </div>
+                )}
+                
+                {/* Manual Save Button */}
+                <button
+                  onClick={handleManualSave}
+                  disabled={saveStatus === "saving"}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Save Now
+                </button>
+              </div>
+            </div>
+            
+            {saveError && (
+              <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <p className="text-sm text-red-800 dark:text-red-200">{saveError}</p>
+              </div>
+            )}
+          </div>
+          
+          {/* Editor */}
+          <div className="p-6">
+            <TipTapEditor
+              content={currentContent}
+              onChange={handleContentChange}
+              editable={true}
+              className="min-h-[600px]"
+            />
+          </div>
+        </div>
+      )}
+
       {/* View Blog Modal */}
-      {showViewBlogModal && item?.generated_content && (
+      {showViewBlogModal && item?.generated_content && !isEditing && (
         <Modal
           isOpen={showViewBlogModal}
           onClose={() => setShowViewBlogModal(false)}
@@ -485,7 +818,7 @@ export default function QueueItemDetailPage() {
             {/* Blog Content */}
             <div className="max-h-[70vh] overflow-y-auto mb-6">
               <TipTapEditor
-                content={item.generated_content}
+                content={currentContent}
                 onChange={() => {}}
                 editable={false}
                 className="min-h-[400px]"
@@ -500,11 +833,23 @@ export default function QueueItemDetailPage() {
               >
                 Close
               </button>
+              {canEdit && (
+                <button
+                  onClick={() => {
+                    setShowViewBlogModal(false);
+                    setIsEditing(true);
+                  }}
+                  className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                >
+                  <PencilIcon className="w-4 h-4 inline mr-2" />
+                  Edit Content
+                </button>
+              )}
               {postId && (
                 <button
                   onClick={() => {
                     setShowViewBlogModal(false);
-                    router.push(`/admin/drafts/view/${postId}`);
+                    router.push(`/admin/drafts/edit/${postId}`);
                   }}
                   className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                 >
