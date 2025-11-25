@@ -472,35 +472,46 @@ export default function QueueItemDetailPage() {
         <Modal
           isOpen={showViewBlogModal}
           onClose={() => setShowViewBlogModal(false)}
-          title={item.generated_title || item.topic}
-          size="xl"
+          className="max-w-5xl max-h-[90vh]"
         >
-          <div className="max-h-[80vh] overflow-y-auto">
-            <TipTapEditor
-              content={item.generated_content}
-              onChange={() => {}}
-              editable={false}
-              className="min-h-[400px]"
-            />
-          </div>
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={() => setShowViewBlogModal(false)}
-              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-            >
-              Close
-            </button>
-            {postId && (
+          <div className="p-6">
+            {/* Modal Header */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {item.generated_title || item.topic}
+              </h2>
+            </div>
+            
+            {/* Blog Content */}
+            <div className="max-h-[70vh] overflow-y-auto mb-6">
+              <TipTapEditor
+                content={item.generated_content}
+                onChange={() => {}}
+                editable={false}
+                className="min-h-[400px]"
+              />
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
-                onClick={() => {
-                  setShowViewBlogModal(false);
-                  router.push(`/admin/drafts/view/${postId}`);
-                }}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                onClick={() => setShowViewBlogModal(false)}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
               >
-                Open Full Editor
+                Close
               </button>
-            )}
+              {postId && (
+                <button
+                  onClick={() => {
+                    setShowViewBlogModal(false);
+                    router.push(`/admin/drafts/view/${postId}`);
+                  }}
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  Open Full Editor
+                </button>
+              )}
+            </div>
           </div>
         </Modal>
       )}
