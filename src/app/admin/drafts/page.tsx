@@ -137,6 +137,35 @@ export default function DraftsPage() {
     }
   };
 
+  const handleBatchDelete = async () => {
+    if (selectedDrafts.length === 0) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedDrafts.length} draft${selectedDrafts.length !== 1 ? 's' : ''}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const results = await Promise.allSettled(
+        selectedDrafts.map(draftId => deletePost(draftId))
+      );
+
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+      const failed = results.length - successful;
+
+      if (failed > 0) {
+        alert(`${successful} draft${successful !== 1 ? 's' : ''} deleted successfully. ${failed} draft${failed !== 1 ? 's' : ''} failed to delete.`);
+      } else {
+        alert(`${successful} draft${successful !== 1 ? 's' : ''} deleted successfully.`);
+      }
+
+      setSelectedDrafts([]);
+      await refetch();
+    } catch (err) {
+      console.error('Error batch deleting drafts:', err);
+      alert('Failed to delete drafts. Please try again.');
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -496,8 +525,12 @@ export default function DraftsPage() {
                 <button className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium">
                   Export
                 </button>
-                <button className="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 font-medium">
-                  Delete
+                <button 
+                  onClick={handleBatchDelete}
+                  className="text-sm text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 font-medium flex items-center gap-1"
+                >
+                  <TrashIcon className="w-4 h-4" />
+                  Delete Selected
                 </button>
               </div>
             </div>
