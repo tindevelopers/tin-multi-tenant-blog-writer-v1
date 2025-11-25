@@ -18,6 +18,8 @@ import {
 import { BlogGenerationQueueItem } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
+import TipTapEditor from "@/components/blog-writer/TipTapEditor";
+import { Modal } from "@/components/ui/modal/index";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -32,6 +34,7 @@ export default function QueueItemDetailPage() {
     content: true,
     metadata: false,
   });
+  const [showViewBlogModal, setShowViewBlogModal] = useState(false);
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -210,11 +213,7 @@ export default function QueueItemDetailPage() {
           {/* View Blog button - show when blog is generated */}
           {hasGeneratedContent && (
             <button
-              onClick={() => {
-                if (postId) {
-                  router.push(`/admin/drafts/view/${postId}`);
-                }
-              }}
+              onClick={() => setShowViewBlogModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
             >
               <EyeIcon className="w-5 h-5" />
@@ -466,6 +465,44 @@ export default function QueueItemDetailPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* View Blog Modal */}
+      {showViewBlogModal && item?.generated_content && (
+        <Modal
+          isOpen={showViewBlogModal}
+          onClose={() => setShowViewBlogModal(false)}
+          title={item.generated_title || item.topic}
+          size="xl"
+        >
+          <div className="max-h-[80vh] overflow-y-auto">
+            <TipTapEditor
+              content={item.generated_content}
+              onChange={() => {}}
+              editable={false}
+              className="min-h-[400px]"
+            />
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              onClick={() => setShowViewBlogModal(false)}
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Close
+            </button>
+            {postId && (
+              <button
+                onClick={() => {
+                  setShowViewBlogModal(false);
+                  router.push(`/admin/drafts/view/${postId}`);
+                }}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Open Full Editor
+              </button>
+            )}
+          </div>
+        </Modal>
       )}
     </div>
   );
