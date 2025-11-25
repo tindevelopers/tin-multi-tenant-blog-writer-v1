@@ -43,7 +43,15 @@ type NavItem = {
     new?: boolean;
     isAccordionHeader?: boolean;
     icon?: React.ReactNode;
-    subItems?: { name: string; path: string; pro?: boolean; new?: boolean; icon?: React.ReactNode }[];
+    subItems?: { 
+      name: string; 
+      path?: string; 
+      pro?: boolean; 
+      new?: boolean; 
+      icon?: React.ReactNode;
+      isAccordionHeader?: boolean;
+      subItems?: { name: string; path: string; pro?: boolean; new?: boolean; icon?: React.ReactNode }[];
+    }[];
   }[];
 };
 
@@ -75,7 +83,16 @@ const blogWriterItems: NavItem[] = [
           { name: "Content Clusters", path: "/admin/content-clusters", icon: <Layers2 className="w-4 h-4" />, new: true },
           { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
           { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
-          { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
+          { 
+            name: "Publishing", 
+            icon: <Globe className="w-4 h-4" />,
+            isAccordionHeader: true,
+            new: true,
+            subItems: [
+              { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
+              { name: "Blog Queue", path: "/admin/blog-queue", icon: <FileClock className="w-4 h-4" />, new: true },
+            ]
+          },
         ]
       },
       { 
