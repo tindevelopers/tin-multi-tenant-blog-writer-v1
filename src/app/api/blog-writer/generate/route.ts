@@ -683,13 +683,18 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Build request payload for unified endpoint (v1.3.4)
-    // Determine blog_type based on requirements
-    // v1.3.4: Use location to determine local_business type, otherwise default to enhanced
-    const blogType: 'standard' | 'enhanced' | 'local_business' | 'abstraction' = 
-      location ? 'local_business' :
-      isPremiumQuality || use_consensus_generation || use_knowledge_graph ? 'enhanced' :
-      'enhanced'; // Default to enhanced for better quality
+    // Build request payload for enhanced endpoint (v1.3.6)
+    // Map template_type to blog_type, or use 'custom' as default
+    // Valid blog_type values: custom, brand, top_10, product_review, how_to, comparison, guide,
+    // tutorial, listicle, case_study, news, opinion, interview, faq, checklist, tips, definition,
+    // benefits, problem_solution, trend_analysis, statistics, resource_list, timeline, myth_busting,
+    // best_practices, getting_started, advanced, troubleshooting
+    const blogType = template_type && [
+      'custom', 'brand', 'top_10', 'product_review', 'how_to', 'comparison', 'guide',
+      'tutorial', 'listicle', 'case_study', 'news', 'opinion', 'interview', 'faq', 'checklist', 'tips',
+      'definition', 'benefits', 'problem_solution', 'trend_analysis', 'statistics', 'resource_list',
+      'timeline', 'myth_busting', 'best_practices', 'getting_started', 'advanced', 'troubleshooting'
+    ].includes(template_type) ? template_type : 'custom';
     
     const requestPayload: Record<string, unknown> = {
       blog_type: blogType,
@@ -711,10 +716,7 @@ export async function POST(request: NextRequest) {
       logger.debug('📝 Using default premium custom instructions');
     }
 
-    // Add template type if provided (v1.3.4 supports template_type for enhanced blogs)
-    if (template_type && blogType === 'enhanced') {
-      requestPayload.template_type = template_type;
-    }
+    // Note: template_type is now mapped to blog_type above, no need to set separately
 
     // Add quality features (enable automatically for premium, or use provided values)
     const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
@@ -743,43 +745,28 @@ export async function POST(request: NextRequest) {
       requestPayload.use_quality_scoring = use_quality_scoring !== undefined ? use_quality_scoring : recommendedQualityFeatures.use_quality_scoring;
     }
 
-    // Note: v1.3.4 unified endpoint doesn't support enhanced_keyword_insights
-    // These insights are handled internally by the API
+    // Note: v1.3.6 enhanced endpoint handles keyword insights internally
     
-    // v1.3.4: Add fields specific to blog_type
-    if (blogType === 'local_business') {
-      // Local business blog requires location
-      if (location) {
-        requestPayload.location = location;
-        requestPayload.max_businesses = max_businesses || 10;
-        requestPayload.max_reviews_per_business = max_reviews_per_business || 20;
-        requestPayload.include_business_details = include_business_details !== undefined ? include_business_details : true;
-        requestPayload.include_review_sentiment = include_review_sentiment !== undefined ? include_review_sentiment : true;
-        requestPayload.use_google = use_google !== undefined ? use_google : true;
-      } else {
-        // If location not provided but product research detected, switch to enhanced
-        logger.warn('⚠️ Location required for local_business blog_type, switching to enhanced');
-        requestPayload.blog_type = 'enhanced';
-      }
+    // v1.3.6: Add common fields supported by all blog types
+    // Add focus_keyword if available
+    if (keywordsArray.length > 0) {
+      requestPayload.focus_keyword = keywordsArray[0];
     }
     
-    // v1.3.4: Enhanced blog supports additional fields
-    if (blogType === 'enhanced') {
-      // Add focus_keyword if available
-      if (keywordsArray.length > 0) {
-        requestPayload.focus_keyword = keywordsArray[0];
-      }
-      
-      // Add include flags
-      requestPayload.include_introduction = true; // Default to true
-      requestPayload.include_conclusion = true; // Default to true
-      requestPayload.include_faq = include_faq_section !== undefined ? include_faq_section : false;
-      requestPayload.include_toc = false; // Default to false
-      
-      // Add word_count_target if word_count is provided
-      if (word_count) {
-        requestPayload.word_count_target = word_count;
-      }
+    // Add include flags (supported by all blog types)
+    requestPayload.include_introduction = true; // Default to true
+    requestPayload.include_conclusion = true; // Default to true
+    requestPayload.include_faq = include_faq_section !== undefined ? include_faq_section : false;
+    requestPayload.include_toc = false; // Default to false
+    
+    // Add word_count_target if word_count is provided
+    if (word_count) {
+      requestPayload.word_count_target = word_count;
+    }
+    
+    // Add location if provided (for location-based content)
+    if (location) {
+      requestPayload.location = location;
     }
     
     // v1.3.4: Abstraction blog type is not currently used in this implementation
