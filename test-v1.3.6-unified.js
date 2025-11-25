@@ -1,27 +1,26 @@
 #!/usr/bin/env node
 
 /**
- * Test /api/v1/blog/generate-enhanced endpoint
- * This is now the PRIMARY and ONLY endpoint for blog generation
+ * Test the Unified Blog Generation Endpoint
+ * This is the PRIMARY endpoint according to documentation
  */
 
 const https = require('https');
 
 const BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-kq42l26tuq-od.a.run.app';
-const ENDPOINT = '/api/v1/blog/generate-enhanced';
 
 let testsPassed = 0;
 let testsFailed = 0;
 let testsTotal = 0;
 
-function makeRequest(data) {
+function makeRequest(endpoint, method = 'GET', data = null) {
   return new Promise((resolve, reject) => {
-    const url = new URL(ENDPOINT, BASE_URL);
+    const url = new URL(endpoint, BASE_URL);
     const options = {
       hostname: url.hostname,
-      port: url.port || 443,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: url.pathname + url.search,
-      method: 'POST',
+      method: method,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -55,7 +54,10 @@ function makeRequest(data) {
       reject(new Error('Request timeout'));
     });
 
-    req.write(JSON.stringify(data));
+    if (data) {
+      req.write(JSON.stringify(data));
+    }
+
     req.end();
   });
 }
@@ -63,98 +65,111 @@ function makeRequest(data) {
 async function runTest(testName, request) {
   testsTotal++;
   console.log(`\n[${testsTotal}] ${testName}`);
-  console.log(`  Blog Type: ${request.blog_type || 'default'}`);
-  console.log(`  Topic: ${request.topic}`);
+  console.log(`Request config: blog_type=${request.blog_type || 'default'}, use_dataforseo=${request.use_dataforseo_content_generation || false}`);
 
-  const startTime = Date.now();
-  
   try {
-    const response = await makeRequest(request);
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    const response = await makeRequest('/api/v1/blog/generate-unified', 'POST', request);
     
     const hasContent = response.body.content && response.body.content.length > 0;
     const hasTitle = !!response.body.title;
-    const wordCount = response.body.content ? response.body.content.split(/\s+/).length : 0;
+    const hasSEO = response.body.seo_score !== undefined;
     
     if (response.status === 200 && hasContent && hasTitle) {
-      console.log(`  ✓ PASSED (${duration}s)`);
-      console.log(`    Title: ${response.body.title.substring(0, 60)}...`);
-      console.log(`    Content: ${wordCount} words`);
-      console.log(`    SEO Score: ${response.body.seo_score || 'N/A'}`);
+      console.log(`✓ PASSED`);
+      console.log(`  Title: ${response.body.title.substring(0, 60)}...`);
+      console.log(`  Content length: ${response.body.content.length} chars`);
+      console.log(`  SEO Score: ${response.body.seo_score || 'N/A'}`);
       if (response.body.seo_metadata?.word_count_range) {
         const wc = response.body.seo_metadata.word_count_range;
-        console.log(`    Word Count: ${wc.actual} (target: ${wc.min}-${wc.max})`);
+        console.log(`  Word Count: ${wc.actual} (target: ${wc.min}-${wc.max})`);
       }
       testsPassed++;
-      return { success: true };
+      return { success: true, response };
     } else {
-      console.log(`  ✗ FAILED (${duration}s)`);
-      console.log(`    Status: ${response.status}`);
-      console.log(`    Has Content: ${hasContent}, Content Length: ${response.body.content?.length || 0}`);
-      console.log(`    Has Title: ${hasTitle}`);
+      console.log(`✗ FAILED - Status: ${response.status}`);
+      console.log(`  Has Content: ${hasContent}, Has Title: ${hasTitle}`);
       if (response.body.error) {
-        console.log(`    Error: ${response.body.error}`);
+        console.log(`  Error: ${response.body.error}`);
       }
       if (response.body.detail) {
-        console.log(`    Detail: ${JSON.stringify(response.body.detail).substring(0, 200)}`);
+        console.log(`  Detail: ${response.body.detail}`);
       }
       if (response.body.warnings) {
-        console.log(`    Warnings: ${JSON.stringify(response.body.warnings)}`);
+        console.log(`  Warnings: ${JSON.stringify(response.body.warnings)}`);
       }
+      // Show full response for debugging
+      console.log(`  Full response keys: ${Object.keys(response.body).join(', ')}`);
       testsFailed++;
-      return { success: false };
+      return { success: false, response };
     }
   } catch (error) {
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`  ✗ ERROR (${duration}s): ${error.message}`);
+    console.log(`✗ ERROR: ${error.message}`);
     testsFailed++;
-    return { success: false };
+    return { success: false, error: error.message };
   }
 }
 
-async function runTests() {
+async function runUnifiedTests() {
   console.log('========================================');
-  console.log('API v1.3.6 Endpoint Test');
-  console.log(`Endpoint: ${ENDPOINT}`);
+  console.log('Unified Blog Generation Endpoint Test');
   console.log(`Base URL: ${BASE_URL}`);
   console.log('========================================');
 
-  // Test various blog types
-  await runTest('Tutorial Type', {
+  // Test 1: Basic unified request
+  await runTest('Basic Unified Request', {
+    blog_type: 'enhanced',
     topic: 'Introduction to Python Programming',
     keywords: ['python', 'programming'],
-    blog_type: 'tutorial',
     tone: 'professional',
-    length: 'short',
-    word_count_target: 300,
-    optimize_for_traffic: true,
-    use_dataforseo_content_generation: true,
+    word_count: 500,
   });
 
-  await runTest('FAQ Type', {
-    topic: 'Frequently Asked Questions About SEO',
-    keywords: ['seo'],
-    blog_type: 'faq',
-    tone: 'professional',
-    length: 'medium',
-    optimize_for_traffic: true,
-  });
-
-  await runTest('Tips Type', {
-    topic: '10 Tips for Better Blog Writing',
-    keywords: ['blog writing'],
-    blog_type: 'tips',
-    tone: 'friendly',
-    length: 'short',
-    word_count_target: 500,
-    optimize_for_traffic: true,
-  });
-
-  await runTest('Custom Type (No SEO)', {
-    topic: 'Python Overview',
+  // Test 2: With DataForSEO
+  await runTest('Unified with DataForSEO', {
+    blog_type: 'enhanced',
+    topic: 'Python Basics',
     keywords: ['python'],
-    blog_type: 'custom',
-    optimize_for_traffic: false,
+    use_dataforseo_content_generation: true,
+    tone: 'professional',
+    word_count: 300,
+  });
+
+  // Test 3: Tutorial type
+  await runTest('Tutorial Type', {
+    blog_type: 'tutorial',
+    topic: 'How to Learn Python',
+    keywords: ['python', 'learning'],
+    tone: 'professional',
+    word_count: 500,
+  });
+
+  // Test 4: FAQ type
+  await runTest('FAQ Type', {
+    blog_type: 'faq',
+    topic: 'Python FAQ',
+    keywords: ['python'],
+    tone: 'professional',
+    word_count: 400,
+  });
+
+  // Test 5: Tips type
+  await runTest('Tips Type', {
+    blog_type: 'tips',
+    topic: 'Python Tips',
+    keywords: ['python'],
+    tone: 'friendly',
+    word_count: 300,
+  });
+
+  // Test 6: With SEO features
+  await runTest('With SEO Features', {
+    blog_type: 'enhanced',
+    topic: 'Python Guide',
+    keywords: ['python'],
+    use_serp_optimization: true,
+    use_semantic_keywords: true,
+    tone: 'professional',
+    word_count: 500,
   });
 
   // Summary
@@ -174,4 +189,5 @@ async function runTests() {
   }
 }
 
-runTests().catch(console.error);
+runUnifiedTests().catch(console.error);
+

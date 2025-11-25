@@ -8,7 +8,7 @@ The frontend is trying to call these Blog Writer API endpoints:
 1. `/api/v1/keywords/enhanced` - Called by `/api/keywords/suggest` and `/api/keywords/analyze`
 2. `/api/v1/keywords/suggest` - Fallback endpoint called by `/api/keywords/suggest`
 
-### ✅ Working Endpoints (from FRONTEND_INTEGRATION_TESTING_GUIDE.md):
+### ✅ Working Endpoints (from FRONTEND_INTEGRATION_TESTING_GUIDE_1.3.6.md):
 1. `/api/v1/keywords/ai-topic-suggestions` - ✅ Working
 2. `/api/v1/keywords/goal-based-analysis` - ✅ Working  
 3. `/api/v1/keywords/ai-mentions` - ✅ Working

@@ -471,6 +471,7 @@ class BlogWriterAPI {
     use_knowledge_graph?: boolean; // Use knowledge graph
     use_semantic_keywords?: boolean; // Use semantic keywords
     use_quality_scoring?: boolean; // Enable quality scoring
+    use_dataforseo_content_generation?: boolean; // Use DataForSEO Content Generation API instead of backend API
   }): Promise<Record<string, unknown> | null> {
     try {
       logger.debug('Starting blog generation via local API route', { params });

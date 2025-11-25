@@ -304,6 +304,7 @@ export async function POST(request: NextRequest) {
       include_business_details,
       include_review_sentiment,
       use_google,
+      use_dataforseo_content_generation = false, // Flag passed to backend API to use DataForSEO Content Generation
     } = body;
     
     logger.debug('📝 Generation parameters:', {
@@ -318,7 +319,8 @@ export async function POST(request: NextRequest) {
       quality_level,
       preset,
       preset_id,
-      use_enhanced
+      use_enhanced,
+      use_dataforseo_content_generation // Passed to backend API for provider selection
     });
     
     // Validate required fields
@@ -332,9 +334,9 @@ export async function POST(request: NextRequest) {
     // Convert keywords to array format (needed for queue entry)
     const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
     
-    // Use unified endpoint (v1.3.4)
+    // Use enhanced endpoint (v1.3.6 - unified endpoint removed, enhanced is now primary)
     const shouldUseEnhanced = true; // Always use enhanced blog type
-    const endpoint = '/api/v1/blog/generate-unified';
+    const endpoint = '/api/v1/blog/generate-enhanced';
     
     // Initialize variables that will be used in queue entry
     let brandVoice: BrandVoice | null = null;
@@ -555,6 +557,9 @@ export async function POST(request: NextRequest) {
     logger.debug('✅ Cloud Run is healthy, proceeding with blog generation...');
     
     // Call the external blog writer API
+    // Note: DataForSEO Content Generation is handled by the backend API service
+    // The use_dataforseo_content_generation flag is passed to the backend,
+    // which will handle the provider selection and API calls
     // Use the blog-writer-api-url.ts helper to get the correct URL based on branch
     const { BLOG_WRITER_API_URL: resolvedApiUrl } = await import('@/lib/blog-writer-api-url');
     const API_BASE_URL = process.env.BLOG_WRITER_API_URL || resolvedApiUrl || 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
@@ -694,6 +699,7 @@ export async function POST(request: NextRequest) {
       tone: (tone || brandVoice?.tone || 'professional') as 'professional' | 'casual' | 'academic' | 'conversational' | 'instructional',
       length: length ? convertLengthToAPI(length) : convertLengthToAPI(mapWordCountToLength(word_count || contentPreset?.word_count || 1000)),
       format: 'html' as 'markdown' | 'html' | 'json',
+      use_dataforseo_content_generation: use_dataforseo_content_generation, // Pass flag to backend API for provider selection
     };
 
     // Add custom instructions (use provided or default for premium)

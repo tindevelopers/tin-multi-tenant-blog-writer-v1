@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     
-    // According to FRONTEND_INTEGRATION_TESTING_GUIDE.md, response structure is:
+    // According to FRONTEND_INTEGRATION_TESTING_GUIDE_1.3.6.md, response structure is:
     // - topic_suggestions: Array of topic objects
     // - ai_metrics.llm_mentions: Record<string, LLMMentionsData>
     // - ai_metrics.search_volume: Record<string, any>
