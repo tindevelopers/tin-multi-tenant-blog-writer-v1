@@ -115,27 +115,24 @@ export default function ContentClustersPage() {
               cluster_groups: [],
             };
             
+            const secondaryKeywords = selectedTerms
+              .filter((t: any) => t.keyword !== primaryKeyword)
+              .map((t: any) => t.keyword);
+            
             const researchResultsData: BlogResearchResults = {
               keyword_analysis: keywordAnalysis,
               title_suggestions: [],
               content_strategy: {
-                pillar_topics: [primaryKeyword],
-                supporting_topics: selectedTerms
-                  .filter((t: any) => t.keyword !== primaryKeyword)
-                  .slice(0, 10)
-                  .map((t: any) => t.keyword),
-                content_types: ['blog_post', 'guide', 'article'],
-                recommended_length: 1500,
+                recommended_approach: `Create comprehensive content focusing on ${primaryKeyword} with supporting topics: ${secondaryKeywords.slice(0, 5).join(', ')}`,
+                target_audience: 'general',
+                content_angle: `Educational and informative content covering ${primaryKeyword} and related topics`,
+                competitor_analysis: `Focus on providing unique insights and comprehensive coverage of ${primaryKeyword}`,
               },
               seo_insights: {
                 primary_keyword: primaryKeyword,
-                secondary_keywords: selectedTerms
-                  .filter((t: any) => t.keyword !== primaryKeyword)
-                  .map((t: any) => t.keyword),
+                secondary_keywords: secondaryKeywords,
                 content_length_recommendation: 1500,
-                keyword_difficulty: primaryTerm.keyword_difficulty || 50,
-                competition_level: primaryTerm.competition < 0.33 ? 'LOW' : 
-                                   primaryTerm.competition < 0.67 ? 'MEDIUM' : 'HIGH',
+                internal_linking_opportunities: secondaryKeywords.slice(0, 10),
               },
             };
             
