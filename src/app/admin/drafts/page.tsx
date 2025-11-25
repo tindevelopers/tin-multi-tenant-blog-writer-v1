@@ -32,66 +32,24 @@ export default function DraftsPage() {
   const { posts: drafts, loading, error, refetch } = useDrafts();
   const { deletePost } = useBlogPostMutations();
 
-  // Mock draft data (fallback)
-  const mockDrafts = [
-    {
-      id: "1",
-      title: "The Future of AI in Content Creation",
-      excerpt: "Exploring how artificial intelligence is revolutionizing the way we create and consume content...",
-      status: "draft",
-      lastModified: "2024-01-15T10:30:00Z",
-      author: "Sarah Johnson",
-      tags: ["AI", "Content Creation", "Technology"],
-      wordCount: 1247,
-      readTime: "5 min read"
-    },
-    {
-      id: "2",
-      title: "10 Tips for Better Blog Writing",
-      excerpt: "Master the art of blog writing with these proven techniques and strategies...",
-      status: "review",
-      lastModified: "2024-01-14T15:45:00Z",
-      author: "Mike Chen",
-      tags: ["Writing Tips", "Blogging", "Content Strategy"],
-      wordCount: 892,
-      readTime: "4 min read"
-    },
-    {
-      id: "3",
-      title: "SEO Best Practices for 2024",
-      excerpt: "Stay ahead of the curve with the latest SEO strategies and techniques...",
-      status: "draft",
-      lastModified: "2024-01-13T09:20:00Z",
-      author: "Emma Davis",
-      tags: ["SEO", "Digital Marketing", "Strategy"],
-      wordCount: 1567,
-      readTime: "7 min read"
-    },
-    {
-      id: "4",
-      title: "Building a Content Calendar That Works",
-      excerpt: "Learn how to create and maintain an effective content calendar for your business...",
-      status: "archived",
-      lastModified: "2024-01-12T14:15:00Z",
-      author: "Alex Rodriguez",
-      tags: ["Content Planning", "Marketing", "Strategy"],
-      wordCount: 2103,
-      readTime: "9 min read"
-    }
-  ];
-
-  // Use real data if available, otherwise fallback to mock data
-  const displayDrafts = drafts.length > 0 ? drafts : mockDrafts;
-  
-  // Type guard to check if draft is from Supabase
-  const isSupabaseDraft = (draft: any): draft is typeof drafts[0] => {
-    return 'post_id' in draft;
+  // Calculate stats from real data
+  const stats = {
+    totalDrafts: drafts.length,
+    inReview: drafts.filter(d => d.status === 'scheduled').length, // Scheduled posts are "in review"
+    published: drafts.filter(d => d.status === 'published').length,
+    thisMonth: drafts.filter(d => {
+      const draftDate = new Date(d.created_at || d.updated_at);
+      const now = new Date();
+      return draftDate.getMonth() === now.getMonth() && draftDate.getFullYear() === now.getFullYear();
+    }).length,
   };
+
+  // All drafts are from Supabase database - no mock fallback
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "draft": return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
-      case "review": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+      case "scheduled": return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
       case "archived": return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
       case "published": return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
       default: return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
@@ -101,7 +59,7 @@ export default function DraftsPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "draft": return <DocumentIcon className="w-4 h-4" />;
-      case "review": return <ClockIcon className="w-4 h-4" />;
+      case "scheduled": return <ClockIcon className="w-4 h-4" />;
       case "archived": return <DocumentTextIcon className="w-4 h-4" />;
       case "published": return <CheckCircleIcon className="w-4 h-4" />;
       default: return <DocumentIcon className="w-4 h-4" />;
@@ -116,9 +74,10 @@ export default function DraftsPage() {
     });
   };
 
-  const filteredDrafts = displayDrafts.filter(draft => {
-    const matchesSearch = draft.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (draft.excerpt && draft.excerpt.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredDrafts = drafts.filter(draft => {
+    const matchesSearch = draft.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (draft.excerpt && draft.excerpt.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                         (draft.content && typeof draft.content === 'string' && draft.content.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesFilter = selectedFilter === "all" || draft.status === selectedFilter;
     
@@ -137,7 +96,7 @@ export default function DraftsPage() {
     setSelectedDrafts(
       selectedDrafts.length === filteredDrafts.length 
         ? [] 
-        : filteredDrafts.map(draft => isSupabaseDraft(draft) ? draft.post_id : draft.id)
+        : filteredDrafts.map(draft => draft.post_id)
     );
   };
 
@@ -206,7 +165,7 @@ export default function DraftsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Drafts</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">24</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalDrafts}</p>
             </div>
             <DocumentTextIcon className="w-8 h-8 text-blue-600" />
           </div>
@@ -216,7 +175,7 @@ export default function DraftsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Review</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">8</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.inReview}</p>
             </div>
             <ClockIcon className="w-8 h-8 text-yellow-600" />
           </div>
@@ -226,7 +185,7 @@ export default function DraftsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Published</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">156</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.published}</p>
             </div>
             <EyeIcon className="w-8 h-8 text-green-600" />
           </div>
@@ -236,7 +195,7 @@ export default function DraftsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">This Month</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">12</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.thisMonth}</p>
             </div>
             <CalendarIcon className="w-8 h-8 text-purple-600" />
           </div>
@@ -304,7 +263,7 @@ export default function DraftsPage() {
               >
                 <option value="all">All Status</option>
                 <option value="draft">Draft</option>
-                <option value="review">In Review</option>
+                <option value="scheduled">Scheduled</option>
                 <option value="published">Published</option>
                 <option value="archived">Archived</option>
               </select>
@@ -367,56 +326,53 @@ export default function DraftsPage() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {filteredDrafts.map((draft) => (
-                <tr key={isSupabaseDraft(draft) ? draft.post_id : draft.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr key={draft.post_id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                   <td className="px-6 py-4">
                     <input
                       type="checkbox"
-                      checked={selectedDrafts.includes(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
-                      onChange={() => handleSelectDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
+                      checked={selectedDrafts.includes(draft.post_id)}
+                      onChange={() => handleSelectDraft(draft.post_id)}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </td>
                   <td className="px-6 py-4">
                     <div className="max-w-md">
                       <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                        {draft.title}
+                        {draft.title || 'Untitled'}
                       </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-                        {draft.excerpt}
-                      </p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {(() => {
-                          // Extract tags from seo_data or use mock tags
-                          const tags = isSupabaseDraft(draft) 
-                            ? (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
-                                ? (draft.seo_data as any).secondary_keywords || []
-                                : [])
-                            : draft.tags || [];
-                          
-                          return tags.slice(0, 3).map((tag: string, index: number) => (
-                            <span
-                              key={index}
-                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                            >
-                              <TagIcon className="w-3 h-3 mr-1" />
-                              {tag}
-                            </span>
-                          ));
-                        })()}
-                        {(() => {
-                          const tags = isSupabaseDraft(draft) 
-                            ? (draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
-                                ? (draft.seo_data as any).secondary_keywords || []
-                                : [])
-                            : draft.tags || [];
-                          
-                          return tags.length > 3 && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              +{tags.length - 3} more
-                            </span>
+                      {draft.excerpt && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                          {draft.excerpt}
+                        </p>
+                      )}
+                      {(() => {
+                        // Extract tags from seo_data
+                        const tags = draft.seo_data && typeof draft.seo_data === 'object' && 'secondary_keywords' in draft.seo_data 
+                          ? (draft.seo_data as any).secondary_keywords || []
+                          : [];
+                        
+                        if (tags.length > 0) {
+                          return (
+                            <div className="flex flex-wrap gap-1 mt-2">
+                              {tags.slice(0, 3).map((tag: string, index: number) => (
+                                <span
+                                  key={index}
+                                  className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                >
+                                  <TagIcon className="w-3 h-3 mr-1" />
+                                  {tag}
+                                </span>
+                              ))}
+                              {tags.length > 3 && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  +{tags.length - 3} more
+                                </span>
+                              )}
+                            </div>
                           );
-                        })()}
-                      </div>
+                        }
+                        return null;
+                      })()}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -428,8 +384,8 @@ export default function DraftsPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <UserIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                      <span className="text-base text-gray-900 dark:text-white font-medium">
-                        {isSupabaseDraft(draft) ? (draft.created_by || 'Unknown') : draft.author}
+                      <span className="text-base text-gray-900 dark:text-white font-medium truncate max-w-[200px]">
+                        {draft.created_by || 'Unknown'}
                       </span>
                     </div>
                   </td>
@@ -437,7 +393,7 @@ export default function DraftsPage() {
                     <div className="flex items-center gap-2 text-base text-gray-700 dark:text-gray-300">
                       <ClockIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                       <span className="font-medium">
-                        {formatDate(isSupabaseDraft(draft) ? (draft.updated_at || draft.created_at) : draft.lastModified)}
+                        {formatDate(draft.updated_at || draft.created_at)}
                       </span>
                     </div>
                   </td>
@@ -447,13 +403,11 @@ export default function DraftsPage() {
                         <DocumentTextIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                         <span className="font-medium">
                           {(() => {
-                            // Calculate word count properly
-                            if (!isSupabaseDraft(draft) && draft.wordCount) {
-                              return draft.wordCount.toLocaleString();
-                            }
-                            if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
-                              // Count words by splitting on whitespace and filtering out empty strings
-                              const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
+                            // Calculate word count from content
+                            if (draft.content && typeof draft.content === 'string') {
+                              // Remove HTML tags for accurate word count
+                              const textContent = draft.content.replace(/<[^>]*>/g, ' ').trim();
+                              const words = textContent.split(/\s+/).filter((word: string) => word.length > 0);
                               return words.length.toLocaleString();
                             }
                             return '0';
@@ -464,12 +418,12 @@ export default function DraftsPage() {
                         <ClockIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                         <span>
                           {(() => {
-                            if (!isSupabaseDraft(draft) && draft.readTime) {
-                              return draft.readTime;
-                            }
-                            if (isSupabaseDraft(draft) && draft.content && typeof draft.content === 'string') {
-                              const words = draft.content.trim().split(/\s+/).filter((word: string) => word.length > 0);
-                              const readTime = Math.ceil(words.length / 200); // Average reading speed: 200 words per minute
+                            // Calculate read time from content
+                            if (draft.content && typeof draft.content === 'string') {
+                              // Remove HTML tags for accurate word count
+                              const textContent = draft.content.replace(/<[^>]*>/g, ' ').trim();
+                              const words = textContent.split(/\s+/).filter((word: string) => word.length > 0);
+                              const readTime = Math.max(1, Math.ceil(words.length / 200)); // Average reading speed: 200 words per minute
                               return `${readTime} min read`;
                             }
                             return '0 min read';
@@ -481,7 +435,7 @@ export default function DraftsPage() {
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button 
-                        onClick={() => handleViewDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
+                        onClick={() => handleViewDraft(draft.post_id)}
                         className="relative group text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 transition-colors rounded"
                       >
                         <EyeIcon className="w-4 h-4" />
@@ -491,7 +445,7 @@ export default function DraftsPage() {
                         </span>
                       </button>
                       <button 
-                        onClick={() => handleEditDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
+                        onClick={() => handleEditDraft(draft.post_id)}
                         className="relative group text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 transition-colors rounded"
                       >
                         <PencilIcon className="w-4 h-4" />
@@ -501,7 +455,7 @@ export default function DraftsPage() {
                         </span>
                       </button>
                       <button 
-                        onClick={() => handleShareDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
+                        onClick={() => handleShareDraft(draft.post_id)}
                         className="relative group text-gray-400 hover:text-green-600 dark:hover:text-green-400 p-1.5 transition-colors rounded"
                       >
                         <ShareIcon className="w-4 h-4" />
@@ -511,7 +465,7 @@ export default function DraftsPage() {
                         </span>
                       </button>
                       <button 
-                        onClick={() => handleDeleteDraft(isSupabaseDraft(draft) ? draft.post_id : draft.id)}
+                        onClick={() => handleDeleteDraft(draft.post_id)}
                         className="relative group text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1.5 transition-colors rounded"
                       >
                         <TrashIcon className="w-4 h-4" />
