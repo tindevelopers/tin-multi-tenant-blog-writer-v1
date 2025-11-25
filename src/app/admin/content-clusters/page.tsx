@@ -75,14 +75,14 @@ export default function ContentClustersPage() {
             );
             
             // Transform to BlogResearchResults format
-            const keywordAnalysis: Record<string, any> = {};
+            const keywordDataMap: Record<string, any> = {};
             
             // Add primary keyword
             const primaryTerm = selectedTerms.find((t: any) => t.keyword === primaryKeyword) || 
                                selectedTerms[0] || 
                                { keyword: primaryKeyword, search_volume: 0, keyword_difficulty: 50, competition: 0.5 };
             
-            keywordAnalysis[primaryKeyword] = {
+            keywordDataMap[primaryKeyword] = {
               keyword: primaryKeyword,
               search_volume: primaryTerm.search_volume || 0,
               keyword_difficulty: primaryTerm.keyword_difficulty || 50,
@@ -96,7 +96,7 @@ export default function ContentClustersPage() {
             // Add other selected keywords
             selectedTerms.forEach((term: any) => {
               if (term.keyword !== primaryKeyword) {
-                keywordAnalysis[term.keyword] = {
+                keywordDataMap[term.keyword] = {
                   keyword: term.keyword,
                   search_volume: term.search_volume || 0,
                   keyword_difficulty: term.keyword_difficulty || 50,
@@ -106,6 +106,14 @@ export default function ContentClustersPage() {
                 };
               }
             });
+            
+            // Create proper KeywordAnalysis object
+            const keywordAnalysis = {
+              keyword_analysis: keywordDataMap,
+              overall_score: primaryTerm.keyword_difficulty ? 100 - primaryTerm.keyword_difficulty : 50,
+              recommendations: [],
+              cluster_groups: [],
+            };
             
             const researchResultsData: BlogResearchResults = {
               keyword_analysis: keywordAnalysis,
