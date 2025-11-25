@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PrimaryKeywordInput } from "@/components/keyword-research/PrimaryKeywordInput";
@@ -13,7 +13,7 @@ import Alert from "@/components/ui/alert/Alert";
 import StreamingProgress from "@/components/keywords/StreamingProgress";
 import { SavedSearchesPanel } from "@/components/keyword-research/SavedSearchesPanel";
 
-export default function SEOToolsPage() {
+function SEOToolsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -580,5 +580,20 @@ export default function SEOToolsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SEOToolsPage() {
+  return (
+    <Suspense fallback={
+      <div className="mx-auto max-w-7xl p-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <Search className="h-8 w-8 animate-pulse text-purple-600 dark:text-purple-400 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Loading SEO Tools...</p>
+        </div>
+      </div>
+    }>
+      <SEOToolsPageContent />
+    </Suspense>
   );
 }

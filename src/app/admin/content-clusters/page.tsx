@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Layers, Sparkles } from 'lucide-react';
 import EnhancedContentClustersPanel from '@/components/content-clusters/EnhancedContentClustersPanel';
 import type { BlogResearchResults } from '@/lib/keyword-research';
 
-export default function ContentClustersPage() {
+function ContentClustersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [researchResults, setResearchResults] = useState<BlogResearchResults | null>(null);
@@ -184,6 +184,21 @@ export default function ContentClustersPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ContentClustersPage() {
+  return (
+    <Suspense fallback={
+      <div className="mx-auto max-w-7xl">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <Sparkles className="h-8 w-8 animate-pulse text-purple-600 dark:text-purple-400 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ContentClustersContent />
+    </Suspense>
   );
 }
 
