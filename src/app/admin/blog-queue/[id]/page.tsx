@@ -96,10 +96,14 @@ export default function QueueItemDetailPage() {
 
   // Auto-save functionality with debouncing
   const autoSave = useCallback(async (content: string) => {
-    if (!item || !queueId) return;
+    if (!item || !queueId) {
+      logger.warn("⚠️ Cannot auto-save: missing item or queueId", { item: !!item, queueId: !!queueId });
+      return;
+    }
     
     // Don't save if content hasn't changed
     if (content === lastSavedContentRef.current) {
+      logger.debug("⏭️ Skipping save: content unchanged");
       return;
     }
 
@@ -114,6 +118,12 @@ export default function QueueItemDetailPage() {
     // Debounce: wait 2 seconds before saving
     autoSaveTimeoutRef.current = setTimeout(async () => {
       try {
+        logger.debug("💾 Starting auto-save", {
+          queueId,
+          contentLength: content.length,
+          hasPostId: !!item.post_id,
+        });
+
         // Format content before saving
         const formattingResult = formatContent(content, {
           fixPunctuation: true,
@@ -121,6 +131,12 @@ export default function QueueItemDetailPage() {
           improveTypography: true,
           addStructure: true,
           detectImagePlaceholders: true,
+        });
+
+        logger.debug("📝 Formatted content", {
+          originalLength: content.length,
+          formattedLength: formattingResult.formattedContent.length,
+          wordCount: formattingResult.wordCount,
         });
 
         const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
@@ -135,15 +151,31 @@ export default function QueueItemDetailPage() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to save content");
+          const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+          logger.error("❌ Save failed with error response", {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorData,
+          });
+          throw new Error(errorData.error || errorData.details || `Failed to save content: ${response.statusText}`);
         }
 
         const result = await response.json();
         
+        logger.debug("✅ Save response received", {
+          success: result.success,
+          postId: result.post_id,
+          hasData: !!result.data,
+        });
+
+        if (!result.success) {
+          throw new Error(result.error || "Save was not successful");
+        }
+
         // Update item with post_id if it was created
         if (result.post_id && !item.post_id) {
           setItem((prevItem) => prevItem ? { ...prevItem, post_id: result.post_id } : null);
+          logger.debug("📌 Updated item with post_id", { postId: result.post_id });
         }
 
         lastSavedContentRef.current = formattingResult.formattedContent;
@@ -152,9 +184,7 @@ export default function QueueItemDetailPage() {
 
         // Reset saved status after 3 seconds
         setTimeout(() => {
-          if (saveStatus === "saved") {
-            setSaveStatus("idle");
-          }
+          setSaveStatus((current) => current === "saved" ? "idle" : current);
         }, 3000);
 
         logger.debug("✅ Content auto-saved successfully", {
@@ -163,12 +193,16 @@ export default function QueueItemDetailPage() {
           wordCount: formattingResult.wordCount,
         });
       } catch (err) {
-        logger.error("❌ Error auto-saving content:", err);
+        logger.error("❌ Error auto-saving content:", {
+          error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
+          queueId,
+        });
         setSaveStatus("error");
         setSaveError(err instanceof Error ? err.message : "Failed to save content");
       }
     }, 2000);
-  }, [item, queueId, saveStatus]);
+  }, [item, queueId]);
 
   // Handle content changes
   const handleContentChange = useCallback((content: string) => {

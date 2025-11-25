@@ -33,12 +33,20 @@ export async function POST(
       title,
     });
 
+    // Use service client to bypass RLS - this is necessary for system operations
     const supabase = createServiceClient();
-    const userSupabase = await createClient();
-
-    // Get current user for created_by
-    const { data: { user } } = await userSupabase.auth.getUser();
-    const userId = user?.id || null;
+    
+    // Try to get authenticated user, but don't fail if not available
+    let userId: string | null = null;
+    try {
+      const userSupabase = await createClient();
+      const { data: { user } } = await userSupabase.auth.getUser();
+      userId = user?.id || null;
+    } catch (authError) {
+      logger.warn('Could not get authenticated user, proceeding with system user', {
+        error: authError instanceof Error ? authError.message : 'Unknown error'
+      });
+    }
 
     // Get queue item to check if post_id exists
     const { data: queueItem, error: queueError } = await supabase
@@ -129,19 +137,46 @@ export async function POST(
       }
 
       // Update queue item with post_id
-      await supabase
+      const { error: queueUpdateError } = await supabase
         .from('blog_generation_queue')
         .update({ post_id: newPost.post_id })
         .eq('queue_id', queueId);
 
+      if (queueUpdateError) {
+        logger.warn('⚠️ Failed to update queue item with post_id (non-critical):', {
+          queueId,
+          postId: newPost.post_id,
+          error: queueUpdateError.message
+        });
+        // Don't fail the save if queue update fails
+      } else {
+        logger.debug('✅ Queue item updated with post_id', {
+          queueId,
+          postId: newPost.post_id
+        });
+      }
+
       result = newPost;
-      logger.debug('✅ Draft created successfully', { postId: newPost.post_id });
     }
+
+    logger.debug('✅ Content saved successfully', {
+      queueId,
+      postId: result.post_id,
+      wasUpdate: !!postId,
+      wasCreate: !postId,
+      contentLength: content.length,
+      title: finalTitle,
+    });
 
     return NextResponse.json({
       success: true,
-      data: result,
       post_id: result.post_id,
+      data: {
+        post_id: result.post_id,
+        title: result.title,
+        content: result.content,
+        updated_at: result.updated_at,
+      },
     });
   } catch (error) {
     logger.error('❌ Error in save-content:', error);
