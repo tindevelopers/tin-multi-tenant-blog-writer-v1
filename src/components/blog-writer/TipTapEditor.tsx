@@ -148,10 +148,10 @@ export default function TipTapEditor({
   }
 
   return (
-    <div className={`border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 ${className}`}>
-      {/* Toolbar */}
+    <div className={`border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 flex flex-col h-full ${className}`}>
+      {/* Toolbar - Fixed at top */}
       {editable && (
-        <div className="border-b border-gray-300 dark:border-gray-600 p-2 flex flex-wrap items-center gap-1 bg-gray-50 dark:bg-gray-900">
+        <div className="border-b border-gray-300 dark:border-gray-600 p-2 flex flex-wrap items-center gap-1 bg-gray-50 dark:bg-gray-900 flex-shrink-0 sticky top-0 z-10">
           {/* Text Formatting */}
           <div className="flex items-center gap-1 border-r border-gray-300 dark:border-gray-600 pr-2 mr-2">
             <button
@@ -347,14 +347,16 @@ export default function TipTapEditor({
         </div>
       )}
 
-      {/* Editor Content */}
-      <div className="min-h-[400px]">
-        <EditorContent editor={editor} />
+      {/* Editor Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="min-h-[400px]">
+          <EditorContent editor={editor} />
+        </div>
       </div>
 
-      {/* Character Count */}
+      {/* Character Count - Fixed at bottom */}
       {editable && editor.storage.characterCount && (
-        <div className="border-t border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900">
+        <div className="border-t border-gray-300 dark:border-gray-600 px-4 py-2 text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900 flex-shrink-0">
           {editor.storage.characterCount.characters()} characters • {editor.storage.characterCount.words()} words
         </div>
       )}

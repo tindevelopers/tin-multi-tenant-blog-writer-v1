@@ -791,41 +791,39 @@ export default function QueueItemDetailPage() {
               )}
             </div>
             
-            {/* Editor - Full Height */}
-            <div className="flex-1 overflow-hidden p-6">
-              <div className="h-full flex flex-col">
-                <TipTapEditor
-                  key={`editor-${queueId}`}
-                  content={currentContent}
-                  onChange={handleContentChange}
-                  editable={true}
-                  placeholder="Start editing your blog content..."
-                  onImageUpload={async (file) => {
-                    try {
-                      const formData = new FormData();
-                      formData.append('file', file);
+            {/* Editor - Full Height with Scroll */}
+            <div className="flex-1 overflow-hidden p-6 min-h-0">
+              <TipTapEditor
+                key={`editor-${queueId}`}
+                content={currentContent}
+                onChange={handleContentChange}
+                editable={true}
+                placeholder="Start editing your blog content..."
+                onImageUpload={async (file) => {
+                  try {
+                    const formData = new FormData();
+                    formData.append('file', file);
 
-                      const response = await fetch('/api/images/upload', {
-                        method: 'POST',
-                        body: formData,
-                      });
+                    const response = await fetch('/api/images/upload', {
+                      method: 'POST',
+                      body: formData,
+                    });
 
-                      if (!response.ok) {
-                        const error = await response.json();
-                        throw new Error(error.error || 'Upload failed');
-                      }
-
-                      const result = await response.json();
-                      return result.url;
-                    } catch (error) {
-                      logger.error('Error uploading image:', error);
-                      alert('Failed to upload image. Please try again.');
-                      return null;
+                    if (!response.ok) {
+                      const error = await response.json();
+                      throw new Error(error.error || 'Upload failed');
                     }
-                  }}
-                  className="flex-1"
-                />
-              </div>
+
+                    const result = await response.json();
+                    return result.url;
+                  } catch (error) {
+                    logger.error('Error uploading image:', error);
+                    alert('Failed to upload image. Please try again.');
+                    return null;
+                  }
+                }}
+                className="h-full"
+              />
             </div>
           </div>
         </div>
