@@ -163,7 +163,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
               });
             }
             
-            // Process matching terms
+            // Process matching terms (from enhanced endpoint discovery section)
             if (data.matchingTerms && Array.isArray(data.matchingTerms)) {
               data.matchingTerms.forEach((term: any) => {
                 if (term.keyword && term.keyword !== primaryKeyword) {
@@ -184,6 +184,41 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
                       keyword_difficulty: term.keyword_difficulty || 0,
                       competition_level,
                       cpc: term.cpc,
+                      search_intent: term.search_intent || term.intent,
+                      parent_topic: term.parent_topic,
+                      is_question: term.is_question || false,
+                      related_keywords: [],
+                      easy_win_score: 0,
+                      high_value_score: 0,
+                    });
+                  }
+                }
+              });
+            }
+
+            // Process discovery questions if available
+            if (data.discovery?.questions && Array.isArray(data.discovery.questions)) {
+              data.discovery.questions.forEach((question: any) => {
+                if (question.keyword && question.keyword !== primaryKeyword) {
+                  const exists = allKeywords.some(k => k.keyword === question.keyword);
+                  if (!exists) {
+                    const competition = question.competition || 0;
+                    let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+                    if (competition >= 0.67) {
+                      competition_level = 'HIGH';
+                    } else if (competition >= 0.33) {
+                      competition_level = 'MEDIUM';
+                    }
+                    
+                    allKeywords.push({
+                      keyword: question.keyword,
+                      search_volume: question.search_volume || 0,
+                      keyword_difficulty: question.keyword_difficulty || 0,
+                      competition_level,
+                      cpc: question.cpc,
+                      search_intent: question.intent || 'informational',
+                      parent_topic: question.parent_topic,
+                      is_question: true,
                       related_keywords: [],
                       easy_win_score: 0,
                       high_value_score: 0,

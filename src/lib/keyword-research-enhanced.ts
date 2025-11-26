@@ -17,6 +17,8 @@ export interface KeywordData {
   cpc?: number;
   search_intent?: 'informational' | 'navigational' | 'commercial' | 'transactional';
   trend_score?: number;
+  parent_topic?: string;
+  is_question?: boolean;
   related_keywords?: string[];
   easy_win_score: number;
   high_value_score: number;

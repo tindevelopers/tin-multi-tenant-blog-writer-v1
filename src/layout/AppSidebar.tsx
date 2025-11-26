@@ -76,6 +76,7 @@ const blogWriterItems: NavItem[] = [
         isAccordionHeader: true,
         subItems: [
           { name: "Keyword Research", path: "/seo", icon: <Search className="w-4 h-4" />, new: true },
+          { name: "Keyword Results", path: "/seo?tab=keyword-results", icon: <TrendingUp className="w-4 h-4" />, new: true },
           { name: "Saved Searches", path: "/seo/saved-searches", icon: <History className="w-4 h-4" />, new: true },
           { name: "Content Clusters", path: "/seo/content-clusters", icon: <Layers2 className="w-4 h-4" />, new: true },
         ]

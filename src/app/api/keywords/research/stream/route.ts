@@ -239,162 +239,213 @@ export async function POST(request: NextRequest) {
             sendEvent('progress', {
               stage: 'analyzing_traditional',
               progress: 60,
-              message: 'Analyzing traditional SEO metrics...',
+              message: 'Analyzing traditional SEO metrics with enhanced search...',
             });
 
             try {
-              
-              // Ensure service is properly initialized
-              if (!keywordResearchService || typeof keywordResearchService.analyzeKeywords !== 'function') {
-                throw new Error(`keywordResearchService.analyzeKeywords is not a function. Service type: ${typeof keywordResearchService}`);
-              }
-              
-              const traditionalAnalysis = await keywordResearchService.analyzeKeywords(
-                [keyword],
-                20, // Get more keyword suggestions
-                location,
+              // Call enhanced endpoint directly to get all data
+              const enhancedResponse = await fetch(
+                `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`,
                 {
-                  include_trends: false,
-                  include_keyword_ideas: true, // Enable to get related keywords
-                  include_search_volume: true, // Request search volume data
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(process.env.BLOG_WRITER_API_KEY && {
+                      'X-API-Key': process.env.BLOG_WRITER_API_KEY,
+                    }),
+                  },
+                  body: JSON.stringify({
+                    keywords: [keyword],
+                    location,
+                    language,
+                    include_search_volume: true,
+                    include_trends: true,
+                    include_keyword_ideas: true,
+                    include_serp: true,
+                    max_suggestions_per_keyword: 150, // Get maximum suggestions
+                  }),
                 }
               );
 
-              // Check if we got an empty analysis (likely backend endpoint returned 404)
-              if (!traditionalAnalysis?.keyword_analysis || Object.keys(traditionalAnalysis.keyword_analysis).length === 0) {
-                logger.warn('Traditional analysis returned empty results (backend endpoint may be unavailable)', {
+              if (!enhancedResponse.ok) {
+                const errorText = await enhancedResponse.text();
+                if (enhancedResponse.headers.get('content-type')?.includes('text/html')) {
+                  logger.warn('Enhanced endpoint returned HTML 404, endpoint may not be available');
+                  sendEvent('progress', {
+                    stage: 'enhanced_unavailable',
+                    progress: 50,
+                    message: 'Enhanced endpoint unavailable, continuing with limited data...',
+                  });
+                  // Don't throw - allow the process to continue with empty results
+                  // The error will be logged but won't block the response
+                } else {
+                  logger.error('Enhanced endpoint failed', {
+                    status: enhancedResponse.status,
+                    statusText: enhancedResponse.statusText,
+                    error: errorText.substring(0, 200),
+                  });
+                  sendEvent('progress', {
+                    stage: 'enhanced_error',
+                    progress: 50,
+                    message: `Enhanced endpoint error: ${enhancedResponse.statusText}`,
+                  });
+                }
+                // Continue without enhanced data - don't throw to allow graceful degradation
+              }
+
+              // Only process if response was OK
+              if (enhancedResponse.ok) {
+                const enhancedData = await enhancedResponse.json();
+                
+                // Extract primary keyword analysis
+                const keywordLower = keyword.toLowerCase();
+                const primaryAnalysis = enhancedData.enhanced_analysis?.[keyword] || enhancedData.enhanced_analysis?.[keywordLower];
+                
+                if (primaryAnalysis) {
+                // Convert difficulty string to number (0-100 scale)
+                const difficultyMap: Record<string, number> = {
+                  'very_easy': 10,
+                  'easy': 20,
+                  'medium': 50,
+                  'hard': 70,
+                  'very_hard': 90,
+                };
+                
+                const difficultyScore = typeof primaryAnalysis.difficulty_score === 'number' 
+                  ? primaryAnalysis.difficulty_score 
+                  : difficultyMap[primaryAnalysis.difficulty || 'medium'] || 50;
+
+                result.traditionalData = {
                   keyword,
-                  location,
-                  hasAnalysis: !!traditionalAnalysis,
-                  analysisKeys: traditionalAnalysis ? Object.keys(traditionalAnalysis) : [],
+                  search_volume: primaryAnalysis.search_volume || 0,
+                  keyword_difficulty: difficultyScore,
+                  competition: primaryAnalysis.competition || 0,
+                  cpc: primaryAnalysis.cpc || 0,
+                  search_intent: primaryAnalysis.primary_intent || primaryAnalysis.intent_probabilities?.['informational'] ? 'informational' : undefined,
+                  trend_score: primaryAnalysis.trend_score || 0,
+                  parent_topic: primaryAnalysis.parent_topic,
+                  related_keywords: [
+                    ...(primaryAnalysis.related_keywords || []),
+                    ...(primaryAnalysis.long_tail_keywords || []),
+                  ],
+                };
+
+                // Extract ALL matching terms from discovery section
+                const allMatchingTerms: any[] = [];
+                const keywordMap = new Map<string, any>();
+
+                // Process discovery.matching_terms (47 keywords in the example)
+                if (enhancedData.discovery?.matching_terms && Array.isArray(enhancedData.discovery.matching_terms)) {
+                  enhancedData.discovery.matching_terms.forEach((term: any) => {
+                    if (term.keyword) {
+                      const normalizedKw = term.keyword.toLowerCase();
+                      if (!keywordMap.has(normalizedKw)) {
+                        keywordMap.set(normalizedKw, {
+                          keyword: term.keyword,
+                          search_volume: term.search_volume || 0,
+                          keyword_difficulty: term.keyword_difficulty || 0,
+                          competition: term.competition || 0,
+                          cpc: term.cpc || 0,
+                          search_intent: term.intent || undefined,
+                          parent_topic: term.parent_topic || undefined,
+                        });
+                      }
+                    }
+                  });
+                }
+
+                // Process discovery.questions
+                if (enhancedData.discovery?.questions && Array.isArray(enhancedData.discovery.questions)) {
+                  enhancedData.discovery.questions.forEach((question: any) => {
+                    if (question.keyword) {
+                      const normalizedKw = question.keyword.toLowerCase();
+                      if (!keywordMap.has(normalizedKw)) {
+                        keywordMap.set(normalizedKw, {
+                          keyword: question.keyword,
+                          search_volume: question.search_volume || 0,
+                          keyword_difficulty: question.keyword_difficulty || 0,
+                          competition: question.competition || 0,
+                          cpc: question.cpc || 0,
+                          search_intent: question.intent || 'informational',
+                          parent_topic: question.parent_topic || undefined,
+                          is_question: true,
+                        });
+                      }
+                    }
+                  });
+                }
+
+                // Process related_keywords and long_tail_keywords from primary analysis
+                const relatedKeywords = [
+                  ...(primaryAnalysis.related_keywords || []),
+                  ...(primaryAnalysis.long_tail_keywords || []),
+                ];
+                
+                relatedKeywords.forEach((kw: string) => {
+                  const normalizedKw = kw.toLowerCase();
+                  if (!keywordMap.has(normalizedKw) && normalizedKw !== keywordLower) {
+                    // Try to find in enhanced_analysis
+                    const kwAnalysis = enhancedData.enhanced_analysis?.[kw] || enhancedData.enhanced_analysis?.[normalizedKw];
+                    if (kwAnalysis) {
+                      const kwDifficultyScore = typeof kwAnalysis.difficulty_score === 'number'
+                        ? kwAnalysis.difficulty_score
+                        : difficultyMap[kwAnalysis.difficulty || 'medium'] || 50;
+                      
+                      keywordMap.set(normalizedKw, {
+                        keyword: kw,
+                        search_volume: kwAnalysis.search_volume || 0,
+                        keyword_difficulty: kwDifficultyScore,
+                        competition: kwAnalysis.competition || 0,
+                        cpc: kwAnalysis.cpc || 0,
+                        search_intent: kwAnalysis.primary_intent || undefined,
+                        parent_topic: kwAnalysis.parent_topic || undefined,
+                      });
+                    } else {
+                      // Add with minimal data
+                      keywordMap.set(normalizedKw, {
+                        keyword: kw,
+                        search_volume: 0,
+                        keyword_difficulty: 0,
+                        competition: 0,
+                        cpc: 0,
+                      });
+                    }
+                  }
+                });
+
+                // Convert map to array, excluding primary keyword
+                const allKeywords = Array.from(keywordMap.values()).filter(
+                  k => k.keyword.toLowerCase() !== keywordLower
+                );
+
+                result.relatedTerms = allKeywords;
+                result.matchingTerms = allKeywords;
+                result.discovery = enhancedData.discovery;
+                result.clusters = enhancedData.clusters || [];
+                result.serp_analysis = enhancedData.serp_analysis;
+
+                logger.debug('Extracted keywords from enhanced endpoint', {
+                  primary: keyword,
+                  totalKeywords: allKeywords.length,
+                  matchingTermsCount: enhancedData.discovery?.matching_terms?.length || 0,
+                  questionsCount: enhancedData.discovery?.questions?.length || 0,
+                  clustersCount: enhancedData.clusters?.length || 0,
+                  hasSerpAnalysis: !!enhancedData.serp_analysis,
+                });
+              } else {
+                logger.warn('Enhanced endpoint response missing primary analysis', {
+                  keyword,
+                  availableKeys: Object.keys(enhancedData.enhanced_analysis || {}),
                 });
                 sendEvent('progress', {
                   stage: 'traditional_error',
                   progress: 50,
-                  message: 'Traditional analysis endpoint unavailable (backend may be down or endpoint missing)',
+                  message: `Primary keyword "${keyword}" not found in enhanced analysis response`,
                 });
-              } else if (traditionalAnalysis.keyword_analysis) {
-                const keywordLower = keyword.toLowerCase();
-                const keywordData = traditionalAnalysis.keyword_analysis[keywordLower];
-
-                if (keywordData) {
-                  // Convert difficulty string to number (0-100 scale)
-                  const difficultyMap: Record<string, number> = {
-                    'very_easy': 10,
-                    'easy': 30,
-                    'medium': 50,
-                    'hard': 70,
-                    'very_hard': 90,
-                  };
-
-                  result.traditionalData = {
-                    keyword,
-                    search_volume: keywordData.search_volume || 0,
-                    keyword_difficulty: difficultyMap[keywordData.difficulty || 'medium'] || 50,
-                    competition: keywordData.competition || 0,
-                    cpc: keywordData.cpc || 0,
-                    search_intent: keywordData.primary_intent as any,
-                    trend_score: keywordData.trend_score || 0,
-                    parent_topic: keywordData.parent_topic,
-                    related_keywords: keywordData.related_keywords || [],
-                  };
-
-                  // Extract ALL keywords from the analysis response (not just the primary)
-                  const allKeywords: any[] = [];
-                  const keywordMap = new Map<string, any>();
-                  
-                  // First, extract all keywords from the analysis response with full data
-                  Object.entries(traditionalAnalysis.keyword_analysis).forEach(([kw, kwData]: [string, any]) => {
-                    if (kwData) {
-                      const normalizedKw = kw.toLowerCase();
-                      keywordMap.set(normalizedKw, {
-                        keyword: kw,
-                        search_volume: kwData.search_volume || 0,
-                        keyword_difficulty: difficultyMap[kwData.difficulty || 'medium'] || 50,
-                        competition: kwData.competition || 0,
-                        cpc: kwData.cpc || 0,
-                        search_intent: kwData.primary_intent || kwData.search_intent || undefined,
-                        parent_topic: kwData.parent_topic || undefined,
-                        trend_score: kwData.trend_score || 0,
-                      });
-                    }
-                  });
-
-                  // Extract related terms from primary keyword's related_keywords array
-                  // These might be strings that aren't in the analysis response yet
-                  if (keywordData.related_keywords && Array.isArray(keywordData.related_keywords)) {
-                    keywordData.related_keywords.forEach((kw: string) => {
-                      const normalizedKw = kw.toLowerCase();
-                      if (!keywordMap.has(normalizedKw)) {
-                        // Try to find this keyword in the analysis response
-                        const foundKwData = traditionalAnalysis.keyword_analysis[normalizedKw] || 
-                                          traditionalAnalysis.keyword_analysis[kw];
-                        
-                        if (foundKwData) {
-                          keywordMap.set(normalizedKw, {
-                            keyword: kw,
-                            search_volume: foundKwData.search_volume || 0,
-                            keyword_difficulty: difficultyMap[foundKwData.difficulty || 'medium'] || 50,
-                            competition: foundKwData.competition || 0,
-                            cpc: foundKwData.cpc || 0,
-                            search_intent: (foundKwData as any).primary_intent || (foundKwData as any).search_intent,
-                            parent_topic: (foundKwData as any).parent_topic,
-                            trend_score: (foundKwData as any).trend_score || 0,
-                          });
-                        } else {
-                          // Keyword not in analysis response, add with minimal data
-                          keywordMap.set(normalizedKw, {
-                      keyword: kw,
-                            search_volume: 0,
-                      keyword_difficulty: 0,
-                      competition: 0,
-                            cpc: 0,
-                          });
-                        }
-                      }
-                    });
-                  }
-                  
-                  // Convert map to array
-                  allKeywords.push(...Array.from(keywordMap.values()));
-
-                  // Separate primary keyword from related keywords
-                  const primaryKeywordData = allKeywords.find(k => k.keyword.toLowerCase() === keywordLower);
-                  const relatedKeywords = allKeywords.filter(k => k.keyword.toLowerCase() !== keywordLower);
-                  
-                  result.relatedTerms = relatedKeywords;
-                  result.matchingTerms = relatedKeywords; // Use same array for matching terms
-                  
-                  logger.debug('Extracted keywords from analysis', {
-                    primary: keyword,
-                    totalKeywords: allKeywords.length,
-                    primaryKeywordData: primaryKeywordData ? {
-                      keyword: primaryKeywordData.keyword,
-                      search_volume: primaryKeywordData.search_volume,
-                    } : null,
-                    relatedTerms: result.relatedTerms.length,
-                    keywordDataSample: keywordData ? {
-                      search_volume: keywordData.search_volume,
-                      hasSearchVolume: 'search_volume' in keywordData,
-                      keywordDataKeys: Object.keys(keywordData),
-                    } : null,
-                    firstRelatedTerm: result.relatedTerms[0] ? {
-                      keyword: result.relatedTerms[0].keyword,
-                      search_volume: result.relatedTerms[0].search_volume,
-                    } : null,
-                  });
-                } else {
-                  logger.warn('Keyword data not found in analysis response', {
-                    keyword,
-                    keywordLower,
-                    availableKeys: Object.keys(traditionalAnalysis.keyword_analysis),
-                  });
-                  sendEvent('progress', {
-                    stage: 'traditional_error',
-                    progress: 50,
-                    message: `Keyword "${keyword}" not found in analysis response`,
-                  });
                 }
+              } else {
+                // Enhanced endpoint not available - result will have empty traditionalData
+                logger.warn('Enhanced endpoint not available, skipping enhanced analysis');
               }
             } catch (error) {
               const errorMessage = error instanceof Error ? error.message : String(error);
