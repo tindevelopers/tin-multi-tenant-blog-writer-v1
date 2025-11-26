@@ -19,6 +19,7 @@ export default function EditDraftPage() {
   const { updatePost } = useBlogPostMutations();
   
   const [saving, setSaving] = useState(false);
+  const [statusSaving, setStatusSaving] = useState(false);
   
   const [formData, setFormData] = useState({
     title: '',
