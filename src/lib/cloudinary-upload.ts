@@ -78,13 +78,6 @@ export async function uploadViaBlogWriterAPI(
     const API_BASE_URL = BLOG_WRITER_API_URL;
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
 
-    // Get organization's Cloudinary credentials
-    const credentials = await getCloudinaryCredentials(orgId);
-    if (!credentials) {
-      logger.error(`No Cloudinary credentials configured for org ${orgId}`);
-      return null;
-    }
-
     // Prepare image data
     let imageBase64: string | null = null;
     if (imageData) {
@@ -104,7 +97,7 @@ export async function uploadViaBlogWriterAPI(
       throw new Error('No image data or URL provided');
     }
 
-    // Call Blog Writer API's Cloudinary upload endpoint
+    // Call Blog Writer API's Cloudinary upload endpoint (API already has credentials via secrets)
     const uploadResponse = await fetch(`${API_BASE_URL}/api/v1/media/upload/cloudinary`, {
       method: 'POST',
       headers: {
@@ -114,12 +107,7 @@ export async function uploadViaBlogWriterAPI(
       body: JSON.stringify({
         image_data: imageBase64,
         file_name: fileName,
-        folder: folder || `blog-images/${orgId}`,
-        cloudinary_credentials: {
-          cloud_name: credentials.cloud_name,
-          api_key: credentials.api_key,
-          api_secret: credentials.api_secret,
-        },
+        folder: folder || (orgId ? `blog-images/${orgId}` : 'blog-images'),
       }),
     });
 
