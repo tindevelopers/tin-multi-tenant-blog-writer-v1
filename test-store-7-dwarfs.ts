@@ -149,7 +149,7 @@ async function testStore7Dwarfs() {
 
     console.log('\n✅ Test complete! Data stored successfully in database.');
     console.log(`\n📝 Research Result ID: ${researchResult.id}`);
-    console.log('   You can view this in the UI at: /admin/seo/keywords');
+    console.log('   You can view this in the UI at: /seo/saved-searches');
 
   } catch (error) {
     console.error('❌ Unexpected error:', error);

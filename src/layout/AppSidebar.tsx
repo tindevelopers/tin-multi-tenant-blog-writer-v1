@@ -28,7 +28,8 @@ import {
   FileClock,
   Shield,
   History,
-  Layers2
+  Layers2,
+  Search
 } from "lucide-react";
 
 type NavItem = {
@@ -69,10 +70,15 @@ const blogWriterItems: NavItem[] = [
       },
       { 
         name: "SEO Tools", 
-        path: "/admin/seo",
         icon: <Target className="w-4 h-4" />,
         pro: true,
         new: true,
+        isAccordionHeader: true,
+        subItems: [
+          { name: "Keyword Research", path: "/seo", icon: <Search className="w-4 h-4" />, new: true },
+          { name: "Saved Searches", path: "/seo/saved-searches", icon: <History className="w-4 h-4" />, new: true },
+          { name: "Content Clusters", path: "/seo/content-clusters", icon: <Layers2 className="w-4 h-4" />, new: true },
+        ]
       },
       { 
         name: "Content Management", 
@@ -80,7 +86,6 @@ const blogWriterItems: NavItem[] = [
         isAccordionHeader: true,
         new: true,
         subItems: [
-          { name: "Content Clusters", path: "/admin/content-clusters", icon: <Layers2 className="w-4 h-4" />, new: true },
           { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
           { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
           { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
@@ -113,7 +118,6 @@ const blogWriterItems: NavItem[] = [
         pro: true,
         subItems: [
           { name: "Analytics", path: "/admin/analytics", icon: <TrendingUp className="w-4 h-4" />, pro: true },
-          { name: "Content Clusters", path: "/admin/content-clusters", icon: <LayoutDashboard className="w-4 h-4" />, new: true },
         ]
       },
     ],

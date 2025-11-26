@@ -88,7 +88,7 @@ async function testStoreEndpoint() {
     console.log(`   ✅ Stored keyword: "${sevenDwarfsData.keyword}"`);
     console.log(`   ✅ Stored ${sevenDwarfsData.related_terms.length} related terms (7 dwarfs)`);
     console.log(`   ✅ Research Result ID: ${data.id}`);
-    console.log('\n   View in UI: http://localhost:3000/admin/seo/keywords');
+    console.log('\n   View in UI: http://localhost:3000/seo/saved-searches');
 
   } catch (error) {
     console.error('❌ Error:', error);

@@ -278,7 +278,7 @@ export function SavedSearchesPanel({ onRerunSearch, userId }: SavedSearchesPanel
                 
                 <div className="flex items-center gap-2 ml-4">
                   <Link
-                    href={`/admin/seo/keywords?id=${search.id}`}
+                    href={`/seo/saved-searches?id=${search.id}`}
                     className="p-2 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"
                     title="View keywords from this search"
                   >

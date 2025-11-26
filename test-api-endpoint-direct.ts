@@ -113,7 +113,7 @@ async function testApiEndpoint() {
   console.log('     -H "Content-Type: application/json"');
   console.log('');
   console.log('   Or test directly in browser:');
-  console.log(`   ${API_BASE_URL}/admin/seo/keywords`);
+  console.log(`   ${API_BASE_URL}/seo/saved-searches`);
 
   // Test 5: Check database directly
   console.log('\n5. Checking Database Directly...');
