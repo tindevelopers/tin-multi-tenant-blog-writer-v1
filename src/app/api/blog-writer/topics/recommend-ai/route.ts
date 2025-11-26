@@ -78,12 +78,16 @@ export async function POST(request: NextRequest) {
         ...(BLOG_WRITER_API_KEY && { 'Authorization': `Bearer ${BLOG_WRITER_API_KEY}` }),
       },
       body: JSON.stringify({
-        keywords: keywords || [objective || industry || 'content topics'].slice(0, 1),
-        prompts: [topicPrompt],
-        llm_models: ['chatgpt', 'claude'],
-        max_tokens: 2000,
-        research_type: 'content_research',
-        include_consensus: true,
+        keywords: keywords || [objective || industry || 'content topics'].slice(0, 5),
+        content_objective: objective || topicPrompt,
+        target_audience: target_audience,
+        industry: industry,
+        content_goals: content_goal ? [content_goal] : undefined,
+        location: 'United States',
+        language: 'en',
+        include_ai_search_volume: true,
+        include_llm_mentions: true,
+        limit: count * 2, // Get more to filter
       }),
       signal: AbortSignal.timeout(60000), // 60 second timeout
     });
