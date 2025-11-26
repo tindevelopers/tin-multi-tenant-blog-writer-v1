@@ -667,8 +667,50 @@ export default function ViewDraftPage() {
     
     html = html.replace(/style="[^"]*"/gi, '');
     html = html.replace(/<figure class="featured-image">/g, '<figure>');
-    
-    return html;
+
+    return formatHtmlForWebflow(html);
+  }
+
+  function formatHtmlForWebflow(rawHtml: string): string {
+    if (typeof window === 'undefined') return rawHtml;
+
+    const parser = new DOMParser();
+    const documentWrapper = parser.parseFromString(`<div>${rawHtml}</div>`, 'text/html');
+    const body = documentWrapper.body;
+
+    body.querySelectorAll('*').forEach((el) => {
+      el.removeAttribute('style');
+      el.removeAttribute('class');
+
+      if (el.tagName === 'FIGURE') {
+        const img = el.querySelector('img');
+        if (img) {
+          const container = documentWrapper.createElement('div');
+          container.appendChild(img.cloneNode(true));
+          el.replaceWith(container);
+        }
+      }
+
+      if (el.tagName === 'LI') {
+        const firstChild = el.firstElementChild;
+        if (firstChild && firstChild.tagName === 'P') {
+          while (firstChild.firstChild) {
+            el.insertBefore(firstChild.firstChild, firstChild);
+          }
+          firstChild.remove();
+        }
+      }
+    });
+
+    body.innerHTML = body.innerHTML
+      .replace(/(&nbsp;|\s)+/g, (match) => (match.includes('&nbsp;') ? '&nbsp;' : ' '))
+      .replace(/<p>\s*<\/p>/g, '');
+
+    const wrapper = documentWrapper.createElement('article');
+    wrapper.className = 'w-richtext';
+    wrapper.innerHTML = body.innerHTML.trim();
+
+    return wrapper.outerHTML;
   }
 }
 
