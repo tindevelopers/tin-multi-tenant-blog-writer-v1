@@ -56,6 +56,24 @@ export default function EditDraftPage() {
     }
   };
 
+  const handleStatusUpdate = async () => {
+    try {
+      setStatusSaving(true);
+      const result = await updatePost(draftId, { status: formData.status });
+      if (result) {
+        alert('Status updated successfully!');
+        router.refresh();
+      } else {
+        alert('Failed to update status. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error updating status:', err);
+      alert('Error updating status. Please try again.');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
@@ -205,17 +223,29 @@ export default function EditDraftPage() {
           <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Status
           </label>
-          <select
-            id="status"
-            value={formData.status}
-            onChange={(e) => handleInputChange('status', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-          >
-            <option value="draft">Draft</option>
-            <option value="published">Published</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="archived">Archived</option>
-          </select>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <select
+              id="status"
+              value={formData.status}
+              onChange={(e) => handleInputChange('status', e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+            >
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="scheduled">Scheduled</option>
+              <option value="archived">Archived</option>
+            </select>
+            <button
+              onClick={handleStatusUpdate}
+              disabled={statusSaving}
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {statusSaving ? 'Updating...' : 'Update Status'}
+            </button>
+          </div>
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Updating the status removes this post from the Draft queue when set to Published/Scheduled and makes it appear in the Publishing dashboard.
+          </p>
         </div>
       </div>
     </div>

@@ -13,6 +13,7 @@ import {
   DocumentTextIcon,
 } from "@heroicons/react/24/outline";
 import { BlogPlatformPublishing } from "@/types/blog-queue";
+import type { Database } from "@/types/database";
 import { getPlatformStatusMetadata, PlatformStatus } from "@/lib/blog-queue-state-machine";
 
 interface PublishingFilters {
@@ -21,11 +22,17 @@ interface PublishingFilters {
   search: string;
 }
 
+type BlogPost = Database["public"]["Tables"]["blog_posts"]["Row"];
+
 export default function PublishingPage() {
   const router = useRouter();
   const [publishing, setPublishing] = useState<BlogPlatformPublishing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [readyPosts, setReadyPosts] = useState<BlogPost[]>([]);
+  const [readyLoading, setReadyLoading] = useState(true);
+  const [platformSelections, setPlatformSelections] = useState<Record<string, "webflow" | "wordpress" | "shopify">>({});
+  const [publishingPostId, setPublishingPostId] = useState<string | null>(null);
   const [filters, setFilters] = useState<PublishingFilters>({
     platform: "all",
     status: "all",
@@ -60,15 +67,33 @@ export default function PublishingPage() {
     }
   }, [filters]);
 
+  const fetchReadyPosts = useCallback(async () => {
+    try {
+      setReadyLoading(true);
+      const response = await fetch("/api/drafts/list?status=published");
+      if (!response.ok) {
+        throw new Error("Failed to fetch published posts");
+      }
+      const data = await response.json();
+      setReadyPosts(data.data || []);
+    } catch (err) {
+      console.error("Error fetching ready posts:", err);
+    } finally {
+      setReadyLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchPublishing();
-  }, [fetchPublishing]);
+    fetchReadyPosts();
+  }, [fetchPublishing, fetchReadyPosts]);
 
   const stats = {
     pending: publishing.filter((p) => p.status === "pending").length,
     published: publishing.filter((p) => p.status === "published").length,
     failed: publishing.filter((p) => p.status === "failed").length,
     scheduled: publishing.filter((p) => p.status === "scheduled").length,
+    ready: readyPosts.length,
   };
 
   const filteredPublishing = publishing.filter((pub) => {
@@ -89,6 +114,41 @@ export default function PublishingPage() {
     shopify: ShoppingBagIcon,
   };
 
+  const handleStartPublishing = async (postId: string) => {
+    const platform = platformSelections[postId] || "webflow";
+    try {
+      setPublishingPostId(postId);
+      const response = await fetch("/api/blog-publishing", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          post_id: postId,
+          platform,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to create publishing job");
+      }
+
+      alert("Publishing job created. Track progress below.");
+      fetchPublishing();
+      fetchReadyPosts();
+    } catch (err) {
+      console.error("Error starting publishing:", err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Failed to start publishing. Please try again."
+      );
+    } finally {
+      setPublishingPostId(null);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -104,7 +164,7 @@ export default function PublishingPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <StatCard
           label="Pending"
           value={stats.pending}
@@ -129,7 +189,105 @@ export default function PublishingPage() {
           color="blue"
           icon="📅"
         />
+        <StatCard
+          label="Ready"
+          value={stats.ready}
+          color="teal"
+          icon="📝"
+        />
       </div>
+      {/* Ready to Publish Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Ready for Publishing
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              These posts have status "Published" and can now be sent to Webflow, WordPress, or Shopify.
+            </p>
+          </div>
+          <button
+            onClick={fetchReadyPosts}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm"
+          >
+            <ArrowPathIcon className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
+
+        {readyLoading ? (
+          <div className="py-6 text-center text-gray-500 dark:text-gray-400">
+            Loading ready posts...
+          </div>
+        ) : readyPosts.length === 0 ? (
+          <div className="py-6 text-center text-gray-500 dark:text-gray-400">
+            No published posts are waiting for distribution. Once you change a draft’s status to
+            <span className="font-semibold"> Published</span>, it will appear here.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Title
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Updated
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Platform
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                {readyPosts.map((post) => (
+                  <tr key={post.post_id}>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                      {post.title}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                      {post.updated_at
+                        ? new Date(post.updated_at).toLocaleDateString()
+                        : "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={platformSelections[post.post_id] || "webflow"}
+                        onChange={(e) =>
+                          setPlatformSelections((prev) => ({
+                            ...prev,
+                            [post.post_id]: e.target.value as "webflow" | "wordpress" | "shopify",
+                          }))
+                        }
+                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
+                      >
+                        <option value="webflow">Webflow</option>
+                        <option value="wordpress">WordPress</option>
+                        <option value="shopify">Shopify</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => handleStartPublishing(post.post_id)}
+                        disabled={publishingPostId === post.post_id}
+                        className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        {publishingPostId === post.post_id ? "Starting..." : "Send to Publishing"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
 
       {/* Filters and Search */}
       <div className="flex items-center gap-4">
