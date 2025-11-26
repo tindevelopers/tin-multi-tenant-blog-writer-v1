@@ -53,24 +53,28 @@ export async function POST(request: NextRequest) {
       orgId: user.org_id,
     });
 
-    const uploadResult = await uploadViaBlogWriterAPI(
-      '',
-      dataUri,
-      user.org_id,
-      file.name,
-      `blog-images/${user.org_id}`
-    );
-
-    if (!uploadResult) {
+    let uploadResult;
+    try {
+      uploadResult = await uploadViaBlogWriterAPI(
+        '',
+        dataUri,
+        user.org_id,
+        file.name,
+        `blog-images/${user.org_id}`,
+        file.name,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Upload failed. Please try again.';
+      logger.error('Cloudinary upload failed via blog writer API', {
+        error: message,
+        orgId: user.org_id,
+      });
       return NextResponse.json(
-        {
-          error: 'Upload failed. Please try again.',
-          code: 'UPLOAD_FAILED',
-        },
-        { status: 500 }
+        { error: message || 'Upload failed. Please try again.' },
+        { status: 502 },
       );
     }
-    
+
     const assetId = await saveMediaAsset(
       user.org_id,
       user.id,
