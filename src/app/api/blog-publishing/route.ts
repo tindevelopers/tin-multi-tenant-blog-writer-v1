@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { PlatformStatus } from "@/lib/blog-queue-state-machine";
 import { logger } from '@/utils/logger';
+import { getWebflowFieldMappings, applyWebflowFieldMappings } from '@/lib/integrations/webflow-field-mapping';
 
 /**
  * GET /api/blog-publishing
@@ -211,6 +212,57 @@ export async function POST(request: NextRequest) {
       ? "scheduled"
       : "pending";
 
+    // For Webflow, get and apply field mappings
+    let finalPublishMetadata = publish_metadata || {};
+    if (platform === 'webflow') {
+      try {
+        // Get the blog post data
+        const { data: post } = await supabase
+          .from("blog_posts")
+          .select("title, content, excerpt, metadata, seo_data")
+          .eq("post_id", finalPostId)
+          .single();
+
+        if (post) {
+          // Get Webflow field mappings
+          const fieldMappings = await getWebflowFieldMappings(userProfile.org_id);
+          
+          // Prepare blog post data
+          const blogPostData = {
+            title: post.title,
+            content: post.content || '',
+            excerpt: post.excerpt || '',
+            slug: (post.metadata as Record<string, unknown>)?.slug as string | undefined,
+            featured_image: (post.metadata as Record<string, unknown>)?.featured_image as string | undefined,
+            seo_title: (post.seo_data as Record<string, unknown>)?.meta_title as string | undefined,
+            seo_description: (post.seo_data as Record<string, unknown>)?.meta_description as string | undefined,
+            published_at: new Date().toISOString(),
+          };
+
+          // Apply field mappings
+          const mappedFields = applyWebflowFieldMappings(blogPostData, fieldMappings);
+          
+          // Store mapped fields in publish_metadata
+          finalPublishMetadata = {
+            ...finalPublishMetadata,
+            field_mappings: fieldMappings,
+            mapped_fields: mappedFields,
+            original_fields: blogPostData,
+          };
+
+          logger.debug('Applied Webflow field mappings', {
+            orgId: userProfile.org_id,
+            postId: finalPostId,
+            mappingCount: fieldMappings.length,
+            mappedFields: Object.keys(mappedFields),
+          });
+        }
+      } catch (error) {
+        logger.error('Error applying Webflow field mappings:', error);
+        // Continue without mappings if there's an error
+      }
+    }
+
     // Create publishing record
     const { data: publishing, error } = await supabase
       .from("blog_platform_publishing")
@@ -222,7 +274,7 @@ export async function POST(request: NextRequest) {
         status: initialStatus,
         scheduled_at: scheduled_at || null,
         published_by: user.id,
-        publish_metadata: publish_metadata || {},
+        publish_metadata: finalPublishMetadata,
         retry_count: 0,
       })
       .select(`
