@@ -81,6 +81,33 @@ export function useContentIdeas(): UseContentIdeasResult {
   }, []);
 
   /**
+   * Load user's content clusters
+   */
+  const loadUserClusters = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setError('User not authenticated');
+        return;
+      }
+
+      const userClusters = await contentIdeasService.getUserClusters(user.id);
+      setClusters(userClusters);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load clusters';
+      setError(errorMessage);
+      logger.error('Load clusters error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Save the current cluster and content ideas to database
    * Can optionally accept a cluster directly to avoid state timing issues
    */
@@ -128,33 +155,6 @@ export function useContentIdeas(): UseContentIdeasResult {
       setLoading(false);
     }
   }, [currentCluster, loadUserClusters]);
-
-  /**
-   * Load user's content clusters
-   */
-  const loadUserClusters = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const supabase = createClient();
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        setError('User not authenticated');
-        return;
-      }
-
-      const userClusters = await contentIdeasService.getUserClusters(user.id);
-      setClusters(userClusters);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load clusters';
-      setError(errorMessage);
-      logger.error('Load clusters error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   /**
    * Load content ideas for a specific cluster
