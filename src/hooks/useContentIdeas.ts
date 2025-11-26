@@ -23,8 +23,8 @@ export interface UseContentIdeasResult {
   contentIdeas: ContentIdea[];
   
   // Actions
-  generateContentIdeas: (request: ContentIdeaGenerationRequest) => Promise<void>;
-  saveContentCluster: () => Promise<{ success: boolean; cluster_id?: string; error?: string }>;
+  generateContentIdeas: (request: ContentIdeaGenerationRequest) => Promise<ContentIdeaGenerationResponse | null>;
+  saveContentCluster: (clusterOverride?: ContentIdeaGenerationResponse | null) => Promise<{ success: boolean; cluster_id?: string; error?: string }>;
   loadUserClusters: () => Promise<void>;
   loadClusterContent: (clusterId: string) => Promise<void>;
   selectIdea: (ideaId: string) => void;
