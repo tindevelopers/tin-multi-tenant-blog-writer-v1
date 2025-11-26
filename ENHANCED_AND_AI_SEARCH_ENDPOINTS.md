@@ -8,7 +8,9 @@ The system provides multiple endpoints for keyword research with both traditiona
 
 ## 1. Enhanced Keyword Analysis Endpoint
 
-**Endpoint:** `POST /api/keywords/analyze`
+**Endpoint:** `POST /api/keywords/analyze`  
+**Backend Endpoint:** `POST /api/v1/keywords/enhanced` (for enhanced features)  
+**Status:** ✅ Active on Cloud Run
 
 **Description:** Comprehensive keyword analysis with enhanced features including SERP analysis, related keywords, and AI volume data.
 
@@ -87,11 +89,15 @@ const response = await fetch('/api/keywords/analyze', {
 
 ## 2. AI Topic Suggestions Endpoint
 
-**Endpoint:** `POST /api/keywords/ai-topic-suggestions`
+**Endpoint:** `POST /api/keywords/ai-topic-suggestions`  
+**Backend Endpoint:** `POST /api/v1/keywords/ai-topic-suggestions`  
+**Status:** ✅ Active on Cloud Run
 
 **Description:** AI-powered topic suggestions optimized for LLM/AI search engines (ChatGPT, Perplexity, etc.) with AI search volume and mentions data.
 
-**Streaming Version:** `POST /api/keywords/ai-topic-suggestions/stream` - Same functionality with Server-Sent Events (SSE) streaming for real-time progress updates.
+**Streaming Version:** `POST /api/keywords/ai-topic-suggestions/stream` - Same functionality with Server-Sent Events (SSE) streaming for real-time progress updates.  
+**Backend Endpoint:** `POST /api/v1/keywords/ai-topic-suggestions/stream`  
+**Status:** ✅ Active on Cloud Run
 
 ### Request Parameters
 
@@ -249,22 +255,13 @@ eventSource.onmessage = (event) => {
 
 ## 4. LLM Research Endpoint
 
-**Endpoint:** `POST /api/keywords/llm-research`
+**Endpoint:** `POST /api/keywords/llm-research`  
+**Backend Endpoint:** `POST /api/v1/keywords/llm-research`  
+**Status:** ❌ Not Available (404) - Endpoint not implemented on backend
 
 **Description:** LLM-powered keyword research using AI models to analyze and suggest keywords.
 
-### Request Parameters
-
-```typescript
-{
-  keywords: string[];                  // Required: Keywords to research
-  location?: string;
-  language?: string;
-  // Additional LLM-specific parameters...
-}
-```
-
-**Note:** This endpoint may not be available on all backend versions. Check availability before use.
+**Note:** This endpoint is **NOT available** on the Cloud Run backend. Use `/api/keywords/ai-topic-suggestions` instead for AI-powered research.
 
 ---
 
