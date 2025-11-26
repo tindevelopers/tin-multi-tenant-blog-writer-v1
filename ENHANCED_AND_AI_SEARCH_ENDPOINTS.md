@@ -91,6 +91,8 @@ const response = await fetch('/api/keywords/analyze', {
 
 **Description:** AI-powered topic suggestions optimized for LLM/AI search engines (ChatGPT, Perplexity, etc.) with AI search volume and mentions data.
 
+**Streaming Version:** `POST /api/keywords/ai-topic-suggestions/stream` - Same functionality with Server-Sent Events (SSE) streaming for real-time progress updates.
+
 ### Request Parameters
 
 ```typescript
@@ -268,16 +270,16 @@ eventSource.onmessage = (event) => {
 
 ## Comparison Table
 
-| Feature | Enhanced Analysis | AI Topic Suggestions | Research Stream |
-|---------|------------------|---------------------|-----------------|
-| **Traditional SEO** | ✅ Yes | ❌ No | ✅ Yes (optional) |
-| **AI Search Volume** | ✅ Yes | ✅ Yes | ✅ Yes (optional) |
-| **LLM Mentions** | ❌ No | ✅ Yes | ✅ Yes (optional) |
-| **SERP Analysis** | ✅ Yes | ❌ No | ❌ No |
-| **Streaming** | ❌ No | ❌ No | ✅ Yes |
-| **Caching** | ❌ No | ❌ No | ✅ Yes |
-| **Database Storage** | ✅ Yes | ❌ No | ✅ Yes |
-| **Multiple Keywords** | ✅ Yes | ✅ Yes | ❌ Single keyword |
+| Feature | Enhanced Analysis | AI Topic Suggestions | AI Suggestions (Stream) | Research Stream |
+|---------|------------------|---------------------|------------------------|-----------------|
+| **Traditional SEO** | ✅ Yes | ❌ No | ❌ No | ✅ Yes (optional) |
+| **AI Search Volume** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes (optional) |
+| **LLM Mentions** | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes (optional) |
+| **SERP Analysis** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **Streaming** | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
+| **Caching** | ❌ No | ❌ No | ❌ No | ✅ Yes |
+| **Database Storage** | ✅ Yes | ❌ No | ❌ No | ✅ Yes |
+| **Multiple Keywords** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ Single keyword |
 
 ---
 
