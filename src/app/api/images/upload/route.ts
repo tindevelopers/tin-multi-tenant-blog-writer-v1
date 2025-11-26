@@ -75,6 +75,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!uploadResult) {
+      logger.error('Cloudinary upload returned null result', {
+        orgId: user.org_id,
+      });
+      return NextResponse.json(
+        { error: 'Upload failed. Please try again.' },
+        { status: 502 },
+      );
+    }
+
     const assetId = await saveMediaAsset(
       user.org_id,
       user.id,
