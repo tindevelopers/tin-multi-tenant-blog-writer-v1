@@ -51,10 +51,11 @@ export async function POST(request: NextRequest) {
       research_type: body.research_type || 'comprehensive',
     };
     
-    const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/llm-research/stream`;
+    // Use AI Topic Suggestions streaming instead of LLM Research (endpoint not available)
+    const endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/ai-topic-suggestions/stream`;
     
     // Wake up Cloud Run before making API call
-    logger.info('🌅 Checking Cloud Run health before LLM research streaming call...');
+    logger.info('🌅 Checking Cloud Run health before AI topic suggestions streaming call...');
     try {
       const healthStatus = await cloudRunHealth.checkHealth();
       logger.info('📊 Cloud Run Status:', {
@@ -73,46 +74,42 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    logger.info('🔍 Calling LLM research streaming endpoint', {
+    // Transform LLM Research request to AI Topic Suggestions format
+    const aiTopicSuggestionsBody = {
+      keywords: body.keywords,
+      location: requestBody.location,
+      language: requestBody.language,
+      include_ai_search_volume: true,
+      include_llm_mentions: true,
+      include_llm_responses: requestBody.include_sources,
+      limit: 50,
+    };
+    
+    logger.info('🔍 Calling AI Topic Suggestions streaming endpoint (as LLM Research replacement)', {
       endpoint,
       keywords: body.keywords,
     });
     
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (process.env.BLOG_WRITER_API_KEY) {
+        headers['Authorization'] = `Bearer ${process.env.BLOG_WRITER_API_KEY}`;
+        headers['X-API-Key'] = process.env.BLOG_WRITER_API_KEY;
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
+        headers,
+        body: JSON.stringify(aiTopicSuggestionsBody),
       });
       
       if (!response.ok) {
         const contentType = response.headers.get('content-type') || '';
         const errorText = await response.text();
-        let errorMessage = `LLM Research API error: ${response.status} ${response.statusText}`;
-        
-        // Check if endpoint doesn't exist (404)
-        if (response.status === 404 || contentType.includes('text/html') || errorText.includes('Not Found')) {
-          logger.warn('⚠️ LLM Research streaming endpoint not found on backend (404)', {
-            endpoint,
-            status: response.status,
-          });
-          return new Response(
-            JSON.stringify({ 
-              type: 'error', 
-              error: 'LLM Research endpoint is not available on the backend. This feature may not be implemented yet.',
-              endpoint_not_found: true,
-            }),
-            { 
-              status: 404,
-              headers: { 
-                'Content-Type': 'application/json',
-                'Cache-Control': 'no-cache',
-              }
-            }
-          );
-        }
+        let errorMessage = `AI Topic Suggestions API error: ${response.status} ${response.statusText}`;
         
         try {
           const errorData = JSON.parse(errorText);
@@ -121,7 +118,7 @@ export async function POST(request: NextRequest) {
           errorMessage = errorText || errorMessage;
         }
         
-        logger.error('LLM Research API error', {
+        logger.error('AI Topic Suggestions API error', {
           status: response.status,
           errorMessage,
         });
@@ -139,8 +136,11 @@ export async function POST(request: NextRequest) {
       }
       
       // Stream the response back to the client
+      // Note: The response format from AI Topic Suggestions may differ from LLM Research
+      // The client should handle the transformation or we transform it here
       const stream = new ReadableStream({
         async start(controller) {
+          const encoder = new TextEncoder();
           const reader = response.body?.getReader();
           const decoder = new TextDecoder();
           
@@ -150,20 +150,35 @@ export async function POST(request: NextRequest) {
           }
           
           try {
+            let buffer = '';
             while (true) {
               const { done, value } = await reader.read();
               
               if (done) {
+                // Send completion event
+                const completeMessage = `data: ${JSON.stringify({ type: 'complete', message: 'Stream completed' })}\n\n`;
+                controller.enqueue(encoder.encode(completeMessage));
                 controller.close();
                 break;
               }
               
-              // Forward the chunk to the client
-              controller.enqueue(value);
+              // Decode and forward chunks
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (line.trim()) {
+                  // Forward SSE events as-is
+                  controller.enqueue(encoder.encode(line + '\n'));
+                }
+              }
             }
           } catch (error) {
-            logger.error('Error streaming LLM research response', { error });
-            controller.error(error);
+            logger.error('Error streaming AI topic suggestions response', { error });
+            const errorMessage = `data: ${JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : 'Streaming error' })}\n\n`;
+            controller.enqueue(encoder.encode(errorMessage));
+            controller.close();
           }
         },
       });

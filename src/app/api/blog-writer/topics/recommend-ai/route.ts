@@ -70,8 +70,8 @@ export async function POST(request: NextRequest) {
       count
     });
 
-    // Use LLM research to generate topic recommendations
-    const llmResearchResponse = await fetch(`${BLOG_WRITER_API_URL}/api/v1/keywords/llm-research`, {
+    // Use AI Topic Suggestions instead of LLM Research (endpoint not available)
+    const aiTopicSuggestionsResponse = await fetch(`${BLOG_WRITER_API_URL}/api/v1/keywords/ai-topic-suggestions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -88,10 +88,10 @@ export async function POST(request: NextRequest) {
       signal: AbortSignal.timeout(60000), // 60 second timeout
     });
 
-    if (!llmResearchResponse.ok) {
-      const errorData = await llmResearchResponse.json().catch(() => ({ error: 'Unknown API error' }));
-      logger.error('LLM Research API error for topic recommendations', {
-        status: llmResearchResponse.status,
+    if (!aiTopicSuggestionsResponse.ok) {
+      const errorData = await aiTopicSuggestionsResponse.json().catch(() => ({ error: 'Unknown API error' }));
+      logger.error('AI Topic Suggestions API error for topic recommendations', {
+        status: aiTopicSuggestionsResponse.status,
         error: errorData,
       });
       
@@ -105,10 +105,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const llmData = await llmResearchResponse.json();
+    const aiData = await aiTopicSuggestionsResponse.json();
     
-    // Extract topics from LLM research consensus
-    const topics = extractTopicsFromLLMResearch(llmData, count);
+    // Extract topics from AI Topic Suggestions
+    const topics = extractTopicsFromAITopicSuggestions(aiData, count);
     
     if (topics.length === 0) {
       // Fallback if LLM doesn't return topics
@@ -180,7 +180,7 @@ function buildTopicGenerationPrompt(params: {
   return prompt;
 }
 
-function extractTopicsFromLLMResearch(llmData: any, count: number): Array<{
+function extractTopicsFromAITopicSuggestions(aiData: any, count: number): Array<{
   title: string;
   description: string;
   keywords: string[];
@@ -200,37 +200,37 @@ function extractTopicsFromLLMResearch(llmData: any, count: number): Array<{
   }> = [];
 
   try {
-    // Try to extract from consensus
-    const llmResearch = llmData.llm_research || {};
-    const firstKeyword = Object.keys(llmResearch)[0];
-    if (firstKeyword) {
-      const research = llmResearch[firstKeyword];
-      const consensus = research.consensus || [];
+    // Extract from AI Topic Suggestions
+    const topicSuggestions = aiData.topic_suggestions || [];
+    
+    for (const suggestion of topicSuggestions.slice(0, count)) {
+      const topic = suggestion.topic || suggestion.title || '';
+      const summary = suggestion.summary || suggestion.description || '';
+      const aiSearchVolume = suggestion.ai_search_volume || 0;
+      const optimizationScore = suggestion.ai_optimization_score || 50;
       
-      // Parse consensus text for JSON array
-      for (const item of consensus) {
-        try {
-          // Try to parse as JSON
-          const parsed = typeof item === 'string' ? JSON.parse(item) : item;
-          if (Array.isArray(parsed)) {
-            topics.push(...parsed.slice(0, count));
-            break;
-          }
-        } catch {
-          // If not JSON, try to extract from text
-          const jsonMatch = item.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            if (Array.isArray(parsed)) {
-              topics.push(...parsed.slice(0, count));
-              break;
-            }
-          }
-        }
-      }
+      // Determine difficulty based on optimization score
+      const difficulty = optimizationScore > 70 ? 'easy' : optimizationScore > 40 ? 'medium' : 'hard';
+      
+      // Extract keywords from topic
+      const topicKeywords = topic
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((w: string) => w.length > 3)
+        .slice(0, 5);
+      
+      topics.push({
+        title: topic.charAt(0).toUpperCase() + topic.slice(1),
+        description: summary || `A comprehensive guide about ${topic}`,
+        keywords: topicKeywords.length > 0 ? topicKeywords : [topic.toLowerCase()],
+        search_volume: aiSearchVolume,
+        difficulty: difficulty,
+        content_angle: suggestion.content_angle || 'AI-optimized content',
+        estimated_traffic: Math.floor(aiSearchVolume * 0.1), // Estimate 10% CTR
+      });
     }
   } catch (error) {
-    logger.warn('Failed to extract topics from LLM research', { error });
+    logger.warn('Failed to extract topics from AI Topic Suggestions', { error });
   }
 
   return topics.slice(0, count);
