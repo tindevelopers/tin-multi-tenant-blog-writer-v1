@@ -145,27 +145,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the post or queue item exists and belongs to the org
-    if (post_id) {
-      const { data: post } = await supabase
-        .from("blog_posts")
-        .select("post_id, org_id")
-        .eq("post_id", post_id)
-        .eq("org_id", userProfile.org_id)
-        .single();
+    // Database requires post_id to be NOT NULL, so we need to ensure post_id exists
+    let finalPostId = post_id;
 
-      if (!post) {
-        return NextResponse.json(
-          { error: "Post not found" },
-          { status: 404 }
-        );
-      }
-    }
-
-    if (queue_id) {
+    // If only queue_id is provided, we need to get the post_id from the queue item
+    if (!finalPostId && queue_id) {
       const { data: queueItem } = await supabase
         .from("blog_generation_queue")
-        .select("queue_id, status, org_id")
+        .select("queue_id, status, org_id, post_id")
         .eq("queue_id", queue_id)
         .eq("org_id", userProfile.org_id)
         .single();
@@ -184,6 +171,39 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+
+      // If queue item has a post_id, use that
+      if (queueItem.post_id) {
+        finalPostId = queueItem.post_id;
+      } else {
+        return NextResponse.json(
+          { error: "Queue item does not have an associated blog post. Please generate content first." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Ensure we have a post_id (required by database)
+    if (!finalPostId) {
+      return NextResponse.json(
+        { error: "post_id is required. Please provide a post_id or ensure the queue item has an associated post." },
+        { status: 400 }
+      );
+    }
+
+    // Verify the post exists and belongs to the org
+    const { data: post } = await supabase
+      .from("blog_posts")
+      .select("post_id, org_id")
+      .eq("post_id", finalPostId)
+      .eq("org_id", userProfile.org_id)
+      .single();
+
+    if (!post) {
+      return NextResponse.json(
+        { error: "Post not found" },
+        { status: 404 }
+      );
     }
 
     // Determine initial status
@@ -196,7 +216,7 @@ export async function POST(request: NextRequest) {
       .from("blog_platform_publishing")
       .insert({
         org_id: userProfile.org_id,
-        post_id: post_id || null,
+        post_id: finalPostId,
         queue_id: queue_id || null,
         platform,
         status: initialStatus,
@@ -214,9 +234,20 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      logger.error("Error creating publishing record:", error);
+      logger.error("Error creating publishing record:", {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        post_id: finalPostId,
+        queue_id,
+        platform,
+      });
       return NextResponse.json(
-        { error: "Failed to create publishing record" },
+        { 
+          error: "Failed to create publishing record",
+          details: error.message || error.details || error.hint
+        },
         { status: 500 }
       );
     }
