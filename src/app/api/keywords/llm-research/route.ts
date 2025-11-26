@@ -84,6 +84,19 @@ function transformAIResponseToLLMFormat(aiData: any, keywords: string[]): LLMRes
     conf.average = (conf.chatgpt + conf.claude + conf.gemini) / 3;
   });
   
+  // Calculate average confidence across all keywords
+  let totalConfidence = 0;
+  let totalSources = 0;
+  Object.values(llmResearch).forEach((research: any) => {
+    if (research.confidence?.average) {
+      totalConfidence += research.confidence.average;
+    }
+    if (research.sources) {
+      totalSources += research.sources.length;
+    }
+  });
+  const averageConfidence = keywords.length > 0 ? totalConfidence / keywords.length : 0;
+  
   return {
     llm_research: llmResearch,
     summary: {
@@ -92,7 +105,8 @@ function transformAIResponseToLLMFormat(aiData: any, keywords: string[]): LLMRes
       total_llm_queries: keywords.length * 3,
       llm_models_used: ['chatgpt', 'claude', 'gemini'],
       research_type: 'comprehensive',
-      timestamp: new Date().toISOString(),
+      average_confidence: averageConfidence,
+      sources_found: totalSources,
     },
   };
 }
