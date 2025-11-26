@@ -21,6 +21,7 @@ import { ImageGallery } from "@/components/content/ImageGallery";
 import { LinkValidationPanel } from "@/components/content/LinkValidationPanel";
 import { SEOMetadataEditor } from "@/components/content/SEOMetadataEditor";
 import { QualityDimensionsDisplay } from "@/components/content/QualityDimensionsDisplay";
+import { ContentInsightsSidebar } from "@/components/content/ContentInsightsSidebar";
 import { extractContentMetadata } from "@/lib/content-metadata-utils";
 import type { ContentMetadata } from "@/lib/content-metadata-utils";
 import { logger } from "@/utils/logger";
@@ -33,6 +34,7 @@ export default function ViewDraftPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [activeTab, setActiveTab] = useState<'content' | 'analysis' | 'seo' | 'metadata'>('content');
   const [showTOC, setShowTOC] = useState(false);
+  const [insightsPanelVisible, setInsightsPanelVisible] = useState(true);
   
   const { post: draft, loading, error } = useBlogPost(draftId);
   const { deletePost } = useBlogPostMutations();
@@ -84,6 +86,18 @@ export default function ViewDraftPage() {
   const keywords = Array.isArray(seoData?.keywords) ? seoData.keywords : 
                    (seoData?.keywords ? [seoData.keywords] : []);
   const topic = seoData?.topic || draft?.title || '';
+
+  const derivedWordCount = useMemo(() => {
+    if (contentMetadata?.word_count) return contentMetadata.word_count;
+    if (!draft?.content) return null;
+    try {
+      const stripped = draft.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (!stripped) return null;
+      return stripped.split(" ").length;
+    } catch {
+      return null;
+    }
+  }, [contentMetadata?.word_count, draft?.content]);
 
   const handleEdit = () => {
     router.push(`/admin/drafts/edit/${draftId}`);
@@ -244,19 +258,26 @@ export default function ViewDraftPage() {
         </nav>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content Area */}
-        <div className={`${activeTab === 'content' ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+      <div className="lg:hidden mb-4">
+        <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/60">
+          <div>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white">Insights Panel</p>
+            <p className="text-xs text-gray-500">Content score & SERP intel</p>
+          </div>
+          <button
+            onClick={() => setInsightsPanelVisible((prev) => !prev)}
+            className="px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+          >
+            {insightsPanelVisible ? 'Hide' : 'Show'}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 space-y-6">
           {/* Content Tab */}
           {activeTab === 'content' && (
             <div className="space-y-6">
-              {/* TOC Sidebar (if enabled) */}
-              {showTOC && contentMetadata && (
-                <div className="mb-6">
-                  <TableOfContents contentMetadata={contentMetadata} />
-                </div>
-              )}
-
               {/* Draft Content - Rich HTML Preview */}
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
                 {/* Featured image */}
@@ -513,23 +534,37 @@ export default function ViewDraftPage() {
           )}
         </div>
 
-        {/* Sidebar (only on content tab) */}
-        {activeTab === 'content' && (
-          <div className="space-y-6">
-            {contentMetadata && (
-              <>
-                <TableOfContents contentMetadata={contentMetadata} />
+        <div className={`${insightsPanelVisible ? 'flex' : 'hidden'} lg:flex lg:w-96 flex-shrink-0 flex-col gap-6`}>
+          <ContentInsightsSidebar
+            contentScore={qualityScore}
+            wordCount={derivedWordCount}
+            readingTimeMinutes={contentMetadata?.reading_time_minutes}
+            metadata={metadata}
+            seoData={seoData}
+            keywords={keywords}
+            topic={topic}
+          />
+
+          {activeTab === 'content' && (
+            <div className="space-y-6">
+              {showTOC && contentMetadata && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Table of Contents</h3>
+                  <TableOfContents contentMetadata={contentMetadata} />
+                </div>
+              )}
+              {contentMetadata && (
                 <ImageGallery contentMetadata={contentMetadata} />
-              </>
-            )}
-            {qualityDimensions && (
-              <QualityDimensionsDisplay
-                dimensions={qualityDimensions}
-                overallScore={qualityScore}
-              />
-            )}
-          </div>
-        )}
+              )}
+              {qualityDimensions && (
+                <QualityDimensionsDisplay
+                  dimensions={qualityDimensions}
+                  overallScore={qualityScore}
+                />
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Webflow HTML Preview Modal */}
