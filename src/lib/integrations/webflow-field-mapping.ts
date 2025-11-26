@@ -162,7 +162,7 @@ export function applyWebflowFieldMappings(
     const value = getBlogFieldValue(blogPost, mapping.blogField);
     
     if (value !== undefined && value !== null) {
-      let transformedValue = value;
+      let transformedValue: unknown = value;
       
       // Apply transformation if specified
       if (mapping.transform) {
