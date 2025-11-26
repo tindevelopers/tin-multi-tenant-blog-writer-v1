@@ -141,14 +141,20 @@ function SEOToolsPageContent() {
     }
 
     try {
-      await generateContentIdeas({
+      // Generate content ideas and get the result directly
+      const generatedCluster = await generateContentIdeas({
         keywords: selectedKeywordsList.map(k => k.keyword),
         pillar_keyword: primaryAnalysis?.keyword,
         cluster_name: primaryAnalysis?.keyword ? `${primaryAnalysis.keyword} Content Hub` : undefined,
       });
 
-      // Save to database
-      const result = await saveContentCluster();
+      if (!generatedCluster) {
+        alert('Failed to generate content ideas');
+        return;
+      }
+      
+      // Save to database using the generated cluster directly
+      const result = await saveContentCluster(generatedCluster);
       
       if (result.success) {
         // Navigate to content clusters page

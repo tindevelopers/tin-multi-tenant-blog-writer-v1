@@ -103,6 +103,7 @@ export class EnhancedKeywordResearchService {
           keywords: keywords.slice(0, 10), // Reduced from 75 to preserve credits
           location,
           language,
+          include_search_volume: true, // Request search volume data
         }),
       });
 

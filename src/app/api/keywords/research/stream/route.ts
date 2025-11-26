@@ -256,6 +256,7 @@ export async function POST(request: NextRequest) {
                 {
                   include_trends: false,
                   include_keyword_ideas: true, // Enable to get related keywords
+                  include_search_volume: true, // Request search volume data
                 }
               );
 
@@ -372,6 +373,15 @@ export async function POST(request: NextRequest) {
                       search_volume: primaryKeywordData.search_volume,
                     } : null,
                     relatedTerms: result.relatedTerms.length,
+                    keywordDataSample: keywordData ? {
+                      search_volume: keywordData.search_volume,
+                      hasSearchVolume: 'search_volume' in keywordData,
+                      keywordDataKeys: Object.keys(keywordData),
+                    } : null,
+                    firstRelatedTerm: result.relatedTerms[0] ? {
+                      keyword: result.relatedTerms[0].keyword,
+                      search_volume: result.relatedTerms[0].search_volume,
+                    } : null,
                   });
                 } else {
                   logger.warn('Keyword data not found in analysis response', {

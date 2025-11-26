@@ -384,6 +384,7 @@ class KeywordResearchService {
       include_keyword_ideas?: boolean;
       include_relevant_pages?: boolean;
       include_serp_ai_summary?: boolean;
+      include_search_volume?: boolean; // Request search volume data
       competitor_domain?: string;
     }
   ): Promise<KeywordAnalysis> {
@@ -409,7 +410,8 @@ class KeywordResearchService {
         location,
         language: 'en',
         include_serp: false,
-        max_suggestions_per_keyword: finalMaxSuggestions
+        max_suggestions_per_keyword: finalMaxSuggestions,
+        include_search_volume: true, // Always request search volume data
       };
 
       // Add enhanced endpoint parameters if provided
@@ -425,6 +427,9 @@ class KeywordResearchService {
         }
         if (options.include_serp_ai_summary !== undefined) {
           requestBody.include_serp_ai_summary = options.include_serp_ai_summary;
+        }
+        if (options.include_search_volume !== undefined) {
+          requestBody.include_search_volume = options.include_search_volume;
         }
         if (options.competitor_domain) {
           requestBody.competitor_domain = options.competitor_domain;

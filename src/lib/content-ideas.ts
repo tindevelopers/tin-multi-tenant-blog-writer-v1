@@ -380,12 +380,26 @@ export class ContentIdeasService {
     try {
       const supabase = createClient();
       
+      // Get user's org_id
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('org_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (userError || !userProfile) {
+        logger.error('Failed to get user org_id:', userError);
+        return { success: false, error: 'User organization not found' };
+      }
+
+      const orgId = userProfile.org_id;
+      
       // Insert cluster
       const { data: clusterData, error: clusterError } = await supabase
         .from('content_clusters')
         .insert({
           user_id: userId,
-          org_id: userId, // Using userId as org_id for now
+          org_id: orgId,
           cluster_name: cluster.cluster_name,
           pillar_keyword: cluster.pillar_keyword,
           cluster_description: cluster.cluster_description,
@@ -407,7 +421,7 @@ export class ContentIdeasService {
       // Insert content ideas
       const ideasToInsert = content_ideas.map(idea => ({
         cluster_id: clusterData.id,
-        org_id: userId,
+        org_id: orgId,
         content_type: idea.content_type,
         target_keyword: idea.target_keyword,
         title: idea.title,

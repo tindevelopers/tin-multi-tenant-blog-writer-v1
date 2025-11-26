@@ -44,8 +44,9 @@ export function useContentIdeas(): UseContentIdeasResult {
 
   /**
    * Generate content ideas from keywords
+   * Returns the generated cluster so it can be used immediately
    */
-  const generateContentIdeas = useCallback(async (request: ContentIdeaGenerationRequest) => {
+  const generateContentIdeas = useCallback(async (request: ContentIdeaGenerationRequest): Promise<ContentIdeaGenerationResponse | null> => {
     try {
       setLoading(true);
       setError(null);
@@ -67,10 +68,13 @@ export function useContentIdeas(): UseContentIdeasResult {
         longTail: result.long_tail_ideas.length,
         total: allIdeas.length,
       });
+      
+      return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate content ideas';
       setError(errorMessage);
       logger.error('Content ideas generation error:', err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -78,9 +82,12 @@ export function useContentIdeas(): UseContentIdeasResult {
 
   /**
    * Save the current cluster and content ideas to database
+   * Can optionally accept a cluster directly to avoid state timing issues
    */
-  const saveContentCluster = useCallback(async () => {
-    if (!currentCluster) {
+  const saveContentCluster = useCallback(async (clusterOverride?: ContentIdeaGenerationResponse | null) => {
+    const clusterToSave = clusterOverride || currentCluster;
+    
+    if (!clusterToSave) {
       return { success: false, error: 'No cluster to save' };
     }
 
@@ -96,14 +103,14 @@ export function useContentIdeas(): UseContentIdeasResult {
       }
 
       const allIdeas = [
-        ...currentCluster.pillar_ideas,
-        ...currentCluster.supporting_ideas,
-        ...currentCluster.long_tail_ideas,
+        ...clusterToSave.pillar_ideas,
+        ...clusterToSave.supporting_ideas,
+        ...clusterToSave.long_tail_ideas,
       ];
 
       const result = await contentIdeasService.saveContentCluster(
         user.id,
-        currentCluster.cluster,
+        clusterToSave.cluster,
         allIdeas
       );
 
@@ -120,7 +127,7 @@ export function useContentIdeas(): UseContentIdeasResult {
     } finally {
       setLoading(false);
     }
-  }, [currentCluster]);
+  }, [currentCluster, loadUserClusters]);
 
   /**
    * Load user's content clusters
