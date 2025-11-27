@@ -821,7 +821,8 @@ export async function POST(request: NextRequest) {
         error: errorText,
         url: apiUrl,
         hasApiKey: !!API_KEY,
-        authentication: API_KEY ? 'Bearer token' : 'Open API (no auth)'
+        authentication: API_KEY ? 'Bearer token' : 'Open API (no auth)',
+        queueId: queueId
       });
       
       // Update queue entry with error if queue exists
@@ -835,11 +836,25 @@ export async function POST(request: NextRequest) {
               generation_completed_at: new Date().toISOString()
             })
             .eq('queue_id', queueId);
+          logger.debug('✅ Queue entry updated with error status', { queueId });
         } catch (error) {
           logger.warn('⚠️ Failed to update queue entry with error:', error);
         }
       }
       
+      // Always return queue_id even on error so frontend can track the failed generation
+      if (queueId) {
+        return NextResponse.json(
+          { 
+            error: `External API error: ${response.status} ${errorText}`,
+            queue_id: queueId, // Include queue_id so frontend can track this failed generation
+            status: 'failed'
+          },
+          { status: 500 } // Return 500 to indicate server error, but include queue_id
+        );
+      }
+      
+      // If no queue_id, return error without queue_id
       return NextResponse.json(
         { error: `External API error: ${response.status} ${errorText}` },
         { status: response.status }
@@ -1200,6 +1215,18 @@ export async function POST(request: NextRequest) {
         }
       }
       
+      // Always return queue_id even on error so frontend can track the failed generation
+      if (queueId) {
+        return NextResponse.json(
+          { 
+            error: result.error_message || result.error || 'Blog generation failed',
+            queue_id: queueId, // Include queue_id so frontend can track this failed generation
+            status: 'failed'
+          },
+          { status: 500 }
+        );
+      }
+      
       return NextResponse.json(
         { error: result.error_message || result.error || 'Blog generation failed' },
         { status: 500 }
@@ -1222,9 +1249,22 @@ export async function POST(request: NextRequest) {
             generation_completed_at: new Date().toISOString()
           })
           .eq('queue_id', queueId);
+        logger.debug('✅ Queue entry updated with error status in catch block', { queueId });
       } catch (updateError) {
         logger.warn('⚠️ Failed to update queue entry with error:', updateError);
       }
+    }
+    
+    // Always return queue_id even on error so frontend can track the failed generation
+    if (queueId) {
+      return NextResponse.json(
+        { 
+          error: 'Internal server error',
+          queue_id: queueId, // Include queue_id so frontend can track this failed generation
+          status: 'failed'
+        },
+        { status: 500 }
+      );
     }
     
     return NextResponse.json(

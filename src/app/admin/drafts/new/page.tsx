@@ -431,21 +431,30 @@ function NewDraftContent() {
 
       console.log('🔍 Generated result:', result);
 
-      // In async mode, we ALWAYS get a queue_id, never immediate content
+      // In async mode, we ALWAYS get a queue_id, even on errors
+      // The backend now always returns queue_id in error responses too
       if (result && (result as any).queue_id) {
         const capturedQueueId = (result as any).queue_id;
         setQueueId(capturedQueueId);
-        setQueueStatus("generating");
-        setIsGenerating(false); // Stop loading spinner since generation is queued
-        console.log('✅ Blog generation queued:', capturedQueueId);
         
+        // Check if this is an error response
+        if (result.error || result.status === 'failed') {
+          setQueueStatus("failed");
+          console.warn('⚠️ Blog generation failed but queue_id received:', capturedQueueId, result.error);
+          // Don't show alert - let the queue UI show the failed status
+        } else {
+          setQueueStatus("generating");
+          console.log('✅ Blog generation queued:', capturedQueueId);
+        }
+        
+        setIsGenerating(false); // Stop loading spinner
         // Don't show alert - let the progress UI handle feedback
         // The SSE hook will update status automatically
       } else {
-        // This should never happen in async mode, but handle gracefully
-        console.warn('⚠️ No queue_id returned from async generation');
+        // This should rarely happen now, but handle gracefully
+        console.error('❌ No queue_id returned from generation:', result);
         setIsGenerating(false);
-        alert('Blog generation started but queue ID not received. Please check the queue dashboard.');
+        alert('Blog generation failed to start. Please try again or check the queue dashboard.');
       }
 
       // REMOVED: Immediate content handling - async mode never returns content immediately
