@@ -46,15 +46,28 @@ fi
 
 # Grant Cloud Run service account access to the secret
 echo "🔑 Granting Cloud Run service account access to secret..."
+
+# Try to get the service account from the Cloud Run service
 SERVICE_ACCOUNT=$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
     --region="$REGION" \
     --project="$PROJECT_ID" \
     --format="value(spec.template.spec.serviceAccountName)" 2>/dev/null || echo "")
 
 if [ -z "$SERVICE_ACCOUNT" ]; then
-    # Use default compute service account
-    SERVICE_ACCOUNT="${PROJECT_ID}@${PROJECT_ID}.iam.gserviceaccount.com"
-    echo "⚠️  Could not find service account, using default: $SERVICE_ACCOUNT"
+    # Get project number for default compute service account
+    PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)" 2>/dev/null || echo "")
+    
+    if [ -n "$PROJECT_NUMBER" ]; then
+        # Use default compute service account format
+        SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+        echo "⚠️  Could not find service account from Cloud Run service, using default compute service account: $SERVICE_ACCOUNT"
+    else
+        # Fallback to appspot service account
+        SERVICE_ACCOUNT="${PROJECT_ID}@appspot.gserviceaccount.com"
+        echo "⚠️  Could not determine project number, using appspot service account: $SERVICE_ACCOUNT"
+    fi
+else
+    echo "✅ Found service account from Cloud Run service: $SERVICE_ACCOUNT"
 fi
 
 echo "   Granting access to: $SERVICE_ACCOUNT"
