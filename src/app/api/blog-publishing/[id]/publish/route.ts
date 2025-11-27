@@ -157,10 +157,29 @@ export async function POST(
           error_code: null,
         };
 
-        await supabase
+        // Update publishing record with results and verify the update succeeded
+        const { data: updatedPublishing, error: updateError } = await supabase
           .from('blog_platform_publishing')
           .update(updateData)
-          .eq('publishing_id', publishingId);
+          .eq('publishing_id', publishingId)
+          .select()
+          .single();
+
+        if (updateError) {
+          logger.error('Failed to update publishing record after successful publish:', {
+            publishingId,
+            updateError,
+            updateData,
+          });
+          // Even though the update failed, the publish was successful
+          // Log the error but don't fail the request
+        } else {
+          logger.debug('Successfully updated publishing record', {
+            publishingId,
+            status: updatedPublishing?.status,
+            sync_status: updatedPublishing?.sync_status,
+          });
+        }
 
         return NextResponse.json({
           success: true,
@@ -173,6 +192,7 @@ export async function POST(
             url: result.url,
             is_draft: is_draft,
           },
+          publishing: updatedPublishing || null, // Return updated record for UI
         });
       } else {
         // WordPress and Shopify publishing (to be implemented)

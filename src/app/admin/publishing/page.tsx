@@ -157,6 +157,9 @@ export default function PublishingPage() {
 
         const publishResult = await publishResponse.json();
         
+        // Wait a moment for database to commit the update
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         alert(
           isDraft 
             ? "Blog post saved as draft on platform. Track progress below."
@@ -172,8 +175,11 @@ export default function PublishingPage() {
         );
       }
       
-      fetchPublishing();
-      fetchReadyPosts();
+      // Refresh data after publishing completes
+      await Promise.all([
+        fetchPublishing(),
+        fetchReadyPosts(),
+      ]);
     } catch (err) {
       console.error("Error starting publishing:", err);
       alert(

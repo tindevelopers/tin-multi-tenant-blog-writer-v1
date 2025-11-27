@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    // Build query
+    // Build query - ensure all fields including sync_status are selected
     let query = supabase
       .from("blog_platform_publishing")
       .select(`
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         published_by_user:users!blog_platform_publishing_published_by_fkey(user_id, email, full_name)
       `)
       .eq("org_id", userProfile.org_id)
-      .order("created_at", { ascending: false })
+      .order("updated_at", { ascending: false }) // Order by updated_at to show latest changes first
       .range(offset, offset + limit - 1);
 
     // Apply filters
