@@ -64,9 +64,15 @@ export default function QueueItemDetailPage() {
 
   useEffect(() => {
     if (status && item) {
-      setItem((prevItem) => prevItem ? { ...prevItem, status: status as QueueStatus, progress_percentage: progress, current_stage: stage } : null);
+      // If status changed to "generated", refetch the full item to get generated_content
+      if (status === "generated" && item.status !== "generated") {
+        fetchQueueItem();
+      } else {
+        // Otherwise, just update the status/progress/stage
+        setItem((prevItem) => prevItem ? { ...prevItem, status: status as QueueStatus, progress_percentage: progress, current_stage: stage } : null);
+      }
     }
-  }, [status, progress, stage, item]);
+  }, [status, progress, stage, item, fetchQueueItem]);
 
 
   const handleCancel = async () => {
