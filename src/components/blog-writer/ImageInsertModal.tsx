@@ -168,14 +168,40 @@ export default function ImageInsertModal({
 
       const result = await response.json();
       
-      // The API should return an image URL
-      const imageUrl = result.image_url || result.url || result.secure_url;
+      // Extract image URL from the response structure
+      // The API returns: { success: true, images: [{ image_url: "...", image_data: "..." }] }
+      let imageUrl: string | null = null;
+      
+      if (result.images && result.images.length > 0) {
+        const imageData = result.images[0];
+        // Prefer image_url, fallback to image_data (base64)
+        if (imageData.image_url) {
+          imageUrl = imageData.image_url;
+        } else if (imageData.image_data) {
+          // Convert base64 to data URL if needed
+          if (imageData.image_data.startsWith('data:image/')) {
+            imageUrl = imageData.image_data;
+          } else {
+            // Assume it's base64 without data URL prefix
+            const format = imageData.format || 'png';
+            imageUrl = `data:image/${format};base64,${imageData.image_data}`;
+          }
+        }
+      } else if (result.image) {
+        // Alternative structure: { image: { image_url: "..." } }
+        imageUrl = result.image.image_url || result.image.url || result.image.secure_url || null;
+      } else {
+        // Fallback to top-level fields
+        imageUrl = result.image_url || result.url || result.secure_url || null;
+      }
       
       if (!imageUrl) {
-        throw new Error('No image URL returned from generation');
+        logger.error('No image URL found in response:', result);
+        throw new Error('No image URL returned from generation. Please check the response structure.');
       }
 
       onImageSelect(imageUrl);
+      
       onClose();
     } catch (error) {
       logger.error('Error generating image:', error);
