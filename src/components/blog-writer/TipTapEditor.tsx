@@ -59,6 +59,8 @@ export default function TipTapEditor({
         heading: {
           levels: [1, 2, 3],
         },
+        // Exclude Link from StarterKit since we're configuring it separately
+        link: false,
       }),
       Image.configure({
         inline: true,
@@ -92,8 +94,13 @@ export default function TipTapEditor({
 
   // Sync content when it changes externally
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content);
+    if (!editor) return;
+    
+    const currentContent = editor.getHTML();
+    // Only update if content actually changed and is different from current
+    // Use setContent with emitUpdate: false to prevent triggering onChange callback
+    if (content && content !== currentContent) {
+      editor.commands.setContent(content, false);
     }
   }, [content, editor]);
 
@@ -103,12 +110,20 @@ export default function TipTapEditor({
   }, [editor]);
 
   const handleImageSelect = useCallback(async (imageUrl: string) => {
-    if (!editor) return;
+    if (!editor) {
+      logger.error('Editor not available for image insertion');
+      return;
+    }
     
-    // If onImageUpload is provided, we might need to handle it differently
-    // But for now, we'll directly insert the image URL
-    editor.chain().focus().setImage({ src: imageUrl }).run();
-    setShowImageModal(false);
+    try {
+      // Ensure editor is focused before inserting image
+      editor.chain().focus().setImage({ src: imageUrl, alt: 'Uploaded image' }).run();
+      setShowImageModal(false);
+      logger.debug('Image inserted successfully', { imageUrl });
+    } catch (error) {
+      logger.error('Error inserting image:', error);
+      alert('Failed to insert image. Please try again.');
+    }
   }, [editor]);
 
   const setLink = useCallback(() => {
