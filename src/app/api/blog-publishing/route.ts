@@ -129,6 +129,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
+    // Check user's role - publishing requires admin, manager, or editor role
+    const { data: userWithRole } = await supabase
+      .from("users")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+
+    const userRole = userWithRole?.role;
+    const allowedRoles = ['admin', 'manager', 'editor', 'system_admin', 'super_admin'];
+    
+    if (!userRole || !allowedRoles.includes(userRole)) {
+      logger.warn("User attempted to create publishing record without required role", {
+        userId: user.id,
+        role: userRole,
+      });
+      return NextResponse.json(
+        { error: "Insufficient permissions. Publishing requires admin, manager, or editor role." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { post_id, queue_id, platform, scheduled_at, publish_metadata } = body;
 
@@ -263,6 +284,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Check if a publishing record already exists for this post+platform
+    const { data: existingPublishing } = await supabase
+      .from("blog_platform_publishing")
+      .select("publishing_id, status")
+      .eq("post_id", finalPostId)
+      .eq("platform", platform)
+      .eq("org_id", userProfile.org_id)
+      .single();
+
+    if (existingPublishing) {
+      // Return the existing record instead of creating a duplicate
+      logger.info("Publishing record already exists, returning existing record", {
+        publishingId: existingPublishing.publishing_id,
+        postId: finalPostId,
+        platform,
+      });
+
+      const { data: publishing } = await supabase
+        .from("blog_platform_publishing")
+        .select(`
+          *,
+          post:blog_posts(post_id, title, status),
+          queue:blog_generation_queue(queue_id, topic, generated_title, status),
+          published_by_user:users!blog_platform_publishing_published_by_fkey(user_id, email, full_name)
+        `)
+        .eq("publishing_id", existingPublishing.publishing_id)
+        .single();
+
+      return NextResponse.json(publishing, { status: 200 });
+    }
+
     // Create publishing record
     const { data: publishing, error } = await supabase
       .from("blog_platform_publishing")
@@ -294,11 +346,46 @@ export async function POST(request: NextRequest) {
         post_id: finalPostId,
         queue_id,
         platform,
+        userRole,
       });
+
+      // Handle unique constraint violation
+      if (error.code === '23505') {
+        // Unique constraint violation - record already exists
+        const { data: existingRecord } = await supabase
+          .from("blog_platform_publishing")
+          .select(`
+            *,
+            post:blog_posts(post_id, title, status),
+            queue:blog_generation_queue(queue_id, topic, generated_title, status),
+            published_by_user:users!blog_platform_publishing_published_by_fkey(user_id, email, full_name)
+          `)
+          .eq("post_id", finalPostId)
+          .eq("platform", platform)
+          .eq("org_id", userProfile.org_id)
+          .single();
+
+        if (existingRecord) {
+          return NextResponse.json(existingRecord, { status: 200 });
+        }
+      }
+
+      // Handle RLS policy violation
+      if (error.code === '42501' || error.message?.includes('permission denied')) {
+        return NextResponse.json(
+          { 
+            error: "Insufficient permissions. Publishing requires admin, manager, or editor role.",
+            details: error.message
+          },
+          { status: 403 }
+        );
+      }
+
       return NextResponse.json(
         { 
           error: "Failed to create publishing record",
-          details: error.message || error.details || error.hint
+          details: error.message || error.details || error.hint,
+          code: error.code
         },
         { status: 500 }
       );
