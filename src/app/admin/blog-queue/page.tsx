@@ -820,7 +820,7 @@ function QueueItemRow({
       <td className="px-6 py-4 whitespace-nowrap">
         <StatusBadge 
           status={item.status} 
-          currentStage={item.status === "generating" ? (item.current_stage || undefined) : undefined}
+          currentStage={item.status === "generating" ? (item.current_stage !== null ? item.current_stage : undefined) : undefined}
         />
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
