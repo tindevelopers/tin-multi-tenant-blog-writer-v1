@@ -1139,6 +1139,21 @@ export class EnhancedContentClustersService {
         return { success: false, error: 'User ID mismatch' };
       }
 
+      // Get user's org_id from users table
+      const { data: userProfile, error: userError } = await supabase
+        .from('users')
+        .select('org_id')
+        .eq('user_id', userId)
+        .single();
+
+      if (userError || !userProfile) {
+        logger.error('❌ Failed to get user org_id:', userError);
+        return { success: false, error: 'User organization not found' };
+      }
+
+      const orgId = userProfile.org_id;
+      logger.debug('✅ Retrieved org_id:', { orgId, userId });
+
       // Test table access before attempting insert
       try {
         logger.debug('🔍 Testing table access...');
@@ -1194,11 +1209,29 @@ export class EnhancedContentClustersService {
       const clusterIds: string[] = [];
       
       for (const cluster of clusters) {
+        // Check if cluster with same name already exists for this org
+        let clusterName = cluster.cluster_name;
+        const { data: existingClusters } = await supabase
+          .from('content_clusters')
+          .select('cluster_name')
+          .eq('org_id', orgId)
+          .eq('cluster_name', clusterName);
+        
+        // If duplicate exists, append timestamp to make it unique
+        if (existingClusters && existingClusters.length > 0) {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+          clusterName = `${cluster.cluster_name} (${timestamp})`;
+          logger.debug('⚠️ Duplicate cluster name detected, appending timestamp:', {
+            original: cluster.cluster_name,
+            new: clusterName
+          });
+        }
+
         // Prepare cluster data for insertion
         const clusterInsertData = {
           user_id: userId,
-          org_id: userId, // Using userId as org_id for now
-          cluster_name: cluster.cluster_name,
+          org_id: orgId, // Use actual org_id from users table
+          cluster_name: clusterName,
           pillar_keyword: cluster.pillar_keyword,
           cluster_description: cluster.cluster_description,
           cluster_status: cluster.cluster_status,
@@ -1318,7 +1351,7 @@ export class EnhancedContentClustersService {
             
             return {
               cluster_id: clusterData.id,
-              org_id: userId,
+              org_id: orgId, // Use actual org_id from users table
               content_type: article.content_type,
               target_keyword: article.target_keyword,
               keyword_sequence: nextSequence,
