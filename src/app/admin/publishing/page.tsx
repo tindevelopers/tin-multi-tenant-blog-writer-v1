@@ -133,10 +133,45 @@ export default function PublishingPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to create publishing job");
+        throw new Error(error.error || "Failed to create publishing record");
       }
 
-      alert("Publishing job created. Track progress below.");
+      const publishingRecord = await response.json();
+      
+      // Trigger actual publishing to platform
+      try {
+        const publishResponse = await fetch(`/api/blog-publishing/${publishingRecord.publishing_id}/publish`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            is_draft: isDraft,
+          }),
+        });
+
+        if (!publishResponse.ok) {
+          const publishError = await publishResponse.json();
+          throw new Error(publishError.message || publishError.error || "Failed to publish to platform");
+        }
+
+        const publishResult = await publishResponse.json();
+        
+        alert(
+          isDraft 
+            ? "Blog post saved as draft on platform. Track progress below."
+            : "Blog post published successfully! Track progress below."
+        );
+      } catch (publishErr) {
+        // Publishing record was created, but actual publish failed
+        console.error("Error publishing to platform:", publishErr);
+        alert(
+          `Publishing record created, but failed to publish to platform: ${
+            publishErr instanceof Error ? publishErr.message : "Unknown error"
+          }. You can retry from the publishing table below.`
+        );
+      }
+      
       fetchPublishing();
       fetchReadyPosts();
     } catch (err) {
