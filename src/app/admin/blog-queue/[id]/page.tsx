@@ -13,6 +13,7 @@ import {
   EyeIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueueItem, type ProgressUpdate } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
@@ -335,6 +336,20 @@ export default function QueueItemDetailPage() {
               percentage={item.progress_percentage || 0}
               stage={item.current_stage || "Starting..."}
             />
+          )}
+
+          {/* Stages Timeline */}
+          {item.progress_updates && Array.isArray(item.progress_updates) && item.progress_updates.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+                Generation Stages
+              </h3>
+              <StagesTimeline
+                progressUpdates={item.progress_updates}
+                currentStage={item.current_stage || ""}
+                currentProgress={item.progress_percentage || 0}
+              />
+            </div>
           )}
 
           <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -697,5 +712,156 @@ function formatDate(dateString: string | null) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function StagesTimeline({
+  progressUpdates,
+  currentStage,
+  currentProgress,
+}: {
+  progressUpdates: ProgressUpdate[];
+  currentStage: string;
+  currentProgress: number;
+}) {
+  // Get unique stages from progress updates, sorted by stage_number
+  const stages = progressUpdates
+    .filter((update) => update.stage_number !== undefined)
+    .sort((a, b) => (a.stage_number || 0) - (b.stage_number || 0))
+    .reduce((acc, update) => {
+      const stageNum = update.stage_number || 0;
+      if (!acc.find((s) => s.stage_number === stageNum)) {
+        acc.push(update);
+      }
+      return acc;
+    }, [] as ProgressUpdate[]);
+
+  // If no stages with stage_number, use all unique stages
+  const uniqueStages =
+    stages.length > 0
+      ? stages
+      : progressUpdates
+          .reduce((acc, update) => {
+            if (!acc.find((s) => s.stage === update.stage)) {
+              acc.push(update);
+            }
+            return acc;
+          }, [] as ProgressUpdate[])
+          .sort((a, b) => {
+            // Sort by timestamp if available
+            return (a.timestamp || 0) - (b.timestamp || 0);
+          });
+
+  if (uniqueStages.length === 0) {
+    return (
+      <div className="text-sm text-gray-500 dark:text-gray-400">
+        No stage information available
+      </div>
+    );
+  }
+
+  // Determine which stage is current
+  const currentStageIndex = uniqueStages.findIndex(
+    (s) => s.stage === currentStage || s.stage.toLowerCase() === currentStage.toLowerCase()
+  );
+
+  return (
+    <div className="relative">
+      {/* Timeline line */}
+      <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-700" />
+
+      <div className="space-y-4">
+        {uniqueStages.map((stage, index) => {
+          const isCompleted = index < currentStageIndex || 
+            (currentStageIndex === -1 && index < uniqueStages.length - 1) ||
+            stage.progress_percentage === 100;
+          const isCurrent = index === currentStageIndex || 
+            (currentStageIndex === -1 && index === uniqueStages.length - 1);
+          const isPending = !isCompleted && !isCurrent;
+
+          // Get the latest update for this stage
+          const latestUpdate = progressUpdates
+            .filter((u) => u.stage === stage.stage)
+            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
+
+          return (
+            <div key={index} className="relative flex items-start gap-4">
+              {/* Stage indicator */}
+              <div className="relative z-10 flex items-center justify-center">
+                {isCompleted ? (
+                  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                    <CheckCircleIcon className="w-5 h-5 text-white" />
+                  </div>
+                ) : isCurrent ? (
+                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center animate-pulse">
+                    <ArrowPathIcon className="w-5 h-5 text-white animate-spin" />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+                    <div className="w-3 h-3 rounded-full bg-gray-500 dark:bg-gray-400" />
+                  </div>
+                )}
+              </div>
+
+              {/* Stage content */}
+              <div className="flex-1 pt-1">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4
+                      className={`text-sm font-medium ${
+                        isCurrent
+                          ? "text-blue-600 dark:text-blue-400"
+                          : isCompleted
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-gray-500 dark:text-gray-400"
+                      }`}
+                    >
+                      {stage.stage || `Stage ${index + 1}`}
+                    </h4>
+                    {latestUpdate?.details && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {latestUpdate.details}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {latestUpdate?.progress_percentage !== undefined && (
+                      <span
+                        className={`text-xs font-medium ${
+                          isCurrent
+                            ? "text-blue-600 dark:text-blue-400"
+                            : isCompleted
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-gray-500 dark:text-gray-400"
+                        }`}
+                      >
+                        {latestUpdate.progress_percentage}%
+                      </span>
+                    )}
+                    {latestUpdate?.timestamp && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        {formatDate(
+                          new Date(latestUpdate.timestamp * 1000).toISOString()
+                        )}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {isCurrent && latestUpdate?.progress_percentage !== undefined && (
+                  <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${latestUpdate.progress_percentage}%`,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
