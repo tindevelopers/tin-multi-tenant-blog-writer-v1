@@ -6,22 +6,23 @@
 set -e
 
 # Configuration
-# Test through our Next.js API route (which creates queue entries)
-# Set NEXT_PUBLIC_APP_URL or use default localhost
-API_BASE_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
-API_URL="${API_BASE_URL}/api/blog-writer/generate"
-NUM_REQUESTS="${NUM_REQUESTS:-10}"  # Default to 10, can override with env var
-CONCURRENT_REQUESTS="${CONCURRENT_REQUESTS:-5}"  # Default to 5 concurrent
+# Test directly against Google Cloud Run backend endpoint
+API_BASE_URL="${BLOG_WRITER_API_URL:-https://blog-writer-api-dev-613248238610.europe-west9.run.app}"
+API_URL="${API_BASE_URL}/api/v1/blog/generate-enhanced"
+NUM_REQUESTS="${NUM_REQUESTS:-100}"  # Default to 100, can override with env var
+CONCURRENT_REQUESTS="${CONCURRENT_REQUESTS:-10}"  # Default to 10 concurrent
+API_KEY="${BLOG_WRITER_API_KEY:-}"
 
-echo "🧪 Testing Blog Generation Queue System"
-echo "========================================"
+echo "🧪 Testing Blog Generation Queue System (Google Cloud Run Backend)"
+echo "=================================================================="
 echo "API URL: $API_URL"
 echo "Number of requests: $NUM_REQUESTS"
 echo "Concurrent requests: $CONCURRENT_REQUESTS"
+echo "API Key: ${API_KEY:+Set (hidden)}${API_KEY:-Not set}"
 echo ""
-echo "⚠️  Note: This tests through our Next.js API route which creates queue entries"
-echo "    Make sure the Next.js dev server is running (npm run dev)"
-echo "    Or set NEXT_PUBLIC_APP_URL to your deployed URL"
+echo "⚠️  Note: This tests directly against Google Cloud Run backend"
+echo "    The backend returns 'job_id' for async jobs (Cloud Tasks)"
+echo "    Set BLOG_WRITER_API_KEY if authentication is required"
 echo ""
 
 # Test payload
@@ -47,8 +48,14 @@ make_request() {
     
     echo "Request $request_num..." >&2
     
+    # Build headers
+    headers=(-H "Content-Type: application/json")
+    if [ -n "$API_KEY" ]; then
+        headers+=(-H "Authorization: Bearer $API_KEY")
+    fi
+    
     response=$(curl -s -w "\n%{http_code}" -X POST "$API_URL?async_mode=true" \
-        -H "Content-Type: application/json" \
+        "${headers[@]}" \
         -d "$PAYLOAD" 2>&1)
     
     http_code=$(echo "$response" | tail -n1)
@@ -57,8 +64,13 @@ make_request() {
     # Save response
     echo "$body" > "$output_file"
     
-    # Check for queue_id or job_id
-    if echo "$body" | grep -q '"queue_id"'; then
+    # Check for job_id (Google Cloud Run returns job_id for async jobs)
+    if echo "$body" | grep -q '"job_id"'; then
+        job_id=$(echo "$body" | grep -o '"job_id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        echo "✅ Request $request_num: SUCCESS - Job ID: $job_id (HTTP $http_code)" >&2
+        echo "SUCCESS|$request_num|$http_code|$job_id"
+    elif echo "$body" | grep -q '"queue_id"'; then
+        # Also check for queue_id (in case backend returns it)
         queue_id=$(echo "$body" | grep -o '"queue_id":"[^"]*"' | head -1 | cut -d'"' -f4)
         if echo "$body" | grep -q '"error"'; then
             error=$(echo "$body" | grep -o '"error":"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -68,10 +80,6 @@ make_request() {
             echo "✅ Request $request_num: SUCCESS - Queue ID: $queue_id (HTTP $http_code)" >&2
             echo "SUCCESS|$request_num|$http_code|$queue_id"
         fi
-    elif echo "$body" | grep -q '"job_id"'; then
-        job_id=$(echo "$body" | grep -o '"job_id":"[^"]*"' | head -1 | cut -d'"' -f4)
-        echo "✅ Request $request_num: SUCCESS - Job ID: $job_id (HTTP $http_code)" >&2
-        echo "SUCCESS|$request_num|$http_code|$job_id"
     elif echo "$body" | grep -q '"error"'; then
         error=$(echo "$body" | grep -o '"error":"[^"]*"\|"message":"[^"]*"' | head -1 | cut -d'"' -f4)
         echo "❌ Request $request_num: ERROR - $error (HTTP $http_code)" >&2
@@ -83,7 +91,7 @@ make_request() {
 }
 
 export -f make_request
-export API_URL PAYLOAD RESULTS_DIR
+export API_URL PAYLOAD RESULTS_DIR API_KEY
 
 # Run requests in parallel batches
 success_count=0
@@ -133,24 +141,26 @@ echo ""
 echo "📊 Test Results Summary"
 echo "======================="
 echo "Total requests: $NUM_REQUESTS"
-echo "✅ Success (with queue_id/job_id): $success_count"
+echo "✅ Success (with job_id/queue_id): $success_count"
 echo "⚠️  Error but queue_id received: $error_with_queue_count"
-echo "❌ Errors (no queue_id): $error_count"
+echo "❌ Errors (no job_id/queue_id): $error_count"
 echo "⚠️  Unknown: $unknown_count"
 echo ""
 
-# Calculate success rate for queue_id extraction
-total_with_queue=$((success_count + error_with_queue_count))
+# Calculate success rate for job_id/queue_id extraction
+total_with_id=$((success_count + error_with_queue_count))
 if [ $NUM_REQUESTS -gt 0 ]; then
-    queue_id_rate=$((total_with_queue * 100 / NUM_REQUESTS))
-    echo "📈 Queue ID extraction rate: $queue_id_rate% ($total_with_queue/$NUM_REQUESTS)"
+    id_extraction_rate=$((total_with_id * 100 / NUM_REQUESTS))
+    echo "📈 Job/Queue ID extraction rate: $id_extraction_rate% ($total_with_id/$NUM_REQUESTS)"
+    echo "   (Google Cloud Run should return 'job_id' for async jobs)"
 fi
 echo ""
 
 # Analyze errors
 if [ $error_count -gt 0 ]; then
-    echo "🔍 Error Analysis (requests without queue_id):"
-    echo "----------------------------------------------"
+    echo "🔍 Error Analysis (requests without job_id/queue_id):"
+    echo "-----------------------------------------------------"
+    shown=0
     for file in "$RESULTS_DIR"/request-*.json; do
         if ! grep -q "queue_id\|job_id" "$file" 2>/dev/null; then
             echo "File: $(basename $file)"
@@ -174,8 +184,8 @@ fi
 
 # Show sample successful responses
 if [ $success_count -gt 0 ] || [ $error_with_queue_count -gt 0 ]; then
-    echo "✅ Sample Responses with Queue ID (first 3):"
-    echo "--------------------------------------------"
+    echo "✅ Sample Responses with Job/Queue ID (first 3):"
+    echo "-----------------------------------------------"
     shown=0
     for file in "$RESULTS_DIR"/request-*.json; do
         if grep -q "queue_id\|job_id" "$file" 2>/dev/null; then
