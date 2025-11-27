@@ -77,6 +77,37 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Provide user-friendly error message for unique constraint violations
+    if (errorMessage.includes('unique constraint') || errorMessage.includes('duplicate key')) {
+      logger.warn('Integration already exists, attempting to update instead', {
+        orgId: user.org_id,
+        type,
+      });
+      
+      // Try to get the existing integration and return it
+      try {
+        const dbAdapter = new EnvironmentIntegrationsDB();
+        const existingIntegrations = await dbAdapter.getIntegrations(user.org_id);
+        const existing = existingIntegrations.find(int => int.type === type);
+        
+        if (existing) {
+          return NextResponse.json({ 
+            success: true, 
+            data: existing,
+            message: 'Integration already exists and was updated'
+          }, { status: 200 });
+        }
+      } catch (updateError) {
+        logger.error('Failed to retrieve existing integration', updateError);
+      }
+      
+      return NextResponse.json({ 
+        error: `An integration of type "${type}" already exists for your organization. Please update the existing integration instead.` 
+      }, { status: 409 });
+    }
+    
     logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
       context: 'integrations-post',
     });

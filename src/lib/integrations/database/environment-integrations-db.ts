@@ -126,7 +126,8 @@ export class EnvironmentIntegrationsDB {
   }
 
   /**
-   * Create a new integration
+   * Create a new integration or update existing one if it already exists
+   * Handles unique constraint violations by updating existing integration
    */
   async createIntegration(
     orgId: string,
@@ -140,40 +141,100 @@ export class EnvironmentIntegrationsDB {
   ): Promise<EnvironmentIntegration> {
     const tableName = getTableName('integrations', this.env);
     
+    // First, check if an integration with the same org_id and provider already exists
+    const { data: existingIntegration } = await this.supabase
+      .from(tableName)
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('provider', provider)
+      .single();
+
     // Encrypt sensitive credentials before storing
     const encryptedConnection = encryptConnectionConfig(connection as Record<string, unknown>);
     
-    const insertData: Record<string, unknown> = {
-      org_id: orgId,
-      provider,
+    const updateData: Record<string, unknown> = {
       connection_method: connectionMethod,
       connection: encryptedConnection,
       status,
+      updated_at: new Date().toISOString(),
     };
 
     if (lastTestedAt) {
-      insertData.last_tested_at = lastTestedAt;
+      updateData.last_tested_at = lastTestedAt;
     }
 
     if (errorMessage !== undefined) {
-      insertData.error_message = errorMessage;
+      updateData.error_message = errorMessage;
     }
 
     if (metadata) {
-      insertData.metadata = metadata;
-    }
-    
-    const { data, error } = await this.supabase
-      .from(tableName)
-      .insert(insertData)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to create integration: ${error.message}`);
+      updateData.metadata = metadata;
     }
 
-    return this.mapToEnvironmentIntegration(data);
+    if (existingIntegration) {
+      // Update existing integration
+      logger.debug(`[EnvironmentIntegrationsDB] Integration already exists for org_id=${orgId}, provider=${provider}. Updating instead of creating.`);
+      
+      const { data, error } = await this.supabase
+        .from(tableName)
+        .update(updateData)
+        .eq('id', existingIntegration.id)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Failed to update existing integration: ${error.message}`);
+      }
+
+      return this.mapToEnvironmentIntegration(data);
+    } else {
+      // Create new integration
+      const insertData: Record<string, unknown> = {
+        org_id: orgId,
+        provider,
+        ...updateData,
+      };
+      
+      const { data, error } = await this.supabase
+        .from(tableName)
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (error) {
+        // If we still get a unique constraint error, try to update instead
+        if (error.code === '23505' || error.message?.includes('unique constraint')) {
+          logger.debug(`[EnvironmentIntegrationsDB] Unique constraint violation detected. Attempting to update existing integration.`);
+          
+          // Try to find and update the existing integration
+          const { data: existing } = await this.supabase
+            .from(tableName)
+            .select('id')
+            .eq('org_id', orgId)
+            .eq('provider', provider)
+            .single();
+
+          if (existing) {
+            const { data: updatedData, error: updateError } = await this.supabase
+              .from(tableName)
+              .update(updateData)
+              .eq('id', existing.id)
+              .select()
+              .single();
+
+            if (updateError) {
+              throw new Error(`Failed to update existing integration: ${updateError.message}`);
+            }
+
+            return this.mapToEnvironmentIntegration(updatedData);
+          }
+        }
+        
+        throw new Error(`Failed to create integration: ${error.message}`);
+      }
+
+      return this.mapToEnvironmentIntegration(data);
+    }
   }
 
   /**
