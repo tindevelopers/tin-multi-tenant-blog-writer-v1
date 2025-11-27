@@ -455,13 +455,13 @@ function NewDraftContent() {
         setGeneratedContent(result);
         
         // Update form data with generated content - ensure excerpt is properly extracted
-        const excerptValue = typeof result.excerpt === 'string' 
+        const excerptValue: string = typeof result.excerpt === 'string' 
           ? result.excerpt 
           : (result.excerpt ? String(result.excerpt) : '');
-        const metaDescValue = typeof result.meta_description === 'string'
+        const metaDescValue: string = typeof result.meta_description === 'string'
           ? result.meta_description
           : (result.meta_description ? String(result.meta_description) : '');
-        const excerpt = excerptValue || metaDescValue || '';
+        const excerpt: string = excerptValue || metaDescValue || '';
         setFormData(prev => ({
           ...prev,
           content: String(result.content || ""),
