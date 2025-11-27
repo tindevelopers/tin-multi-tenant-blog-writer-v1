@@ -371,11 +371,31 @@ class BlogWriterAPI {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Even on error, check if queue_id is present (our API always returns it)
+        if (errorData.queue_id) {
+          logger.debug('API error but queue_id received', { 
+            queue_id: errorData.queue_id, 
+            error: errorData.error,
+            status: errorData.status 
+          });
+          // Return the error response with queue_id so frontend can track it
+          return {
+            job_id: '', // No backend job_id on error
+            status: errorData.status || 'failed',
+            message: errorData.error || 'Blog generation failed',
+            queue_id: errorData.queue_id
+          };
+        }
+        
         throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
       }
       
       const result = await response.json();
-      logger.debug('Async job created successfully', { job_id: result.job_id });
+      logger.debug('Async job created successfully', { 
+        job_id: result.job_id,
+        queue_id: result.queue_id 
+      });
       return result;
     } catch (error) {
       logger.logError(error instanceof Error ? error : new Error('Failed to create async job'), {
