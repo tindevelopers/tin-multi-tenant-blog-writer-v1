@@ -248,7 +248,19 @@ export default function PublishingPage() {
                 {readyPosts.map((post) => (
                   <tr key={post.post_id}>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
-                      {post.title}
+                      <div className="flex items-center gap-3">
+                        <span className="flex-1">{post.title}</span>
+                        <a
+                          href={`/admin/drafts/view/${post.post_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 text-xs font-medium hover:underline"
+                          title="View blog post details"
+                        >
+                          <EyeIcon className="w-4 h-4" />
+                          View
+                        </a>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                       {post.updated_at
