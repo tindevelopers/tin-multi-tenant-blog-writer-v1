@@ -506,12 +506,35 @@ class BlogWriterAPI {
         body: JSON.stringify(params),
       });
       
+      // Parse response body first to check for queue_id even on errors
+      const result = await response.json().catch(() => ({}));
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
+        // Even on error, check if queue_id is present (our API always returns it)
+        if (result.queue_id) {
+          logger.debug('API error but queue_id received', { 
+            queue_id: result.queue_id, 
+            error: result.error,
+            status: result.status || 'failed',
+            httpStatus: response.status
+          });
+          // Return the error response with queue_id so frontend can track it
+          return {
+            ...result,
+            queue_id: result.queue_id,
+            status: result.status || 'failed',
+            error: result.error || `API request failed: ${response.status}`
+          };
+        }
+        
+        // No queue_id in error response - this shouldn't happen but handle gracefully
+        logger.warn('API error without queue_id', { 
+          status: response.status,
+          error: result.error || response.statusText 
+        });
+        throw new Error(`API request failed: ${response.status} ${result.error || response.statusText}`);
       }
       
-      const result = await response.json();
       logger.debug('Blog generation queued successfully', { 
         queue_id: result.queue_id,
         job_id: result.job_id 
