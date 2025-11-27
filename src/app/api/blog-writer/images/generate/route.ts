@@ -17,6 +17,9 @@ const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
  * FRONTEND_IMAGE_GENERATION_GUIDE.md
  */
 export async function POST(request: NextRequest) {
+  // Declare queueId outside try block so it's accessible in catch block
+  let queueId: string | null = null;
+  
   try {
     const user = await getAuthenticatedUser(request);
     if (!user) {
@@ -58,9 +61,9 @@ export async function POST(request: NextRequest) {
     // Get user's org_id if not provided
     let orgId = org_id;
     let userId = user.id;
+    const supabase = await createClient();
 
     if (!orgId) {
-      const supabase = await createClient();
       const { data: userProfile } = await supabase
         .from('users')
         .select('org_id')
@@ -73,6 +76,56 @@ export async function POST(request: NextRequest) {
         // Fallback to system defaults
         orgId = '00000000-0000-0000-0000-000000000001';
         userId = '00000000-0000-0000-0000-000000000002';
+      }
+    }
+
+    // Create queue entry before generation starts
+    if (orgId && userId) {
+      try {
+        logger.debug('📋 Creating queue entry for image generation...');
+        const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
+        const { data: queueItem, error: queueError } = await supabase
+          .from('image_generation_queue')
+          .insert({
+            org_id: orgId,
+            created_by: userId,
+            prompt: prompt,
+            style: style,
+            aspect_ratio: aspect_ratio,
+            quality: quality,
+            type: type,
+            blog_topic: blog_topic,
+            keywords: keywordsArray,
+            section_title: section_title,
+            position: position,
+            priority: 5, // Default priority
+            status: 'generating',
+            progress_percentage: 0,
+            generation_started_at: new Date().toISOString(),
+            metadata: {
+              style,
+              aspect_ratio,
+              quality,
+              type,
+              blog_topic,
+              keywords: keywordsArray,
+              section_title,
+              position
+            }
+          })
+          .select('queue_id')
+          .single();
+        
+        if (queueError) {
+          logger.warn('⚠️ Failed to create queue entry:', queueError);
+          // Continue without queue entry (non-blocking)
+        } else if (queueItem) {
+          queueId = queueItem.queue_id;
+          logger.debug('✅ Queue entry created:', queueId);
+        }
+      } catch (error) {
+        logger.warn('⚠️ Error creating queue entry:', error);
+        // Continue without queue entry (non-blocking)
       }
     }
 
@@ -113,6 +166,22 @@ export async function POST(request: NextRequest) {
         error: errorText
       });
       
+      // Update queue entry with error if queue exists
+      if (queueId) {
+        try {
+          await supabase
+            .from('image_generation_queue')
+            .update({
+              status: 'failed',
+              generation_error: `API error ${imageResponse.status}: ${errorText.substring(0, 500)}`,
+              generation_completed_at: new Date().toISOString()
+            })
+            .eq('queue_id', queueId);
+        } catch (error) {
+          logger.warn('⚠️ Failed to update queue entry with error:', error);
+        }
+      }
+      
       return NextResponse.json(
         { error: `Image generation failed: ${imageResponse.status} ${errorText}` },
         { status: imageResponse.status }
@@ -123,6 +192,23 @@ export async function POST(request: NextRequest) {
 
     if (!imageResult.success || !imageResult.images || imageResult.images.length === 0) {
       logger.error('❌ Image generation returned no images:', imageResult.error_message);
+      
+      // Update queue entry with error if queue exists
+      if (queueId) {
+        try {
+          await supabase
+            .from('image_generation_queue')
+            .update({
+              status: 'failed',
+              generation_error: imageResult.error_message || 'Image generation returned no images',
+              generation_completed_at: new Date().toISOString()
+            })
+            .eq('queue_id', queueId);
+        } catch (error) {
+          logger.warn('⚠️ Failed to update queue entry with error:', error);
+        }
+      }
+      
       return NextResponse.json(
         { error: imageResult.error_message || 'Image generation failed' },
         { status: 500 }
@@ -191,8 +277,54 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Update queue entry with success results
+    if (queueId) {
+      try {
+        const altText = type === 'featured' 
+          ? `Featured image for ${blog_topic || prompt}`
+          : `Section image: ${section_title || prompt}`;
+        
+        await supabase
+          .from('image_generation_queue')
+          .update({
+            status: 'generated',
+            progress_percentage: 100,
+            generated_image_url: cloudinaryUrl,
+            generated_image_id: generatedImage.image_id,
+            image_width: generatedImage.width,
+            image_height: generatedImage.height,
+            image_format: generatedImage.format,
+            alt_text: altText,
+            quality_score: generatedImage.quality_score,
+            safety_score: generatedImage.safety_score,
+            asset_id: assetId,
+            generation_completed_at: new Date().toISOString(),
+            metadata: {
+              style,
+              aspect_ratio,
+              quality,
+              type,
+              blog_topic,
+              keywords: Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []),
+              section_title,
+              position,
+              provider: imageResult.provider,
+              model: imageResult.model,
+              cost: imageResult.cost,
+              generation_time_seconds: imageResult.generation_time_seconds
+            }
+          })
+          .eq('queue_id', queueId);
+        
+        logger.debug('✅ Queue entry updated with success results');
+      } catch (error) {
+        logger.warn('⚠️ Failed to update queue entry with success:', error);
+      }
+    }
+
     return NextResponse.json({
       success: true,
+      queue_id: queueId, // Include queue_id in response
       image: {
         image_id: generatedImage.image_id,
         image_url: cloudinaryUrl,
@@ -216,6 +348,24 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     logger.error('❌ Error in image generation API:', error);
+    
+    // Update queue entry with error if queue exists
+    if (queueId) {
+      try {
+        const supabase = await createClient();
+        await supabase
+          .from('image_generation_queue')
+          .update({
+            status: 'failed',
+            generation_error: error instanceof Error ? error.message : 'Internal server error',
+            generation_completed_at: new Date().toISOString()
+          })
+          .eq('queue_id', queueId);
+      } catch (updateError) {
+        logger.warn('⚠️ Failed to update queue entry with error:', updateError);
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
