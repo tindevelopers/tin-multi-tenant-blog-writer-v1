@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   PlusIcon, 
   MagnifyingGlassIcon, 
@@ -14,8 +14,36 @@ import {
   PencilIcon,
   TrashIcon,
   ShareIcon,
-  DocumentArrowDownIcon
+  DocumentArrowDownIcon,
+  ArrowPathIcon
 } from "@heroicons/react/24/outline";
+import { createClient } from "@/lib/supabase/client";
+import { logger } from "@/utils/logger";
+
+interface MediaAsset {
+  asset_id: string;
+  file_name: string;
+  file_url: string;
+  file_type: string;
+  file_size: number;
+  created_at: string;
+  uploaded_by: string | null;
+  metadata: {
+    public_id?: string;
+    width?: number;
+    height?: number;
+    tags?: string[];
+    [key: string]: any;
+  };
+}
+
+interface MediaStats {
+  total: number;
+  images: number;
+  videos: number;
+  storageUsed: string;
+  storageBytes: number;
+}
 
 export default function MediaPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -23,9 +51,107 @@ export default function MediaPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedMedia, setSelectedMedia] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
+  const [mediaFiles, setMediaFiles] = useState<MediaAsset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [stats, setStats] = useState<MediaStats>({
+    total: 0,
+    images: 0,
+    videos: 0,
+    storageUsed: "0 GB",
+    storageBytes: 0,
+  });
 
-  // Mock media data
-  const mediaFiles = [
+  // Load media assets
+  const loadMediaAssets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        search: searchTerm,
+        type: selectedFilter,
+        limit: '100',
+      });
+
+      const response = await fetch(`/api/media/list?${params}`);
+      if (!response.ok) {
+        throw new Error('Failed to load media assets');
+      }
+
+      const result = await response.json();
+      setMediaFiles(result.data || []);
+      setStats(result.stats || stats);
+    } catch (error) {
+      logger.error('Error loading media assets:', error);
+      alert('Failed to load media assets. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [searchTerm, selectedFilter]);
+
+  useEffect(() => {
+    loadMediaAssets();
+  }, [loadMediaAssets]);
+
+  // Sync with Cloudinary
+  const handleSyncCloudinary = async () => {
+    setSyncing(true);
+    try {
+      const response = await fetch('/api/media/sync', {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Sync failed');
+      }
+
+      const result = await response.json();
+      
+      if (result.error && response.status === 404) {
+        alert(`⚠️ ${result.error}\n\nNote: Images uploaded through this system will automatically appear in your media library.`);
+      } else {
+        alert(`✅ Sync completed!\n\nSynced: ${result.synced || 0}\nUpdated: ${result.updated || 0}\nSkipped: ${result.skipped || 0}\nTotal: ${result.total || 0}`);
+      }
+      
+      // Reload media assets
+      await loadMediaAssets();
+    } catch (error) {
+      logger.error('Error syncing Cloudinary:', error);
+      alert(error instanceof Error ? error.message : 'Failed to sync with Cloudinary. Please try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (files: FileList) => {
+    const formData = new FormData();
+    Array.from(files).forEach((file) => {
+      formData.append('file', file);
+    });
+
+    try {
+      const response = await fetch('/api/images/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Upload failed');
+      }
+
+      // Reload media assets
+      await loadMediaAssets();
+      alert('Files uploaded successfully!');
+    } catch (error) {
+      logger.error('Error uploading files:', error);
+      alert(error instanceof Error ? error.message : 'Failed to upload files. Please try again.');
+    }
+  };
+
+  // Mock media data (for fallback/development)
+  const mockMediaFiles = [
     {
       id: "1",
       name: "hero-image-blog.jpg",
@@ -125,11 +251,27 @@ export default function MediaPage() {
     });
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
+
+  const getFileType = (fileType: string): string => {
+    if (fileType.startsWith('image/')) return 'image';
+    if (fileType.startsWith('video/')) return 'video';
+    if (fileType.startsWith('audio/')) return 'audio';
+    return 'document';
+  };
+
   const filteredMedia = mediaFiles.filter(file => {
-    const matchesSearch = file.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         file.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+    const fileType = getFileType(file.file_type);
+    const matchesSearch = file.file_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (file.metadata?.tags && Array.isArray(file.metadata.tags) && 
+                          file.metadata.tags.some((tag: string) => tag.toLowerCase().includes(searchTerm.toLowerCase())));
     
-    const matchesFilter = selectedFilter === "all" || file.type === selectedFilter;
+    const matchesFilter = selectedFilter === "all" || fileType === selectedFilter;
     
     return matchesSearch && matchesFilter;
   });
@@ -146,25 +288,8 @@ export default function MediaPage() {
     setSelectedMedia(
       selectedMedia.length === filteredMedia.length 
         ? [] 
-        : filteredMedia.map(file => file.id)
+        : filteredMedia.map(file => file.asset_id)
     );
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    // Handle file drop logic here
-    console.log("Files dropped:", e.dataTransfer.files);
   };
 
   return (
@@ -180,10 +305,40 @@ export default function MediaPage() {
               Upload, organize, and manage your media assets for your blog content
             </p>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors">
-            <PlusIcon className="w-5 h-5" />
-            Upload Media
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSyncCloudinary}
+              disabled={syncing}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+            >
+              {syncing ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Syncing...</span>
+                </>
+              ) : (
+                <>
+                  <ArrowPathIcon className="w-5 h-5" />
+                  <span>Sync with Cloudinary</span>
+                </>
+              )}
+            </button>
+            <label className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors cursor-pointer">
+              <PlusIcon className="w-5 h-5" />
+              Upload Media
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*,audio/*"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleFileUpload(e.target.files);
+                  }
+                }}
+                className="hidden"
+              />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -193,7 +348,9 @@ export default function MediaPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Files</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">1,247</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? '...' : stats.total.toLocaleString()}
+              </p>
             </div>
             <DocumentIcon className="w-8 h-8 text-blue-600" />
           </div>
@@ -203,7 +360,9 @@ export default function MediaPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Images</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">892</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? '...' : stats.images.toLocaleString()}
+              </p>
             </div>
             <PhotoIcon className="w-8 h-8 text-green-600" />
           </div>
@@ -213,7 +372,9 @@ export default function MediaPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Videos</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">156</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? '...' : stats.videos.toLocaleString()}
+              </p>
             </div>
             <VideoCameraIcon className="w-8 h-8 text-red-600" />
           </div>
@@ -223,7 +384,9 @@ export default function MediaPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Storage Used</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">2.4 GB</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                {loading ? '...' : stats.storageUsed}
+              </p>
             </div>
             <CloudArrowUpIcon className="w-8 h-8 text-purple-600" />
           </div>
@@ -289,9 +452,21 @@ export default function MediaPage() {
             ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20" 
             : "border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
         }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            handleFileUpload(e.dataTransfer.files);
+          }
+        }}
       >
         <div className="text-center">
           <CloudArrowUpIcon className="mx-auto h-12 w-12 text-gray-400" />
@@ -301,84 +476,111 @@ export default function MediaPage() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             or click to browse files from your computer
           </p>
-          <button className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+          <label className="mt-4 inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors cursor-pointer">
             Choose Files
-          </button>
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*,audio/*"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  handleFileUpload(e.target.files);
+                }
+              }}
+              className="hidden"
+            />
+          </label>
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
       {/* Media Grid/List */}
-      {viewMode === "grid" ? (
+      {!loading && viewMode === "grid" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-6">
-          {filteredMedia.map((file) => (
-            <div
-              key={file.id}
-              className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer transition-all hover:shadow-md ${
-                selectedMedia.includes(file.id) ? "ring-2 ring-blue-500" : ""
-              }`}
-              onClick={() => handleSelectMedia(file.id)}
-            >
-              <div className="aspect-square relative bg-gray-100 dark:bg-gray-700">
-                {file.type === "image" ? (
-                  <img
-                    src={file.url}
-                    alt={file.alt}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    {getFileTypeIcon(file.type)}
+          {filteredMedia.map((file) => {
+            const fileType = getFileType(file.file_type);
+            const dimensions = file.metadata?.width && file.metadata?.height 
+              ? `${file.metadata.width}x${file.metadata.height}` 
+              : null;
+            const tags = file.metadata?.tags || [];
+            
+            return (
+              <div
+                key={file.asset_id}
+                className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer transition-all hover:shadow-md ${
+                  selectedMedia.includes(file.asset_id) ? "ring-2 ring-blue-500" : ""
+                }`}
+                onClick={() => handleSelectMedia(file.asset_id)}
+              >
+                <div className="aspect-square relative bg-gray-100 dark:bg-gray-700">
+                  {fileType === "image" ? (
+                    <img
+                      src={file.file_url}
+                      alt={file.file_name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      {getFileTypeIcon(fileType)}
+                    </div>
+                  )}
+                  
+                  <div className="absolute top-2 left-2">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getFileTypeColor(fileType)}`}>
+                      {getFileTypeIcon(fileType)}
+                    </span>
                   </div>
-                )}
-                
-                <div className="absolute top-2 left-2">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getFileTypeColor(file.type)}`}>
-                    {getFileTypeIcon(file.type)}
-                  </span>
+                  
+                  <div className="absolute top-2 right-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedMedia.includes(file.asset_id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSelectMedia(file.asset_id);
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
                 
-                <div className="absolute top-2 right-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedMedia.includes(file.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      handleSelectMedia(file.id);
-                    }}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              
-              <div className="p-3">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                  {file.name}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {file.size}
-                  {file.dimensions && ` • ${file.dimensions}`}
-                  {file.duration && ` • ${file.duration}`}
-                </p>
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {file.tags.slice(0, 2).map((tag, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                  {file.tags.length > 2 && (
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      +{file.tags.length - 2}
-                    </span>
+                <div className="p-3">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {file.file_name}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {formatFileSize(file.file_size)}
+                    {dimensions && ` • ${dimensions}`}
+                  </p>
+                  {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {tags.slice(0, 2).map((tag: string, index: number) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {tags.length > 2 && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          +{tags.length - 2}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      ) : (
+      ) : !loading ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -413,96 +615,112 @@ export default function MediaPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {filteredMedia.map((file) => (
-                  <tr key={file.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedMedia.includes(file.id)}
-                        onChange={() => handleSelectMedia(file.id)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          {file.type === "image" ? (
-                            <img
-                              src={file.url}
-                              alt={file.alt}
-                              className="h-10 w-10 rounded-lg object-cover"
-                            />
-                          ) : (
-                            <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${getFileTypeColor(file.type)}`}>
-                              {getFileTypeIcon(file.type)}
+                {filteredMedia.map((file) => {
+                  const fileType = getFileType(file.file_type);
+                  const tags = file.metadata?.tags || [];
+                  
+                  return (
+                    <tr key={file.asset_id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedMedia.includes(file.asset_id)}
+                          onChange={() => handleSelectMedia(file.asset_id)}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 h-10 w-10">
+                            {fileType === "image" ? (
+                              <img
+                                src={file.file_url}
+                                alt={file.file_name}
+                                className="h-10 w-10 rounded-lg object-cover"
+                              />
+                            ) : (
+                              <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${getFileTypeColor(fileType)}`}>
+                                {getFileTypeIcon(fileType)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="ml-4">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">
+                              {file.file_name}
                             </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400">
+                              {file.uploaded_by || 'System'}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getFileTypeColor(fileType)}`}>
+                          {getFileTypeIcon(fileType)}
+                          <span className="ml-1">{fileType}</span>
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                        {formatFileSize(file.file_size)}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                        {formatDate(file.created_at)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {tags.slice(0, 3).map((tag: string, index: number) => (
+                            <span
+                              key={index}
+                              className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {tags.length > 3 && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              +{tags.length - 3}
+                            </span>
                           )}
                         </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {file.name}
-                          </div>
-                          <div className="text-sm text-gray-500 dark:text-gray-400">
-                            {file.uploadedBy}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getFileTypeColor(file.type)}`}>
-                        {getFileTypeIcon(file.type)}
-                        <span className="ml-1">{file.type}</span>
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                      {file.size}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
-                      {formatDate(file.uploaded)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {file.tags.slice(0, 3).map((tag, index) => (
-                          <span
-                            key={index}
-                            className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => window.open(file.file_url, '_blank')}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
                           >
-                            {tag}
-                          </span>
-                        ))}
-                        {file.tags.length > 3 && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            +{file.tags.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
-                          <EyeIcon className="w-4 h-4" />
-                        </button>
-                        <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
-                          <PencilIcon className="w-4 h-4" />
-                        </button>
-                        <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
-                          <DocumentArrowDownIcon className="w-4 h-4" />
-                        </button>
-                        <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
-                          <ShareIcon className="w-4 h-4" />
-                        </button>
-                        <button className="text-gray-400 hover:text-red-600 p-1">
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            <EyeIcon className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              navigator.clipboard.writeText(file.file_url);
+                              alert('Image URL copied to clipboard!');
+                            }}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                          >
+                            <ShareIcon className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              const link = document.createElement('a');
+                              link.href = file.file_url;
+                              link.download = file.file_name;
+                              link.click();
+                            }}
+                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+                          >
+                            <DocumentArrowDownIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Bulk Actions */}
       {selectedMedia.length > 0 && (
@@ -553,3 +771,4 @@ export default function MediaPage() {
     </div>
   );
 }
+
