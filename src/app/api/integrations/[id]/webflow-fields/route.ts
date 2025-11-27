@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { getWebflowCollections } from '@/lib/integrations/webflow-api';
 import { logger } from '@/utils/logger';
 import { getAuthenticatedUser } from '@/lib/api-utils';
+import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 
 /**
  * GET /api/integrations/[id]/webflow-fields
@@ -19,28 +19,12 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = await createClient(request);
-    
-    // Get user's org_id
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('org_id')
-      .eq('user_id', user.id)
-      .single();
+    // Get the integration using the database adapter (handles environment-suffixed tables)
+    const dbAdapter = new EnvironmentIntegrationsDB();
+    const integration = await dbAdapter.getIntegration(id, user.org_id);
 
-    if (!userProfile?.org_id) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
-    }
-
-    // Get the integration
-    const { data: integration, error: integrationError } = await supabase
-      .from('integrations')
-      .select('*')
-      .eq('integration_id', id)
-      .eq('org_id', userProfile.org_id)
-      .single();
-
-    if (integrationError || !integration) {
+    if (!integration) {
+      logger.error('Integration not found', { integrationId: id, orgId: user.org_id });
       return NextResponse.json({ error: 'Integration not found' }, { status: 404 });
     }
 
