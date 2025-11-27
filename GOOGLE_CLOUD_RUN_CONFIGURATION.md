@@ -14,9 +14,64 @@ The external Blog Writer API (running on Google Cloud Run) is trying to create a
 
 ## Solution
 
-### Option 1: Configure GOOGLE_CLOUD_PROJECT in External API (Recommended)
+### Option 1: Store in Secrets Manager and Mount to Cloud Run (Recommended)
 
-The external Blog Writer API needs to have `GOOGLE_CLOUD_PROJECT` set as an environment variable.
+The Google Cloud Project ID should be stored in Google Cloud Secrets Manager and mounted as an environment variable in Cloud Run.
+
+**Project ID:** `api-ai-blog-writer`
+
+#### Step 1: Create Secret in Secrets Manager
+
+Run the setup script:
+```bash
+./scripts/setup-google-cloud-project-secret.sh
+```
+
+Or manually:
+```bash
+# Set your project
+gcloud config set project api-ai-blog-writer
+
+# Create the secret
+echo -n "api-ai-blog-writer" | gcloud secrets create google-cloud-project-id \
+    --project=api-ai-blog-writer \
+    --data-file=-
+
+# Grant Cloud Run service account access
+gcloud secrets add-iam-policy-binding google-cloud-project-id \
+    --project=api-ai-blog-writer \
+    --member="serviceAccount:api-ai-blog-writer@appspot.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+```
+
+#### Step 2: Update Cloud Run Service to Use Secret
+
+Run the update script:
+```bash
+./scripts/update-cloud-run-with-secret.sh
+```
+
+Or manually:
+```bash
+gcloud run services update blog-writer-api-dev \
+    --region=europe-west9 \
+    --project=api-ai-blog-writer \
+    --update-secrets=GOOGLE_CLOUD_PROJECT=google-cloud-project-id:latest
+```
+
+#### Step 3: Verify Configuration
+
+Check that the secret is mounted:
+```bash
+gcloud run services describe blog-writer-api-dev \
+    --region=europe-west9 \
+    --project=api-ai-blog-writer \
+    --format="value(spec.template.spec.containers[0].env)"
+```
+
+### Option 2: Configure Directly as Environment Variable (Alternative)
+
+If you prefer not to use Secrets Manager:
 
 **For Google Cloud Run:**
 1. Go to Google Cloud Console
@@ -25,14 +80,7 @@ The external Blog Writer API needs to have `GOOGLE_CLOUD_PROJECT` set as an envi
 4. Go to "Variables & Secrets" tab
 5. Add environment variable:
    - **Name**: `GOOGLE_CLOUD_PROJECT`
-   - **Value**: Your Google Cloud Project ID (e.g., `blog-writer-api-dev`)
-
-**To find your Project ID:**
-```bash
-gcloud config get-value project
-```
-
-Or check in Google Cloud Console → Project Settings
+   - **Value**: `api-ai-blog-writer`
 
 ### Option 2: Verify External API Configuration
 
