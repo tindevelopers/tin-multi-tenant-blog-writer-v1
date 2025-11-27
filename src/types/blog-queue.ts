@@ -148,7 +148,11 @@ export interface BlogPlatformPublishing {
   retry_count: number;
   last_retry_at?: string | null;
   last_synced_at?: string | null;
-  sync_status?: 'in_sync' | 'out_of_sync' | 'never_synced' | null;
+  sync_status?: 'in_sync' | 'out_of_sync' | 'never_synced' | 'syncing' | 'sync_failed' | null;
+  is_draft?: boolean | null;
+  platform_draft_status?: 'draft' | 'published' | 'unknown' | null;
+  sync_metadata?: Record<string, any>;
+  last_platform_check_at?: string | null;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
