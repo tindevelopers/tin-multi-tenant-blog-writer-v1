@@ -551,6 +551,14 @@ function PublishingRow({
           <span className="text-sm text-gray-400">—</span>
         )}
       </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <SyncStatusBadge 
+          syncStatus={(publishing as any).sync_status} 
+          isDraft={(publishing as any).is_draft}
+          platformDraftStatus={(publishing as any).platform_draft_status}
+          lastSyncedAt={(publishing as any).last_synced_at}
+        />
+      </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
         {publishing.status === "failed" && (
           <button
