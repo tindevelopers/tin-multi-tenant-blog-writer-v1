@@ -25,6 +25,13 @@ type ContentIdeaWithCluster = HumanReadableArticle & {
   cluster_name?: string;
   pillar_keyword?: string;
   cluster_authority_score?: number;
+  keywords?: string[]; // May come from database or seo_insights
+  seo_insights?: {
+    secondary_keywords?: string[];
+    semantic_keywords?: string[];
+    [key: string]: any;
+  };
+  internal_links?: any[]; // May be stored as JSONB
 };
 
 interface ContentIdeaDetailModalProps {
@@ -100,7 +107,22 @@ export default function ContentIdeaDetailModal({
     return 'text-green-600 dark:text-green-400';
   };
 
-  const keywords = Array.isArray(idea.keywords) ? idea.keywords : [];
+  // Extract keywords from various sources
+  let keywords: string[] = [];
+  if (Array.isArray(idea.keywords)) {
+    keywords = idea.keywords;
+  } else if (idea.seo_insights) {
+    const seoInsightsObj = typeof idea.seo_insights === 'object' ? idea.seo_insights as Record<string, any> : {};
+    keywords = [
+      ...(seoInsightsObj.secondary_keywords || []),
+      ...(seoInsightsObj.semantic_keywords || [])
+    ];
+  }
+  // Always include target_keyword
+  if (idea.target_keyword && !keywords.includes(idea.target_keyword)) {
+    keywords.unshift(idea.target_keyword);
+  }
+  
   const internalLinks = idea.internal_links && Array.isArray(idea.internal_links) ? idea.internal_links : [];
   const seoInsights = idea.seo_insights && typeof idea.seo_insights === 'object' ? idea.seo_insights as Record<string, any> : {};
   const contentOutline = idea.content_outline && typeof idea.content_outline === 'object' ? idea.content_outline as Record<string, any> : {};

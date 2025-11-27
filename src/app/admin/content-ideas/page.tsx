@@ -26,6 +26,13 @@ type ContentIdeaWithCluster = HumanReadableArticle & {
   cluster_id?: string;
   cluster_name?: string;
   pillar_keyword?: string;
+  keywords?: string[]; // May come from database or seo_insights
+  seo_insights?: {
+    secondary_keywords?: string[];
+    semantic_keywords?: string[];
+    [key: string]: any;
+  };
+  internal_links?: any[]; // May be stored as JSONB
 };
 
 export default function ContentIdeasPage() {
@@ -170,10 +177,25 @@ export default function ContentIdeasPage() {
   };
 
   const handleGenerateContent = (idea: ContentIdeaWithCluster) => {
+    // Extract keywords from various sources
+    let keywordsArray: string[] = [];
+    if (Array.isArray(idea.keywords)) {
+      keywordsArray = idea.keywords;
+    } else if (idea.seo_insights) {
+      keywordsArray = [
+        ...(idea.seo_insights.secondary_keywords || []),
+        ...(idea.seo_insights.semantic_keywords || [])
+      ];
+    }
+    // Always include target_keyword
+    if (idea.target_keyword && !keywordsArray.includes(idea.target_keyword)) {
+      keywordsArray.unshift(idea.target_keyword);
+    }
+    
     const params = new URLSearchParams({
       title: idea.title || '',
       topic: idea.target_keyword || '',
-      keywords: Array.isArray(idea.keywords) ? idea.keywords.join(', ') : idea.target_keyword || '',
+      keywords: keywordsArray.length > 0 ? keywordsArray.join(', ') : idea.target_keyword || '',
       target_audience: idea.target_audience || 'general',
       word_count: idea.estimated_word_count?.toString() || '1500',
       content_type: idea.content_type || 'blog',
@@ -356,25 +378,42 @@ export default function ContentIdeasPage() {
               </div>
 
               {/* Keywords Preview */}
-              {idea.keywords && Array.isArray(idea.keywords) && idea.keywords.length > 0 && (
-                <div className="mb-4">
-                  <div className="flex flex-wrap gap-1">
-                    {idea.keywords.slice(0, 3).map((keyword, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded"
-                      >
-                        {keyword}
-                      </span>
-                    ))}
-                    {idea.keywords.length > 3 && (
-                      <span className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400">
-                        +{idea.keywords.length - 3} more
-                      </span>
-                    )}
+              {(() => {
+                // Extract keywords from various sources
+                let keywordsArray: string[] = [];
+                if (Array.isArray(idea.keywords)) {
+                  keywordsArray = idea.keywords;
+                } else if (idea.seo_insights) {
+                  keywordsArray = [
+                    ...(idea.seo_insights.secondary_keywords || []),
+                    ...(idea.seo_insights.semantic_keywords || [])
+                  ];
+                }
+                // Always include target_keyword
+                if (idea.target_keyword && !keywordsArray.includes(idea.target_keyword)) {
+                  keywordsArray.unshift(idea.target_keyword);
+                }
+                
+                return keywordsArray.length > 0 ? (
+                  <div className="mb-4">
+                    <div className="flex flex-wrap gap-1">
+                      {keywordsArray.slice(0, 3).map((keyword, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded"
+                        >
+                          {keyword}
+                        </span>
+                      ))}
+                      {keywordsArray.length > 3 && (
+                        <span className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400">
+                          +{keywordsArray.length - 3} more
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                ) : null;
+              })()}
 
               {/* Actions */}
               <div className="flex items-center justify-between">
