@@ -107,28 +107,34 @@ export async function getWebflowFieldMappings(orgId: string): Promise<FieldMappi
 /**
  * Get default Webflow field mappings
  * These are common field names used in Webflow CMS collections
+ * Updated with more comprehensive field name variations
  */
 export function getDefaultWebflowFieldMappings(): FieldMapping[] {
   return [
     {
       blogField: 'title',
-      targetField: 'name', // Webflow uses 'name' for the title field
+      targetField: 'name', // Webflow uses 'name' for the title field (most common)
+      // Alternatives: 'title', 'post-title', 'blog-title', 'headline'
     },
     {
       blogField: 'content',
       targetField: 'post-body', // Common Webflow field name for blog content
+      // Alternatives: 'body', 'content', 'post-content', 'main-content', 'rich-text', 'description'
     },
     {
       blogField: 'slug',
       targetField: 'slug',
+      // Alternatives: 'url-slug', 'post-slug', 'url'
     },
     {
       blogField: 'excerpt',
       targetField: 'post-summary',
+      // Alternatives: 'excerpt', 'summary', 'description', 'short-description', 'intro'
     },
     {
       blogField: 'featured_image',
       targetField: 'post-image',
+      // Alternatives: 'main-image', 'featured-image', 'image', 'thumbnail', 'cover-image', 'hero-image', 'feature-image'
     },
     {
       blogField: 'published_at',
@@ -137,16 +143,129 @@ export function getDefaultWebflowFieldMappings(): FieldMapping[] {
         type: 'date-format',
         config: { format: 'ISO8601' },
       },
+      // Alternatives: 'published-date', 'date', 'published-at', 'post-date', 'publish-date-time'
     },
     {
       blogField: 'seo_title',
       targetField: 'seo-title',
+      // Alternatives: 'meta-title', 'og-title', 'seo-meta-title'
     },
     {
       blogField: 'seo_description',
       targetField: 'seo-description',
+      // Alternatives: 'meta-description', 'og-description', 'seo-meta-description'
     },
   ];
+}
+
+/**
+ * Auto-detect field mappings based on available Webflow collection fields
+ * This tries to intelligently match blog fields to Webflow fields
+ */
+export function autoDetectFieldMappings(
+  availableFieldSlugs: string[],
+  fieldTypeMap: Map<string, string>
+): FieldMapping[] {
+  const mappings: FieldMapping[] = [];
+  const usedFields = new Set<string>();
+
+  // Title field - try 'name' first (Webflow standard), then alternatives
+  const titleFields = ['name', 'title', 'post-title', 'blog-title', 'headline'];
+  for (const field of titleFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      mappings.push({ blogField: 'title', targetField: field });
+      usedFields.add(field);
+      break;
+    }
+  }
+
+  // Content field - try common content field names
+  const contentFields = ['post-body', 'body', 'content', 'post-content', 'main-content', 'rich-text', 'description'];
+  for (const field of contentFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      const fieldType = fieldTypeMap.get(field);
+      // Prefer RichText or PlainText fields for content
+      if (fieldType === 'RichText' || fieldType === 'PlainText' || !fieldType) {
+        mappings.push({ blogField: 'content', targetField: field });
+        usedFields.add(field);
+        break;
+      }
+    }
+  }
+
+  // Slug field
+  const slugFields = ['slug', 'url-slug', 'post-slug', 'url'];
+  for (const field of slugFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      mappings.push({ blogField: 'slug', targetField: field });
+      usedFields.add(field);
+      break;
+    }
+  }
+
+  // Excerpt field
+  const excerptFields = ['post-summary', 'excerpt', 'summary', 'description', 'short-description', 'intro'];
+  for (const field of excerptFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      mappings.push({ blogField: 'excerpt', targetField: field });
+      usedFields.add(field);
+      break;
+    }
+  }
+
+  // Image field - prefer ImageRef or FileRef types
+  const imageFields = ['post-image', 'main-image', 'featured-image', 'image', 'thumbnail', 'cover-image', 'hero-image', 'feature-image'];
+  for (const field of imageFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      const fieldType = fieldTypeMap.get(field);
+      if (fieldType === 'ImageRef' || fieldType === 'FileRef' || fieldType === 'Image' || !fieldType) {
+        mappings.push({ blogField: 'featured_image', targetField: field });
+        usedFields.add(field);
+        break;
+      }
+    }
+  }
+
+  // Date field
+  const dateFields = ['publish-date', 'published-date', 'date', 'published-at', 'post-date', 'publish-date-time'];
+  for (const field of dateFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      const fieldType = fieldTypeMap.get(field);
+      if (fieldType === 'Date' || fieldType === 'DateTime' || !fieldType) {
+        mappings.push({
+          blogField: 'published_at',
+          targetField: field,
+          transform: {
+            type: 'date-format',
+            config: { format: 'ISO8601' },
+          },
+        });
+        usedFields.add(field);
+        break;
+      }
+    }
+  }
+
+  // SEO fields
+  const seoTitleFields = ['seo-title', 'meta-title', 'og-title', 'seo-meta-title'];
+  for (const field of seoTitleFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      mappings.push({ blogField: 'seo_title', targetField: field });
+      usedFields.add(field);
+      break;
+    }
+  }
+
+  const seoDescFields = ['seo-description', 'meta-description', 'og-description', 'seo-meta-description'];
+  for (const field of seoDescFields) {
+    if (availableFieldSlugs.includes(field) && !usedFields.has(field)) {
+      mappings.push({ blogField: 'seo_description', targetField: field });
+      usedFields.add(field);
+      break;
+    }
+  }
+
+  return mappings;
 }
 
 /**

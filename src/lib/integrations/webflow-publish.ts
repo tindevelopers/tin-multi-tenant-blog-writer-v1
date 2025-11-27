@@ -5,8 +5,9 @@
  */
 
 import { logger } from '@/utils/logger';
-import { getWebflowFieldMappings, applyWebflowFieldMappings } from './webflow-field-mapping';
+import { getWebflowFieldMappings, applyWebflowFieldMappings, autoDetectFieldMappings } from './webflow-field-mapping';
 import { autoDetectWebflowSiteId, getWebflowCollectionById } from './webflow-api';
+import { uploadImageToWebflow, validateImageUrl } from './webflow-assets';
 
 export interface WebflowItem {
   id: string;
@@ -169,15 +170,39 @@ export async function publishBlogToWebflow(params: {
     const collection = await getWebflowCollectionById(apiKey, collectionId);
     const availableFieldSlugs = new Set(collection.fields.map(f => f.slug));
     
+    // Create a map of field types for better handling
+    const fieldTypeMap = new Map<string, string>();
+    collection.fields.forEach(f => {
+      fieldTypeMap.set(f.slug, f.type);
+    });
+    
     logger.debug('Available Webflow fields', { 
       collectionId, 
-      fields: collection.fields.map(f => ({ slug: f.slug, displayName: f.displayName, type: f.type }))
+      fields: collection.fields.map(f => ({ 
+        slug: f.slug, 
+        displayName: f.displayName, 
+        type: f.type,
+        isRequired: f.isRequired || false
+      })),
+      fieldTypeMap: Object.fromEntries(fieldTypeMap)
     });
 
     // Get field mappings if orgId is provided
     let fieldData: Record<string, unknown>;
     if (orgId) {
       const mappings = await getWebflowFieldMappings(orgId);
+      
+      // If no custom mappings found, try auto-detection
+      const useAutoDetect = mappings.length === 0 || 
+        mappings.every(m => m.targetField === getDefaultWebflowFieldMappings().find(d => d.blogField === m.blogField)?.targetField);
+      
+      let finalMappings = mappings;
+      if (useAutoDetect) {
+        logger.debug('No custom mappings found, using auto-detection', { collectionId });
+        finalMappings = autoDetectFieldMappings(Array.from(availableFieldSlugs), fieldTypeMap);
+        logger.debug('Auto-detected field mappings', { mappings: finalMappings });
+      }
+      
       const mappedData = applyWebflowFieldMappings(
         {
           title: blogPost.title,
@@ -191,7 +216,7 @@ export async function publishBlogToWebflow(params: {
           tags: blogPost.tags || [],
           categories: blogPost.categories || [],
         },
-        mappings
+        finalMappings
       );
       
       // Filter out fields that don't exist in the collection
@@ -249,12 +274,45 @@ export async function publishBlogToWebflow(params: {
         fieldData.slug = blogPost.slug || generateSlug(blogPost.title);
       }
       
-      // Image fields
-      const imageFields = ['main-image', 'featured-image', 'post-image', 'image', 'thumbnail'];
-      for (const fieldName of imageFields) {
-        if (availableFieldSlugs.has(fieldName) && blogPost.featured_image) {
-          fieldData[fieldName] = blogPost.featured_image;
-          break;
+      // Image fields - handle image upload/validation
+      const imageFields = ['main-image', 'featured-image', 'post-image', 'image', 'thumbnail', 'cover-image', 'hero-image'];
+      if (blogPost.featured_image) {
+        // Validate image URL first
+        const isValidImage = await validateImageUrl(blogPost.featured_image).catch(() => false);
+        if (!isValidImage) {
+          logger.warn('Featured image URL validation failed, but proceeding', { 
+            imageUrl: blogPost.featured_image 
+          });
+        }
+        
+        // Try to upload image to Webflow if needed (or use URL directly)
+        let imageUrl = blogPost.featured_image;
+        try {
+          // For now, use external URL directly (Webflow supports this)
+          // If you need to upload to Webflow assets, uncomment:
+          // imageUrl = await uploadImageToWebflow(apiKey, finalSiteId, blogPost.featured_image);
+        } catch (uploadError) {
+          logger.warn('Failed to upload image to Webflow, using original URL', { 
+            error: uploadError,
+            imageUrl: blogPost.featured_image 
+          });
+        }
+        
+        // Find matching image field
+        for (const fieldName of imageFields) {
+          if (availableFieldSlugs.has(fieldName)) {
+            const fieldType = fieldTypeMap.get(fieldName);
+            // Webflow image fields expect a URL string
+            if (fieldType === 'ImageRef' || fieldType === 'FileRef' || fieldType === 'Image') {
+              fieldData[fieldName] = imageUrl;
+              logger.debug('Mapped featured image to Webflow field', { 
+                fieldName, 
+                imageUrl,
+                fieldType 
+              });
+              break;
+            }
+          }
         }
       }
       
@@ -277,14 +335,42 @@ export async function publishBlogToWebflow(params: {
     }
     
     // Validate that we have at least the name/title field
-    if (!fieldData.name && !fieldData.title) {
+    const hasTitleField = fieldData.name || fieldData.title || 
+      Array.from(availableFieldSlugs).some(slug => 
+        ['name', 'title', 'post-title', 'blog-title'].includes(slug) && fieldData[slug]
+      );
+    
+    if (!hasTitleField) {
       const availableFields = Array.from(availableFieldSlugs).join(', ');
+      const mappedFields = Object.keys(fieldData).join(', ');
+      logger.error('Missing required title field', {
+        availableFields,
+        mappedFields,
+        fieldData,
+        collectionId
+      });
       throw new Error(
         `Cannot publish: No title field found in Webflow collection. ` +
         `Available fields: ${availableFields}. ` +
+        `Mapped fields: ${mappedFields}. ` +
         `Please configure field mappings in the integration settings.`
       );
     }
+    
+    // Log final field data for debugging
+    logger.debug('Final field data prepared for Webflow', {
+      collectionId,
+      fieldCount: Object.keys(fieldData).length,
+      fields: Object.keys(fieldData),
+      fieldData: Object.fromEntries(
+        Object.entries(fieldData).map(([key, value]) => [
+          key,
+          typeof value === 'string' && value.length > 100 
+            ? `${value.substring(0, 100)}...` 
+            : value
+        ])
+      )
+    });
     
     logger.debug('Final field data to publish', { 
       fieldSlugs: Object.keys(fieldData),

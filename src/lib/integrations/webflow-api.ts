@@ -21,12 +21,15 @@ export interface WebflowCollection {
   displayName: string;
   singularName: string;
   slug: string;
+  siteId?: string;
+  itemCount?: number;
   fields: Array<{
     id: string;
     displayName: string;
     slug: string;
     type: string;
     isRequired?: boolean;
+    isEditable?: boolean;
   }>;
 }
 
