@@ -192,28 +192,7 @@ export default function EditDraftPage() {
             content={formData.content || ''}
             onChange={(html) => handleInputChange('content', html)}
             placeholder="Start writing your blog post..."
-            onImageUpload={async (file) => {
-              try {
-                const formData = new FormData();
-                formData.append('file', file);
-
-                const response = await fetch('/api/images/upload', {
-                  method: 'POST',
-                  body: formData,
-                });
-
-                if (!response.ok) {
-                  const error = await response.json();
-                  throw new Error(error.error || 'Upload failed');
-                }
-
-                const result = await response.json();
-                return result.url;
-              } catch (error) {
-                console.error('Error uploading image:', error);
-                throw error;
-              }
-            }}
+            excerpt={formData.excerpt || ''}
             editable={true}
             className="mt-2"
           />

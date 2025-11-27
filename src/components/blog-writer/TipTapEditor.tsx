@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { logger } from '@/utils/logger';
+import ImageInsertModal from './ImageInsertModal';
 
 interface TipTapEditorProps {
   content: string;
@@ -37,6 +38,7 @@ interface TipTapEditorProps {
   onImageUpload?: (file: File) => Promise<string | null>;
   editable?: boolean;
   className?: string;
+  excerpt?: string; // For AI image generation
 }
 
 export default function TipTapEditor({
@@ -45,9 +47,11 @@ export default function TipTapEditor({
   placeholder = 'Start writing your blog post...',
   onImageUpload,
   editable = true,
-  className = ''
+  className = '',
+  excerpt = ''
 }: TipTapEditorProps) {
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -93,33 +97,19 @@ export default function TipTapEditor({
     }
   }, [content, editor]);
 
-  const handleImageUpload = useCallback(async () => {
-    if (!editor || !onImageUpload) return;
+  const handleImageUpload = useCallback(() => {
+    if (!editor) return;
+    setShowImageModal(true);
+  }, [editor]);
 
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      setUploadingImage(true);
-      try {
-        const imageUrl = await onImageUpload(file);
-        if (imageUrl) {
-          editor.chain().focus().setImage({ src: imageUrl }).run();
-        } else {
-          alert('Failed to upload image. Please try again.');
-        }
-      } catch (error) {
-        logger.error('Error uploading image:', error);
-        alert('Error uploading image. Please try again.');
-      } finally {
-        setUploadingImage(false);
-      }
-    };
-    input.click();
-  }, [editor, onImageUpload]);
+  const handleImageSelect = useCallback(async (imageUrl: string) => {
+    if (!editor) return;
+    
+    // If onImageUpload is provided, we might need to handle it differently
+    // But for now, we'll directly insert the image URL
+    editor.chain().focus().setImage({ src: imageUrl }).run();
+    setShowImageModal(false);
+  }, [editor]);
 
   const setLink = useCallback(() => {
     if (!editor) return;
@@ -309,20 +299,18 @@ export default function TipTapEditor({
             >
               <LinkIcon className="w-4 h-4" />
             </button>
-            {onImageUpload && (
-              <button
-                onClick={handleImageUpload}
-                disabled={uploadingImage}
-                className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Insert Image"
-              >
-                {uploadingImage ? (
-                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <ImageIcon className="w-4 h-4" />
-                )}
-              </button>
-            )}
+            <button
+              onClick={handleImageUpload}
+              disabled={uploadingImage}
+              className="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Insert Image"
+            >
+              {uploadingImage ? (
+                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <ImageIcon className="w-4 h-4" />
+              )}
+            </button>
           </div>
 
           {/* Undo/Redo */}
@@ -360,6 +348,14 @@ export default function TipTapEditor({
           {editor.storage.characterCount.characters()} characters • {editor.storage.characterCount.words()} words
         </div>
       )}
+
+      {/* Image Insert Modal */}
+      <ImageInsertModal
+        isOpen={showImageModal}
+        onClose={() => setShowImageModal(false)}
+        onImageSelect={handleImageSelect}
+        excerpt={excerpt}
+      />
     </div>
   );
 }
