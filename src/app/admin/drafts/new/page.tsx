@@ -442,11 +442,12 @@ function NewDraftContent() {
       }
 
       if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
+        const excerptValue = typeof result.excerpt === 'string' ? result.excerpt : (result.excerpt ? String(result.excerpt) : '');
         logger.debug('📥 Received blog generation result:', {
           hasContent: !!result.content,
           hasExcerpt: !!result.excerpt,
-          excerpt: result.excerpt || 'missing',
-          excerptLength: (typeof result.excerpt === 'string' ? result.excerpt.length : 0),
+          excerpt: excerptValue || 'missing',
+          excerptLength: excerptValue.length,
           title: result.title,
           allKeys: Object.keys(result),
         });
