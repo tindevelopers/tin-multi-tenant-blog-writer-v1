@@ -394,13 +394,34 @@ export class ContentIdeasService {
 
       const orgId = userProfile.org_id;
       
+      // Check if cluster with same name already exists for this org
+      let clusterName = cluster.cluster_name;
+      const { data: existingClusters } = await supabase
+        .from('content_clusters')
+        .select('cluster_name')
+        .eq('org_id', orgId)
+        .eq('cluster_name', clusterName);
+      
+      // If duplicate exists, append timestamp to make it unique
+      if (existingClusters && existingClusters.length > 0) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        clusterName = `${cluster.cluster_name} (${timestamp})`;
+        logger.debug('⚠️ Duplicate cluster name detected, appending timestamp:', {
+          original: cluster.cluster_name,
+          new: clusterName
+        });
+      }
+      
       // Insert cluster
-      const { data: clusterData, error: clusterError } = await supabase
+      let clusterData: any = null;
+      let clusterError: any = null;
+      
+      const { data: insertData, error: insertError } = await supabase
         .from('content_clusters')
         .insert({
           user_id: userId,
           org_id: orgId,
-          cluster_name: cluster.cluster_name,
+          cluster_name: clusterName,
           pillar_keyword: cluster.pillar_keyword,
           cluster_description: cluster.cluster_description,
           cluster_status: cluster.cluster_status,
@@ -413,9 +434,50 @@ export class ContentIdeasService {
         .select()
         .single();
 
+      clusterData = insertData;
+      clusterError = insertError;
+
+      // If there's a unique constraint violation, try with a more unique name
+      if (clusterError && (clusterError.message?.includes('unique_cluster_per_org') || clusterError.code === '23505')) {
+        logger.debug('🔄 Unique constraint violation detected, retrying with timestamp:', clusterError);
+        const retryTimestamp = Date.now();
+        const retryClusterName = `${cluster.cluster_name} (${retryTimestamp})`;
+        
+        const { data: retryData, error: retryError } = await supabase
+          .from('content_clusters')
+          .insert({
+            user_id: userId,
+            org_id: orgId,
+            cluster_name: retryClusterName,
+            pillar_keyword: cluster.pillar_keyword,
+            cluster_description: cluster.cluster_description,
+            cluster_status: cluster.cluster_status,
+            authority_score: cluster.authority_score,
+            total_keywords: cluster.total_keywords,
+            content_count: content_ideas.length,
+            pillar_content_count: content_ideas.filter(i => i.content_type === 'pillar').length,
+            supporting_content_count: content_ideas.filter(i => i.content_type === 'supporting').length,
+          })
+          .select()
+          .single();
+        
+        if (retryError) {
+          logger.error('Failed to save cluster on retry:', retryError);
+          return { success: false, error: `A cluster with this name already exists. Please use a different name.` };
+        }
+        
+        clusterData = retryData;
+        clusterError = null;
+      }
+
       if (clusterError) {
         logger.error('Failed to save cluster:', clusterError);
         return { success: false, error: clusterError.message };
+      }
+
+      if (!clusterData) {
+        logger.error('No cluster data returned from insert');
+        return { success: false, error: 'Failed to save cluster: No data returned' };
       }
 
       // Insert content ideas
