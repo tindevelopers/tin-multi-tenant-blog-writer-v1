@@ -362,6 +362,7 @@ const AppSidebar: React.FC = () => {
                       ? "lg:justify-center"
                       : "lg:justify-start"
                   }`}
+                  style={{ pointerEvents: 'auto' }}
                 >
                   <span
                     className={`${
@@ -404,6 +405,7 @@ const AppSidebar: React.FC = () => {
                       ? "lg:justify-center"
                       : "lg:justify-start"
                   }`}
+                  style={{ pointerEvents: 'auto' }}
                 >
                   <span
                     className={`${
@@ -456,6 +458,7 @@ const AppSidebar: React.FC = () => {
                                     ? "lg:justify-center"
                                     : "lg:justify-start"
                                 }`}
+                                style={{ pointerEvents: 'auto' }}
                               >
                                 <span className="flex items-center gap-2">
                                   {subItem.icon && (
@@ -498,6 +501,7 @@ const AppSidebar: React.FC = () => {
                                               ? "lg:justify-center"
                                               : "lg:justify-start"
                                           }`}
+                                          style={{ pointerEvents: 'auto' }}
                                         >
                                           <span className="flex items-center gap-2">
                                             {nestedItem.icon && (
@@ -538,6 +542,7 @@ const AppSidebar: React.FC = () => {
                                   ? "lg:justify-center"
                                   : "lg:justify-start"
                               }`}
+                              style={{ pointerEvents: 'auto' }}
                             >
                               <span className="flex items-center gap-2">
                                 {subItem.icon && (
