@@ -100,7 +100,7 @@ export default function TipTapEditor({
     // Only update if content actually changed and is different from current
     // Use setContent with emitUpdate: false to prevent triggering onChange callback
     if (content && content !== currentContent) {
-      editor.commands.setContent(content, false);
+      editor.commands.setContent(content, { emitUpdate: false });
     }
   }, [content, editor]);
 
