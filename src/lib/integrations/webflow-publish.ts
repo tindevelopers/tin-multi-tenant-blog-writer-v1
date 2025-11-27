@@ -1,0 +1,226 @@
+/**
+ * Webflow Publishing Functions
+ * 
+ * Functions to publish blog posts to Webflow CMS collections
+ */
+
+import { logger } from '@/utils/logger';
+import { getWebflowFieldMappings, applyWebflowFieldMappings } from './webflow-field-mapping';
+import { autoDetectWebflowSiteId } from './webflow-api';
+
+export interface WebflowItem {
+  id: string;
+  cmsLocaleId: string;
+  lastPublished: string | null;
+  lastUpdated: string;
+  createdOn: string;
+  isArchived: boolean;
+  isDraft: boolean;
+  fieldData: Record<string, unknown>;
+}
+
+export interface CreateWebflowItemParams {
+  apiKey: string;
+  collectionId: string;
+  fieldData: Record<string, unknown>;
+  isDraft?: boolean;
+}
+
+/**
+ * Create a new item in a Webflow CMS collection
+ */
+export async function createWebflowItem(params: CreateWebflowItemParams): Promise<WebflowItem> {
+  const { apiKey, collectionId, fieldData, isDraft = false } = params;
+
+  try {
+    const response = await fetch(`https://api.webflow.com/v2/collections/${collectionId}/items`, {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'authorization': `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        fieldData,
+        isDraft,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Webflow API error creating item:', {
+        status: response.status,
+        error: errorText,
+        collectionId,
+      });
+      throw new Error(`Webflow API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const item: WebflowItem = await response.json();
+    logger.debug('Successfully created Webflow item', { itemId: item.id, collectionId });
+    return item;
+  } catch (error: any) {
+    logger.error('Error creating Webflow item:', error);
+    throw new Error(`Failed to create Webflow item: ${error.message}`);
+  }
+}
+
+/**
+ * Publish a Webflow item (make it live)
+ */
+export async function publishWebflowItem(
+  apiKey: string,
+  collectionId: string,
+  itemId: string
+): Promise<{ published: boolean; itemId: string }> {
+  try {
+    const response = await fetch(
+      `https://api.webflow.com/v2/collections/${collectionId}/items/${itemId}/publish`,
+      {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'authorization': `Bearer ${apiKey}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Webflow API error publishing item:', {
+        status: response.status,
+        error: errorText,
+        itemId,
+        collectionId,
+      });
+      throw new Error(`Webflow API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    logger.debug('Successfully published Webflow item', { itemId, collectionId });
+    return { published: true, itemId };
+  } catch (error: any) {
+    logger.error('Error publishing Webflow item:', error);
+    throw new Error(`Failed to publish Webflow item: ${error.message}`);
+  }
+}
+
+/**
+ * Publish a blog post to Webflow
+ */
+export async function publishBlogToWebflow(params: {
+  apiKey: string;
+  collectionId: string;
+  siteId: string;
+  blogPost: {
+    title: string;
+    content: string;
+    excerpt?: string;
+    slug?: string;
+    featured_image?: string;
+    seo_title?: string;
+    seo_description?: string;
+    published_at?: string;
+    tags?: string[];
+    categories?: string[];
+  };
+  orgId?: string;
+  isDraft?: boolean;
+  publishImmediately?: boolean;
+}): Promise<{ itemId: string; published: boolean; url?: string }> {
+  const {
+    apiKey,
+    collectionId,
+    siteId,
+    blogPost,
+    orgId,
+    isDraft = false,
+    publishImmediately = true,
+  } = params;
+
+  try {
+    // Auto-detect siteId if not provided
+    let finalSiteId = siteId;
+    if (!finalSiteId) {
+      logger.debug('Auto-detecting Webflow site ID', { collectionId });
+      const detectedSiteId = await autoDetectWebflowSiteId(apiKey, collectionId);
+      if (!detectedSiteId) {
+        throw new Error('Could not auto-detect Webflow site ID. Please provide siteId in integration config.');
+      }
+      finalSiteId = detectedSiteId;
+      logger.debug('Auto-detected site ID', { siteId: finalSiteId });
+    }
+
+    // Get field mappings if orgId is provided
+    let fieldData: Record<string, unknown>;
+    if (orgId) {
+      const mappings = await getWebflowFieldMappings(orgId);
+      fieldData = applyWebflowFieldMappings(
+        {
+          title: blogPost.title,
+          content: blogPost.content,
+          excerpt: blogPost.excerpt || '',
+          slug: blogPost.slug,
+          featured_image: blogPost.featured_image,
+          seo_title: blogPost.seo_title,
+          seo_description: blogPost.seo_description,
+          published_at: blogPost.published_at || new Date().toISOString(),
+          tags: blogPost.tags || [],
+          categories: blogPost.categories || [],
+        },
+        mappings
+      );
+    } else {
+      // Use default field mapping
+      fieldData = {
+        name: blogPost.title, // Webflow typically uses 'name' for title
+        'post-body': blogPost.content,
+        excerpt: blogPost.excerpt || '',
+        slug: blogPost.slug || generateSlug(blogPost.title),
+        'main-image': blogPost.featured_image || '',
+        'seo-title': blogPost.seo_title || blogPost.title,
+        'seo-description': blogPost.seo_description || blogPost.excerpt || '',
+        'publish-date': blogPost.published_at || new Date().toISOString(),
+      };
+    }
+
+    // Create the item
+    const item = await createWebflowItem({
+      apiKey,
+      collectionId,
+      fieldData,
+      isDraft,
+    });
+
+    // Publish if requested
+    let published = false;
+    if (publishImmediately && !isDraft) {
+      await publishWebflowItem(apiKey, collectionId, item.id);
+      published = true;
+    }
+
+    // Generate URL (Webflow pattern: https://{siteId}.webflow.io/{slug})
+    const slug = blogPost.slug || generateSlug(blogPost.title);
+    const url = finalSiteId ? `https://${finalSiteId}.webflow.io/${slug}` : undefined;
+
+    return {
+      itemId: item.id,
+      published,
+      url: published ? url : undefined,
+    };
+  } catch (error: any) {
+    logger.error('Error publishing blog to Webflow:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate a URL-friendly slug from a title
+ */
+function generateSlug(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
