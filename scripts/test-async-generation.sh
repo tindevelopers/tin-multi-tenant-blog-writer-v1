@@ -194,17 +194,31 @@ if [ -n "$IMG_JOB_ID" ]; then
             if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
                 if [ "$STATUS" = "completed" ]; then
                     # According to IMAGE_RESPONSE_STRUCTURE.md: data.result.images[0].image_url
+                    # Also check for image_data (base64) as fallback
                     HAS_RESULT=$(echo "$STATUS_RESPONSE" | jq -r 'has("result")' 2>/dev/null || echo "false")
                     HAS_IMAGES=$(echo "$STATUS_RESPONSE" | jq -r '.result.images | length' 2>/dev/null || echo "0")
                     IMG_URL=$(echo "$STATUS_RESPONSE" | jq -r '.result.images[0].image_url // empty' 2>/dev/null || echo "")
+                    IMG_DATA=$(echo "$STATUS_RESPONSE" | jq -r '.result.images[0].image_data // empty' 2>/dev/null || echo "")
                     
-                    if [ "$HAS_RESULT" = "true" ] && [ "$HAS_IMAGES" -gt 0 ] && [ -n "$IMG_URL" ] && [ "$IMG_URL" != "null" ]; then
+                    # Check if we have either image_url or image_data
+                    HAS_IMAGE=false
+                    if [ -n "$IMG_URL" ] && [ "$IMG_URL" != "null" ] && [ ${#IMG_URL} -gt 0 ]; then
+                        HAS_IMAGE=true
+                        IMG_SOURCE="image_url"
+                        IMG_VALUE="$IMG_URL"
+                    elif [ -n "$IMG_DATA" ] && [ "$IMG_DATA" != "null" ] && [ ${#IMG_DATA} -gt 0 ]; then
+                        HAS_IMAGE=true
+                        IMG_SOURCE="image_data (base64)"
+                        IMG_VALUE="$IMG_DATA"
+                    fi
+                    
+                    if [ "$HAS_RESULT" = "true" ] && [ "$HAS_IMAGES" -gt 0 ] && [ "$HAS_IMAGE" = "true" ]; then
                         echo -e "   ${GREEN}✅ Image generation completed${NC}"
-                        # Truncate very long base64 URLs for display
-                        if [ ${#IMG_URL} -gt 100 ]; then
-                            echo "   Image URL: ${IMG_URL:0:100}... (truncated, ${#IMG_URL} chars total)"
+                        # Truncate very long base64 URLs/data for display
+                        if [ ${#IMG_VALUE} -gt 100 ]; then
+                            echo "   Image ($IMG_SOURCE): ${IMG_VALUE:0:100}... (truncated, ${#IMG_VALUE} chars total)"
                         else
-                            echo "   Image URL: $IMG_URL"
+                            echo "   Image ($IMG_SOURCE): $IMG_VALUE"
                         fi
                         # Extract additional metadata
                         IMG_WIDTH=$(echo "$STATUS_RESPONSE" | jq -r '.result.images[0].width // empty' 2>/dev/null || echo "")
@@ -215,11 +229,12 @@ if [ -n "$IMG_JOB_ID" ]; then
                         fi
                         ((TESTS_PASSED++))
                     else
-                        echo -e "   ${YELLOW}⚠️  Completed but image_url not found in expected location${NC}"
+                        echo -e "   ${YELLOW}⚠️  Completed but no image URL or image_data found${NC}"
                         echo "   Debug info:"
                         echo "   - Has result: $HAS_RESULT"
                         echo "   - Images count: $HAS_IMAGES"
                         echo "   - Image URL length: ${#IMG_URL}"
+                        echo "   - Image data length: ${#IMG_DATA}"
                         if [ "$HAS_RESULT" = "true" ]; then
                             echo "   - Result keys: $(echo "$STATUS_RESPONSE" | jq -r '.result | keys | join(", ")' 2>/dev/null || echo "unknown")"
                             if [ "$HAS_IMAGES" -gt 0 ]; then
