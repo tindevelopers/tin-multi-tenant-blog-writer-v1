@@ -176,14 +176,15 @@ function NewDraftContent() {
 
         if (queueItem?.generated_content || queueItem?.generation_metadata) {
           const metadata = queueItem.generation_metadata || {};
-          const excerpt = metadata.excerpt || queueItem.generated_title || '';
+          const excerptValue = metadata.excerpt || queueItem.generated_title || '';
+          const excerpt: string = typeof excerptValue === 'string' ? excerptValue : String(excerptValue);
           const title = queueItem.generated_title || formData.title || '';
           const content = queueItem.generated_content || '';
 
           logger.debug('✅ Fetched generated content from queue:', {
             hasContent: !!content,
             hasExcerpt: !!excerpt,
-            excerptLength: excerpt?.length || 0,
+            excerptLength: excerpt.length,
             contentLength: content?.length || 0,
           });
 
@@ -211,7 +212,7 @@ function NewDraftContent() {
 
           logger.debug('✅ Updated formData with excerpt:', {
             excerpt: excerpt || 'empty',
-            excerptLength: excerpt?.length || 0,
+            excerptLength: excerpt.length,
           });
         }
       } catch (error) {
@@ -442,18 +443,6 @@ function NewDraftContent() {
       }
 
       if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
-        const excerptValue = typeof result.excerpt === 'string' ? result.excerpt : (result.excerpt ? String(result.excerpt) : '');
-        logger.debug('📥 Received blog generation result:', {
-          hasContent: !!result.content,
-          hasExcerpt: !!result.excerpt,
-          excerpt: excerptValue || 'missing',
-          excerptLength: excerptValue.length,
-          title: result.title,
-          allKeys: Object.keys(result),
-        });
-        
-        setGeneratedContent(result);
-        
         // Update form data with generated content - ensure excerpt is properly extracted
         const excerptValue: string = typeof result.excerpt === 'string' 
           ? result.excerpt 
@@ -462,6 +451,17 @@ function NewDraftContent() {
           ? result.meta_description
           : (result.meta_description ? String(result.meta_description) : '');
         const excerpt: string = excerptValue || metaDescValue || '';
+        
+        logger.debug('📥 Received blog generation result:', {
+          hasContent: !!result.content,
+          hasExcerpt: !!result.excerpt,
+          excerpt: excerpt || 'missing',
+          excerptLength: excerpt.length,
+          title: result.title,
+          allKeys: Object.keys(result),
+        });
+        
+        setGeneratedContent(result);
         setFormData(prev => ({
           ...prev,
           content: String(result.content || ""),
