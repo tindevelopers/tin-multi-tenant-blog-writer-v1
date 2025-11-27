@@ -60,6 +60,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "TEST 2: Blog Generation (Async Mode)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📋 Testing: POST /api/v1/blog/generate-enhanced?async_mode=true"
+echo "   Expected: Returns job_id immediately (per FRONTEND_TESTING_GUIDE.md)"
 
 BLOG_PAYLOAD='{
   "topic": "Python programming benefits",
@@ -137,6 +138,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "TEST 4: Image Generation (Always Async)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📋 Testing: POST /api/v1/images/generate"
+echo "   Expected: Returns job_id immediately (per FRONTEND_TESTING_GUIDE.md)"
+echo "   Image URL path: result.images[0].image_url (per IMAGE_RESPONSE_STRUCTURE.md)"
 
 IMG_PAYLOAD='{
   "prompt": "A beautiful sunset over mountains",
@@ -175,6 +178,8 @@ if [ -n "$IMG_JOB_ID" ]; then
     echo "TEST 5: Image Job Status Polling"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "📋 Polling image job status: $IMG_JOB_ID"
+    echo "   Endpoint: GET /api/v1/images/jobs/{job_id}"
+    echo "   Image URL extraction: result.images[0].image_url (per IMAGE_RESPONSE_STRUCTURE.md)"
     
     for i in {1..10}; do
         echo "   Attempt $i/10..."
@@ -188,13 +193,39 @@ if [ -n "$IMG_JOB_ID" ]; then
             
             if [ "$STATUS" = "completed" ] || [ "$STATUS" = "failed" ]; then
                 if [ "$STATUS" = "completed" ]; then
+                    # According to IMAGE_RESPONSE_STRUCTURE.md: data.result.images[0].image_url
+                    HAS_RESULT=$(echo "$STATUS_RESPONSE" | jq -r 'has("result")' 2>/dev/null || echo "false")
+                    HAS_IMAGES=$(echo "$STATUS_RESPONSE" | jq -r '.result.images | length' 2>/dev/null || echo "0")
                     IMG_URL=$(echo "$STATUS_RESPONSE" | jq -r '.result.images[0].image_url // empty' 2>/dev/null || echo "")
-                    if [ -n "$IMG_URL" ]; then
+                    
+                    if [ "$HAS_RESULT" = "true" ] && [ "$HAS_IMAGES" -gt 0 ] && [ -n "$IMG_URL" ] && [ "$IMG_URL" != "null" ]; then
                         echo -e "   ${GREEN}✅ Image generation completed${NC}"
-                        echo "   Image URL: $IMG_URL"
+                        # Truncate very long base64 URLs for display
+                        if [ ${#IMG_URL} -gt 100 ]; then
+                            echo "   Image URL: ${IMG_URL:0:100}... (truncated, ${#IMG_URL} chars total)"
+                        else
+                            echo "   Image URL: $IMG_URL"
+                        fi
+                        # Extract additional metadata
+                        IMG_WIDTH=$(echo "$STATUS_RESPONSE" | jq -r '.result.images[0].width // empty' 2>/dev/null || echo "")
+                        IMG_HEIGHT=$(echo "$STATUS_RESPONSE" | jq -r '.result.images[0].height // empty' 2>/dev/null || echo "")
+                        IMG_FORMAT=$(echo "$STATUS_RESPONSE" | jq -r '.result.images[0].format // empty' 2>/dev/null || echo "")
+                        if [ -n "$IMG_WIDTH" ] && [ "$IMG_WIDTH" != "null" ]; then
+                            echo "   Image dimensions: ${IMG_WIDTH}x${IMG_HEIGHT} (${IMG_FORMAT})"
+                        fi
                         ((TESTS_PASSED++))
                     else
-                        echo -e "   ${YELLOW}⚠️  Completed but no image URL found${NC}"
+                        echo -e "   ${YELLOW}⚠️  Completed but image_url not found in expected location${NC}"
+                        echo "   Debug info:"
+                        echo "   - Has result: $HAS_RESULT"
+                        echo "   - Images count: $HAS_IMAGES"
+                        echo "   - Image URL length: ${#IMG_URL}"
+                        if [ "$HAS_RESULT" = "true" ]; then
+                            echo "   - Result keys: $(echo "$STATUS_RESPONSE" | jq -r '.result | keys | join(", ")' 2>/dev/null || echo "unknown")"
+                            if [ "$HAS_IMAGES" -gt 0 ]; then
+                                echo "   - First image keys: $(echo "$STATUS_RESPONSE" | jq -r '.result.images[0] | keys | join(", ")' 2>/dev/null || echo "unknown")"
+                            fi
+                        fi
                         ((TESTS_FAILED++))
                     fi
                 else
