@@ -897,6 +897,39 @@ export async function POST(request: NextRequest) {
       });
     }
     
+    // If async_mode was requested but no job_id returned, check if it's an error
+    // The external API might not support async mode (missing GOOGLE_CLOUD_PROJECT)
+    if (asyncMode && !result.job_id) {
+      logger.warn('⚠️ Async mode requested but no job_id returned. External API may not support async mode.', {
+        resultKeys: Object.keys(result),
+        error: result.error || result.error_message
+      });
+      
+      // If queue exists, update it to indicate async mode failed
+      // But still return queue_id so frontend can track it
+      if (queueId) {
+        try {
+          await supabase
+            .from('blog_generation_queue')
+            .update({
+              status: 'generating', // Keep as generating - will be updated when content arrives
+              metadata: {
+                async_mode_requested: true,
+                async_mode_failed: true,
+                fallback_to_sync: true,
+                error: result.error || result.error_message || 'Async mode not available'
+              }
+            })
+            .eq('queue_id', queueId);
+        } catch (error) {
+          logger.warn('⚠️ Failed to update queue entry:', error);
+        }
+      }
+      
+      // Continue with synchronous processing - the content will be returned below
+      // But ensure queue_id is included in response
+    }
+    
     logger.debug('✅ Blog generated successfully from external API');
     logger.debug('📄 Full API response structure:', {
       hasContent: !!result.content,
