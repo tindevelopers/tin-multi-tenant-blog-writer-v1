@@ -88,7 +88,6 @@ export async function POST(request: NextRequest) {
             skipped: 0,
             total: 0,
           },
-          },
           { status: 404 }
         );
       }
