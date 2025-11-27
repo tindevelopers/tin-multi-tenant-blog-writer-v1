@@ -11,6 +11,7 @@ import {
   GlobeAltIcon,
   ShoppingBagIcon,
   DocumentTextIcon,
+  EyeIcon,
 } from "@heroicons/react/24/outline";
 import { BlogPlatformPublishing } from "@/types/blog-queue";
 import type { Database } from "@/types/database";
