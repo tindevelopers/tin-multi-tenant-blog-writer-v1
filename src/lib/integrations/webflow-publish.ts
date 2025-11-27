@@ -6,7 +6,7 @@
 
 import { logger } from '@/utils/logger';
 import { getWebflowFieldMappings, applyWebflowFieldMappings } from './webflow-field-mapping';
-import { autoDetectWebflowSiteId } from './webflow-api';
+import { autoDetectWebflowSiteId, getWebflowCollectionById } from './webflow-api';
 
 export interface WebflowItem {
   id: string;
@@ -151,11 +151,21 @@ export async function publishBlogToWebflow(params: {
       logger.debug('Auto-detected site ID', { siteId: finalSiteId });
     }
 
+    // Fetch collection schema to validate fields
+    logger.debug('Fetching Webflow collection schema', { collectionId });
+    const collection = await getWebflowCollectionById(apiKey, collectionId);
+    const availableFieldSlugs = new Set(collection.fields.map(f => f.slug));
+    
+    logger.debug('Available Webflow fields', { 
+      collectionId, 
+      fields: collection.fields.map(f => ({ slug: f.slug, displayName: f.displayName, type: f.type }))
+    });
+
     // Get field mappings if orgId is provided
     let fieldData: Record<string, unknown>;
     if (orgId) {
       const mappings = await getWebflowFieldMappings(orgId);
-      fieldData = applyWebflowFieldMappings(
+      const mappedData = applyWebflowFieldMappings(
         {
           title: blogPost.title,
           content: blogPost.content,
@@ -170,19 +180,103 @@ export async function publishBlogToWebflow(params: {
         },
         mappings
       );
+      
+      // Filter out fields that don't exist in the collection
+      fieldData = {};
+      const missingFields: string[] = [];
+      for (const [fieldSlug, value] of Object.entries(mappedData)) {
+        if (availableFieldSlugs.has(fieldSlug)) {
+          fieldData[fieldSlug] = value;
+        } else {
+          missingFields.push(fieldSlug);
+          logger.warn(`Field "${fieldSlug}" not found in Webflow collection, skipping`, {
+            collectionId,
+            availableFields: Array.from(availableFieldSlugs),
+          });
+        }
+      }
+      
+      if (missingFields.length > 0) {
+        logger.warn('Some mapped fields were not found in Webflow collection', {
+          missingFields,
+          availableFields: Array.from(availableFieldSlugs),
+        });
+      }
     } else {
-      // Use default field mapping
-      fieldData = {
-        name: blogPost.title, // Webflow typically uses 'name' for title
-        'post-body': blogPost.content,
-        excerpt: blogPost.excerpt || '',
-        slug: blogPost.slug || generateSlug(blogPost.title),
-        'main-image': blogPost.featured_image || '',
-        'seo-title': blogPost.seo_title || blogPost.title,
-        'seo-description': blogPost.seo_description || blogPost.excerpt || '',
-        'publish-date': blogPost.published_at || new Date().toISOString(),
-      };
+      // Use default field mapping, but only include fields that exist
+      fieldData = {};
+      
+      // Try common Webflow field names
+      if (availableFieldSlugs.has('name')) {
+        fieldData.name = blogPost.title;
+      } else if (availableFieldSlugs.has('title')) {
+        fieldData.title = blogPost.title;
+      }
+      
+      // Try various content field names
+      const contentFields = ['post-body', 'body', 'content', 'post-content', 'main-content'];
+      for (const fieldName of contentFields) {
+        if (availableFieldSlugs.has(fieldName)) {
+          fieldData[fieldName] = blogPost.content;
+          break;
+        }
+      }
+      
+      // Try excerpt/summary fields
+      const excerptFields = ['excerpt', 'post-summary', 'summary', 'description'];
+      for (const fieldName of excerptFields) {
+        if (availableFieldSlugs.has(fieldName) && blogPost.excerpt) {
+          fieldData[fieldName] = blogPost.excerpt;
+          break;
+        }
+      }
+      
+      // Slug field
+      if (availableFieldSlugs.has('slug')) {
+        fieldData.slug = blogPost.slug || generateSlug(blogPost.title);
+      }
+      
+      // Image fields
+      const imageFields = ['main-image', 'featured-image', 'post-image', 'image', 'thumbnail'];
+      for (const fieldName of imageFields) {
+        if (availableFieldSlugs.has(fieldName) && blogPost.featured_image) {
+          fieldData[fieldName] = blogPost.featured_image;
+          break;
+        }
+      }
+      
+      // SEO fields
+      if (availableFieldSlugs.has('seo-title') && blogPost.seo_title) {
+        fieldData['seo-title'] = blogPost.seo_title;
+      }
+      if (availableFieldSlugs.has('seo-description') && blogPost.seo_description) {
+        fieldData['seo-description'] = blogPost.seo_description;
+      }
+      
+      // Date fields
+      const dateFields = ['publish-date', 'published-date', 'date', 'published-at'];
+      for (const fieldName of dateFields) {
+        if (availableFieldSlugs.has(fieldName)) {
+          fieldData[fieldName] = blogPost.published_at || new Date().toISOString();
+          break;
+        }
+      }
     }
+    
+    // Validate that we have at least the name/title field
+    if (!fieldData.name && !fieldData.title) {
+      const availableFields = Array.from(availableFieldSlugs).join(', ');
+      throw new Error(
+        `Cannot publish: No title field found in Webflow collection. ` +
+        `Available fields: ${availableFields}. ` +
+        `Please configure field mappings in the integration settings.`
+      );
+    }
+    
+    logger.debug('Final field data to publish', { 
+      fieldSlugs: Object.keys(fieldData),
+      collectionId 
+    });
 
     // Create the item
     const item = await createWebflowItem({
