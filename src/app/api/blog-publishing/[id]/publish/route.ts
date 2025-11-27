@@ -101,7 +101,7 @@ export async function POST(
           throw new Error('Blog post not found');
         }
 
-        // Prepare blog post data
+        // Prepare blog post data (following the same structure as test endpoint)
         const blogPostData = {
           title: post.title,
           content: post.content || '',
@@ -111,17 +111,29 @@ export async function POST(
           seo_title: (post.seo_data as Record<string, unknown>)?.meta_title as string | undefined,
           seo_description: (post.seo_data as Record<string, unknown>)?.meta_description as string | undefined,
           published_at: new Date().toISOString(),
+          // Include tags and categories if available in metadata
+          tags: (post.metadata as Record<string, unknown>)?.tags as string[] | undefined,
+          categories: (post.metadata as Record<string, unknown>)?.categories as string[] | undefined,
         };
 
-        // Publish to Webflow
+        logger.debug('Publishing blog to Webflow', {
+          collectionId,
+          siteId: siteId || 'auto-detect',
+          orgId: userProfile.org_id,
+          title: blogPostData.title,
+          isDraft: is_draft,
+          publishImmediately: !is_draft,
+        });
+
+        // Publish to Webflow (following the same pattern as test endpoint)
         const result = await publishBlogToWebflow({
           apiKey,
           collectionId,
-          siteId: siteId || '',
+          siteId: siteId || '', // Will be auto-detected if not provided (same as test)
           blogPost: blogPostData,
           orgId: userProfile.org_id,
-          isDraft: is_draft, // Use the is_draft flag
-          publishImmediately: !is_draft, // If not draft, publish immediately
+          isDraft: is_draft, // Use the is_draft flag from request
+          publishImmediately: !is_draft, // If not draft, publish immediately (same as test)
         });
 
         // Update publishing record with results
