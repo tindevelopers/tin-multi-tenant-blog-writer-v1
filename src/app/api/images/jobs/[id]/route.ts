@@ -15,10 +15,10 @@ const API_KEY = process.env.BLOG_WRITER_API_KEY;
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = params.id;
+    const { id: jobId } = await params;
     
     if (!jobId) {
       return NextResponse.json(
