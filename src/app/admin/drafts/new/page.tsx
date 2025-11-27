@@ -176,8 +176,25 @@ function NewDraftContent() {
 
         if (queueItem?.generated_content || queueItem?.generation_metadata) {
           const metadata = queueItem.generation_metadata || {};
-          const excerptValue = metadata.excerpt || queueItem.generated_title || '';
-          const excerpt: string = typeof excerptValue === 'string' ? excerptValue : String(excerptValue);
+          
+          // Extract excerpt from multiple possible locations in generation_metadata
+          // Priority: excerpt → meta_description → seo_metadata.meta_description → extract from content
+          let excerptValue = metadata.excerpt || 
+                            metadata.meta_description || 
+                            (metadata.seo_metadata && typeof metadata.seo_metadata === 'object' && 'meta_description' in metadata.seo_metadata 
+                              ? (metadata.seo_metadata as any).meta_description 
+                              : null) ||
+                            null;
+          
+          // If no excerpt found, try to extract first paragraph from content
+          if (!excerptValue && queueItem.generated_content) {
+            const contentText = queueItem.generated_content.replace(/<[^>]*>/g, '').trim();
+            const firstParagraph = contentText.split('\n').find(p => p.trim().length > 50) || 
+                                  contentText.substring(0, 200);
+            excerptValue = firstParagraph.length > 200 ? firstParagraph.substring(0, 197) + '...' : firstParagraph;
+          }
+          
+          const excerpt: string = excerptValue ? (typeof excerptValue === 'string' ? excerptValue : String(excerptValue)) : '';
           const title = queueItem.generated_title || formData.title || '';
           const content = queueItem.generated_content || '';
 
@@ -186,6 +203,8 @@ function NewDraftContent() {
             hasExcerpt: !!excerpt,
             excerptLength: excerpt.length,
             contentLength: content?.length || 0,
+            metadataKeys: Object.keys(metadata),
+            excerptSource: metadata.excerpt ? 'excerpt' : metadata.meta_description ? 'meta_description' : 'extracted_from_content',
           });
 
           const blogContent = {

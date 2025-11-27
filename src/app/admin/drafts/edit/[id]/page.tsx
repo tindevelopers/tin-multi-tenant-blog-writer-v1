@@ -172,15 +172,25 @@ export default function EditDraftPage() {
         <div>
           <label htmlFor="excerpt" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Excerpt
+            {!formData.excerpt && (
+              <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+                (No excerpt found - consider extracting from content)
+              </span>
+            )}
           </label>
           <textarea
             id="excerpt"
             value={formData.excerpt}
             onChange={(e) => handleInputChange('excerpt', e.target.value)}
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-            placeholder="Enter draft excerpt..."
+            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white resize-y"
+            placeholder={formData.excerpt || "Enter draft excerpt... (A brief summary of the blog post, typically 150-200 characters)"}
           />
+          {formData.excerpt && (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {formData.excerpt.length} characters
+            </p>
+          )}
         </div>
 
         {/* Content */}
