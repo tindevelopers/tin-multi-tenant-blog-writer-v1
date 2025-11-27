@@ -200,7 +200,7 @@ export default function QueueItemDetailPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between relative z-10" style={{ pointerEvents: 'auto' }}>
         <div className="flex items-center gap-4">
           <button
             onClick={() => router.back()}
@@ -217,12 +217,13 @@ export default function QueueItemDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap relative z-10" style={{ pointerEvents: 'auto' }}>
           {/* View Blog button - show when blog is generated */}
           {hasGeneratedContent && (
             <button
               onClick={() => setShowViewBlogModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               <EyeIcon className="w-5 h-5" />
               View Blog
@@ -232,7 +233,8 @@ export default function QueueItemDetailPage() {
           {hasGeneratedContent && postId && (
             <button
               onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               <PencilIcon className="w-5 h-5" />
               Edit in Drafts
@@ -264,7 +266,8 @@ export default function QueueItemDetailPage() {
                   alert("Failed to create draft. Please try again.");
                 }
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               <PencilIcon className="w-5 h-5" />
               Create Draft
@@ -274,7 +277,8 @@ export default function QueueItemDetailPage() {
           {item.status === "generated" && (
             <button
               onClick={handleRegenerate}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               <ArrowPathIcon className="w-5 h-5" />
               Regenerate
@@ -283,7 +287,8 @@ export default function QueueItemDetailPage() {
           {item.status === "generated" && (
             <button
               onClick={handleRequestApproval}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               <DocumentCheckIcon className="w-5 h-5" />
               Request Approval
@@ -292,7 +297,8 @@ export default function QueueItemDetailPage() {
           {item.status === "failed" && (
             <button
               onClick={handleRetry}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               <ArrowPathIcon className="w-5 h-5" />
               Retry
@@ -301,7 +307,8 @@ export default function QueueItemDetailPage() {
           {!["published", "cancelled"].includes(item.status) && (
             <button
               onClick={handleCancel}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors relative z-10"
+              style={{ pointerEvents: 'auto' }}
             >
               <XMarkIcon className="w-5 h-5" />
               Cancel
@@ -449,7 +456,8 @@ export default function QueueItemDetailPage() {
               {postId ? (
                 <button
                   onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-10"
+                  style={{ pointerEvents: 'auto' }}
                 >
                   <PencilIcon className="w-4 h-4" />
                   Edit in Drafts
@@ -479,14 +487,15 @@ export default function QueueItemDetailPage() {
                       alert("Failed to create draft. Please try again.");
                     }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-10"
+                  style={{ pointerEvents: 'auto' }}
                 >
                   <PencilIcon className="w-4 h-4" />
                   Create Draft to Edit
                 </button>
               )}
             </div>
-            <div className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto">
+            <div className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto relative" style={{ zIndex: 1 }}>
               <TipTapEditor
                 content={item.generated_content}
                 onChange={() => {}}
