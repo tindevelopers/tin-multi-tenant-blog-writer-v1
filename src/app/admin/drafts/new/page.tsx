@@ -189,7 +189,7 @@ function NewDraftContent() {
           // If no excerpt found, try to extract first paragraph from content
           if (!excerptValue && queueItem.generated_content) {
             const contentText = queueItem.generated_content.replace(/<[^>]*>/g, '').trim();
-            const firstParagraph = contentText.split('\n').find(p => p.trim().length > 50) || 
+            const firstParagraph = contentText.split('\n').find((p: string) => p.trim().length > 50) || 
                                   contentText.substring(0, 200);
             excerptValue = firstParagraph.length > 200 ? firstParagraph.substring(0, 197) + '...' : firstParagraph;
           }
