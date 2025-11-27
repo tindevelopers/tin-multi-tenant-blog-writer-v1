@@ -88,6 +88,7 @@ const blogWriterItems: NavItem[] = [
         new: true,
         subItems: [
           { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
+          { name: "Content Ideas", path: "/admin/content-ideas", icon: <Target className="w-4 h-4" />, new: true },
           { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
           { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
           { name: "Blog Queue", path: "/admin/blog-queue", icon: <FileClock className="w-4 h-4" />, new: true },

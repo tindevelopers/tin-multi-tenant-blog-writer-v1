@@ -343,7 +343,7 @@ function EnhancedContentClustersPanel({
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Authority: {cluster.authority_score}/10
+                  Authority: {cluster.authority_score !== null && cluster.authority_score !== undefined ? cluster.authority_score : 'N/A'}/10
                 </div>
                 <button
                   onClick={() => {

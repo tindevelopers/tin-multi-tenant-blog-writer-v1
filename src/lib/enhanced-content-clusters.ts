@@ -990,12 +990,24 @@ export class EnhancedContentClustersService {
   }
 
   private calculateAuthorityScore(cluster: KeywordCluster, researchResults: BlogResearchResults): number {
-    const avgCompetition = cluster.avg_competition;
-    const clusterScore = cluster.cluster_score;
-    const keywordCount = cluster.keywords.length;
+    const avgCompetition = cluster.avg_competition ?? 0.5; // Default to medium competition
+    const clusterScore = cluster.cluster_score ?? 0.5; // Default to medium score
+    const keywordCount = cluster.keywords?.length ?? 0;
     
-    // Calculate authority score based on multiple factors
-    return Math.round((clusterScore * 0.4) + ((1 - avgCompetition) * 0.4) + (Math.min(keywordCount / 20, 1) * 0.2) * 10);
+    // Calculate authority score based on multiple factors (0-10 scale)
+    // Factor 1: Cluster score (40% weight) - how good the cluster is
+    // Factor 2: Low competition (40% weight) - easier to rank
+    // Factor 3: Keyword count (20% weight) - more keywords = more comprehensive
+    
+    const score1 = clusterScore * 0.4; // 0-0.4 range
+    const score2 = (1 - Math.min(avgCompetition, 1)) * 0.4; // Lower competition = higher score, 0-0.4 range
+    const score3 = Math.min(keywordCount / 20, 1) * 0.2; // More keywords up to 20 = better, 0-0.2 range
+    
+    const totalScore = score1 + score2 + score3; // 0-1 range
+    const authorityScore = Math.round(totalScore * 10); // Convert to 0-10 scale
+    
+    // Ensure score is between 0 and 10
+    return Math.max(0, Math.min(10, authorityScore));
   }
 
   private estimateTrafficPotential(cluster: KeywordCluster): 'low' | 'medium' | 'high' {
@@ -1227,6 +1239,20 @@ export class EnhancedContentClustersService {
           });
         }
 
+        // Ensure authority_score is calculated if missing
+        let authorityScore = cluster.authority_score;
+        if (!authorityScore || authorityScore === 0) {
+          // Recalculate if missing or zero
+          const keywordCluster = cluster.keyword_clusters?.[0];
+          if (keywordCluster && cluster.research_data) {
+            authorityScore = this.calculateAuthorityScore(keywordCluster, cluster.research_data);
+            logger.debug('🔄 Recalculated authority score:', {
+              cluster_name: clusterName,
+              authority_score: authorityScore
+            });
+          }
+        }
+
         // Prepare cluster data for insertion
         const clusterInsertData = {
           user_id: userId,
@@ -1235,7 +1261,7 @@ export class EnhancedContentClustersService {
           pillar_keyword: cluster.pillar_keyword,
           cluster_description: cluster.cluster_description,
           cluster_status: cluster.cluster_status,
-          authority_score: cluster.authority_score,
+          authority_score: authorityScore || 5, // Default to 5 if still missing
           total_keywords: cluster.total_keywords,
           content_count: cluster.content_count,
           pillar_content_count: cluster.pillar_content_count,
