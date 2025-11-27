@@ -28,6 +28,7 @@ export interface CreateWebflowItemParams {
 
 /**
  * Create a new item in a Webflow CMS collection
+ * In Webflow API v2, items are published immediately if isDraft is false
  */
 export async function createWebflowItem(params: CreateWebflowItemParams): Promise<WebflowItem> {
   const { apiKey, collectionId, fieldData, isDraft = false } = params;
@@ -57,7 +58,11 @@ export async function createWebflowItem(params: CreateWebflowItemParams): Promis
     }
 
     const item: WebflowItem = await response.json();
-    logger.debug('Successfully created Webflow item', { itemId: item.id, collectionId });
+    logger.debug('Successfully created Webflow item', { 
+      itemId: item.id, 
+      collectionId,
+      isDraft: item.isDraft 
+    });
     return item;
   } catch (error: any) {
     logger.error('Error creating Webflow item:', error);
@@ -66,42 +71,50 @@ export async function createWebflowItem(params: CreateWebflowItemParams): Promis
 }
 
 /**
- * Publish a Webflow item (make it live)
+ * Publish a Webflow site (makes all draft items live)
+ * Note: In Webflow API v2, individual items cannot be published separately.
+ * Items are published when created with isDraft: false, or by publishing the entire site.
  */
-export async function publishWebflowItem(
+export async function publishWebflowSite(
   apiKey: string,
-  collectionId: string,
-  itemId: string
-): Promise<{ published: boolean; itemId: string }> {
+  siteId: string,
+  itemIds?: string[]
+): Promise<{ published: boolean }> {
   try {
     const response = await fetch(
-      `https://api.webflow.com/v2/collections/${collectionId}/items/${itemId}/publish`,
+      `https://api.webflow.com/v2/sites/${siteId}/publish`,
       {
         method: 'POST',
         headers: {
           'accept': 'application/json',
           'authorization': `Bearer ${apiKey}`,
+          'content-type': 'application/json',
         },
+        body: JSON.stringify({
+          // Optionally specify which items to publish
+          // If not provided, publishes all draft items
+          ...(itemIds && itemIds.length > 0 ? { itemIds } : {}),
+        }),
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error('Webflow API error publishing item:', {
+      logger.error('Webflow API error publishing site:', {
         status: response.status,
         error: errorText,
-        itemId,
-        collectionId,
+        siteId,
+        itemIds,
       });
       throw new Error(`Webflow API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
     const result = await response.json();
-    logger.debug('Successfully published Webflow item', { itemId, collectionId });
-    return { published: true, itemId };
+    logger.debug('Successfully published Webflow site', { siteId, itemIds });
+    return { published: true };
   } catch (error: any) {
-    logger.error('Error publishing Webflow item:', error);
-    throw new Error(`Failed to publish Webflow item: ${error.message}`);
+    logger.error('Error publishing Webflow site:', error);
+    throw new Error(`Failed to publish Webflow site: ${error.message}`);
   }
 }
 
@@ -278,19 +291,40 @@ export async function publishBlogToWebflow(params: {
       collectionId 
     });
 
-    // Create the item
+    // Create the item (published immediately if isDraft is false)
     const item = await createWebflowItem({
       apiKey,
       collectionId,
       fieldData,
-      isDraft,
+      isDraft: publishImmediately ? false : isDraft, // If publishImmediately, set isDraft to false
     });
 
-    // Publish if requested
+    // In Webflow API v2, items are published when created with isDraft: false
+    // If we created as draft but want to publish, we need to publish the site
     let published = false;
     if (publishImmediately && !isDraft) {
-      await publishWebflowItem(apiKey, collectionId, item.id);
-      published = true;
+      // Item is already published if isDraft was false
+      published = !item.isDraft;
+      
+      // If item was created as draft but we want to publish immediately,
+      // we need to publish the site (which publishes all draft items)
+      if (item.isDraft && finalSiteId) {
+        try {
+          await publishWebflowSite(apiKey, finalSiteId, [item.id]);
+          published = true;
+          logger.debug('Published Webflow item via site publish', { itemId: item.id, siteId: finalSiteId });
+        } catch (publishError) {
+          logger.warn('Failed to publish site, item created as draft', {
+            itemId: item.id,
+            siteId: finalSiteId,
+            error: publishError,
+          });
+          // Item was created successfully, just not published yet
+          published = false;
+        }
+      }
+    } else {
+      published = !item.isDraft;
     }
 
     // Generate URL (Webflow pattern: https://{siteId}.webflow.io/{slug})
