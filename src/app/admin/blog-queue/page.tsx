@@ -118,6 +118,64 @@ export default function BlogQueuePage() {
     fetchStats();
   }, [fetchQueueItems, fetchStats]);
 
+  // Poll for updates on generating items
+  useEffect(() => {
+    const generatingItems = queueItems.filter(item => item.status === "generating" || item.status === "queued");
+    
+    if (generatingItems.length === 0) {
+      return; // No items to poll
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // Fetch updated status for all generating items
+        const updatePromises = generatingItems.map(async (item) => {
+          try {
+            const response = await fetch(`/api/blog-queue/${item.queue_id}`);
+            if (response.ok) {
+              const data = await response.json();
+              return data.queue_item || data;
+            }
+          } catch (err) {
+            // Silently fail for individual items
+            return null;
+          }
+          return null;
+        });
+
+        const updatedItems = await Promise.all(updatePromises);
+        
+        // Update queue items state with new data
+        setQueueItems(prevItems => {
+          const updatedMap = new Map(updatedItems.filter(Boolean).map(item => [item.queue_id, item]));
+          
+          return prevItems.map(item => {
+            const updated = updatedMap.get(item.queue_id);
+            if (updated) {
+              return updated;
+            }
+            return item;
+          });
+        });
+
+        // Refresh stats if any item changed status
+        const hasStatusChange = updatedItems.some((updated, idx) => {
+          if (!updated) return false;
+          const original = generatingItems[idx];
+          return original && updated.status !== original.status;
+        });
+
+        if (hasStatusChange) {
+          fetchStats();
+        }
+      } catch (err) {
+        // Silently fail polling errors
+      }
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [queueItems, fetchStats]);
+
 
   const handleCancel = async (queueId: string) => {
     try {
@@ -760,13 +818,16 @@ function QueueItemRow({
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        <StatusBadge status={item.status} />
+        <StatusBadge 
+          status={item.status} 
+          currentStage={item.status === "generating" ? item.current_stage : undefined}
+        />
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        {item.status === "generating" ? (
+        {item.status === "generating" || item.status === "queued" ? (
           <ProgressIndicator
             percentage={item.progress_percentage || 0}
-            stage={item.current_stage || "Starting..."}
+            stage={item.current_stage || (item.status === "queued" ? "Queued" : "Starting...")}
           />
         ) : (
           <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -868,7 +929,13 @@ function QueueItemRow({
   );
 }
 
-function StatusBadge({ status }: { status: QueueStatus | string | null | undefined }) {
+function StatusBadge({ 
+  status, 
+  currentStage 
+}: { 
+  status: QueueStatus | string | null | undefined;
+  currentStage?: string;
+}) {
   const meta = getQueueStatusMetadata(status);
   
   if (!meta) {
@@ -880,6 +947,11 @@ function StatusBadge({ status }: { status: QueueStatus | string | null | undefin
     );
   }
   
+  // Show current stage if generating and stage is available
+  const displayLabel = status === "generating" && currentStage 
+    ? currentStage 
+    : meta.label;
+  
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
@@ -887,9 +959,10 @@ function StatusBadge({ status }: { status: QueueStatus | string | null | undefin
         backgroundColor: `${meta.color}20`,
         color: meta.color,
       }}
+      title={status === "generating" && currentStage ? `Generating: ${currentStage}` : undefined}
     >
       <span>{meta.icon}</span>
-      {meta.label}
+      {displayLabel}
     </span>
   );
 }
