@@ -168,8 +168,72 @@ export default function ImageInsertModal({
 
       const result = await response.json();
       
-      // Extract image URL from the response structure
-      // The API returns: { success: true, images: [{ image_url: "...", image_data: "..." }] }
+      // Check if async mode (job_id returned)
+      if (result.job_id) {
+        logger.debug('Async mode detected, polling job status...', { job_id: result.job_id });
+        
+        // Poll job status until completed
+        const maxAttempts = 30;
+        let attempt = 0;
+        let imageUrl: string | null = null;
+        
+        while (attempt < maxAttempts) {
+          attempt++;
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between polls
+          
+          const statusResponse = await fetch(`/api/images/jobs/${result.job_id}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (!statusResponse.ok) {
+            throw new Error(`Failed to check job status: ${statusResponse.status}`);
+          }
+          
+          const statusResult = await statusResponse.json();
+          const jobStatus = statusResult.status;
+          const progress = statusResult.progress_percentage || 0;
+          
+          logger.debug('Job status poll', { attempt, status: jobStatus, progress });
+          
+          if (jobStatus === 'completed') {
+            // Extract image from completed job
+            if (statusResult.result?.images && statusResult.result.images.length > 0) {
+              const imageData = statusResult.result.images[0];
+              if (imageData.image_url) {
+                imageUrl = imageData.image_url;
+              } else if (imageData.image_data) {
+                // Convert base64 to data URL
+                const format = imageData.format || 'png';
+                if (imageData.image_data.startsWith('data:image/')) {
+                  imageUrl = imageData.image_data;
+                } else {
+                  imageUrl = `data:image/${format};base64,${imageData.image_data}`;
+                }
+              }
+            }
+            
+            if (imageUrl) {
+              break;
+            }
+          } else if (jobStatus === 'failed') {
+            const errorMsg = statusResult.error_message || statusResult.error || 'Image generation failed';
+            throw new Error(errorMsg);
+          }
+        }
+        
+        if (!imageUrl) {
+          throw new Error('Image generation timed out or did not return an image URL');
+        }
+        
+        onImageSelect(imageUrl);
+        onClose();
+        return;
+      }
+      
+      // Synchronous mode - extract image URL directly
       let imageUrl: string | null = null;
       
       if (result.images && result.images.length > 0) {
