@@ -420,6 +420,9 @@ export default function PublishingPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   URL
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Sync Status
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Actions
                 </th>
@@ -577,6 +580,66 @@ function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
       <span>{meta.icon}</span>
       {meta.label}
     </span>
+  );
+}
+
+function SyncStatusBadge({ 
+  syncStatus, 
+  isDraft, 
+  platformDraftStatus,
+  lastSyncedAt 
+}: { 
+  syncStatus?: string | null; 
+  isDraft?: boolean | null;
+  platformDraftStatus?: string | null;
+  lastSyncedAt?: string | null;
+}) {
+  const getSyncStatusInfo = () => {
+    if (!syncStatus || syncStatus === 'never_synced') {
+      return { label: 'Not Synced', color: '#6B7280', icon: '⏳' };
+    }
+    if (syncStatus === 'in_sync') {
+      const draftLabel = isDraft ? ' (Draft)' : '';
+      const platformStatus = platformDraftStatus === 'draft' ? ' (Platform Draft)' : '';
+      return { 
+        label: `Synced${draftLabel}${platformStatus}`, 
+        color: '#10B981', 
+        icon: '✅' 
+      };
+    }
+    if (syncStatus === 'out_of_sync') {
+      return { label: 'Out of Sync', color: '#F59E0B', icon: '⚠️' };
+    }
+    if (syncStatus === 'syncing') {
+      return { label: 'Syncing...', color: '#3B82F6', icon: '🔄' };
+    }
+    if (syncStatus === 'sync_failed') {
+      return { label: 'Sync Failed', color: '#EF4444', icon: '❌' };
+    }
+    return { label: 'Unknown', color: '#6B7280', icon: '❓' };
+  };
+
+  const info = getSyncStatusInfo();
+  
+  return (
+    <div className="flex flex-col gap-1">
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+        style={{
+          backgroundColor: `${info.color}20`,
+          color: info.color,
+        }}
+        title={lastSyncedAt ? `Last synced: ${new Date(lastSyncedAt).toLocaleString()}` : undefined}
+      >
+        <span>{info.icon}</span>
+        {info.label}
+      </span>
+      {lastSyncedAt && (
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {new Date(lastSyncedAt).toLocaleDateString()}
+        </span>
+      )}
+    </div>
   );
 }
 
