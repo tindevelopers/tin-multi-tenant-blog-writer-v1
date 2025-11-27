@@ -347,9 +347,16 @@ export async function publishBlogToWebflow(params: {
       }
     }
 
-    // Generate URL (Webflow pattern: https://{siteId}.webflow.io/{slug})
+    // Generate URL
+    // Webflow URLs follow: https://{site-slug}.webflow.io/{collection-slug}/{item-slug}
+    // However, we don't have the site slug or collection slug from the API response
+    // So we'll use the site ID pattern as a fallback
+    // Note: The actual URL may differ based on Webflow site configuration
     const slug = blogPost.slug || generateSlug(blogPost.title);
-    const url = finalSiteId ? `https://${finalSiteId}.webflow.io/${slug}` : undefined;
+    const collectionSlug = collection.slug || 'blog'; // Default to 'blog' if not available
+    const url = finalSiteId 
+      ? `https://${finalSiteId}.webflow.io/${collectionSlug}/${slug}` 
+      : undefined;
 
     return {
       itemId: item.id,
