@@ -16,7 +16,12 @@ import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environme
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient(request);
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError) {
+      logger.error('Auth error in webflow-inspect-collection:', authError);
+      return NextResponse.json({ error: 'Authentication error', details: authError.message }, { status: 401 });
+    }
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -69,10 +74,27 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    logger.debug('Inspecting Webflow collection', { collectionId });
+    logger.debug('Inspecting Webflow collection', { collectionId, hasApiKey: !!finalApiKey });
 
     // Fetch collection schema
-    const collection = await getWebflowCollectionById(finalApiKey, collectionId);
+    let collection;
+    try {
+      collection = await getWebflowCollectionById(finalApiKey, collectionId);
+      logger.debug('Successfully fetched Webflow collection', { 
+        collectionId, 
+        fieldCount: collection.fields?.length || 0 
+      });
+    } catch (webflowError: any) {
+      logger.error('Error fetching Webflow collection:', webflowError);
+      return NextResponse.json(
+        {
+          error: 'Failed to fetch Webflow collection',
+          message: webflowError.message || 'Unknown Webflow API error',
+          details: webflowError.toString(),
+        },
+        { status: 500 }
+      );
+    }
 
     // Get sample items to see field data structure
     let sampleItems: any[] = [];
@@ -148,11 +170,16 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error: any) {
-    logger.error('Error inspecting Webflow collection:', error);
+    logger.error('Error inspecting Webflow collection:', {
+      error: error.message || error,
+      stack: error.stack,
+      name: error.name,
+    });
     return NextResponse.json(
       {
         error: 'Failed to inspect Webflow collection',
         message: error.message || 'Unknown error',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
       { status: 500 }
     );
