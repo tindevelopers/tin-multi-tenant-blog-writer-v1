@@ -455,11 +455,17 @@ function NewDraftContent() {
         setGeneratedContent(result);
         
         // Update form data with generated content - ensure excerpt is properly extracted
-        const excerpt = result.excerpt || result.meta_description || '';
+        const excerptValue = typeof result.excerpt === 'string' 
+          ? result.excerpt 
+          : (result.excerpt ? String(result.excerpt) : '');
+        const metaDescValue = typeof result.meta_description === 'string'
+          ? result.meta_description
+          : (result.meta_description ? String(result.meta_description) : '');
+        const excerpt = excerptValue || metaDescValue || '';
         setFormData(prev => ({
           ...prev,
           content: String(result.content || ""),
-          excerpt: String(excerpt), // Explicitly set excerpt
+          excerpt: excerpt, // Explicitly set excerpt
           title: String(result.title || prev.title)
         }));
         
