@@ -138,7 +138,10 @@ export default function TipTapEditor({
   }
 
   return (
-    <div className={`border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 flex flex-col h-full ${className}`}>
+    <div 
+      className={`border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 flex flex-col h-full ${className}`}
+      style={!editable ? { pointerEvents: 'none' } : {}}
+    >
       {/* Toolbar - Fixed at top */}
       {editable && (
         <div className="border-b border-gray-300 dark:border-gray-600 p-2 flex flex-wrap items-center gap-1 bg-gray-50 dark:bg-gray-900 flex-shrink-0 sticky top-0 z-10">

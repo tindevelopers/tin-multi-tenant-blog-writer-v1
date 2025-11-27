@@ -449,14 +449,17 @@ export default function QueueItemDetailPage() {
       {item.generated_content && (
         <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 relative z-20" style={{ pointerEvents: 'auto' }}>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Content Preview
               </h2>
               {postId ? (
                 <button
-                  onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/admin/drafts/edit/${postId}`);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-20"
                   style={{ pointerEvents: 'auto' }}
                 >
                   <PencilIcon className="w-4 h-4" />
@@ -464,7 +467,8 @@ export default function QueueItemDetailPage() {
                 </button>
               ) : (
                 <button
-                  onClick={async () => {
+                  onClick={async (e) => {
+                    e.stopPropagation();
                     try {
                       const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
                         method: "POST",
@@ -481,13 +485,16 @@ export default function QueueItemDetailPage() {
                         if (result.post_id) {
                           router.push(`/admin/drafts/edit/${result.post_id}`);
                         }
+                      } else {
+                        const errorData = await response.json().catch(() => ({ error: 'Failed to create draft' }));
+                        alert(errorData.error || "Failed to create draft. Please try again.");
                       }
                     } catch (err) {
                       logger.error("Error creating draft:", err);
                       alert("Failed to create draft. Please try again.");
                     }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-10"
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-20"
                   style={{ pointerEvents: 'auto' }}
                 >
                   <PencilIcon className="w-4 h-4" />
@@ -495,7 +502,10 @@ export default function QueueItemDetailPage() {
                 </button>
               )}
             </div>
-            <div className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto relative" style={{ zIndex: 1 }}>
+            <div 
+              className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto relative" 
+              style={{ zIndex: 1 }}
+            >
               <TipTapEditor
                 content={item.generated_content}
                 onChange={() => {}}

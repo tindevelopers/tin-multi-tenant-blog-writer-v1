@@ -17,7 +17,7 @@ const AppHeader: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 flex w-full bg-white border-b border-gray-200 z-50 dark:border-gray-800 dark:bg-gray-900">
+    <header className="sticky top-0 flex w-full bg-white border-b border-gray-200 z-40 dark:border-gray-800 dark:bg-gray-900">
       <div className="flex items-center justify-between w-full px-6 py-4">
         {/* Left side - Menu toggle */}
         <button
