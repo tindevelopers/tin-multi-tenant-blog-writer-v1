@@ -23,6 +23,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
+import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
+import { extractBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
 // import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
@@ -124,7 +126,22 @@ function NewDraftContent() {
     use_knowledge_graph: false,
     use_semantic_keywords: false,
     use_quality_scoring: false,
+    // Additional blog fields
+    slug: "",
+    author_name: "",
+    author_image: "",
+    author_bio: "",
+    featured_image: "",
+    featured_image_alt: "",
+    thumbnail_image: "",
+    thumbnail_image_alt: "",
+    locale: "en",
+    is_featured: false,
+    published_at: "",
   });
+
+  const [showFieldConfig, setShowFieldConfig] = useState(false);
+  const [blogFieldData, setBlogFieldData] = useState<BlogFieldData>({});
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -549,6 +566,69 @@ function NewDraftContent() {
     }
   };
 
+  // Prepare field configuration data from current form state
+  const prepareFieldConfigData = (): BlogFieldData => {
+    const contentToSave = String(formData.content || generatedContent?.content || "");
+    const excerptToSave = String(
+      formData.excerpt || 
+      generatedContent?.excerpt || 
+      generatedContent?.meta_description || 
+      ""
+    );
+    const wordCount = generatedContent?.word_count as number || 
+                     contentToSave.split(/\s+/).filter(word => word.length > 0).length;
+
+    return extractBlogFields({
+      title: formData.title,
+      content: contentToSave,
+      excerpt: excerptToSave,
+      metadata: {
+        ...(formData.slug ? { slug: formData.slug } : {}),
+        ...(formData.featured_image ? { featured_image: formData.featured_image } : {}),
+        ...(formData.featured_image_alt ? { featured_image_alt: formData.featured_image_alt } : {}),
+        ...(formData.thumbnail_image ? { thumbnail_image: formData.thumbnail_image } : {}),
+        ...(formData.thumbnail_image_alt ? { thumbnail_image_alt: formData.thumbnail_image_alt } : {}),
+        ...(formData.author_name ? { author_name: formData.author_name } : {}),
+        ...(formData.author_image ? { author_image: formData.author_image } : {}),
+        ...(formData.author_bio ? { author_bio: formData.author_bio } : {}),
+        locale: formData.locale,
+        is_featured: formData.is_featured,
+        word_count: wordCount,
+        ...(formData.published_at ? { published_at: formData.published_at } : {}),
+        ...(generatedContent?.featured_image ? { featured_image: generatedContent.featured_image as string } : {}),
+      },
+      seo_data: {
+        meta_title: generatedContent?.meta_title as string || formData.title,
+        meta_description: generatedContent?.meta_description as string || excerptToSave,
+      },
+      featured_image: generatedContent?.featured_image ? {
+        image_url: generatedContent.featured_image as string,
+      } : undefined,
+      word_count: wordCount,
+    });
+  };
+
+  const handleFieldConfigSave = (fieldData: BlogFieldData) => {
+    // Update formData with configured fields
+    setFormData(prev => ({
+      ...prev,
+      slug: fieldData.slug || prev.slug,
+      excerpt: fieldData.excerpt || prev.excerpt,
+      featured_image: fieldData.featured_image || prev.featured_image,
+      featured_image_alt: fieldData.featured_image_alt || prev.featured_image_alt,
+      thumbnail_image: fieldData.thumbnail_image || prev.thumbnail_image,
+      thumbnail_image_alt: fieldData.thumbnail_image_alt || prev.thumbnail_image_alt,
+      author_name: fieldData.author_name || prev.author_name,
+      author_image: fieldData.author_image || prev.author_image,
+      author_bio: fieldData.author_bio || prev.author_bio,
+      locale: fieldData.locale || prev.locale,
+      is_featured: fieldData.is_featured || prev.is_featured,
+      published_at: fieldData.published_at || prev.published_at,
+    }));
+    setBlogFieldData(fieldData);
+    setShowFieldConfig(false);
+  };
+
   const handleSaveDraft = async () => {
     if (!formData.title) {
       alert("Please enter a title for your draft");
@@ -597,18 +677,30 @@ function NewDraftContent() {
       const wordCount = generatedContent?.word_count as number || 
                        contentToSave.split(/\s+/).filter(word => word.length > 0).length;
 
+      // Use configured field data if available, otherwise use formData
+      const finalFieldData = Object.keys(blogFieldData).length > 0 ? blogFieldData : prepareFieldConfigData();
+
       // Build comprehensive draft data with all fields
       const draftData = {
         title: formData.title,
         content: contentToSave,
-        excerpt: excerptToSave,
+        excerpt: finalFieldData.excerpt || excerptToSave,
+        slug: finalFieldData.slug,
+        author_name: finalFieldData.author_name,
+        author_image: finalFieldData.author_image,
+        author_bio: finalFieldData.author_bio,
+        thumbnail_image: finalFieldData.thumbnail_image,
+        thumbnail_image_alt: finalFieldData.thumbnail_image_alt,
+        locale: finalFieldData.locale || 'en',
+        is_featured: finalFieldData.is_featured,
+        published_at: finalFieldData.published_at,
         seo_data: {
           topic: formData.topic,
           keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
           target_audience: formData.target_audience || "general",
           tone: formData.tone || "professional",
-          meta_title: generatedContent?.meta_title as string || formData.title,
-          meta_description: generatedContent?.meta_description as string || excerptToSave,
+          meta_title: finalFieldData.seo_title || generatedContent?.meta_title as string || formData.title,
+          meta_description: finalFieldData.meta_description || generatedContent?.meta_description as string || excerptToSave,
         },
         metadata: {
           generated_from_research: true,
@@ -618,13 +710,23 @@ function NewDraftContent() {
           preset_id: formData.preset_id || null,
           brand_voice_used: !!brandVoice,
           // Additional fields for complete blog creation
-          locale: 'en', // Default locale
+          slug: finalFieldData.slug,
+          locale: finalFieldData.locale || 'en',
           word_count: wordCount,
-          // Include featured image if available
-          ...(generatedContent?.featured_image ? { 
-            featured_image: generatedContent.featured_image 
-          } : {}),
+          featured_image: finalFieldData.featured_image || generatedContent?.featured_image as string || undefined,
+          featured_image_alt: finalFieldData.featured_image_alt,
+          thumbnail_image: finalFieldData.thumbnail_image,
+          thumbnail_image_alt: finalFieldData.thumbnail_image_alt,
+          author_name: finalFieldData.author_name,
+          author_image: finalFieldData.author_image,
+          author_bio: finalFieldData.author_bio,
+          is_featured: finalFieldData.is_featured,
+          published_at: finalFieldData.published_at,
         },
+        featured_image: finalFieldData.featured_image ? {
+          image_url: finalFieldData.featured_image,
+          alt_text: finalFieldData.featured_image_alt,
+        } : undefined,
         word_count: wordCount,
       };
 
@@ -1215,6 +1317,18 @@ function NewDraftContent() {
           {/* Actions */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <div className="flex flex-col sm:flex-row gap-3">
+              {/* Field Configuration Button */}
+              {formData.title && (formData.content || generatedContent?.content) && (
+                <button
+                  onClick={() => {
+                    setBlogFieldData(prepareFieldConfigData());
+                    setShowFieldConfig(true);
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                >
+                  ⚙️ Configure Fields
+                </button>
+              )}
               <button
                 onClick={handleGenerateContent}
                 disabled={isGenerating || !formData.topic}
@@ -1329,6 +1443,14 @@ function NewDraftContent() {
           onCancel={() => setShowPlatformSelector(false)}
         />
       )}
+
+      {/* Field Configuration Modal */}
+      <BlogFieldConfiguration
+        initialData={blogFieldData}
+        onSave={handleFieldConfigSave}
+        onCancel={() => setShowFieldConfig(false)}
+        show={showFieldConfig}
+      />
     </div>
   );
 }
