@@ -94,6 +94,44 @@ export async function getWebflowCollections(
 }
 
 /**
+ * Get a specific collection by ID with all fields
+ * This endpoint returns the full collection details including fields
+ */
+export async function getWebflowCollectionById(
+  apiKey: string,
+  collectionId: string
+): Promise<WebflowCollection> {
+  try {
+    const response = await fetch(`https://api.webflow.com/v2/collections/${collectionId}`, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json',
+        'authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Webflow API error response:', { status: response.status, error: errorText });
+      throw new Error(`Webflow API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const collection: WebflowCollection = await response.json();
+    
+    // Ensure fields array exists
+    if (!collection.fields || !Array.isArray(collection.fields)) {
+      logger.warn('Collection response missing fields array', { collectionId, collection });
+      collection.fields = [];
+    }
+    
+    return collection;
+  } catch (error: any) {
+    logger.error('Error fetching Webflow collection by ID:', error);
+    throw new Error(`Failed to fetch Webflow collection: ${error.message}`);
+  }
+}
+
+/**
  * Auto-detect Site ID from API key
  * 
  * Strategy:

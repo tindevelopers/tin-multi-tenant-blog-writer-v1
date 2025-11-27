@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getWebflowCollections } from '@/lib/integrations/webflow-api';
+import { getWebflowCollectionById } from '@/lib/integrations/webflow-api';
 import { logger } from '@/utils/logger';
 import { getAuthenticatedUser } from '@/lib/api-utils';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
@@ -37,24 +37,30 @@ export async function GET(
     const siteId = config.site_id as string | undefined;
     const collectionId = config.collection_id as string | undefined;
 
-    if (!apiKey || !siteId || !collectionId) {
+    if (!apiKey || !collectionId) {
       return NextResponse.json(
-        { error: 'Webflow integration is not fully configured. Please ensure API key, Site ID, and Collection ID are set.' },
+        { error: 'Webflow integration is not fully configured. Please ensure API key and Collection ID are set.' },
         { status: 400 }
       );
     }
 
-    // Fetch collections for the site
-    const collections = await getWebflowCollections(apiKey, siteId);
+    // Fetch the collection directly by ID (this includes all fields)
+    logger.debug('Fetching Webflow collection', { collectionId, hasApiKey: !!apiKey });
+    const collection = await getWebflowCollectionById(apiKey, collectionId);
     
-    // Find the specific collection
-    const collection = collections.find(c => c.id === collectionId);
-    
-    if (!collection) {
-      return NextResponse.json(
-        { error: `Collection ${collectionId} not found in site ${siteId}` },
-        { status: 404 }
-      );
+    // Ensure fields array exists and is valid
+    if (!collection.fields || !Array.isArray(collection.fields)) {
+      logger.warn('Collection has no fields array', { collectionId, collection });
+      return NextResponse.json({
+        success: true,
+        collection: {
+          id: collection.id,
+          displayName: collection.displayName || 'Unknown',
+          singularName: collection.singularName || 'Unknown',
+          slug: collection.slug || 'unknown',
+          fields: [],
+        },
+      });
     }
 
     // Return collection fields
