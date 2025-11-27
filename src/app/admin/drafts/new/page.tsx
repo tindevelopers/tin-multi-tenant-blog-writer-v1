@@ -446,7 +446,7 @@ function NewDraftContent() {
           hasContent: !!result.content,
           hasExcerpt: !!result.excerpt,
           excerpt: result.excerpt || 'missing',
-          excerptLength: result.excerpt?.length || 0,
+          excerptLength: (typeof result.excerpt === 'string' ? result.excerpt.length : 0),
           title: result.title,
           allKeys: Object.keys(result),
         });
