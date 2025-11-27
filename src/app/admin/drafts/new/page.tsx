@@ -431,72 +431,30 @@ function NewDraftContent() {
 
       console.log('🔍 Generated result:', result);
 
-      // Capture queue_id if present
+      // In async mode, we ALWAYS get a queue_id, never immediate content
       if (result && (result as any).queue_id) {
         const capturedQueueId = (result as any).queue_id;
         setQueueId(capturedQueueId);
         setQueueStatus("generating");
-        console.log('✅ Queue ID captured:', capturedQueueId);
+        setIsGenerating(false); // Stop loading spinner since generation is queued
+        console.log('✅ Blog generation queued:', capturedQueueId);
         
-        // Show success message with link to queue
-        alert(`Blog generation started! View progress in the queue dashboard. Queue ID: ${capturedQueueId}`);
+        // Don't show alert - let the progress UI handle feedback
+        // The SSE hook will update status automatically
+      } else {
+        // This should never happen in async mode, but handle gracefully
+        console.warn('⚠️ No queue_id returned from async generation');
+        setIsGenerating(false);
+        alert('Blog generation started but queue ID not received. Please check the queue dashboard.');
       }
 
-      if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
-        // Update form data with generated content - ensure excerpt is properly extracted
-        const excerptValue: string = typeof result.excerpt === 'string' 
-          ? result.excerpt 
-          : (result.excerpt ? String(result.excerpt) : '');
-        const metaDescValue: string = typeof result.meta_description === 'string'
-          ? result.meta_description
-          : (result.meta_description ? String(result.meta_description) : '');
-        const excerpt: string = excerptValue || metaDescValue || '';
-        
-        logger.debug('📥 Received blog generation result:', {
-          hasContent: !!result.content,
-          hasExcerpt: !!result.excerpt,
-          excerpt: excerpt || 'missing',
-          excerptLength: excerpt.length,
-          title: result.title,
-          allKeys: Object.keys(result),
-        });
-        
-        setGeneratedContent(result);
-        setFormData(prev => ({
-          ...prev,
-          content: String(result.content || ""),
-          excerpt: excerpt, // Explicitly set excerpt
-          title: String(result.title || prev.title)
-        }));
-        
-        logger.debug('✅ Content updated in form data:', {
-          contentLength: String(result.content || "").length,
-          excerpt: excerpt,
-          excerptLength: excerpt.length,
-          title: result.title || 'No title from result',
-        });
-        
-        console.log('✅ Content updated in form data:', {
-          contentLength: String(result.content || "").length,
-          excerpt: excerpt,
-          excerptLength: excerpt.length,
-          title: result.title || 'No title from result',
-          fullContent: String(result.content || "").substring(0, 500) + '...'
-        });
-      } else {
-        console.error('❌ Generated result is empty or invalid:', {
-          hasResult: !!result,
-          hasContent: !!(result?.content),
-          contentLength: (result?.content && typeof result.content === 'string') ? result.content.length : 0,
-          resultKeys: result ? Object.keys(result) : 'No result'
-        });
-        alert("Failed to generate content. The API returned empty content. Please try again.");
-      }
+      // REMOVED: Immediate content handling - async mode never returns content immediately
+      // Content will be fetched via queue status when generation completes (handled by existing useEffect)
+      
     } catch (error) {
       console.error("Error generating content:", error);
-      alert("Error generating content. Please check your connection and try again.");
-    } finally {
       setIsGenerating(false);
+      alert("Error generating content. Please check your connection and try again.");
     }
   };
 

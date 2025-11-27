@@ -474,10 +474,11 @@ class BlogWriterAPI {
     use_dataforseo_content_generation?: boolean; // Use DataForSEO Content Generation API instead of backend API
   }): Promise<Record<string, unknown> | null> {
     try {
-      logger.debug('Starting blog generation via local API route', { params });
+      logger.debug('Starting blog generation via local API route (async mode)', { params });
       
-      // Use local API route instead of external API to avoid CORS issues
-      const response = await fetch('/api/blog-writer/generate', {
+      // Always use async_mode=true to force queue-based generation
+      // This ensures all generations go through the queue system for better tracking and reliability
+      const response = await fetch('/api/blog-writer/generate?async_mode=true', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -491,7 +492,13 @@ class BlogWriterAPI {
       }
       
       const result = await response.json();
-      logger.debug('Blog generation successful', { hasResult: !!result });
+      logger.debug('Blog generation queued successfully', { 
+        queue_id: result.queue_id,
+        job_id: result.job_id 
+      });
+      
+      // In async mode, result will always have queue_id and possibly job_id
+      // Never expect immediate content
       return result;
     } catch (error) {
       logger.logError(error instanceof Error ? error : new Error('Failed to generate blog'), {
