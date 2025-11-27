@@ -480,34 +480,123 @@ export class ContentIdeasService {
         return { success: false, error: 'Failed to save cluster: No data returned' };
       }
 
-      // Insert content ideas
-      const ideasToInsert = content_ideas.map(idea => ({
-        cluster_id: clusterData.id,
-        org_id: orgId,
-        content_type: idea.content_type,
-        target_keyword: idea.target_keyword,
-        title: idea.title,
-        meta_description: idea.meta_description,
-        url_slug: idea.url_slug,
-        outline: idea.outline,
-        word_count_target: idea.word_count_target,
-        tone: idea.tone,
-        status: idea.status,
-        priority: idea.priority,
-        search_volume: idea.search_volume,
-        keyword_difficulty: idea.keyword_difficulty,
-        content_gap_score: idea.content_gap_score,
-        internal_links_planned: idea.internal_links_planned,
-        external_links_planned: idea.external_links_planned,
-      }));
-
-      const { error: ideasError } = await supabase
+      // Check for existing content ideas in this cluster to determine sequence numbers
+      const { data: existingIdeas } = await supabase
         .from('cluster_content_ideas')
-        .insert(ideasToInsert);
+        .select('target_keyword, keyword_sequence')
+        .eq('cluster_id', clusterData.id);
+
+      // Build a map of existing sequences per keyword
+      const existingSequences = new Map<string, number>();
+      if (existingIdeas) {
+        for (const idea of existingIdeas) {
+          const keyword = idea.target_keyword;
+          const currentMax = existingSequences.get(keyword) || 0;
+          const sequence = idea.keyword_sequence || 1;
+          if (sequence > currentMax) {
+            existingSequences.set(keyword, sequence);
+          }
+        }
+      }
+
+      // Group new ideas by target_keyword to assign sequence numbers
+      const keywordGroups = new Map<string, number>();
+      
+      // Initialize keyword groups with existing max sequences
+      for (const [keyword, maxSeq] of existingSequences.entries()) {
+        keywordGroups.set(keyword, maxSeq);
+      }
+
+      // Insert content ideas with proper sequence numbers
+      const ideasToInsert = content_ideas.map(idea => {
+        const keyword = idea.target_keyword;
+        const currentSequence = keywordGroups.get(keyword) || 0;
+        const nextSequence = currentSequence + 1;
+        keywordGroups.set(keyword, nextSequence);
+        
+        return {
+          cluster_id: clusterData.id,
+          org_id: orgId,
+          content_type: idea.content_type,
+          target_keyword: idea.target_keyword,
+          keyword_sequence: nextSequence,
+          title: idea.title,
+          meta_description: idea.meta_description,
+          url_slug: idea.url_slug,
+          outline: idea.outline,
+          word_count_target: idea.word_count_target,
+          tone: idea.tone,
+          status: idea.status,
+          priority: idea.priority,
+          search_volume: idea.search_volume,
+          keyword_difficulty: idea.keyword_difficulty,
+          content_gap_score: idea.content_gap_score,
+          internal_links_planned: idea.internal_links_planned,
+          external_links_planned: idea.external_links_planned,
+        };
+      });
+
+      let ideasError: any = null;
+      let retryAttempts = 0;
+      const maxRetries = 3;
+
+      // Try inserting with retry logic for race conditions
+      while (retryAttempts < maxRetries) {
+        const { error: insertError } = await supabase
+          .from('cluster_content_ideas')
+          .insert(ideasToInsert);
+
+        ideasError = insertError;
+
+        // If no error or not a unique constraint violation, break
+        if (!ideasError || (!ideasError.message?.includes('unique_keyword_sequence_per_cluster') && ideasError.code !== '23505')) {
+          break;
+        }
+
+        // If it's a unique constraint violation, refresh existing sequences and retry
+        logger.debug(`⚠️ Unique constraint violation on content ideas, retry ${retryAttempts + 1}/${maxRetries}`);
+        
+        // Re-fetch existing ideas to get updated sequences
+        const { data: updatedExistingIdeas } = await supabase
+          .from('cluster_content_ideas')
+          .select('target_keyword, keyword_sequence')
+          .eq('cluster_id', clusterData.id);
+
+        // Rebuild sequence map
+        const updatedSequences = new Map<string, number>();
+        if (updatedExistingIdeas) {
+          for (const idea of updatedExistingIdeas) {
+            const keyword = idea.target_keyword;
+            const currentMax = updatedSequences.get(keyword) || 0;
+            const sequence = idea.keyword_sequence || 1;
+            if (sequence > currentMax) {
+              updatedSequences.set(keyword, sequence);
+            }
+          }
+        }
+
+        // Reset keyword groups with updated sequences
+        keywordGroups.clear();
+        for (const [keyword, maxSeq] of updatedSequences.entries()) {
+          keywordGroups.set(keyword, maxSeq);
+        }
+
+        // Rebuild ideasToInsert with updated sequences
+        for (let i = 0; i < ideasToInsert.length; i++) {
+          const idea = content_ideas[i];
+          const keyword = idea.target_keyword;
+          const currentSequence = keywordGroups.get(keyword) || 0;
+          const nextSequence = currentSequence + 1;
+          keywordGroups.set(keyword, nextSequence);
+          ideasToInsert[i].keyword_sequence = nextSequence;
+        }
+
+        retryAttempts++;
+      }
 
       if (ideasError) {
-        logger.error('Failed to save content ideas:', ideasError);
-        return { success: false, error: ideasError.message };
+        logger.error('Failed to save content ideas after retries:', ideasError);
+        return { success: false, error: `Failed to save content ideas: ${ideasError.message || 'Unknown error'}` };
       }
 
       logger.debug('✅ Successfully saved content cluster and ideas');
