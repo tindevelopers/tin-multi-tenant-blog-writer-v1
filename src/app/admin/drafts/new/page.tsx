@@ -22,6 +22,7 @@ import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
+import { logger } from "@/utils/logger";
 // import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
@@ -154,6 +155,72 @@ function NewDraftContent() {
       });
     }
   }, [queueId, sseStatus, sseProgress, sseStage]);
+
+  // Fetch generated content from queue when generation completes
+  useEffect(() => {
+    const fetchGeneratedContent = async () => {
+      if (!queueId || sseStatus !== 'generated' || generatedContent) {
+        return; // Don't fetch if already have content or not ready
+      }
+
+      try {
+        logger.debug('📥 Fetching generated content from queue:', queueId);
+        const response = await fetch(`/api/blog-queue/${queueId}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch queue item: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const queueItem = result.queue_item;
+
+        if (queueItem?.generated_content || queueItem?.generation_metadata) {
+          const metadata = queueItem.generation_metadata || {};
+          const excerpt = metadata.excerpt || queueItem.generated_title || '';
+          const title = queueItem.generated_title || formData.title || '';
+          const content = queueItem.generated_content || '';
+
+          logger.debug('✅ Fetched generated content from queue:', {
+            hasContent: !!content,
+            hasExcerpt: !!excerpt,
+            excerptLength: excerpt?.length || 0,
+            contentLength: content?.length || 0,
+          });
+
+          const blogContent = {
+            title,
+            content,
+            excerpt,
+            meta_description: metadata.meta_description || excerpt,
+            seo_score: metadata.seo_score,
+            readability_score: metadata.readability_score,
+            quality_score: metadata.quality_score,
+            word_count: metadata.word_count,
+            metadata: metadata,
+          };
+
+          setGeneratedContent(blogContent);
+          
+          // Update form data with generated content including excerpt
+          setFormData(prev => ({
+            ...prev,
+            title: title || prev.title,
+            content: content || prev.content,
+            excerpt: excerpt || prev.excerpt, // Ensure excerpt is set
+          }));
+
+          logger.debug('✅ Updated formData with excerpt:', {
+            excerpt: excerpt || 'empty',
+            excerptLength: excerpt?.length || 0,
+          });
+        }
+      } catch (error) {
+        logger.error('❌ Error fetching generated content from queue:', error);
+      }
+    };
+
+    fetchGeneratedContent();
+  }, [queueId, sseStatus, generatedContent]);
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
   const [showPlatformSelector, setShowPlatformSelector] = useState(false);
@@ -270,6 +337,12 @@ function NewDraftContent() {
 
   const handleBlogGenerated = (blogContent: any) => {
     console.log('📝 handleBlogGenerated called with:', blogContent);
+    logger.debug('📝 handleBlogGenerated - excerpt check:', {
+      hasExcerpt: !!blogContent?.excerpt,
+      excerpt: blogContent?.excerpt || 'missing',
+      excerptLength: blogContent?.excerpt?.length || 0,
+      allKeys: blogContent ? Object.keys(blogContent) : [],
+    });
     setGeneratedContent(blogContent);
     
     // Update form data with generated content
@@ -278,8 +351,13 @@ function NewDraftContent() {
         ...prev,
         title: blogContent.title || prev.title,
         content: blogContent.content || prev.content,
-        excerpt: blogContent.excerpt || prev.excerpt
+        excerpt: blogContent.excerpt || prev.excerpt || '', // Ensure excerpt is set, default to empty string
       }));
+      
+      logger.debug('✅ Updated formData with excerpt:', {
+        excerpt: blogContent.excerpt || 'empty',
+        excerptLength: blogContent.excerpt?.length || 0,
+      });
     }
     
     setShowContentSuggestions(false);
@@ -364,19 +442,37 @@ function NewDraftContent() {
       }
 
       if (result && result.content && typeof result.content === 'string' && result.content.trim().length > 0) {
+        logger.debug('📥 Received blog generation result:', {
+          hasContent: !!result.content,
+          hasExcerpt: !!result.excerpt,
+          excerpt: result.excerpt || 'missing',
+          excerptLength: result.excerpt?.length || 0,
+          title: result.title,
+          allKeys: Object.keys(result),
+        });
+        
         setGeneratedContent(result);
         
-        // Update form data with generated content
+        // Update form data with generated content - ensure excerpt is properly extracted
+        const excerpt = result.excerpt || result.meta_description || '';
         setFormData(prev => ({
           ...prev,
           content: String(result.content || ""),
-          excerpt: String(result.excerpt || ""),
+          excerpt: String(excerpt), // Explicitly set excerpt
           title: String(result.title || prev.title)
         }));
         
+        logger.debug('✅ Content updated in form data:', {
+          contentLength: String(result.content || "").length,
+          excerpt: excerpt,
+          excerptLength: excerpt.length,
+          title: result.title || 'No title from result',
+        });
+        
         console.log('✅ Content updated in form data:', {
           contentLength: String(result.content || "").length,
-          excerpt: String(result.excerpt || ""),
+          excerpt: excerpt,
+          excerptLength: excerpt.length,
           title: result.title || 'No title from result',
           fullContent: String(result.content || "").substring(0, 500) + '...'
         });
@@ -468,7 +564,13 @@ function NewDraftContent() {
 
     try {
       const contentToSave = String(formData.content || generatedContent?.content || "");
-      const excerptToSave = String(formData.excerpt || generatedContent?.excerpt || "");
+      // Extract excerpt with fallback chain: formData.excerpt → generatedContent.excerpt → generatedContent.meta_description → empty string
+      const excerptToSave = String(
+        formData.excerpt || 
+        generatedContent?.excerpt || 
+        generatedContent?.meta_description || 
+        ""
+      );
       
       // Validate that we have actual content to save
       if (!contentToSave || contentToSave.trim().length === 0) {
@@ -476,13 +578,25 @@ function NewDraftContent() {
         return;
       }
       
+      logger.debug('💾 Saving draft with data:', {
+        title: formData.title,
+        contentLength: contentToSave.length,
+        excerptLength: excerptToSave.length,
+        excerpt: excerptToSave || 'empty',
+        hasGeneratedContent: !!generatedContent,
+        formDataExcerpt: formData.excerpt || 'empty',
+        generatedContentExcerpt: generatedContent?.excerpt || 'empty',
+        generatedContentMetaDescription: generatedContent?.meta_description || 'empty',
+      });
+      
       console.log('💾 Saving draft with data:', {
         title: formData.title,
         contentLength: contentToSave.length,
         excerptLength: excerptToSave.length,
+        excerpt: excerptToSave || 'empty',
         hasGeneratedContent: !!generatedContent,
-        formDataContent: formData.content,
-        generatedContent: generatedContent?.content,
+        formDataExcerpt: formData.excerpt || 'empty',
+        generatedContentExcerpt: generatedContent?.excerpt || 'empty',
         contentPreview: contentToSave.substring(0, 200) + '...'
       });
 
