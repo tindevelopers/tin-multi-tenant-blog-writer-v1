@@ -143,9 +143,6 @@ async function handleUpdate(
     // Determine connection_method from connection if provided
     const connectionMethod = connection_method || (connectionConfig?.access_token ? 'oauth' : (connectionConfig ? 'api_key' : undefined));
 
-    // Merge metadata if provided
-    const finalMetadata = metadata ? { ...(existing.metadata || {}), ...metadata } : undefined;
-
     // Update integration
     const integration = await dbAdapter.updateIntegration(
       id,
@@ -153,7 +150,7 @@ async function handleUpdate(
         connection: connectionConfig as ConnectionConfig,
         connection_method: connectionMethod,
         status: status,
-        metadata: finalMetadata,
+        ...(metadata && { metadata }),
       },
       user.org_id
     );
