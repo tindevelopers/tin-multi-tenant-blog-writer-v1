@@ -5,7 +5,7 @@
  */
 
 import { logger } from '@/utils/logger';
-import { getWebflowFieldMappings, applyWebflowFieldMappings, autoDetectFieldMappings } from './webflow-field-mapping';
+import { getWebflowFieldMappings, applyWebflowFieldMappings, autoDetectFieldMappings, getDefaultWebflowFieldMappings } from './webflow-field-mapping';
 import { autoDetectWebflowSiteId, getWebflowCollectionById } from './webflow-api';
 import { uploadImageToWebflow, validateImageUrl } from './webflow-assets';
 
