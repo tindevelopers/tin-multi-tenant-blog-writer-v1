@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { post_id, queue_id, platform, scheduled_at, publish_metadata } = body;
+    const { post_id, queue_id, platform, scheduled_at, publish_metadata, is_draft = false } = body;
 
     if (!post_id && !queue_id) {
       return NextResponse.json(
@@ -327,6 +327,9 @@ export async function POST(request: NextRequest) {
         scheduled_at: scheduled_at || null,
         published_by: user.id,
         publish_metadata: finalPublishMetadata,
+        is_draft: is_draft,
+        platform_draft_status: is_draft ? 'draft' : null,
+        sync_status: 'never_synced',
         retry_count: 0,
       })
       .select(`
@@ -391,11 +394,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If not scheduled, trigger immediate publishing (async)
-    if (!scheduled_at) {
-      // In a real implementation, this would trigger an async job
-      // For now, we'll just return the record
-      // TODO: Trigger actual publishing job
+    // If not scheduled, trigger immediate publishing
+    if (!scheduled_at && publishing) {
+      // Trigger actual publishing job
+      try {
+        const publishResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/blog-publishing/${publishing.publishing_id}/publish`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': request.headers.get('authorization') || '',
+            },
+            body: JSON.stringify({ is_draft }),
+          }
+        );
+
+        if (!publishResponse.ok) {
+          logger.warn('Failed to trigger immediate publishing', {
+            publishingId: publishing.publishing_id,
+            status: publishResponse.status,
+          });
+        }
+      } catch (publishError) {
+        logger.error('Error triggering immediate publishing:', publishError);
+        // Don't fail the request, just log the error
+      }
     }
 
     return NextResponse.json(publishing, { status: 201 });
