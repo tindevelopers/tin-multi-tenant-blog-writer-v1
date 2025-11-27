@@ -43,7 +43,7 @@ async function testWebflowPublish() {
 
     const integration = webflowIntegrations[0];
     console.log(`✅ Found Webflow integration: ${integration.name || 'Unnamed'}`);
-    console.log(`   Integration ID: ${integration.id}\n`);
+    console.log(`   Integration ID: ${integration.integration_id}\n`);
 
     const config = integration.config as Record<string, unknown>;
     const apiKey = config.api_key as string | undefined;
