@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import type { Database } from '@/types/database';
 import { logger } from '@/utils/logger';
 import { parseJsonBody, validateRequiredFields, handleApiError } from '@/lib/api-utils';
+import { generateSlug, calculateReadTime, validateBlogFields } from '@/lib/blog-field-validator';
 
 type BlogPostInsert = Database['public']['Tables']['blog_posts']['Insert'];
 
@@ -33,12 +34,31 @@ export async function POST(request: NextRequest) {
     
     validateRequiredFields(body, ['title', 'content']);
     
-    const { title, content, excerpt, status = 'draft', seo_data, metadata, featured_image } = body;
+    const { 
+      title, 
+      content, 
+      excerpt, 
+      status = 'draft', 
+      seo_data, 
+      metadata, 
+      featured_image,
+      slug,
+      author_name,
+      author_image,
+      author_bio,
+      thumbnail_image,
+      thumbnail_image_alt,
+      locale,
+      is_featured,
+      word_count,
+      published_at,
+    } = body;
 
     logger.debug('Saving draft', { title, contentLength: content.length });
 
     // Extract featured image from content if not provided
     let featuredImageUrl = featured_image?.image_url || null;
+    let featuredImageAlt = featured_image?.alt_text || null;
     if (!featuredImageUrl && content) {
       // Try to extract from content HTML
       const imageMatch = String(content).match(/<figure[^>]*class="[^"]*featured[^"]*"[^>]*>[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i) ||
@@ -49,9 +69,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build metadata object
+    // Generate slug if not provided
+    const finalSlug = slug || generateSlug(title);
+
+    // Calculate read_time from word_count if available
+    const readTime = word_count ? calculateReadTime(word_count) : null;
+
+    // Build comprehensive metadata object with all fields
     const finalMetadata: Record<string, unknown> = {
       ...(metadata || {}),
+      // Slug
+      slug: finalSlug,
+      // Images
       ...(featuredImageUrl ? { featured_image: featuredImageUrl } : {}),
       ...(featured_image ? { 
         featured_image_data: {
@@ -61,8 +90,60 @@ export async function POST(request: NextRequest) {
           width: featured_image.width,
           height: featured_image.height
         }
-      } : {})
+      } : {}),
+      ...(featuredImageAlt ? { featured_image_alt: featuredImageAlt } : {}),
+      ...(thumbnail_image ? { thumbnail_image } : {}),
+      ...(thumbnail_image_alt ? { thumbnail_image_alt } : {}),
+      // Author fields
+      ...(author_name ? { author_name } : {}),
+      ...(author_image ? { author_image } : {}),
+      ...(author_bio ? { author_bio } : {}),
+      // Publishing fields
+      ...(locale ? { locale } : { locale: 'en' }), // Default to 'en'
+      ...(is_featured !== undefined ? { is_featured } : {}),
+      ...(readTime ? { read_time: readTime } : {}),
+      ...(word_count ? { word_count } : {}),
+      ...(published_at ? { published_at } : {}),
     };
+
+    // Build comprehensive SEO data
+    const finalSeoData: Record<string, unknown> = {
+      ...(seo_data || {}),
+      // Ensure meta_title and meta_description are set
+      ...(seo_data?.meta_title ? {} : { meta_title: title }), // Default to title if not set
+      ...(seo_data?.meta_description ? {} : excerpt ? { meta_description: excerpt } : {}),
+    };
+
+    // Validate fields before saving
+    const validation = validateBlogFields({
+      title,
+      content,
+      excerpt,
+      slug: finalSlug,
+      featured_image: featuredImageUrl || undefined,
+      featured_image_alt: featuredImageAlt || undefined,
+      thumbnail_image: thumbnail_image || undefined,
+      thumbnail_image_alt: thumbnail_image_alt || undefined,
+      author_name: author_name || undefined,
+      author_image: author_image || undefined,
+      meta_description: finalSeoData.meta_description as string | undefined,
+      locale: locale || 'en',
+      word_count: word_count || undefined,
+      read_time: readTime || undefined,
+    });
+
+    if (!validation.isValid) {
+      logger.warn('Blog field validation failed', {
+        missingRequired: validation.missingRequired,
+        missingRecommended: validation.missingRecommended,
+        warnings: validation.warnings,
+      });
+      // Don't fail, but log warnings
+    } else {
+      logger.debug('Blog field validation passed', {
+        warnings: validation.warnings,
+      });
+    }
 
     // Use service client for server-side operations
     const supabase = createServiceClient();
@@ -79,8 +160,9 @@ export async function POST(request: NextRequest) {
       content,
       excerpt: excerpt || '',
       status: status as 'draft' | 'published' | 'scheduled' | 'archived',
-      seo_data: (seo_data || {}) as Database['public']['Tables']['blog_posts']['Row']['seo_data'],
+      seo_data: finalSeoData as Database['public']['Tables']['blog_posts']['Row']['seo_data'],
       metadata: finalMetadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],
+      published_at: published_at || (status === 'published' ? new Date().toISOString() : null),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

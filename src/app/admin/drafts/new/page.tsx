@@ -593,6 +593,11 @@ function NewDraftContent() {
         contentPreview: contentToSave.substring(0, 200) + '...'
       });
 
+      // Extract word count from generated content or calculate from content length
+      const wordCount = generatedContent?.word_count as number || 
+                       contentToSave.split(/\s+/).filter(word => word.length > 0).length;
+
+      // Build comprehensive draft data with all fields
       const draftData = {
         title: formData.title,
         content: contentToSave,
@@ -601,7 +606,9 @@ function NewDraftContent() {
           topic: formData.topic,
           keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
           target_audience: formData.target_audience || "general",
-          tone: formData.tone || "professional"
+          tone: formData.tone || "professional",
+          meta_title: generatedContent?.meta_title as string || formData.title,
+          meta_description: generatedContent?.meta_description as string || excerptToSave,
         },
         metadata: {
           generated_from_research: true,
@@ -609,8 +616,16 @@ function NewDraftContent() {
           generation_timestamp: new Date().toISOString(),
           ai_generated: true,
           preset_id: formData.preset_id || null,
-          brand_voice_used: !!brandVoice
-        }
+          brand_voice_used: !!brandVoice,
+          // Additional fields for complete blog creation
+          locale: 'en', // Default locale
+          word_count: wordCount,
+          // Include featured image if available
+          ...(generatedContent?.featured_image ? { 
+            featured_image: generatedContent.featured_image 
+          } : {}),
+        },
+        word_count: wordCount,
       };
 
       console.log('🚀 Calling createDraft with data:', draftData);
