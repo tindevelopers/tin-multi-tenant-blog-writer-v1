@@ -403,7 +403,7 @@ function NewDraftContent() {
   const handleDraftSaved = (draftId: string) => {
     console.log('📝 Draft saved with ID:', draftId);
     // Optionally redirect to drafts page or show success message
-    // router.push('/admin/drafts');
+    // router.push('/contentmanagement/drafts');
   };
 
   const handleGenerateContent = async () => {
@@ -739,7 +739,7 @@ function NewDraftContent() {
         setSavedPostId(result.post_id);
         alert("Draft saved successfully!");
         // Don't redirect immediately - allow user to add internal links
-        // router.push("/admin/drafts");
+        // router.push("/contentmanagement/drafts");
       } else {
         console.log('❌ createDraft returned null/undefined');
         alert("Failed to save draft. Please try again.");
@@ -802,7 +802,7 @@ function NewDraftContent() {
                 <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
                   <span>Queue ID: {queueId.substring(0, 8)}...</span>
                   <button
-                    onClick={() => router.push(`/admin/blog-queue/${queueId}`)}
+                    onClick={() => router.push(`/contentmanagement/blog-queue/${queueId}`)}
                     className="hover:underline"
                   >
                     View Details →

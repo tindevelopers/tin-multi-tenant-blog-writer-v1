@@ -101,7 +101,7 @@ export default function ViewDraftPage() {
   }, [contentMetadata?.word_count, draft?.content]);
 
   const handleEdit = () => {
-    router.push(`/admin/drafts/edit/${draftId}`);
+    router.push(`/contentmanagement/drafts/edit/${draftId}`);
   };
 
   const handleShare = () => {
@@ -115,7 +115,7 @@ export default function ViewDraftPage() {
         const success = await deletePost(draftId);
         if (success) {
           alert('Draft deleted successfully!');
-          router.push('/admin/drafts');
+          router.push('/contentmanagement/drafts');
         } else {
           alert('Failed to delete draft. Please try again.');
         }

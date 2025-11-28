@@ -30,7 +30,7 @@ function ContentClustersContent() {
       word_count: suggestion.word_count_target || suggestion.estimated_word_count || 1500
     });
     
-    router.push(`/admin/drafts/new?${params.toString()}`);
+    router.push(`/contentmanagement/drafts/new?${params.toString()}`);
   };
 
   // Handler for when blog content is generated
@@ -43,7 +43,7 @@ function ContentClustersContent() {
   const handleDraftSaved = (draftId: string) => {
     console.log('🔍 Draft saved in ContentClustersPage:', draftId);
     // Could show a success message or navigate to the draft
-    router.push(`/admin/drafts/edit/${draftId}`);
+    router.push(`/contentmanagement/drafts/edit/${draftId}`);
   };
 
   // Load keywords from URL params if present (from keyword history page)

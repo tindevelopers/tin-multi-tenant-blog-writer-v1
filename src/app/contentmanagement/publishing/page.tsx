@@ -294,7 +294,7 @@ export default function PublishingPage() {
                       <div className="flex items-center gap-3">
                         <span className="flex-1">{post.title}</span>
                         <a
-                          href={`/admin/drafts/view/${post.post_id}`}
+                          href={`/contentmanagement/drafts/view/${post.post_id}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center gap-1 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 text-xs font-medium hover:underline"

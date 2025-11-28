@@ -32,7 +32,7 @@ export function CreateBlogButton({
       ...(keywords.length > 0 && { keywords: keywords.join(',') }),
     });
 
-    router.push(`/admin/drafts/new?${params.toString()}`);
+    router.push(`/contentmanagement/drafts/new?${params.toString()}`);
   };
 
   const baseClasses = "inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors";

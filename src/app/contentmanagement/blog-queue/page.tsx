@@ -340,7 +340,7 @@ export default function BlogQueuePage() {
       
       const result = await response.json();
       if (result.queue_id) {
-        router.push(`/admin/blog-queue/${result.queue_id}`);
+        router.push(`/contentmanagement/blog-queue/${result.queue_id}`);
       } else {
         await fetchQueueItems();
         await fetchStats();
@@ -383,7 +383,7 @@ export default function BlogQueuePage() {
           </p>
         </div>
         <button
-          onClick={() => router.push("/admin/drafts/new")}
+          onClick={() => router.push("/contentmanagement/drafts/new")}
           className="flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
         >
           <PlusIcon className="w-5 h-5" />
@@ -669,7 +669,7 @@ export default function BlogQueuePage() {
                   item={item}
                   selected={selectedItems.includes(item.queue_id)}
                   onSelect={() => handleSelectItem(item.queue_id)}
-                  onView={() => router.push(`/admin/blog-queue/${item.queue_id}`)}
+                  onView={() => router.push(`/contentmanagement/blog-queue/${item.queue_id}`)}
                   onCancel={() => handleCancel(item.queue_id)}
                   onRetry={() => handleRetry(item.queue_id)}
                   onRegenerate={() => handleRegenerate(item)}
@@ -864,7 +864,7 @@ function QueueItemRow({
               onClick={() => {
                 if (postId) {
                   // Draft exists - go directly to editor
-                  router.push(`/admin/drafts/edit/${postId}`);
+                  router.push(`/contentmanagement/drafts/edit/${postId}`);
                 } else {
                   // No draft yet - go to detail page to create one
                   onView?.();

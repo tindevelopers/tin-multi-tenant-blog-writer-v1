@@ -291,7 +291,7 @@ function EnhancedContentClustersPanel({
           </p>
           {!researchResults && (
             <button
-              onClick={() => router.push('/admin/drafts/new')}
+              onClick={() => router.push('/contentmanagement/drafts/new')}
               className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
             >
               <Search className="h-4 w-4" />

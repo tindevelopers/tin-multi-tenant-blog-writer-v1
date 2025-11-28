@@ -104,12 +104,12 @@ export default function DraftsPage() {
   // Action handlers
   const handleViewDraft = (draftId: string) => {
     console.log('👁️ Viewing draft:', draftId);
-    router.push(`/admin/drafts/view/${draftId}`);
+    router.push(`/contentmanagement/drafts/view/${draftId}`);
   };
 
   const handleEditDraft = (draftId: string) => {
     console.log('✏️ Editing draft:', draftId);
-    router.push(`/admin/drafts/edit/${draftId}`);
+    router.push(`/contentmanagement/drafts/edit/${draftId}`);
   };
 
   const handleShareDraft = (draftId: string) => {
@@ -203,7 +203,7 @@ export default function DraftsPage() {
             </p>
           </div>
           <button 
-            onClick={() => router.push('/admin/drafts/new')}
+            onClick={() => router.push('/contentmanagement/drafts/new')}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
           >
             <PlusIcon className="w-5 h-5" />
@@ -598,7 +598,7 @@ export default function DraftsPage() {
           {(!searchTerm && selectedFilter === "all") && (
             <div className="mt-6">
               <button 
-                onClick={() => router.push('/admin/drafts/new')}
+                onClick={() => router.push('/contentmanagement/drafts/new')}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 mx-auto transition-colors"
               >
                 <PlusIcon className="w-5 h-5" />

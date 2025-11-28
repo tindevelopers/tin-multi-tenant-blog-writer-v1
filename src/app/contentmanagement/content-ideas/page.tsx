@@ -201,7 +201,7 @@ export default function ContentIdeasPage() {
       content_type: idea.content_type || 'blog',
     });
     
-    router.push(`/admin/drafts/new?${params.toString()}`);
+    router.push(`/contentmanagement/drafts/new?${params.toString()}`);
   };
 
   if (loading) {

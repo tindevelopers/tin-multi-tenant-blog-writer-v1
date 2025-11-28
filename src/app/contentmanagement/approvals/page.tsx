@@ -239,7 +239,7 @@ export default function ApprovalsPage() {
                 <ApprovalRow
                   key={approval.approval_id}
                   approval={approval}
-                  onView={() => router.push(`/admin/approvals/${approval.approval_id}`)}
+                  onView={() => router.push(`/contentmanagement/approvals/${approval.approval_id}`)}
                 />
               ))}
             </tbody>

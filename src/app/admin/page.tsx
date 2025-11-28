@@ -128,7 +128,7 @@ export default async function BlogWriterDashboardPage() {
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Link
-            href="/admin/drafts/new"
+            href="/contentmanagement/drafts/new"
             className="flex items-center space-x-3 p-3 md:p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/30 transition-colors min-w-0"
           >
             <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -152,7 +152,7 @@ export default async function BlogWriterDashboardPage() {
           </Link>
           
           <Link
-            href="/admin/templates"
+            href="/contentmanagement/templates"
             className="flex items-center space-x-3 p-3 md:p-4 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors min-w-0"
           >
             <div className="w-8 h-8 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -164,7 +164,7 @@ export default async function BlogWriterDashboardPage() {
           </Link>
           
           <Link
-            href="/admin/publishing"
+            href="/contentmanagement/publishing"
             className="flex items-center space-x-3 p-3 md:p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors min-w-0"
           >
             <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center flex-shrink-0">

@@ -235,7 +235,7 @@ export default function EditDraftPage() {
       const success = await updatePost(draftId, payload);
       if (success) {
         alert('Draft saved successfully!');
-        router.push('/admin/drafts');
+        router.push('/contentmanagement/drafts');
       } else {
         alert('Failed to save draft. Please try again.');
       }

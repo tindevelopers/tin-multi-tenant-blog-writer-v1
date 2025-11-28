@@ -79,7 +79,7 @@ export default function QueueItemDetailPage() {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed to cancel");
-      router.push("/admin/blog-queue");
+      router.push("/contentmanagement/blog-queue");
     } catch (err) {
       console.error("Error cancelling:", err);
       alert("Failed to cancel queue item");
@@ -148,7 +148,7 @@ export default function QueueItemDetailPage() {
       
       const result = await response.json();
       if (result.queue_id) {
-        router.push(`/admin/blog-queue/${result.queue_id}`);
+        router.push(`/contentmanagement/blog-queue/${result.queue_id}`);
       } else {
         alert("Blog regeneration started!");
       }
@@ -174,7 +174,7 @@ export default function QueueItemDetailPage() {
     try {
       // If draft already exists, redirect to edit
       if (postId) {
-        router.push(`/admin/drafts/edit/${postId}`);
+        router.push(`/contentmanagement/drafts/edit/${postId}`);
         return;
       }
       
@@ -193,7 +193,7 @@ export default function QueueItemDetailPage() {
       if (response.ok) {
         const result = await response.json();
         if (result.post_id) {
-          router.push(`/admin/drafts/edit/${result.post_id}`);
+          router.push(`/contentmanagement/drafts/edit/${result.post_id}`);
         }
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Failed to create draft' }));
@@ -253,7 +253,7 @@ export default function QueueItemDetailPage() {
           {/* Edit in Drafts button - redirects to draft editor */}
           {hasGeneratedContent && postId && (
             <button
-              onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
+              onClick={() => router.push(`/contentmanagement/drafts/edit/${postId}`)}
               className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-10"
               style={{ pointerEvents: 'auto' }}
             >

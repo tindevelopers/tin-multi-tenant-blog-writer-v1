@@ -63,7 +63,7 @@ export default function ApprovalReviewPage() {
       }
 
       await fetchApproval();
-      router.push("/admin/approvals");
+      router.push("/contentmanagement/approvals");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to approve");
       console.error("Error approving:", err);
@@ -95,7 +95,7 @@ export default function ApprovalReviewPage() {
       }
 
       await fetchApproval();
-      router.push("/admin/approvals");
+      router.push("/contentmanagement/approvals");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to reject");
       console.error("Error rejecting:", err);
@@ -127,7 +127,7 @@ export default function ApprovalReviewPage() {
       }
 
       await fetchApproval();
-      router.push("/admin/approvals");
+      router.push("/contentmanagement/approvals");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to request changes");
       console.error("Error requesting changes:", err);
@@ -159,7 +159,7 @@ export default function ApprovalReviewPage() {
 
       alert(`Successfully queued for publishing to: ${platforms.join(", ")}`);
       setShowPlatformSelector(false);
-      router.push("/admin/publishing");
+      router.push("/contentmanagement/publishing");
     } catch (error) {
       console.error("Error publishing:", error);
       setError("Failed to publish. Please try again.");

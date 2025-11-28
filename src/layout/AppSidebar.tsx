@@ -87,11 +87,11 @@ const blogWriterItems: NavItem[] = [
         isAccordionHeader: true,
         new: true,
         subItems: [
-          { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
-          { name: "Content Ideas", path: "/admin/content-ideas", icon: <Target className="w-4 h-4" />, new: true },
-          { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
-          { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
-          { name: "Blog Queue", path: "/admin/blog-queue", icon: <FileClock className="w-4 h-4" />, new: true },
+          { name: "Drafts", path: "/contentmanagement/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
+          { name: "Content Ideas", path: "/contentmanagement/content-ideas", icon: <Target className="w-4 h-4" />, new: true },
+          { name: "Templates", path: "/contentmanagement/templates", icon: <FileText className="w-4 h-4" />, new: true },
+          { name: "Publishing", path: "/contentmanagement/publishing", icon: <Globe className="w-4 h-4" />, new: true },
+          { name: "Blog Queue", path: "/contentmanagement/blog-queue", icon: <FileClock className="w-4 h-4" />, new: true },
         ]
       },
       { 
@@ -101,7 +101,7 @@ const blogWriterItems: NavItem[] = [
         new: true,
         subItems: [
           { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, new: true },
-          { name: "Media", path: "/admin/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
+          { name: "Media", path: "/contentmanagement/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
         ]
       },
       { 
