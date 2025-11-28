@@ -87,7 +87,7 @@ export default function TipTapEditor({
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-lg dark:prose-invert max-w-none focus:outline-none px-4 py-3',
+        class: `prose prose-lg dark:prose-invert max-w-none focus:outline-none px-4 py-3 ${!editable ? 'pointer-events-none select-none' : ''}`,
       },
     },
   });

@@ -549,9 +549,15 @@ export default function QueueItemDetailPage() {
             </div>
             <div 
               className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto relative" 
-              style={{ zIndex: 1, pointerEvents: 'none' }}
+              style={{ zIndex: 1 }}
             >
-              <div style={{ pointerEvents: 'auto' }}>
+              <div 
+                style={{ 
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                }}
+                className="[&_*]:pointer-events-none [&_*]:select-none"
+              >
                 <TipTapEditor
                   content={item.generated_content}
                   onChange={() => {}}
