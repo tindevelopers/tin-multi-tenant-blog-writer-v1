@@ -21,6 +21,8 @@ import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 import { Modal } from "@/components/ui/modal/index";
 import { logger } from "@/utils/logger";
+import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
+import { extractBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -36,6 +38,8 @@ export default function QueueItemDetailPage() {
     metadata: false,
   });
   const [showViewBlogModal, setShowViewBlogModal] = useState(false);
+  const [showFieldConfig, setShowFieldConfig] = useState(false);
+  const [blogFieldData, setBlogFieldData] = useState<BlogFieldData>({});
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -173,6 +177,84 @@ export default function QueueItemDetailPage() {
   const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
   const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
 
+  // Prepare field configuration data from queue item
+  const prepareFieldConfigData = (): BlogFieldData => {
+    return extractBlogFields({
+      title: item?.generated_title || item?.topic || '',
+      content: item?.generated_content || '',
+      excerpt: '',
+      metadata: {},
+      seo_data: {},
+      word_count: item?.word_count,
+    });
+  };
+
+  const handleFieldConfigSave = (fieldData: BlogFieldData) => {
+    setBlogFieldData(fieldData);
+    setShowFieldConfig(false);
+    // After saving field config, proceed with draft creation
+    handleCreateDraftWithFields(fieldData);
+  };
+
+  const handleCreateDraftWithFields = async (fieldData: BlogFieldData) => {
+    if (!item) return;
+    
+    try {
+      const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: item.generated_content,
+          title: item.generated_title || item.topic,
+          excerpt: fieldData.excerpt || '',
+          queue_item_id: queueId,
+          // Include all configured fields
+          slug: fieldData.slug,
+          author_name: fieldData.author_name,
+          author_image: fieldData.author_image,
+          author_bio: fieldData.author_bio,
+          thumbnail_image: fieldData.thumbnail_image,
+          thumbnail_image_alt: fieldData.thumbnail_image_alt,
+          locale: fieldData.locale || 'en',
+          is_featured: fieldData.is_featured,
+          published_at: fieldData.published_at,
+          seo_data: {
+            meta_title: fieldData.seo_title || item.generated_title || item.topic,
+            meta_description: fieldData.meta_description || '',
+          },
+          metadata: {
+            slug: fieldData.slug,
+            featured_image: fieldData.featured_image,
+            featured_image_alt: fieldData.featured_image_alt,
+            thumbnail_image: fieldData.thumbnail_image,
+            thumbnail_image_alt: fieldData.thumbnail_image_alt,
+            author_name: fieldData.author_name,
+            author_image: fieldData.author_image,
+            author_bio: fieldData.author_bio,
+            locale: fieldData.locale || 'en',
+            is_featured: fieldData.is_featured,
+            published_at: fieldData.published_at,
+            word_count: item.word_count,
+            read_time: fieldData.read_time,
+          },
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.post_id) {
+          router.push(`/admin/drafts/edit/${result.post_id}`);
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to create draft' }));
+        alert(errorData.error || "Failed to create draft. Please try again.");
+      }
+    } catch (err) {
+      logger.error("Error creating draft:", err);
+      alert("Failed to create draft. Please try again.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6">
@@ -243,31 +325,13 @@ export default function QueueItemDetailPage() {
           {/* Create Draft button - if content exists but no post_id yet */}
           {hasGeneratedContent && !postId && (
             <button
-              onClick={async () => {
-                try {
-                  const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      content: item.generated_content,
-                      title: item.generated_title || item.topic,
-                      excerpt: "",
-                      queue_item_id: queueId,
-                    }),
-                  });
-                  if (response.ok) {
-                    const result = await response.json();
-                    if (result.post_id) {
-                      router.push(`/admin/drafts/edit/${result.post_id}`);
-                    }
-                  }
-                } catch (err) {
-                  logger.error("Error creating draft:", err);
-                  alert("Failed to create draft. Please try again.");
-                }
+              onClick={() => {
+                // Open field configuration modal first
+                setBlogFieldData(prepareFieldConfigData());
+                setShowFieldConfig(true);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-10"
-              style={{ pointerEvents: 'auto' }}
+              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-50"
+              style={{ pointerEvents: 'auto', position: 'relative' }}
             >
               <PencilIcon className="w-5 h-5" />
               Create Draft
@@ -449,7 +513,7 @@ export default function QueueItemDetailPage() {
       {item.generated_content && (
         <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center justify-between mb-4 relative z-20" style={{ pointerEvents: 'auto' }}>
+            <div className="flex items-center justify-between mb-4 relative z-50" style={{ pointerEvents: 'auto', position: 'relative' }}>
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Content Preview
               </h2>
@@ -457,45 +521,26 @@ export default function QueueItemDetailPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     router.push(`/admin/drafts/edit/${postId}`);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-20"
-                  style={{ pointerEvents: 'auto' }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-50"
+                  style={{ pointerEvents: 'auto', position: 'relative' }}
                 >
                   <PencilIcon className="w-4 h-4" />
                   Edit in Drafts
                 </button>
               ) : (
                 <button
-                  onClick={async (e) => {
+                  onClick={(e) => {
                     e.stopPropagation();
-                    try {
-                      const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          content: item.generated_content,
-                          title: item.generated_title || item.topic,
-                          excerpt: "",
-                          queue_item_id: queueId,
-                        }),
-                      });
-                      if (response.ok) {
-                        const result = await response.json();
-                        if (result.post_id) {
-                          router.push(`/admin/drafts/edit/${result.post_id}`);
-                        }
-                      } else {
-                        const errorData = await response.json().catch(() => ({ error: 'Failed to create draft' }));
-                        alert(errorData.error || "Failed to create draft. Please try again.");
-                      }
-                    } catch (err) {
-                      logger.error("Error creating draft:", err);
-                      alert("Failed to create draft. Please try again.");
-                    }
+                    e.preventDefault();
+                    // Open field configuration modal first
+                    setBlogFieldData(prepareFieldConfigData());
+                    setShowFieldConfig(true);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-20"
-                  style={{ pointerEvents: 'auto' }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-50"
+                  style={{ pointerEvents: 'auto', position: 'relative' }}
                 >
                   <PencilIcon className="w-4 h-4" />
                   Create Draft to Edit
@@ -504,14 +549,16 @@ export default function QueueItemDetailPage() {
             </div>
             <div 
               className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto relative" 
-              style={{ zIndex: 1 }}
+              style={{ zIndex: 1, pointerEvents: 'none' }}
             >
-              <TipTapEditor
-                content={item.generated_content}
-                onChange={() => {}}
-                editable={false}
-                className="min-h-[200px]"
-              />
+              <div style={{ pointerEvents: 'auto' }}>
+                <TipTapEditor
+                  content={item.generated_content}
+                  onChange={() => {}}
+                  editable={false}
+                  className="min-h-[200px]"
+                />
+              </div>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
               💡 To edit content, add images, and format your blog, use the &quot;Edit in Drafts&quot; button above.
@@ -654,6 +701,14 @@ export default function QueueItemDetailPage() {
           </div>
         </Modal>
       )}
+
+      {/* Field Configuration Modal */}
+      <BlogFieldConfiguration
+        initialData={blogFieldData}
+        onSave={handleFieldConfigSave}
+        onCancel={() => setShowFieldConfig(false)}
+        show={showFieldConfig}
+      />
     </div>
   );
 }

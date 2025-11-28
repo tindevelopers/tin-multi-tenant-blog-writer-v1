@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 import type { Database } from '@/types/database';
+import { generateSlug, calculateReadTime } from '@/lib/blog-field-validator';
 
 type BlogPostInsert = Database['public']['Tables']['blog_posts']['Insert'];
 type BlogPostUpdate = Database['public']['Tables']['blog_posts']['Update'];
@@ -18,7 +19,25 @@ export async function POST(
   try {
     const { id: queueId } = await params;
     const body = await request.json();
-    const { content, title, excerpt, queue_item_id } = body;
+    const { 
+      content, 
+      title, 
+      excerpt, 
+      queue_item_id,
+      // Additional fields for complete blog creation
+      slug,
+      author_name,
+      author_image,
+      author_bio,
+      thumbnail_image,
+      thumbnail_image_alt,
+      locale,
+      is_featured,
+      published_at,
+      seo_data,
+      metadata,
+      word_count,
+    } = body;
 
     if (!content) {
       return NextResponse.json(
@@ -66,13 +85,39 @@ export async function POST(
     const orgId = queueItem.org_id || '00000000-0000-0000-0000-000000000001';
     const postId = queueItem.post_id;
     const finalTitle = title || queueItem.generated_title || queueItem.topic || 'Untitled';
+    const finalSlug = slug || generateSlug(finalTitle);
+    const finalWordCount = word_count || (content ? content.split(/\s+/).filter(w => w.length > 0).length : 0);
+    const readTime = finalWordCount ? calculateReadTime(finalWordCount) : null;
 
-    // Build metadata with edit history
-    const metadata: Record<string, unknown> = {
+    // Build comprehensive metadata with all fields
+    const finalMetadata: Record<string, unknown> = {
       queue_id: queueId,
       last_edited_at: new Date().toISOString(),
       ...(userId ? { last_edited_by: userId } : {}),
       auto_saved: true,
+      // Include all configured fields
+      slug: finalSlug,
+      ...(featured_image ? { featured_image } : {}),
+      ...(featured_image_alt ? { featured_image_alt } : {}),
+      ...(thumbnail_image ? { thumbnail_image } : {}),
+      ...(thumbnail_image_alt ? { thumbnail_image_alt } : {}),
+      ...(author_name ? { author_name } : {}),
+      ...(author_image ? { author_image } : {}),
+      ...(author_bio ? { author_bio } : {}),
+      locale: locale || 'en',
+      ...(is_featured !== undefined ? { is_featured } : {}),
+      ...(readTime ? { read_time: readTime } : {}),
+      word_count: finalWordCount,
+      ...(published_at ? { published_at } : {}),
+      // Merge with any existing metadata
+      ...(metadata || {}),
+    };
+
+    // Build comprehensive SEO data
+    const finalSeoData: Record<string, unknown> = {
+      ...(seo_data || {}),
+      meta_title: seo_data?.meta_title || finalTitle,
+      meta_description: seo_data?.meta_description || excerpt || '',
     };
 
     let result;
@@ -86,7 +131,9 @@ export async function POST(
         title: finalTitle,
         excerpt: excerpt || null,
         updated_at: new Date().toISOString(),
-        metadata: metadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],
+        seo_data: finalSeoData as Database['public']['Tables']['blog_posts']['Row']['seo_data'],
+        metadata: finalMetadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],
+        published_at: published_at || null,
       };
 
       const { data: updatedPost, error: updateError } = await supabase
@@ -117,7 +164,9 @@ export async function POST(
         content,
         excerpt: excerpt || null,
         status: 'draft',
-        metadata: metadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],
+        seo_data: finalSeoData as Database['public']['Tables']['blog_posts']['Row']['seo_data'],
+        metadata: finalMetadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],
+        published_at: published_at || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
