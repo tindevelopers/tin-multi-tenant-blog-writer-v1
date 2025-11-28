@@ -24,6 +24,17 @@ export async function POST(request: NextRequest) {
         width?: number;
         height?: number;
       };
+      // Additional fields for complete blog creation
+      slug?: string;
+      author_name?: string;
+      author_image?: string;
+      author_bio?: string;
+      thumbnail_image?: string;
+      thumbnail_image_alt?: string;
+      locale?: string;
+      is_featured?: boolean;
+      word_count?: number;
+      published_at?: string;
     }>(request);
     logger.debug('Request body received', { 
       title: body.title, 
