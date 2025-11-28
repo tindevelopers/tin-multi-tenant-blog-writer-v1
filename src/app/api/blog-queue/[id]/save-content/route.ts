@@ -29,6 +29,8 @@ export async function POST(
       author_name,
       author_image,
       author_bio,
+      featured_image,
+      featured_image_alt,
       thumbnail_image,
       thumbnail_image_alt,
       locale,
