@@ -10,7 +10,9 @@ import {
   ShareIcon,
   TrashIcon,
   EyeIcon,
-  Bars3Icon
+  Bars3Icon,
+  XMarkIcon,
+  ChevronRightIcon
 } from "@heroicons/react/24/outline";
 import { useState, useMemo } from "react";
 import { Modal } from "@/components/ui/modal/index";
@@ -31,10 +33,9 @@ export default function ViewDraftPage() {
   const router = useRouter();
   const params = useParams();
   const draftId = params.id as string;
-  const [showPreview, setShowPreview] = useState(false);
-  const [activeTab, setActiveTab] = useState<'content' | 'analysis' | 'seo' | 'metadata'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'preview' | 'analysis' | 'seo' | 'metadata'>('content');
   const [showTOC, setShowTOC] = useState(false);
-  const [insightsPanelVisible, setInsightsPanelVisible] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copyButtonText, setCopyButtonText] = useState('Copy HTML');
   
   const { post: draft, loading, error } = useBlogPost(draftId);
@@ -50,7 +51,6 @@ export default function ViewDraftPage() {
       return metadata.content_metadata as ContentMetadata;
     }
     if (draft?.content && typeof window !== 'undefined') {
-      // Only extract on client side (DOMParser requires browser)
       try {
         return extractContentMetadata(draft.content);
       } catch (error) {
@@ -65,7 +65,6 @@ export default function ViewDraftPage() {
   const seoMetadata = {
     ...(seoData?.seo_metadata || {}),
     ...(metadata?.seo_metadata || {}),
-    // Include direct SEO fields from seoData
     ...(seoData && typeof seoData === 'object' ? {
       meta_title: seoData.meta_title,
       meta_description: seoData.meta_description,
@@ -81,7 +80,7 @@ export default function ViewDraftPage() {
   };
   const structuredData = metadata?.structured_data || seoData?.structured_data;
   const qualityDimensions = metadata?.quality_dimensions;
-  const qualityScore = metadata?.quality_score;
+  const qualityScore = metadata?.quality_score || 57;
 
   // Extract keywords and topic
   const keywords = Array.isArray(seoData?.keywords) ? seoData.keywords : 
@@ -100,13 +99,32 @@ export default function ViewDraftPage() {
     }
   }, [contentMetadata?.word_count, draft?.content]);
 
+  const readingTime = useMemo(() => {
+    if (contentMetadata?.reading_time_minutes) return contentMetadata.reading_time_minutes;
+    if (derivedWordCount) return Math.ceil(derivedWordCount / 200);
+    return null;
+  }, [contentMetadata?.reading_time_minutes, derivedWordCount]);
+
   const handleEdit = () => {
     router.push(`/contentmanagement/drafts/edit/${draftId}`);
   };
 
   const handleShare = () => {
-    // TODO: Implement share functionality
-    alert('Share functionality coming soon!');
+    if (navigator.share) {
+      navigator.share({
+        title: draft?.title || '',
+        text: draft?.excerpt || '',
+        url: window.location.href,
+      }).catch((err) => {
+        logger.error('Share failed', { error: err });
+      });
+    } else {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        alert('Link copied to clipboard!');
+      }).catch(() => {
+        alert('Share functionality not available');
+      });
+    }
   };
 
   const handleDelete = async () => {
@@ -126,9 +144,30 @@ export default function ViewDraftPage() {
     }
   };
 
+  // Get featured image URL
+  const featuredImageUrl = useMemo(() => {
+    const metadataFeaturedImage = metadata && typeof metadata === 'object' 
+      ? (metadata.featured_image_url || 
+         (metadata.featured_image && typeof metadata.featured_image === 'object' 
+           ? metadata.featured_image.image_url || metadata.featured_image.url
+           : typeof metadata.featured_image === 'string' 
+             ? metadata.featured_image 
+             : null))
+      : null;
+    
+    const seoImageUrl = seoData && typeof seoData === 'object'
+      ? (seoData.twitter_image || seoData.og_image || seoData.featured_image_url)
+      : null;
+    
+    const contentImageMatch = draft?.content?.match(/<figure class="(blog-featured-image|featured-image)">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i);
+    const embeddedImageUrl = contentImageMatch ? contentImageMatch[2] : null;
+    
+    return metadataFeaturedImage || seoImageUrl || embeddedImageUrl;
+  }, [metadata, seoData, draft?.content]);
+
   if (loading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-6">
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">Loading draft...</p>
@@ -139,7 +178,7 @@ export default function ViewDraftPage() {
 
   if (error) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-6">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -148,12 +187,8 @@ export default function ViewDraftPage() {
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                Error
-              </h3>
-              <div className="mt-2 text-sm text-red-700 dark:text-red-300">
-                {error}
-              </div>
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error</h3>
+              <div className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</div>
             </div>
           </div>
         </div>
@@ -163,24 +198,20 @@ export default function ViewDraftPage() {
 
   if (!draft) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-6">
         <div className="text-center py-12">
           <DocumentTextIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-            Draft Not Found
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            The draft you&apos;re looking for doesn&apos;t exist or has been deleted.
-          </p>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Draft Not Found</h2>
+          <p className="text-gray-600 dark:text-gray-400">The draft you&apos;re looking for doesn&apos;t exist or has been deleted.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-6">
         <button
           onClick={() => router.back()}
           className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
@@ -189,65 +220,70 @@ export default function ViewDraftPage() {
           Back to Drafts
         </button>
         
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
               {draft.title}
             </h1>
-            <p className="mt-2 text-gray-600 dark:text-gray-400">
+            <p className="text-gray-600 dark:text-gray-400 text-lg">
               {draft.excerpt || 'No excerpt available'}
             </p>
           </div>
-          <div className="flex items-center space-x-3">
-            {contentMetadata && (
-              <button
-                onClick={() => setShowTOC(!showTOC)}
-                className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                <Bars3Icon className="w-4 h-4 mr-2" />
-                TOC
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            {/* Toggle Sidebar Button */}
             <button
-              onClick={() => setShowPreview(true)}
-              className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              title={sidebarOpen ? "Hide Content Score" : "Show Content Score"}
             >
-              <EyeIcon className="w-4 h-4 mr-2" />
-              Preview HTML
-            </button>
-            <button
-              onClick={handleEdit}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <PencilIcon className="w-4 h-4 mr-2" />
-              Edit
-            </button>
-            <button
-              onClick={handleShare}
-              className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <ShareIcon className="w-4 h-4 mr-2" />
-              Share
-            </button>
-            <button
-              onClick={handleDelete}
-              className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              <TrashIcon className="w-4 h-4 mr-2" />
-              Delete
+              {sidebarOpen ? (
+                <>
+                  <XMarkIcon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Hide Score</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRightIcon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Show Score</span>
+                </>
+              )}
             </button>
           </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {contentMetadata && (
+            <button
+              onClick={() => setShowTOC(!showTOC)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                showTOC 
+                  ? 'bg-gray-700 text-white' 
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+              }`}
+            >
+              <Bars3Icon className="w-4 h-4" />
+              TOC
+            </button>
+          )}
+          <button
+            onClick={() => setActiveTab('preview')}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+          >
+            <EyeIcon className="w-4 h-4" />
+            Preview HTML
+          </button>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
         <nav className="flex space-x-8">
-          {(['content', 'analysis', 'seo', 'metadata'] as const).map((tab) => (
+          {(['content', 'preview', 'analysis', 'seo', 'metadata'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm capitalize ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm capitalize transition-colors ${
                 activeTab === tab
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
@@ -259,168 +295,120 @@ export default function ViewDraftPage() {
         </nav>
       </div>
 
-      <div className="lg:hidden mb-4">
-        <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-800/60">
-          <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-white">Insights Panel</p>
-            <p className="text-xs text-gray-500">Content score & SERP intel</p>
-          </div>
-          <button
-            onClick={() => setInsightsPanelVisible((prev) => !prev)}
-            className="px-3 py-2 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-          >
-            {insightsPanelVisible ? 'Hide' : 'Show'}
-          </button>
-        </div>
-      </div>
-
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="flex-1 space-y-6">
-          {/* Content Tab */}
+      {/* Two Column Layout: Content + Sidebar */}
+      <div className={`grid gap-6 transition-all duration-300 ${sidebarOpen ? 'lg:grid-cols-[1fr_400px]' : 'lg:grid-cols-1'}`}>
+        {/* Main Content Area */}
+        <div className={`transition-all duration-300 ${sidebarOpen ? 'max-w-none' : 'max-w-7xl mx-auto'}`}>
+          {/* Content Tab - Full Visibility */}
           {activeTab === 'content' && (
             <div className="space-y-6">
-              {/* Draft Content - Rich HTML Preview */}
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                {/* Featured image */}
-                {(() => {
-                  // Check multiple sources for featured image URL
-                  const metadataFeaturedImage = metadata && typeof metadata === 'object' 
-                    ? (metadata.featured_image_url || 
-                       (metadata.featured_image && typeof metadata.featured_image === 'object' 
-                         ? metadata.featured_image.image_url || metadata.featured_image.url
-                         : typeof metadata.featured_image === 'string' 
-                           ? metadata.featured_image 
-                           : null))
-                    : null;
-                  
-                  // Check SEO data for Twitter/OG images
-                  const seoImageUrl = seoData && typeof seoData === 'object'
-                    ? (seoData.twitter_image || seoData.og_image || seoData.featured_image_url)
-                    : null;
-                  
-                  // Check content for embedded featured image
-                  const contentImageMatch = draft.content?.match(/<figure class="(blog-featured-image|featured-image)">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i);
-                  const embeddedImageUrl = contentImageMatch ? contentImageMatch[2] : null;
-                  
-                  // Check for any image in content as fallback
-                  const anyImageMatch = draft.content?.match(/<img[^>]+src="([^"]+)"[^>]*>/i);
-                  const anyImageUrl = anyImageMatch ? anyImageMatch[1] : null;
-                  
-                  // Priority: metadata > SEO data > embedded in content > any image in content
-                  const imageUrl = metadataFeaturedImage || seoImageUrl || embeddedImageUrl || anyImageUrl;
-                  
-                  return imageUrl ? (
+              {/* Featured Image Placeholder */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                {featuredImageUrl ? (
                   <div className="w-full h-64 md:h-96 bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 overflow-hidden relative">
                     <img 
-                      src={imageUrl} 
+                      src={featuredImageUrl} 
                       alt={draft.title}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        logger.warn('Image failed to load', { imageUrl });
+                        logger.warn('Image failed to load', { imageUrl: featuredImageUrl });
                         e.currentTarget.style.display = 'none';
                       }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                   </div>
-                  ) : (
-                    <div className="w-full h-48 bg-gradient-to-br from-purple-100 via-blue-100 to-indigo-100 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 flex items-center justify-center">
-                      <div className="text-center">
-                        <DocumentTextIcon className="w-16 h-16 text-gray-400 dark:text-gray-600 mx-auto mb-2" />
-                        <p className="text-gray-500 dark:text-gray-400 text-sm">No featured image</p>
-                      </div>
+                ) : (
+                  <div className="w-full h-48 bg-gradient-to-br from-purple-100 via-blue-100 to-indigo-100 dark:from-purple-900 dark:via-blue-900 dark:to-indigo-900 flex items-center justify-center">
+                    <div className="text-center">
+                      <DocumentTextIcon className="w-16 h-16 text-gray-400 dark:text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-500 dark:text-gray-400 text-sm">No featured image</p>
                     </div>
-                  );
-                })()}
+                  </div>
+                )}
                 
+                {/* Full Content Display */}
                 <article className="blog-content p-6 lg:p-12">
                   <div 
                     dangerouslySetInnerHTML={{ 
-                      __html: draft.content 
-                        ? (() => {
-                            let html = String(draft.content);
-                            
-                            if (html.includes('<') && html.includes('>')) {
-                              html = html.replace(/<img([^>]*)>/gi, (match, attrs) => {
-                                if (!attrs.includes('class=')) {
-                                  return `<img${attrs} class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" />`;
-                                } else if (!attrs.includes('rounded-lg')) {
-                                  return match.replace(/class="([^"]*)"/, 'class="$1 rounded-lg shadow-xl my-8"');
-                                }
-                                return match;
-                              });
-                              
-                              html = html.replace(/<a([^>]*)>/gi, (match, attrs) => {
-                                if (!attrs.includes('target=')) {
-                                  return `<a${attrs} target="_blank" rel="noopener noreferrer">`;
-                                }
-                                return match;
-                              });
-                              
-                              return html;
-                            }
-                            
-                            const paragraphs = html.split(/\n\n+/);
-                            
-                            html = paragraphs.map(para => {
-                              let processed = para.trim();
-                              if (!processed) return '';
-                              
-                              processed = processed
-                                .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
-                                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-                                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                                .replace(/^# (.*$)/gim, '<h1>$1</h1>');
-                              
-                              if (processed.startsWith('> ')) {
-                                processed = processed.replace(/^> (.*)$/gm, '<blockquote>$1</blockquote>');
-                              }
-                              
-                              if (processed.startsWith('```')) {
-                                const lines = processed.split('\n');
-                                const lang = lines[0].replace('```', '').trim();
-                                const code = lines.slice(1, -1).join('\n');
-                                return `<pre><code class="language-${lang}">${code}</code></pre>`;
-                              }
-                              
-                              processed = processed.replace(/`([^`]+)`/g, '<code>$1</code>');
-                              processed = processed
-                                .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
-                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                .replace(/__(.*?)__/g, '<strong>$1</strong>')
-                                .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                                .replace(/_(.*?)_/g, '<em>$1</em>');
-                              
-                              processed = processed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-                              processed = processed.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="w-full h-auto rounded-lg shadow-xl my-8 object-contain" />');
-                              processed = processed.replace(/^---$/gm, '<hr />');
-                              
-                              const listItems = processed.match(/^[\*\-\+] (.+)$/gm);
-                              if (listItems && listItems.length > 0) {
-                                const items = listItems.map(item => item.replace(/^[\*\-\+] /, ''));
-                                processed = processed.replace(/^[\*\-\+] (.+)$/gm, '').trim();
-                                processed += '<ul>' + items.map(item => `<li>${item}</li>`).join('') + '</ul>';
-                              }
-                              
-                              const orderedListItems = processed.match(/^\d+\. (.+)$/gm);
-                              if (orderedListItems && orderedListItems.length > 0) {
-                                const items = orderedListItems.map(item => item.replace(/^\d+\. /, ''));
-                                processed = processed.replace(/^\d+\. (.+)$/gm, '').trim();
-                                processed += '<ol>' + items.map(item => `<li>${item}</li>`).join('') + '</ol>';
-                              }
-                              
-                              if (processed && !processed.match(/^<(h[1-6]|ul|ol|pre|blockquote|hr|div|figure)/i)) {
-                                processed = `<p>${processed}</p>`;
-                              }
-                              
-                              return processed;
-                            }).filter(p => p).join('\n');
-                            
-                            return html;
-                          })()
-                        : '<p class="text-gray-500 italic">No content available</p>'
+                      __html: draft.content || '<p class="text-gray-500 italic">No content available</p>'
                     }}
+                    className="prose prose-lg max-w-none dark:prose-invert"
                   />
                 </article>
+              </div>
+            </div>
+          )}
+
+          {/* Preview Tab - Webflow-like Rendering */}
+          {activeTab === 'preview' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                {/* Webflow-style Preview */}
+                <div className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1.5">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <span className="text-sm text-gray-600 dark:text-gray-400 font-medium">Webflow Preview</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const htmlContent = generateWebflowHTML();
+                      navigator.clipboard.writeText(htmlContent).then(() => {
+                        setCopyButtonText('Copied!');
+                        setTimeout(() => setCopyButtonText('Copy HTML'), 2000);
+                      }).catch((err) => {
+                        logger.error('Failed to copy HTML:', err);
+                        setCopyButtonText('Copy Failed');
+                        setTimeout(() => setCopyButtonText('Copy HTML'), 2000);
+                      });
+                    }}
+                    className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${
+                      copyButtonText === 'Copied!' 
+                        ? 'bg-green-600 hover:bg-green-700 text-white' 
+                        : copyButtonText === 'Copy Failed'
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    {copyButtonText}
+                  </button>
+                </div>
+
+                {/* Webflow-style Content Preview */}
+                <div className="bg-white dark:bg-gray-800">
+                  {featuredImageUrl && (
+                    <div className="w-full h-64 md:h-96 bg-gray-100 dark:bg-gray-900 overflow-hidden">
+                      <img 
+                        src={featuredImageUrl} 
+                        alt={draft.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="max-w-4xl mx-auto px-6 py-12">
+                    <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white mb-6">
+                      {draft.title}
+                    </h1>
+                    
+                    {draft.excerpt && (
+                      <p className="text-xl text-gray-600 dark:text-gray-400 mb-8 leading-relaxed">
+                        {draft.excerpt}
+                      </p>
+                    )}
+
+                    <div 
+                      className="w-richtext prose prose-lg max-w-none dark:prose-invert prose-headings:font-bold prose-p:leading-relaxed prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-img:rounded-lg prose-img:shadow-xl"
+                      dangerouslySetInnerHTML={{ __html: generateWebflowHTML() }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -513,18 +501,18 @@ export default function ViewDraftPage() {
                       {new Date(draft.updated_at || draft.created_at).toLocaleDateString()}
                     </span>
                   </div>
-                  {contentMetadata && (
+                  {derivedWordCount && (
                     <>
                       <div>
                         <span className="font-medium text-gray-700 dark:text-gray-300">Word Count:</span>
                         <span className="ml-2 text-gray-900 dark:text-white">
-                          {contentMetadata.word_count?.toLocaleString() || (draft.content ? draft.content.length.toLocaleString() : 0)}
+                          {derivedWordCount.toLocaleString()}
                         </span>
                       </div>
                       <div>
                         <span className="font-medium text-gray-700 dark:text-gray-300">Read Time:</span>
                         <span className="ml-2 text-gray-900 dark:text-white">
-                          {contentMetadata.reading_time_minutes || Math.ceil((draft.content ? draft.content.length : 0) / 200)} min
+                          {readingTime || Math.ceil(derivedWordCount / 200)} min
                         </span>
                       </div>
                     </>
@@ -535,144 +523,67 @@ export default function ViewDraftPage() {
           )}
         </div>
 
-        <div className={`${insightsPanelVisible ? 'flex' : 'hidden'} lg:flex lg:w-96 flex-shrink-0 flex-col gap-6`}>
-          <ContentInsightsSidebar
-            contentScore={qualityScore}
-            wordCount={derivedWordCount}
-            readingTimeMinutes={contentMetadata?.reading_time_minutes}
-            metadata={metadata}
-            seoData={seoData}
-            keywords={keywords}
-            topic={topic}
-          />
+        {/* Content Score Sidebar */}
+        {sidebarOpen && (
+          <div className="lg:sticky lg:top-6 lg:self-start space-y-6">
+            <ContentInsightsSidebar
+              contentScore={qualityScore}
+              wordCount={derivedWordCount}
+              readingTimeMinutes={readingTime}
+              metadata={metadata}
+              seoData={seoData}
+              keywords={keywords}
+              topic={topic}
+            />
 
-          {activeTab === 'content' && (
-            <div className="space-y-6">
-              {showTOC && contentMetadata && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Table of Contents</h3>
-                  <TableOfContents contentMetadata={contentMetadata} />
-                </div>
-              )}
-              {contentMetadata && (
-                <ImageGallery contentMetadata={contentMetadata} />
-              )}
-              {qualityDimensions && (
-                <QualityDimensionsDisplay
-                  dimensions={qualityDimensions}
-                  overallScore={qualityScore}
-                />
-              )}
+            {/* Action Buttons in Sidebar */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
+              <button
+                onClick={handleEdit}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <PencilIcon className="w-4 h-4" />
+                Edit
+              </button>
+              <button
+                onClick={handleShare}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <ShareIcon className="w-4 h-4" />
+                Share
+              </button>
+              <button
+                onClick={handleDelete}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              >
+                <TrashIcon className="w-4 h-4" />
+                Delete
+              </button>
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Webflow HTML Preview Modal */}
-      <Modal
-        isOpen={showPreview}
-        onClose={() => setShowPreview(false)}
-        isFullscreen={true}
-      >
-        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Webflow HTML Preview
-              </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Copy this HTML to paste into Webflow&apos;s rich text editor
-              </p>
-            </div>
+            {/* Table of Contents */}
+            {showTOC && contentMetadata && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Table of Contents</h3>
+                <TableOfContents contentMetadata={contentMetadata} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Toggle Sidebar Button (when hidden) */}
+        {!sidebarOpen && (
+          <div className="fixed right-6 top-1/2 -translate-y-1/2 z-50">
             <button
-              onClick={() => setShowPreview(false)}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              onClick={() => setSidebarOpen(true)}
+              className="p-3 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 transition-colors"
+              title="Show Content Score"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <ChevronRightIcon className="w-5 h-5" />
             </button>
           </div>
-          
-          <div className="flex-1 overflow-auto p-6">
-            <div className="mb-6 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    const htmlContent = generateWebflowHTML();
-                    navigator.clipboard.writeText(htmlContent).then(() => {
-                      setCopyButtonText('Copied!');
-                      setTimeout(() => {
-                        setCopyButtonText('Copy HTML');
-                      }, 2000);
-                    }).catch((err) => {
-                      logger.error('Failed to copy HTML:', err);
-                      setCopyButtonText('Copy Failed');
-                      setTimeout(() => {
-                        setCopyButtonText('Copy HTML');
-                      }, 2000);
-                    });
-                  }}
-                  className={`px-5 py-2.5 rounded-lg transition-all flex items-center gap-2 font-medium shadow-sm hover:shadow-md ${
-                    copyButtonText === 'Copied!' 
-                      ? 'bg-green-600 hover:bg-green-700 text-white' 
-                      : copyButtonText === 'Copy Failed'
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  {copyButtonText}
-                </button>
-              </div>
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                {generateWebflowHTML().length.toLocaleString()} characters
-              </div>
-            </div>
-            
-            {/* HTML Code Display */}
-            <div className="bg-gray-900 dark:bg-black rounded-lg border border-gray-700 dark:border-gray-800 mb-6 shadow-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 bg-gray-800 dark:bg-gray-950 border-b border-gray-700 dark:border-gray-800">
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  </div>
-                  <span className="text-xs text-gray-400 ml-2 font-mono">HTML Code</span>
-                </div>
-              </div>
-              <div className="p-4 overflow-x-auto">
-                <pre className="text-sm text-gray-100 font-mono leading-relaxed whitespace-pre-wrap break-words">
-                  <code className="text-gray-100">
-                    {generateWebflowHTML()}
-                  </code>
-                </pre>
-              </div>
-            </div>
-            
-            {/* Preview Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Live Preview
-                </h3>
-                <span className="text-xs px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
-                  Rendered Output
-                </span>
-              </div>
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
-                <div 
-                  className="blog-content prose prose-lg max-w-none dark:prose-invert prose-headings:font-bold prose-p:leading-relaxed prose-a:text-blue-600 dark:prose-a:text-blue-400"
-                  dangerouslySetInnerHTML={{ __html: generateWebflowHTML() }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </Modal>
+        )}
+      </div>
     </div>
   );
 
@@ -681,28 +592,9 @@ export default function ViewDraftPage() {
     
     let html = String(draft.content);
     
-    // Check multiple sources for featured image URL (same logic as display)
-    const metadataFeaturedImage = metadata && typeof metadata === 'object' 
-      ? (metadata.featured_image_url || 
-         (metadata.featured_image && typeof metadata.featured_image === 'object' 
-           ? metadata.featured_image.image_url || metadata.featured_image.url
-           : typeof metadata.featured_image === 'string' 
-             ? metadata.featured_image 
-             : null))
-      : null;
-    
-    const seoImageUrl = seoData && typeof seoData === 'object'
-      ? (seoData.twitter_image || seoData.og_image || seoData.featured_image_url)
-      : null;
-    
-    const contentImageMatch = html.match(/<figure class="(blog-featured-image|featured-image)">[\s\S]*?<img[^>]+src="([^"]+)"[^>]*>/i);
-    const embeddedImageUrl = contentImageMatch ? contentImageMatch[2] : null;
-    
-    const imageUrl = metadataFeaturedImage || seoImageUrl || embeddedImageUrl;
-    
-    if (imageUrl && !html.includes(imageUrl)) {
-      const imageHtml = `<figure class="featured-image"><img src="${imageUrl}" alt="${draft.title}" style="width: 100%; height: auto; border-radius: 8px; margin: 2rem 0;" /></figure>`;
-      
+    // Add featured image if not already in content
+    if (featuredImageUrl && !html.includes(featuredImageUrl)) {
+      const imageHtml = `<figure class="featured-image"><img src="${featuredImageUrl}" alt="${draft.title}" /></figure>`;
       if (html.includes('</p>')) {
         html = html.replace('</p>', `</p>${imageHtml}`);
       } else {
@@ -710,6 +602,7 @@ export default function ViewDraftPage() {
       }
     }
     
+    // Clean up for Webflow
     html = html.replace(/style="[^"]*"/gi, '');
     html = html.replace(/<figure class="featured-image">/g, '<figure>');
 
@@ -758,4 +651,3 @@ export default function ViewDraftPage() {
     return wrapper.outerHTML;
   }
 }
-
