@@ -117,3 +117,4 @@ npx tsx scripts/test-cloud-run-endpoints.ts
 
 All critical endpoints for enhanced search and AI search are **ACTIVE** and responding correctly on Google Cloud Run.
 
+
