@@ -354,9 +354,18 @@ export default function TipTapEditor({
       )}
 
       {/* Editor Content - Scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="min-h-[400px]">
-          <EditorContent editor={editor} />
+      <div 
+        className="flex-1 overflow-y-auto min-h-0"
+        style={!editable ? { pointerEvents: 'none', userSelect: 'none' } : {}}
+      >
+        <div 
+          className="min-h-[400px]"
+          style={!editable ? { pointerEvents: 'none', userSelect: 'none' } : {}}
+        >
+          <EditorContent 
+            editor={editor}
+            style={!editable ? { pointerEvents: 'none', userSelect: 'none' } : {}}
+          />
         </div>
       </div>
 
