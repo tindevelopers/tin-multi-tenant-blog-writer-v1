@@ -86,7 +86,7 @@ export async function POST(
     const postId = queueItem.post_id;
     const finalTitle = title || queueItem.generated_title || queueItem.topic || 'Untitled';
     const finalSlug = slug || generateSlug(finalTitle);
-    const finalWordCount = word_count || (content ? content.split(/\s+/).filter(w => w.length > 0).length : 0);
+    const finalWordCount = word_count || (content ? content.split(/\s+/).filter((w: string) => w.length > 0).length : 0);
     const readTime = finalWordCount ? calculateReadTime(finalWordCount) : null;
 
     // Build comprehensive metadata with all fields
