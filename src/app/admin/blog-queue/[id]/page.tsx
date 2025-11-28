@@ -185,7 +185,7 @@ export default function QueueItemDetailPage() {
       excerpt: '',
       metadata: {},
       seo_data: {},
-      word_count: item?.word_count,
+      word_count: item?.word_count ?? undefined,
     });
   };
 
