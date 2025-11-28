@@ -551,20 +551,12 @@ export default function QueueItemDetailPage() {
               className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto relative" 
               style={{ zIndex: 1 }}
             >
-              <div 
-                style={{ 
-                  pointerEvents: 'none',
-                  userSelect: 'none',
-                }}
-                className="[&_*]:pointer-events-none [&_*]:select-none"
-              >
-                <TipTapEditor
-                  content={item.generated_content}
-                  onChange={() => {}}
-                  editable={false}
-                  className="min-h-[200px]"
-                />
-              </div>
+              <TipTapEditor
+                content={item.generated_content}
+                onChange={() => {}}
+                editable={false}
+                className="min-h-[200px]"
+              />
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
               💡 To edit content, add images, and format your blog, use the &quot;Edit in Drafts&quot; button above.

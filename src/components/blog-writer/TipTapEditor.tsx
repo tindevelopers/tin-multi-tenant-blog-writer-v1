@@ -155,7 +155,6 @@ export default function TipTapEditor({
   return (
     <div 
       className={`border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 flex flex-col h-full ${className}`}
-      style={!editable ? { pointerEvents: 'none' } : {}}
     >
       {/* Toolbar - Fixed at top */}
       {editable && (
@@ -354,17 +353,11 @@ export default function TipTapEditor({
       )}
 
       {/* Editor Content - Scrollable */}
-      <div 
-        className="flex-1 overflow-y-auto min-h-0"
-        style={!editable ? { pointerEvents: 'none', userSelect: 'none' } : {}}
-      >
-        <div 
-          className="min-h-[400px]"
-          style={!editable ? { pointerEvents: 'none', userSelect: 'none' } : {}}
-        >
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="min-h-[400px]">
           <EditorContent 
             editor={editor}
-            style={!editable ? { pointerEvents: 'none', userSelect: 'none' } : {}}
+            aria-readonly={!editable}
           />
         </div>
       </div>
