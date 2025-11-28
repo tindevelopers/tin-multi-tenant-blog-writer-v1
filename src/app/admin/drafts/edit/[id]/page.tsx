@@ -11,9 +11,11 @@ import {
   SparklesIcon
 } from "@heroicons/react/24/outline";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
-import { extractBlogFields, generateSlug, calculateReadTime } from "@/lib/blog-field-validator";
+import { extractBlogFields, generateSlug, calculateReadTime, validateBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
 import { dataForSEOContentGenerationClient } from "@/lib/dataforseo-content-generation-client";
 import { logger } from "@/utils/logger";
+import { ExclamationTriangleIcon, InformationCircleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
+import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
 
 type DraftFormState = {
   title: string;
@@ -69,6 +71,9 @@ export default function EditDraftPage() {
   });
   const [aiGenerating, setAiGenerating] = useState(false);
   const [contentStats, setContentStats] = useState({ wordCount: 0, readTime: 1 });
+  const [fieldValidation, setFieldValidation] = useState<ReturnType<typeof validateBlogFields> | null>(null);
+  const [showFieldConfig, setShowFieldConfig] = useState(false);
+  const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     if (draft) {
@@ -112,7 +117,28 @@ export default function EditDraftPage() {
       wordCount: words.length,
       readTime: Math.max(1, calculateReadTime(words.length || 1)),
     });
-  }, [formData.content]);
+    
+    // Validate fields for Webflow publishing
+    const validation = validateBlogFields({
+      title: formData.title,
+      content: formData.content,
+      excerpt: formData.excerpt,
+      slug: formData.slug,
+      featured_image: formData.featuredImage,
+      featured_image_alt: formData.featuredImageAlt,
+      thumbnail_image: formData.thumbnailImage,
+      thumbnail_image_alt: formData.thumbnailImageAlt,
+      author_name: formData.authorName,
+      author_image: formData.authorImage,
+      author_bio: formData.authorBio,
+      seo_title: formData.seoTitle,
+      meta_description: formData.metaDescription,
+      locale: formData.locale,
+      word_count: contentStats.wordCount,
+      read_time: contentStats.readTime,
+    });
+    setFieldValidation(validation);
+  }, [formData, contentStats.wordCount, contentStats.readTime]);
 
   const buildMetadataPayload = () => {
     const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
@@ -182,6 +208,18 @@ export default function EditDraftPage() {
   };
 
   const handleSave = async () => {
+    // Phase 6: Check if critical fields are missing before saving
+    if (fieldValidation && (fieldValidation.missingRequired.length > 0 || fieldValidation.missingRecommended.length > 0)) {
+      // Show field configuration modal if critical fields are missing
+      setPendingSaveAction(() => handleSaveInternal);
+      setShowFieldConfig(true);
+      return;
+    }
+    
+    await handleSaveInternal();
+  };
+
+  const handleSaveInternal = async () => {
     try {
       setSaving(true);
       const payload = {
@@ -206,7 +244,61 @@ export default function EditDraftPage() {
       alert('Error saving draft. Please try again.');
     } finally {
       setSaving(false);
+      setShowFieldConfig(false);
+      setPendingSaveAction(null);
     }
+  };
+
+  const handleFieldConfigSave = (fieldData: BlogFieldData) => {
+    // Update form data with configured fields
+    setFormData(prev => ({
+      ...prev,
+      excerpt: fieldData.excerpt || prev.excerpt,
+      slug: fieldData.slug || prev.slug,
+      seoTitle: fieldData.seo_title || prev.seoTitle,
+      metaDescription: fieldData.meta_description || prev.metaDescription,
+      featuredImage: fieldData.featured_image || prev.featuredImage,
+      featuredImageAlt: fieldData.featured_image_alt || prev.featuredImageAlt,
+      thumbnailImage: fieldData.thumbnail_image || prev.thumbnailImage,
+      thumbnailImageAlt: fieldData.thumbnail_image_alt || prev.thumbnailImageAlt,
+      authorName: fieldData.author_name || prev.authorName,
+      authorImage: fieldData.author_image || prev.authorImage,
+      authorBio: fieldData.author_bio || prev.authorBio,
+      locale: fieldData.locale || prev.locale,
+      isFeatured: fieldData.is_featured ?? prev.isFeatured,
+      publishedAt: fieldData.published_at || prev.publishedAt,
+    }));
+    
+    setShowFieldConfig(false);
+    
+    // Execute pending save action if any
+    if (pendingSaveAction) {
+      pendingSaveAction();
+      setPendingSaveAction(null);
+    }
+  };
+
+  const prepareFieldConfigData = (): BlogFieldData => {
+    return {
+      title: formData.title,
+      content: formData.content,
+      excerpt: formData.excerpt,
+      slug: formData.slug,
+      seo_title: formData.seoTitle,
+      meta_description: formData.metaDescription,
+      featured_image: formData.featuredImage,
+      featured_image_alt: formData.featuredImageAlt,
+      thumbnail_image: formData.thumbnailImage,
+      thumbnail_image_alt: formData.thumbnailImageAlt,
+      author_name: formData.authorName,
+      author_image: formData.authorImage,
+      author_bio: formData.authorBio,
+      locale: formData.locale,
+      is_featured: formData.isFeatured,
+      published_at: formData.publishedAt,
+      word_count: contentStats.wordCount,
+      read_time: contentStats.readTime,
+    };
   };
 
   const handleStatusUpdate = async () => {
@@ -336,7 +428,21 @@ export default function EditDraftPage() {
         {/* Excerpt */}
         <div>
           <label htmlFor="excerpt" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Excerpt
+            <span className="flex items-center gap-2">
+              Excerpt
+              {fieldValidation?.missingRecommended.includes('excerpt') && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded">
+                  <ExclamationTriangleIcon className="w-3 h-3" />
+                  Recommended
+                </span>
+              )}
+              {formData.excerpt && !fieldValidation?.missingRecommended.includes('excerpt') && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                  <CheckCircleIcon className="w-3 h-3" />
+                  Complete
+                </span>
+              )}
+            </span>
             {!formData.excerpt && (
               <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
                 (No excerpt found - consider extracting from content)
@@ -372,6 +478,49 @@ export default function EditDraftPage() {
             className="mt-2"
           />
         </div>
+
+        {/* Field Validation Warnings */}
+        {fieldValidation && (fieldValidation.missingRecommended.length > 0 || fieldValidation.warnings.length > 0) && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <InformationCircleIcon className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-2">
+                  Recommended Fields for Webflow Publishing
+                </h3>
+                {fieldValidation.missingRecommended.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">
+                      Missing recommended fields:
+                    </p>
+                    <ul className="list-disc list-inside text-xs text-amber-600 dark:text-amber-400 space-y-1">
+                      {fieldValidation.missingRecommended.map((field) => (
+                        <li key={field}>
+                          {field === 'excerpt' && 'Excerpt (summary of the blog post)'}
+                          {field === 'featured_image' && 'Featured Image (main image for the post)'}
+                          {field === 'author_name' && 'Author Name (required for Webflow)'}
+                          {field === 'meta_description' && 'Meta Description (SEO summary)'}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {fieldValidation.warnings.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">
+                      Warnings:
+                    </p>
+                    <ul className="list-disc list-inside text-xs text-amber-600 dark:text-amber-400 space-y-1">
+                      {fieldValidation.warnings.map((warning, idx) => (
+                        <li key={idx}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Webflow Publishing Fields */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
@@ -476,7 +625,15 @@ export default function EditDraftPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                SEO Title
+                <span className="flex items-center gap-2">
+                  SEO Title
+                  {formData.seoTitle && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                      <CheckCircleIcon className="w-3 h-3" />
+                      Complete
+                    </span>
+                  )}
+                </span>
               </label>
               <input
                 type="text"
@@ -488,7 +645,21 @@ export default function EditDraftPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Meta Description
+                <span className="flex items-center gap-2">
+                  Meta Description
+                  {fieldValidation?.missingRecommended.includes('meta_description') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded">
+                      <ExclamationTriangleIcon className="w-3 h-3" />
+                      Recommended
+                    </span>
+                  )}
+                  {formData.metaDescription && !fieldValidation?.missingRecommended.includes('meta_description') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                      <CheckCircleIcon className="w-3 h-3" />
+                      Complete
+                    </span>
+                  )}
+                </span>
               </label>
               <textarea
                 value={formData.metaDescription}
@@ -503,7 +674,21 @@ export default function EditDraftPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Featured Image URL
+                <span className="flex items-center gap-2">
+                  Featured Image URL
+                  {fieldValidation?.missingRecommended.includes('featured_image') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded">
+                      <ExclamationTriangleIcon className="w-3 h-3" />
+                      Recommended
+                    </span>
+                  )}
+                  {formData.featuredImage && !fieldValidation?.missingRecommended.includes('featured_image') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                      <CheckCircleIcon className="w-3 h-3" />
+                      Complete
+                    </span>
+                  )}
+                </span>
               </label>
               <input
                 type="url"
@@ -554,7 +739,21 @@ export default function EditDraftPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Author Name
+                <span className="flex items-center gap-2">
+                  Author Name
+                  {fieldValidation?.missingRecommended.includes('author_name') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded">
+                      <ExclamationTriangleIcon className="w-3 h-3" />
+                      Recommended
+                    </span>
+                  )}
+                  {formData.authorName && !fieldValidation?.missingRecommended.includes('author_name') && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                      <CheckCircleIcon className="w-3 h-3" />
+                      Complete
+                    </span>
+                  )}
+                </span>
               </label>
               <input
                 type="text"
@@ -626,6 +825,19 @@ export default function EditDraftPage() {
           </p>
         </div>
       </div>
+
+      {/* Field Configuration Modal */}
+      {showFieldConfig && (
+        <BlogFieldConfiguration
+          initialData={prepareFieldConfigData()}
+          onSave={handleFieldConfigSave}
+          onCancel={() => {
+            setShowFieldConfig(false);
+            setPendingSaveAction(null);
+          }}
+          show={showFieldConfig}
+        />
+      )}
     </div>
   );
 }

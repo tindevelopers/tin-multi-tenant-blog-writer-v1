@@ -858,33 +858,23 @@ function QueueItemRow({
             <span className="text-xs">Details</span>
           </button>
           
-          {/* View Blog - show when blog is generated */}
+          {/* View in Editor / Create Draft - show when blog is generated */}
           {hasGeneratedContent && (
             <button
               onClick={() => {
                 if (postId) {
-                  router.push(`/admin/drafts/view/${postId}`);
+                  // Draft exists - go directly to editor
+                  router.push(`/admin/drafts/edit/${postId}`);
                 } else {
+                  // No draft yet - go to detail page to create one
                   onView?.();
                 }
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-              title="View Blog"
-            >
-              <EyeIcon className="w-4 h-4" />
-              <span className="text-xs">View</span>
-            </button>
-          )}
-          
-          {/* Edit Blog - show when blog is generated and has post_id */}
-          {item.status === "generated" && postId && (
-            <button
-              onClick={() => router.push(`/admin/drafts/edit/${postId}`)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
-              title="Edit Blog"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+              title={postId ? "Edit in Drafts" : "Create & Edit Draft"}
             >
               <PencilIcon className="w-4 h-4" />
-              <span className="text-xs">Edit</span>
+              <span className="text-xs">{postId ? "Edit" : "Create Draft"}</span>
             </button>
           )}
           

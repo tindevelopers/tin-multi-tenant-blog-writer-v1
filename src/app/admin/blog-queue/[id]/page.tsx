@@ -10,7 +10,6 @@ import {
   XMarkIcon,
   DocumentCheckIcon,
   PencilIcon,
-  EyeIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   CheckCircleIcon,
@@ -18,11 +17,7 @@ import {
 import { BlogGenerationQueueItem, type ProgressUpdate } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
-import TipTapEditor from "@/components/blog-writer/TipTapEditor";
-import { Modal } from "@/components/ui/modal/index";
 import { logger } from "@/utils/logger";
-import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
-import { extractBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -34,12 +29,8 @@ export default function QueueItemDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     status: true,
-    content: true,
     metadata: false,
   });
-  const [showViewBlogModal, setShowViewBlogModal] = useState(false);
-  const [showFieldConfig, setShowFieldConfig] = useState(false);
-  const [blogFieldData, setBlogFieldData] = useState<BlogFieldData>({});
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -177,66 +168,25 @@ export default function QueueItemDetailPage() {
   const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
   const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
 
-  // Prepare field configuration data from queue item
-  const prepareFieldConfigData = (): BlogFieldData => {
-    return extractBlogFields({
-      title: item?.generated_title || item?.topic || '',
-      content: item?.generated_content || '',
-      excerpt: '',
-      metadata: {},
-      seo_data: {},
-      word_count: item?.word_count ?? undefined,
-    });
-  };
-
-  const handleFieldConfigSave = (fieldData: BlogFieldData) => {
-    setBlogFieldData(fieldData);
-    setShowFieldConfig(false);
-    // After saving field config, proceed with draft creation
-    handleCreateDraftWithFields(fieldData);
-  };
-
-  const handleCreateDraftWithFields = async (fieldData: BlogFieldData) => {
+  const handleCreateDraft = async () => {
     if (!item) return;
     
     try {
+      // If draft already exists, redirect to edit
+      if (postId) {
+        router.push(`/admin/drafts/edit/${postId}`);
+        return;
+      }
+      
+      // Create draft using save-content endpoint (which will auto-extract fields)
       const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: item.generated_content,
           title: item.generated_title || item.topic,
-          excerpt: fieldData.excerpt || '',
+          excerpt: item.generation_metadata?.excerpt || '',
           queue_item_id: queueId,
-          // Include all configured fields
-          slug: fieldData.slug,
-          author_name: fieldData.author_name,
-          author_image: fieldData.author_image,
-          author_bio: fieldData.author_bio,
-          thumbnail_image: fieldData.thumbnail_image,
-          thumbnail_image_alt: fieldData.thumbnail_image_alt,
-          locale: fieldData.locale || 'en',
-          is_featured: fieldData.is_featured,
-          published_at: fieldData.published_at,
-          seo_data: {
-            meta_title: fieldData.seo_title || item.generated_title || item.topic,
-            meta_description: fieldData.meta_description || '',
-          },
-          metadata: {
-            slug: fieldData.slug,
-            featured_image: fieldData.featured_image,
-            featured_image_alt: fieldData.featured_image_alt,
-            thumbnail_image: fieldData.thumbnail_image,
-            thumbnail_image_alt: fieldData.thumbnail_image_alt,
-            author_name: fieldData.author_name,
-            author_image: fieldData.author_image,
-            author_bio: fieldData.author_bio,
-            locale: fieldData.locale || 'en',
-            is_featured: fieldData.is_featured,
-            published_at: fieldData.published_at,
-            word_count: item.word_count,
-            read_time: fieldData.read_time,
-          },
         }),
       });
       
@@ -300,17 +250,6 @@ export default function QueueItemDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap relative z-10" style={{ pointerEvents: 'auto' }}>
-          {/* View Blog button - show when blog is generated */}
-          {hasGeneratedContent && (
-            <button
-              onClick={() => setShowViewBlogModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors relative z-10"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <EyeIcon className="w-5 h-5" />
-              View Blog
-            </button>
-          )}
           {/* Edit in Drafts button - redirects to draft editor */}
           {hasGeneratedContent && postId && (
             <button
@@ -322,19 +261,15 @@ export default function QueueItemDetailPage() {
               Edit in Drafts
             </button>
           )}
-          {/* Create Draft button - if content exists but no post_id yet */}
+          {/* Create & Edit Draft button - if content exists but no post_id yet */}
           {hasGeneratedContent && !postId && (
             <button
-              onClick={() => {
-                // Open field configuration modal first
-                setBlogFieldData(prepareFieldConfigData());
-                setShowFieldConfig(true);
-              }}
+              onClick={handleCreateDraft}
               className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-50"
               style={{ pointerEvents: 'auto', position: 'relative' }}
             >
               <PencilIcon className="w-5 h-5" />
-              Create Draft
+              Create & Edit Draft
             </button>
           )}
           {/* Regenerate button - show when blog is generated */}
@@ -509,58 +444,37 @@ export default function QueueItemDetailPage() {
         )}
       </div>
 
-      {/* Generated Content Preview */}
-      {item.generated_content && (
+      {/* Generation Complete - Action Card */}
+      {hasGeneratedContent && (
         <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
           <div className="p-6">
-            <div className="flex items-center justify-between mb-4 relative z-50" style={{ pointerEvents: 'auto', position: 'relative' }}>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Content Preview
-              </h2>
-              {postId ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    router.push(`/admin/drafts/edit/${postId}`);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-50"
-                  style={{ pointerEvents: 'auto', position: 'relative' }}
-                >
-                  <PencilIcon className="w-4 h-4" />
-                  Edit in Drafts
-                </button>
-              ) : (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    // Open field configuration modal first
-                    setBlogFieldData(prepareFieldConfigData());
-                    setShowFieldConfig(true);
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm relative z-50"
-                  style={{ pointerEvents: 'auto', position: 'relative' }}
-                >
-                  <PencilIcon className="w-4 h-4" />
-                  Create Draft to Edit
-                </button>
-              )}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  Blog Generation Complete
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {postId 
+                    ? "Your draft has been created and is ready to edit."
+                    : "Click below to create a draft and start editing your blog post."
+                  }
+                </p>
+              </div>
+              <button
+                onClick={handleCreateDraft}
+                className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
+              >
+                <PencilIcon className="w-5 h-5" />
+                {postId ? "Edit in Drafts" : "Create & Edit Draft"}
+              </button>
             </div>
-            <div 
-              className="prose dark:prose-invert max-w-none max-h-96 overflow-y-auto relative" 
-              style={{ zIndex: 1 }}
-            >
-              <TipTapEditor
-                content={item.generated_content}
-                onChange={() => {}}
-                editable={false}
-                className="min-h-[200px]"
-              />
-            </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
-              💡 To edit content, add images, and format your blog, use the &quot;Edit in Drafts&quot; button above.
-            </p>
+            {postId && (
+              <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <p className="text-sm text-green-800 dark:text-green-200">
+                  ✅ Draft created successfully. All fields have been auto-populated from the generated content.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -619,94 +533,6 @@ export default function QueueItemDetailPage() {
         </div>
       )}
 
-      {/* View Blog Modal */}
-      {showViewBlogModal && item?.generated_content && (
-        <Modal
-          isOpen={showViewBlogModal}
-          onClose={() => setShowViewBlogModal(false)}
-          className="max-w-5xl max-h-[90vh]"
-        >
-          <div className="p-6">
-            {/* Modal Header */}
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {item.generated_title || item.topic}
-              </h2>
-            </div>
-            
-            {/* Blog Content */}
-            <div className="max-h-[70vh] overflow-y-auto mb-6">
-              <TipTapEditor
-                content={item.generated_content}
-                onChange={() => {}}
-                editable={false}
-                className="min-h-[400px]"
-              />
-            </div>
-            
-            {/* Modal Footer */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={() => setShowViewBlogModal(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-              >
-                Close
-              </button>
-              {postId ? (
-                <button
-                  onClick={() => {
-                    setShowViewBlogModal(false);
-                    router.push(`/admin/drafts/edit/${postId}`);
-                  }}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
-                >
-                  <PencilIcon className="w-4 h-4" />
-                  Edit in Drafts
-                </button>
-              ) : (
-                <button
-                  onClick={async () => {
-                    try {
-                      const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          content: item.generated_content,
-                          title: item.generated_title || item.topic,
-                          excerpt: "",
-                          queue_item_id: queueId,
-                        }),
-                      });
-                      if (response.ok) {
-                        const result = await response.json();
-                        if (result.post_id) {
-                          setShowViewBlogModal(false);
-                          router.push(`/admin/drafts/edit/${result.post_id}`);
-                        }
-                      }
-                    } catch (err) {
-                      logger.error("Error creating draft:", err);
-                      alert("Failed to create draft. Please try again.");
-                    }
-                  }}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center gap-2"
-                >
-                  <PencilIcon className="w-4 h-4" />
-                  Create Draft to Edit
-                </button>
-              )}
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* Field Configuration Modal */}
-      <BlogFieldConfiguration
-        initialData={blogFieldData}
-        onSave={handleFieldConfigSave}
-        onCancel={() => setShowFieldConfig(false)}
-        show={showFieldConfig}
-      />
     </div>
   );
 }
