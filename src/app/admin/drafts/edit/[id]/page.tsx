@@ -6,9 +6,36 @@ import { useBlogPost } from "@/hooks/useBlogPosts";
 import { useBlogPostMutations } from "@/hooks/useBlogPosts";
 import { 
   ArrowLeftIcon,
-  CheckIcon
+  CheckIcon,
+  ArrowsRightLeftIcon,
+  SparklesIcon
 } from "@heroicons/react/24/outline";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
+import { extractBlogFields, generateSlug, calculateReadTime } from "@/lib/blog-field-validator";
+import { dataForSEOContentGenerationClient } from "@/lib/dataforseo-content-generation-client";
+import { logger } from "@/utils/logger";
+
+type DraftFormState = {
+  title: string;
+  content: string;
+  excerpt: string;
+  status: 'draft' | 'published' | 'scheduled' | 'archived';
+  slug: string;
+  seoTitle: string;
+  metaDescription: string;
+  featuredImage: string;
+  featuredImageAlt: string;
+  thumbnailImage: string;
+  thumbnailImageAlt: string;
+  authorName: string;
+  authorImage: string;
+  authorBio: string;
+  locale: string;
+  isFeatured: boolean;
+  publishedAt: string;
+};
+
+const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ");
 
 export default function EditDraftPage() {
   const router = useRouter();
@@ -21,28 +48,153 @@ export default function EditDraftPage() {
   const [saving, setSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<DraftFormState>({
     title: '',
     content: '',
     excerpt: '',
-    status: 'draft' as 'draft' | 'published' | 'scheduled' | 'archived'
+    status: 'draft',
+    slug: '',
+    seoTitle: '',
+    metaDescription: '',
+    featuredImage: '',
+    featuredImageAlt: '',
+    thumbnailImage: '',
+    thumbnailImageAlt: '',
+    authorName: '',
+    authorImage: '',
+    authorBio: '',
+    locale: 'en',
+    isFeatured: false,
+    publishedAt: ''
   });
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [contentStats, setContentStats] = useState({ wordCount: 0, readTime: 1 });
 
   useEffect(() => {
     if (draft) {
+      const metadata = (draft.metadata as Record<string, unknown>) || {};
+      const seoData = (draft.seo_data as Record<string, unknown>) || {};
+      const extractedFields = extractBlogFields({
+        title: draft.title || '',
+        content: draft.content || '',
+        excerpt: draft.excerpt || undefined,
+        metadata,
+        seo_data: seoData,
+        word_count: metadata.word_count as number | undefined,
+      });
+
       setFormData({
         title: draft.title || '',
         content: draft.content || '',
-        excerpt: draft.excerpt || '',
-        status: draft.status || 'draft'
+        excerpt: draft.excerpt || extractedFields.excerpt || '',
+        status: draft.status || 'draft',
+        slug: extractedFields.slug || '',
+        seoTitle: extractedFields.seo_title || draft.title || '',
+        metaDescription: extractedFields.meta_description || draft.excerpt || '',
+        featuredImage: extractedFields.featured_image || '',
+        featuredImageAlt: extractedFields.featured_image_alt || '',
+        thumbnailImage: extractedFields.thumbnail_image || '',
+        thumbnailImageAlt: extractedFields.thumbnail_image_alt || '',
+        authorName: extractedFields.author_name || '',
+        authorImage: extractedFields.author_image || '',
+        authorBio: extractedFields.author_bio || '',
+        locale: extractedFields.locale || 'en',
+        isFeatured: extractedFields.is_featured ?? false,
+        publishedAt: extractedFields.published_at || draft.published_at || '',
       });
     }
   }, [draft]);
 
+  useEffect(() => {
+    const plainText = stripHtml(formData.content || '');
+    const words = plainText ? plainText.split(/\s+/).filter((word) => word.length > 0) : [];
+    setContentStats({
+      wordCount: words.length,
+      readTime: Math.max(1, calculateReadTime(words.length || 1)),
+    });
+  }, [formData.content]);
+
+  const buildMetadataPayload = () => {
+    const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
+    const metadataPayload: Record<string, unknown> = {
+      slug: formData.slug || generateSlug(formData.title || 'untitled'),
+      locale: formData.locale || 'en',
+      is_featured: formData.isFeatured,
+      read_time: contentStats.readTime,
+      word_count: contentStats.wordCount,
+    };
+
+    if (formData.featuredImage) metadataPayload.featured_image = formData.featuredImage;
+    if (formData.featuredImageAlt) metadataPayload.featured_image_alt = formData.featuredImageAlt;
+    if (formData.thumbnailImage) metadataPayload.thumbnail_image = formData.thumbnailImage;
+    if (formData.thumbnailImageAlt) metadataPayload.thumbnail_image_alt = formData.thumbnailImageAlt;
+    if (formData.authorName) metadataPayload.author_name = formData.authorName;
+    if (formData.authorImage) metadataPayload.author_image = formData.authorImage;
+    if (formData.authorBio) metadataPayload.author_bio = formData.authorBio;
+    if (formData.publishedAt) metadataPayload.published_at = formData.publishedAt;
+
+    return {
+      ...existingMetadata,
+      ...metadataPayload,
+    };
+  };
+
+  const handleAutoGenerateFields = async () => {
+    if (!formData.content) {
+      alert('Add content before generating fields.');
+      return;
+    }
+
+    setAiGenerating(true);
+
+    try {
+      const plainText = stripHtml(formData.content).trim();
+      const excerptFallback = formData.excerpt && formData.excerpt.trim().length > 0
+        ? formData.excerpt
+        : plainText.substring(0, 220).concat(plainText.length > 220 ? '…' : '');
+
+      const meta = await dataForSEOContentGenerationClient.generateMetaTags(plainText || formData.title || '');
+
+      setFormData(prev => ({
+        ...prev,
+        slug: prev.slug || generateSlug(prev.title || 'untitled'),
+        seoTitle: meta.meta_title || prev.seoTitle || prev.title,
+        metaDescription: meta.meta_description || prev.metaDescription || excerptFallback,
+        excerpt: prev.excerpt || excerptFallback,
+      }));
+    } catch (error) {
+      logger.logError(error instanceof Error ? error : new Error('Failed to auto-generate fields'), {
+        context: 'edit-draft-generate-fields',
+      });
+      alert('Unable to generate fields automatically. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const buildSeoPayload = () => {
+    const existingSeo = (draft?.seo_data as Record<string, unknown>) || {};
+    return {
+      ...existingSeo,
+      meta_title: formData.seoTitle || formData.title,
+      meta_description: formData.metaDescription || formData.excerpt,
+    };
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
-      const success = await updatePost(draftId, formData);
+      const payload = {
+        title: formData.title,
+        content: formData.content,
+        excerpt: formData.excerpt,
+        status: formData.status,
+        metadata: buildMetadataPayload(),
+        seo_data: buildSeoPayload(),
+        published_at: formData.publishedAt || null,
+      };
+
+      const success = await updatePost(draftId, payload);
       if (success) {
         alert('Draft saved successfully!');
         router.push('/admin/drafts');
@@ -60,7 +212,20 @@ export default function EditDraftPage() {
   const handleStatusUpdate = async () => {
     try {
       setStatusSaving(true);
-      const result = await updatePost(draftId, { status: formData.status });
+      const payload: { status: DraftFormState['status']; published_at?: string | null } = {
+        status: formData.status,
+      };
+
+      if (formData.status === 'published') {
+        payload.published_at = formData.publishedAt || new Date().toISOString();
+        if (payload.published_at) {
+          handleInputChange('publishedAt', payload.published_at);
+        }
+      } else if (formData.publishedAt) {
+        payload.published_at = formData.publishedAt;
+      }
+
+      const result = await updatePost(draftId, payload);
       if (result) {
         alert('Status updated successfully!');
         router.refresh();
@@ -75,7 +240,7 @@ export default function EditDraftPage() {
     }
   };
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = <K extends keyof DraftFormState>(field: K, value: DraftFormState[K]) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -206,6 +371,229 @@ export default function EditDraftPage() {
             editable={true}
             className="mt-2"
           />
+        </div>
+
+        {/* Webflow Publishing Fields */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Webflow Publishing Fields</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Configure all fields required before syncing to Webflow.
+              </p>
+            </div>
+            <button
+              onClick={handleAutoGenerateFields}
+              disabled={aiGenerating || !formData.content}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              title={!formData.content ? 'Add content before using AI' : 'Let AI suggest slug and meta tags'}
+            >
+              {aiGenerating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <SparklesIcon className="w-4 h-4" />
+                  Generate Fields with AI
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Slug
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.slug}
+                  onChange={(e) => handleInputChange('slug', e.target.value)}
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  placeholder="auto-generated-slug"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('slug', generateSlug(formData.title || ''))}
+                  className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                  title="Regenerate slug from title"
+                >
+                  <ArrowsRightLeftIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Locale
+              </label>
+              <select
+                value={formData.locale}
+                onChange={(e) => handleInputChange('locale', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              >
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="it">Italian</option>
+                <option value="pt">Portuguese</option>
+                <option value="zh">Chinese</option>
+                <option value="ja">Japanese</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Featured Post
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={formData.isFeatured}
+                  onChange={(e) => handleInputChange('isFeatured', e.target.checked)}
+                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Highlight on featured sections.
+                </span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Published Date
+              </label>
+              <input
+                type="datetime-local"
+                value={formData.publishedAt ? new Date(formData.publishedAt).toISOString().slice(0, 16) : ''}
+                onChange={(e) => handleInputChange('publishedAt', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                SEO Title
+              </label>
+              <input
+                type="text"
+                value={formData.seoTitle}
+                onChange={(e) => handleInputChange('seoTitle', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="Compelling headline for search results"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Meta Description
+              </label>
+              <textarea
+                value={formData.metaDescription}
+                onChange={(e) => handleInputChange('metaDescription', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white resize-y"
+                placeholder="150-160 character summary for SERPs"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Featured Image URL
+              </label>
+              <input
+                type="url"
+                value={formData.featuredImage}
+                onChange={(e) => handleInputChange('featuredImage', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="https://example.com/image.jpg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Featured Image Alt Text
+              </label>
+              <input
+                type="text"
+                value={formData.featuredImageAlt}
+                onChange={(e) => handleInputChange('featuredImageAlt', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="Describe the featured image"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Thumbnail Image URL
+              </label>
+              <input
+                type="url"
+                value={formData.thumbnailImage}
+                onChange={(e) => handleInputChange('thumbnailImage', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="https://example.com/thumbnail.jpg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Thumbnail Image Alt Text
+              </label>
+              <input
+                type="text"
+                value={formData.thumbnailImageAlt}
+                onChange={(e) => handleInputChange('thumbnailImageAlt', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="Describe the thumbnail image"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Author Name
+              </label>
+              <input
+                type="text"
+                value={formData.authorName}
+                onChange={(e) => handleInputChange('authorName', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="e.g., Jane Smith"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Author Image URL
+              </label>
+              <input
+                type="url"
+                value={formData.authorImage}
+                onChange={(e) => handleInputChange('authorImage', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                placeholder="https://example.com/author.jpg"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Author Bio
+              </label>
+              <textarea
+                value={formData.authorBio}
+                onChange={(e) => handleInputChange('authorBio', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white resize-y"
+                placeholder="Short bio shown with the post"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-6 text-sm text-gray-600 dark:text-gray-400">
+            <span>{contentStats.wordCount.toLocaleString()} words</span>
+            <span>≈ {contentStats.readTime} min read</span>
+          </div>
         </div>
 
         {/* Status */}

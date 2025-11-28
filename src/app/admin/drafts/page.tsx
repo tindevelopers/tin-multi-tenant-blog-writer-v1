@@ -166,6 +166,29 @@ export default function DraftsPage() {
     }
   };
 
+  const resolveAuthorDisplay = (draft: (typeof drafts)[number]) => {
+    const metadata = (draft.metadata as Record<string, unknown>) || {};
+    const authorName = typeof metadata.author_name === 'string' && metadata.author_name.trim().length > 0
+      ? metadata.author_name
+      : draft.created_by_user?.full_name ||
+        draft.created_by_user?.email ||
+        (draft.created_by ? `User ${draft.created_by.substring(0, 6)}` : 'System Writer');
+
+    const authorImage = typeof metadata.author_image === 'string' ? metadata.author_image : null;
+
+    return { authorName, authorImage };
+  };
+
+  const metadataHasDifferentAuthorName = (draft: (typeof drafts)[number]) => {
+    const metadata = (draft.metadata as Record<string, unknown>) || {};
+    const metaAuthor = typeof metadata.author_name === 'string' ? metadata.author_name : null;
+    return Boolean(
+      metaAuthor &&
+      draft.created_by_user?.full_name &&
+      metaAuthor.trim() !== draft.created_by_user.full_name.trim()
+    );
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -412,12 +435,34 @@ export default function DraftsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <UserIcon className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-                      <span className="text-base text-gray-900 dark:text-white font-medium truncate max-w-[200px]">
-                        {draft.created_by || 'Unknown'}
-                      </span>
-                    </div>
+                    {(() => {
+                      const { authorName, authorImage } = resolveAuthorDisplay(draft);
+                      return (
+                        <div className="flex items-center gap-2">
+                          {authorImage ? (
+                            <img
+                              src={authorImage}
+                              alt={authorName}
+                              className="w-8 h-8 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                              <UserIcon className="w-4 h-4 text-gray-500 dark:text-gray-300" />
+                            </div>
+                          )}
+                          <div className="flex flex-col">
+                            <span className="text-base text-gray-900 dark:text-white font-medium truncate max-w-[200px]">
+                              {authorName}
+                            </span>
+                            {draft.created_by_user?.full_name && metadataHasDifferentAuthorName(draft) && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {draft.created_by_user.full_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 text-base text-gray-700 dark:text-gray-300">

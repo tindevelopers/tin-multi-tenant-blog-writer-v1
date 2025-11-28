@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       
       let query = supabase
         .from('blog_posts')
-        .select('*')
+        .select('*, created_by_user:users!blog_posts_created_by_fkey(user_id, email, full_name)')
         .eq('org_id', orgId);
       
       if (status !== 'all') {
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     
     let query = supabase
       .from('blog_posts')
-      .select('*')
+      .select('*, created_by_user:users!blog_posts_created_by_fkey(user_id, email, full_name)')
       .eq('org_id', orgId);
     
     if (status !== 'all') {

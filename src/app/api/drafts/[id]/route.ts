@@ -68,20 +68,42 @@ export async function PUT(
 
     const { id: draftId } = await params;
     const body = await request.json();
-    const { title, content, excerpt, status } = body;
+    const { 
+      title, 
+      content, 
+      excerpt, 
+      status, 
+      metadata, 
+      seo_data, 
+      published_at 
+    } = body as {
+      title?: string;
+      content?: string;
+      excerpt?: string;
+      status?: 'draft' | 'published' | 'scheduled' | 'archived';
+      metadata?: Record<string, unknown>;
+      seo_data?: Record<string, unknown>;
+      published_at?: string | null;
+    };
 
     logger.debug('📝 Updating draft:', draftId);
+
+    const updates: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (title !== undefined) updates.title = title;
+    if (content !== undefined) updates.content = content;
+    if (excerpt !== undefined) updates.excerpt = excerpt;
+    if (status) updates.status = status;
+    if (metadata !== undefined) updates.metadata = metadata;
+    if (seo_data !== undefined) updates.seo_data = seo_data;
+    if (published_at !== undefined) updates.published_at = published_at;
 
     // Update the draft - RLS policies will ensure user can only update their org's posts
     const { data: updatedDraft, error: updateError } = await supabase
       .from('blog_posts')
-      .update({
-        title,
-        content,
-        excerpt,
-        status: status || 'draft',
-        updated_at: new Date().toISOString()
-      })
+      .update(updates)
       .eq('post_id', draftId)
       .select()
       .single();
