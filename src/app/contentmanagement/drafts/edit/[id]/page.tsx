@@ -434,9 +434,8 @@ export default function EditDraftPage() {
       <div className={`grid gap-6 transition-all duration-300 ${sidebarOpen ? 'lg:grid-cols-[1fr_400px]' : 'lg:grid-cols-1'}`}>
         {/* Main Content Area */}
         <div className={`transition-all duration-300 ${sidebarOpen ? 'max-w-none' : 'max-w-7xl mx-auto'}`}>
-
-      {/* Form */}
-      <div className="space-y-6">
+          {/* Form */}
+          <div className="space-y-6">
         {/* Title */}
         <div>
           <label htmlFor="title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -851,6 +850,7 @@ export default function EditDraftPage() {
             Updating the status removes this post from the Draft queue when set to Published/Scheduled and makes it appear in the Publishing dashboard.
           </p>
         </div>
+          </div>
         </div>
 
         {/* Content Score Sidebar */}
