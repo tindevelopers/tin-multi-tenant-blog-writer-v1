@@ -61,7 +61,6 @@ export default function BlogFieldConfiguration({
           >
             <XMarkIcon className="w-6 h-6" />
           </button>
-        </button>
         </div>
 
         {/* Validation Summary */}
