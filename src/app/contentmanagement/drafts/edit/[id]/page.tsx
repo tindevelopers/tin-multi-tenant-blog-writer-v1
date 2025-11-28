@@ -8,7 +8,9 @@ import {
   ArrowLeftIcon,
   CheckIcon,
   ArrowsRightLeftIcon,
-  SparklesIcon
+  SparklesIcon,
+  XMarkIcon,
+  ChevronRightIcon
 } from "@heroicons/react/24/outline";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 import { extractBlogFields, generateSlug, calculateReadTime, validateBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
@@ -16,6 +18,7 @@ import { dataForSEOContentGenerationClient } from "@/lib/dataforseo-content-gene
 import { logger } from "@/utils/logger";
 import { ExclamationTriangleIcon, InformationCircleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
+import { ContentInsightsSidebar } from "@/components/content/ContentInsightsSidebar";
 
 type DraftFormState = {
   title: string;
@@ -74,6 +77,7 @@ export default function EditDraftPage() {
   const [fieldValidation, setFieldValidation] = useState<ReturnType<typeof validateBlogFields> | null>(null);
   const [showFieldConfig, setShowFieldConfig] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     if (draft) {
@@ -375,7 +379,7 @@ export default function EditDraftPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6">
       {/* Header */}
       <div className="mb-8">
         <button
@@ -396,6 +400,24 @@ export default function EditDraftPage() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
+            {/* Toggle Sidebar Button */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              title={sidebarOpen ? "Hide Content Score" : "Show Content Score"}
+            >
+              {sidebarOpen ? (
+                <>
+                  <XMarkIcon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Hide Score</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRightIcon className="w-4 h-4" />
+                  <span className="hidden sm:inline">Show Score</span>
+                </>
+              )}
+            </button>
             <button
               onClick={handleSave}
               disabled={saving}
@@ -407,6 +429,11 @@ export default function EditDraftPage() {
           </div>
         </div>
       </div>
+
+      {/* Two Column Layout: Content Editor + Sidebar */}
+      <div className={`grid gap-6 transition-all duration-300 ${sidebarOpen ? 'lg:grid-cols-[1fr_400px]' : 'lg:grid-cols-1'}`}>
+        {/* Main Content Area */}
+        <div className={`transition-all duration-300 ${sidebarOpen ? 'max-w-none' : 'max-w-7xl mx-auto'}`}>
 
       {/* Form */}
       <div className="space-y-6">
@@ -824,6 +851,22 @@ export default function EditDraftPage() {
             Updating the status removes this post from the Draft queue when set to Published/Scheduled and makes it appear in the Publishing dashboard.
           </p>
         </div>
+        </div>
+
+        {/* Content Score Sidebar */}
+        {sidebarOpen && (
+          <div className="lg:sticky lg:top-6 lg:self-start">
+            <ContentInsightsSidebar
+              contentScore={fieldValidation?.isValid ? 75 : 57}
+              wordCount={contentStats.wordCount}
+              readingTimeMinutes={contentStats.readTime}
+              metadata={draft?.metadata as Record<string, any> | null}
+              seoData={draft?.seo_data as Record<string, any> | null}
+              keywords={[]}
+              topic={formData.title || draft?.title || undefined}
+            />
+          </div>
+        )}
       </div>
 
       {/* Field Configuration Modal */}
