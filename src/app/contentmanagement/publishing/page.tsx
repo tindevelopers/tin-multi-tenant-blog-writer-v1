@@ -119,6 +119,8 @@ export default function PublishingPage() {
     const platform = platformSelections[postId] || "webflow";
     try {
       setPublishingPostId(postId);
+      
+      // Step 1: Create publishing record
       const response = await fetch("/api/blog-publishing", {
         method: "POST",
         headers: {
@@ -133,12 +135,12 @@ export default function PublishingPage() {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || "Failed to create publishing record");
+        throw new Error(error.error || error.details || "Failed to create publishing record");
       }
 
       const publishingRecord = await response.json();
       
-      // Trigger actual publishing to platform
+      // Step 2: Trigger actual publishing to platform (with enhanced fields)
       try {
         const publishResponse = await fetch(`/api/blog-publishing/${publishingRecord.publishing_id}/publish`, {
           method: "POST",
@@ -158,20 +160,26 @@ export default function PublishingPage() {
         const publishResult = await publishResponse.json();
         
         // Wait a moment for database to commit the update
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        alert(
-          isDraft 
-            ? "Blog post saved as draft on platform. Track progress below."
-            : "Blog post published successfully! Track progress below."
-        );
+        // Show success message with details
+        const successMessage = isDraft 
+          ? `✅ Blog post saved as draft on ${platform}.\n\n` +
+            (publishResult.result?.itemId ? `Item ID: ${publishResult.result.itemId}\n` : '') +
+            `Track progress in the publishing table below.`
+          : `✅ Blog post published successfully to ${platform}!\n\n` +
+            (publishResult.result?.itemId ? `Item ID: ${publishResult.result.itemId}\n` : '') +
+            (publishResult.result?.url ? `URL: ${publishResult.result.url}\n` : '') +
+            `\nEnhanced fields (SEO title, meta description, slug, alt text) were automatically optimized using OpenAI.`;
+        
+        alert(successMessage);
       } catch (publishErr) {
         // Publishing record was created, but actual publish failed
         console.error("Error publishing to platform:", publishErr);
+        const errorMessage = publishErr instanceof Error ? publishErr.message : "Unknown error";
         alert(
-          `Publishing record created, but failed to publish to platform: ${
-            publishErr instanceof Error ? publishErr.message : "Unknown error"
-          }. You can retry from the publishing table below.`
+          `⚠️ Publishing record created, but failed to publish to ${platform}:\n\n${errorMessage}\n\n` +
+          `You can retry from the publishing table below.`
         );
       }
       
@@ -182,11 +190,8 @@ export default function PublishingPage() {
       ]);
     } catch (err) {
       console.error("Error starting publishing:", err);
-      alert(
-        err instanceof Error
-          ? err.message
-          : "Failed to start publishing. Please try again."
-      );
+      const errorMessage = err instanceof Error ? err.message : "Failed to start publishing. Please try again.";
+      alert(`❌ Error: ${errorMessage}`);
     } finally {
       setPublishingPostId(null);
     }
@@ -248,6 +253,10 @@ export default function PublishingPage() {
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               These posts have status "Published" and can now be sent to Webflow, WordPress, or Shopify.
+              <br />
+              <span className="text-xs text-brand-600 dark:text-brand-400 mt-1 inline-block">
+                ✨ Enhanced fields (SEO title, meta description, slug, alt text) will be automatically optimized using OpenAI before publishing.
+              </span>
             </p>
           </div>
           <button
@@ -327,13 +336,24 @@ export default function PublishingPage() {
                       </select>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleStartPublishing(post.post_id)}
-                        disabled={publishingPostId === post.post_id}
-                        className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                      >
-                        {publishingPostId === post.post_id ? "Starting..." : "Send to Publishing"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleStartPublishing(post.post_id, false)}
+                          disabled={publishingPostId === post.post_id}
+                          className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                          title="Publish immediately to Webflow with enhanced SEO fields"
+                        >
+                          {publishingPostId === post.post_id ? "Publishing..." : "Publish Now"}
+                        </button>
+                        <button
+                          onClick={() => handleStartPublishing(post.post_id, true)}
+                          disabled={publishingPostId === post.post_id}
+                          className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                          title="Save as draft on Webflow"
+                        >
+                          Draft
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -459,10 +479,13 @@ export default function PublishingPage() {
                   Published At
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  URL
+                  Platform URL / ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Sync Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Mode
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Actions
@@ -579,18 +602,25 @@ function PublishingRow({
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
-        {publishing.platform_url ? (
-          <a
-            href={publishing.platform_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
-          >
-            View
-          </a>
-        ) : (
-          <span className="text-sm text-gray-400">—</span>
-        )}
+        <div className="flex flex-col gap-1">
+          {publishing.platform_url ? (
+            <a
+              href={publishing.platform_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 font-medium"
+            >
+              View Live →
+            </a>
+          ) : (
+            <span className="text-sm text-gray-400">—</span>
+          )}
+          {publishing.platform_post_id && (
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+              ID: {publishing.platform_post_id.substring(0, 8)}...
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <SyncStatusBadge 
@@ -600,16 +630,30 @@ function PublishingRow({
           lastSyncedAt={(publishing as any).last_synced_at}
         />
       </td>
+      <td className="px-6 py-4 whitespace-nowrap">
+        <DraftModeBadge 
+          isDraft={(publishing as any).is_draft}
+          platformDraftStatus={(publishing as any).platform_draft_status}
+        />
+      </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        {publishing.status === "failed" && (
-          <button
-            onClick={onRetry}
-            className="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 flex items-center gap-1"
-          >
-            <ArrowPathIcon className="w-4 h-4" />
-            Retry
-          </button>
-        )}
+        <div className="flex items-center justify-end gap-2">
+          {publishing.status === "failed" && (
+            <button
+              onClick={onRetry}
+              className="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
+              title="Retry publishing with enhanced fields"
+            >
+              <ArrowPathIcon className="w-4 h-4" />
+              Retry
+            </button>
+          )}
+          {publishing.status === "published" && publishing.platform === "webflow" && (
+            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1" title="Enhanced fields were optimized using OpenAI">
+              ✨ Enhanced
+            </span>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -628,6 +672,33 @@ function PlatformStatusBadge({ status }: { status: PlatformStatus }) {
     >
       <span>{meta.icon}</span>
       {meta.label}
+    </span>
+  );
+}
+
+function DraftModeBadge({ 
+  isDraft, 
+  platformDraftStatus 
+}: { 
+  isDraft?: boolean | null;
+  platformDraftStatus?: string | null;
+}) {
+  if (isDraft || platformDraftStatus === 'draft') {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+        title="Published as draft on platform"
+      >
+        📝 Draft
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200"
+      title="Published live on platform"
+    >
+      🌐 Live
     </span>
   );
 }
