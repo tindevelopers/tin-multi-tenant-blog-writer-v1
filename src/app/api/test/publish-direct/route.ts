@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/service';
+import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 import { publishBlogToWebflow } from '@/lib/integrations/webflow-publish';
 import { enhanceBlogFields } from '@/lib/integrations/enhance-fields';
@@ -14,6 +14,25 @@ import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environme
 export async function POST(request: NextRequest) {
   try {
     logger.info('🧪 Direct publishing test endpoint called');
+
+    // Authenticate user
+    const supabase = await createClient(request);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get user's org_id
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!userProfile?.org_id) {
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+    }
 
     // Get request body
     const body = await request.json().catch(() => ({}));
@@ -35,7 +54,7 @@ export async function POST(request: NextRequest) {
       featured_image = 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200',
       collection_id = '6928d5ea7146ca3510367bcc',
       site_id,
-      org_id = '00000000-0000-0000-0000-000000000001', // Default org
+      org_id = userProfile.org_id, // Use authenticated user's org_id
     } = body;
 
     logger.info('Test parameters:', {

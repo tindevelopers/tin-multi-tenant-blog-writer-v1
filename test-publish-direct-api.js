@@ -18,11 +18,17 @@ async function testDirectPublish() {
   try {
     console.log('\n🚀 Calling /api/test/publish-direct...\n');
 
+    console.log('Making request to:', `${BASE_URL}/api/test/publish-direct`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+    
     const response = await fetch(`${BASE_URL}/api/test/publish-direct`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      signal: controller.signal,
       body: JSON.stringify({
         title: 'Test Blog: Direct Publishing with Enhanced Fields',
         content: `
@@ -43,8 +49,13 @@ async function testDirectPublish() {
       }),
     });
 
+    clearTimeout(timeoutId);
+    
+    console.log('Response status:', response.status);
+    
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('Error response:', errorText);
       throw new Error(`HTTP ${response.status}: ${errorText}`);
     }
 
