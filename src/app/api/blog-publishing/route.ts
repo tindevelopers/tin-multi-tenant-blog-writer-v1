@@ -327,8 +327,10 @@ export async function POST(request: NextRequest) {
         scheduled_at: scheduled_at || null,
         published_by: user.id,
         publish_metadata: finalPublishMetadata,
-        is_draft: is_draft,
-        platform_draft_status: is_draft ? 'draft' : null,
+        // Only include is_draft and platform_draft_status if columns exist
+        // Migration 003/005 should add these, but handle gracefully if not applied
+        ...(is_draft !== undefined ? { is_draft: is_draft } : {}),
+        ...(is_draft !== undefined ? { platform_draft_status: is_draft ? 'draft' : null } : {}),
         sync_status: 'never_synced',
         retry_count: 0,
       })
