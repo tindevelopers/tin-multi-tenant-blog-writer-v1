@@ -586,7 +586,7 @@ const AppSidebar: React.FC = () => {
           ? "left-0"
           : "-left-72 lg:left-0 lg:w-20"
       }`}
-      style={{ zIndex: 9999, pointerEvents: 'auto' }}
+      style={{ zIndex: 50 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
