@@ -445,7 +445,7 @@ function findMissingKeywords(text: string, keywords: string[], targetKeyword?: s
   for (const keyword of allKeywords) {
     if (!keyword) continue;
     const keywordLower = keyword.toLowerCase();
-    if (!lowerText.includes(keywordLower))) {
+    if (!lowerText.includes(keywordLower)) {
       missing.push(keyword);
     }
   }
