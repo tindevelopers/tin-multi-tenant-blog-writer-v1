@@ -52,6 +52,9 @@ function ContentClustersContent() {
     const primaryParam = searchParams?.get('primary');
     const researchResultId = searchParams?.get('research_result_id');
     
+    // Always reload clusters when component mounts or URL changes
+    // This ensures newly saved clusters appear immediately
+    
     if (researchResultId && keywordsParam && primaryParam) {
       const loadKeywordsForClusters = async () => {
         setLoading(true);

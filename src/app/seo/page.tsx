@@ -143,7 +143,7 @@ function SEOToolsPageContent() {
       const generatedCluster = await generateContentIdeas({
         keywords: selectedKeywordsList.map(k => k.keyword),
         pillar_keyword: primaryAnalysis?.keyword,
-        cluster_name: primaryAnalysis?.keyword ? `${primaryAnalysis.keyword} Content Hub` : undefined,
+        cluster_name: primaryAnalysis?.keyword || undefined,
       });
 
       if (!generatedCluster) {

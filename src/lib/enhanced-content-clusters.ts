@@ -1229,11 +1229,11 @@ export class EnhancedContentClustersService {
           .eq('org_id', orgId)
           .eq('cluster_name', clusterName);
         
-        // If duplicate exists, append timestamp to make it unique
+        // If duplicate exists, append date to make it unique
         if (existingClusters && existingClusters.length > 0) {
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-          clusterName = `${cluster.cluster_name} (${timestamp})`;
-          logger.debug('⚠️ Duplicate cluster name detected, appending timestamp:', {
+          const date = new Date().toISOString().split('T')[0]; // Just the date: YYYY-MM-DD
+          clusterName = `${cluster.cluster_name} (${date})`;
+          logger.debug('⚠️ Duplicate cluster name detected, appending date:', {
             original: cluster.cluster_name,
             new: clusterName
           });

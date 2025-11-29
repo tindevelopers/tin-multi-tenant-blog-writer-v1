@@ -309,7 +309,7 @@ function EnhancedContentClustersPanel({
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                    {cluster.cluster_name}
+                    {cluster.cluster_name.replace(/\s+Content Hub/gi, '').replace(/\s*\([\d-]+\)\s*$/, '')}
                   </h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                     Pillar: <span className="font-medium">{cluster.pillar_keyword}</span>
@@ -377,7 +377,7 @@ function EnhancedContentClustersPanel({
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                    {selectedCluster.cluster_name}
+                    {selectedCluster.cluster_name.replace(/\s+Content Hub/gi, '').replace(/\s*\([\d-]+\)\s*$/, '')}
                   </h2>
                   <p className="text-gray-600 dark:text-gray-400 mb-2">
                     Pillar Keyword: <span className="font-semibold">{selectedCluster.pillar_keyword}</span>
