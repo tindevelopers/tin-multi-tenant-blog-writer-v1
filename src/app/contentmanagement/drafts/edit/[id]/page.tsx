@@ -15,6 +15,8 @@ import {
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 import { extractBlogFields, generateSlug, calculateReadTime, validateBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
 import { dataForSEOContentGenerationClient } from "@/lib/dataforseo-content-generation-client";
+import { llmAnalysisClient } from "@/lib/llm-analysis-client";
+import { extractImagesFromContent, extractFeaturedImage } from "@/lib/image-extractor";
 import { logger } from "@/utils/logger";
 import { ExclamationTriangleIcon, InformationCircleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
@@ -52,6 +54,12 @@ export default function EditDraftPage() {
   
   const [saving, setSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [llmSuggestions, setLlmSuggestions] = useState<{
+    missingFields: string[];
+    recommendations: string[];
+    improvements: string[];
+  } | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   
   const [formData, setFormData] = useState<DraftFormState>({
     title: '',
@@ -176,42 +184,124 @@ export default function EditDraftPage() {
     }
 
     setAiGenerating(true);
+    setLlmSuggestions(null);
+    setShowSuggestions(false);
 
     try {
+      // Extract images from content (especially Cloudinary URLs)
+      const extractedImages = extractImagesFromContent(formData.content);
+      const cloudinaryImages = extractedImages.filter(img => img.type === 'cloudinary');
+      
+      logger.debug('Extracted images from content', {
+        totalImages: extractedImages.length,
+        cloudinaryImages: cloudinaryImages.length,
+      });
+
+      // Extract featured image if available
+      const featuredImage = extractFeaturedImage(formData.content);
+      if (featuredImage && !formData.featuredImage) {
+        logger.debug('Found featured image in content', {
+          url: featuredImage.url.substring(0, 50) + '...',
+        });
+      }
+
+      // Try LLM analysis first (if OpenAI is configured)
+      try {
+        const analysis = await llmAnalysisClient.analyzeBlogContent({
+          title: formData.title || 'Untitled',
+          content: formData.content,
+          images: extractedImages.map(img => ({
+            url: img.url,
+            type: img.type,
+            position: img.position,
+          })),
+          existingFields: {
+            excerpt: formData.excerpt,
+            slug: formData.slug,
+            seoTitle: formData.seoTitle,
+            metaDescription: formData.metaDescription,
+            featuredImage: formData.featuredImage,
+            featuredImageAlt: formData.featuredImageAlt,
+          },
+        });
+
+        // Update form data with LLM-generated fields
+        setFormData(prev => ({
+          ...prev,
+          slug: analysis.slug || prev.slug || generateSlug(prev.title || 'untitled'),
+          seoTitle: analysis.seoTitle || prev.seoTitle || prev.title,
+          metaDescription: analysis.metaDescription || prev.metaDescription,
+          excerpt: analysis.excerpt || prev.excerpt,
+          // Update featured image if found and not already set
+          featuredImage: prev.featuredImage || featuredImage?.url || analysis.imageDescriptions[0]?.url || '',
+          featuredImageAlt: prev.featuredImageAlt || featuredImage?.altText || analysis.imageDescriptions[0]?.altText || '',
+        }));
+
+        // Update image alt texts from LLM analysis
+        if (analysis.imageDescriptions && analysis.imageDescriptions.length > 0) {
+          // Find featured image description
+          const featuredImageDesc = analysis.imageDescriptions.find(desc => 
+            desc.url === featuredImage?.url || desc.url === formData.featuredImage
+          );
+          
+          if (featuredImageDesc && !formData.featuredImageAlt) {
+            setFormData(prev => ({
+              ...prev,
+              featuredImageAlt: featuredImageDesc.altText,
+            }));
+          }
+        }
+
+        // Store suggestions for UI display
+        setLlmSuggestions(analysis.suggestions);
+        setShowSuggestions(true);
+
+        logger.debug('LLM analysis completed', {
+          fallback: analysis.fallback,
+          suggestionsCount: analysis.suggestions?.recommendations?.length || 0,
+        });
+
+        if (analysis.fallback && analysis.message) {
+          logger.info('LLM analysis used fallback', {
+            message: analysis.message,
+          });
+        }
+
+        return; // Success, exit early
+      } catch (llmError) {
+        logger.warn('LLM analysis failed, falling back to DataForSEO', {
+          error: llmError instanceof Error ? llmError.message : String(llmError),
+        });
+        // Fall through to DataForSEO fallback
+      }
+
+      // Fallback to DataForSEO if LLM fails
       const plainText = stripHtml(formData.content).trim();
       const excerptFallback = formData.excerpt && formData.excerpt.trim().length > 0
         ? formData.excerpt
         : plainText.substring(0, 220).concat(plainText.length > 220 ? '…' : '');
 
-      // Generate meta tags with fallback handling
       const meta = await dataForSEOContentGenerationClient.generateMetaTags(
         plainText || formData.title || '',
         'en',
         formData.title
       );
 
-      // Show info message if fallback was used
-      if (meta.fallback && meta.message) {
-        logger.info('Field generation used fallback', {
-          message: meta.message,
-          context: 'edit-draft-generate-fields',
-        });
-        // Don't show alert for fallback - it's expected behavior
-      }
-
-      // Update form data with generated or fallback values
+      // Update form data with DataForSEO-generated values
       setFormData(prev => ({
         ...prev,
         slug: prev.slug || generateSlug(prev.title || 'untitled'),
         seoTitle: meta.meta_title || prev.seoTitle || prev.title,
         metaDescription: meta.meta_description || prev.metaDescription || excerptFallback,
         excerpt: prev.excerpt || excerptFallback,
+        // Set featured image if found
+        featuredImage: prev.featuredImage || featuredImage?.url || '',
+        featuredImageAlt: prev.featuredImageAlt || featuredImage?.altText || '',
       }));
 
-      // Show success message
-      if (!meta.fallback) {
-        logger.debug('Fields generated successfully using DataForSEO', {
-          context: 'edit-draft-generate-fields',
+      if (meta.fallback && meta.message) {
+        logger.info('Field generation used DataForSEO fallback', {
+          message: meta.message,
         });
       }
     } catch (error) {
@@ -219,14 +309,13 @@ export default function EditDraftPage() {
         context: 'edit-draft-generate-fields',
       });
       
-      // Try fallback extraction as last resort
+      // Final fallback: simple extraction
       try {
         const plainText = stripHtml(formData.content).trim();
         const excerptFallback = formData.excerpt && formData.excerpt.trim().length > 0
           ? formData.excerpt
           : plainText.substring(0, 220).concat(plainText.length > 220 ? '…' : '');
         
-        // Use simple fallback extraction
         const cleanText = plainText || formData.title || '';
         const metaTitle = formData.title || cleanText.substring(0, 60);
         const metaDescription = cleanText.substring(0, 155);
@@ -244,11 +333,11 @@ export default function EditDraftPage() {
           excerpt: prev.excerpt || excerptFallback,
         }));
         
-        logger.info('Used fallback extraction after error', {
+        logger.info('Used basic extraction fallback', {
           context: 'edit-draft-generate-fields',
         });
       } catch (fallbackError) {
-        logger.error('Fallback extraction also failed', {
+        logger.error('All fallback methods failed', {
           error: fallbackError,
           context: 'edit-draft-generate-fields',
         });
@@ -633,6 +722,68 @@ export default function EditDraftPage() {
               )}
             </button>
           </div>
+
+          {/* LLM Suggestions Panel */}
+          {showSuggestions && llmSuggestions && (
+            <div className="mb-6 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-3">
+                    <SparklesIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    <h3 className="text-sm font-semibold text-purple-900 dark:text-purple-100">
+                      AI-Generated Suggestions
+                    </h3>
+                  </div>
+                  
+                  {llmSuggestions.recommendations.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs font-medium text-purple-800 dark:text-purple-200 mb-2">
+                        Recommendations:
+                      </p>
+                      <ul className="list-disc list-inside text-xs text-purple-700 dark:text-purple-300 space-y-1">
+                        {llmSuggestions.recommendations.map((rec, idx) => (
+                          <li key={idx}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {llmSuggestions.improvements.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs font-medium text-purple-800 dark:text-purple-200 mb-2">
+                        Content Improvements:
+                      </p>
+                      <ul className="list-disc list-inside text-xs text-purple-700 dark:text-purple-300 space-y-1">
+                        {llmSuggestions.improvements.map((imp, idx) => (
+                          <li key={idx}>{imp}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {llmSuggestions.missingFields.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-purple-800 dark:text-purple-200 mb-2">
+                        Missing Fields:
+                      </p>
+                      <ul className="list-disc list-inside text-xs text-purple-700 dark:text-purple-300 space-y-1">
+                        {llmSuggestions.missingFields.map((field, idx) => (
+                          <li key={idx}>{field}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowSuggestions(false)}
+                  className="text-purple-400 hover:text-purple-600 dark:hover:text-purple-300 transition-colors"
+                  title="Close suggestions"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
