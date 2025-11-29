@@ -214,7 +214,21 @@ export function useMultiPhaseWorkflow() {
       }));
 
       // Phase 3: Content Enhancement
-      logger.info('Starting Phase 3: Content Enhancement');
+      // Validate that Phase 1 produced content
+      if (!contentResult.content || contentResult.content.trim().length === 0) {
+        throw new Error('Phase 1 did not produce any content. Cannot proceed to Phase 3.');
+      }
+      
+      if (!contentResult.title || contentResult.title.trim().length === 0) {
+        logger.warn('Phase 1 did not produce a title, using topic as fallback');
+        contentResult.title = config.topic || 'Untitled';
+      }
+      
+      logger.info('Starting Phase 3: Content Enhancement', {
+        hasContent: !!contentResult.content,
+        contentLength: contentResult.content?.length || 0,
+        hasTitle: !!contentResult.title,
+      });
       const enhancementResult = await executePhase3(config, contentResult, signal);
       
       if (signal.aborted) throw new Error('Workflow cancelled');
