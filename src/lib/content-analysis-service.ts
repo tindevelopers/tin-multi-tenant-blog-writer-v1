@@ -200,9 +200,9 @@ function calculateReadabilityScore(text: string, wordCount: number): number {
   
   for (const word of words) {
     // Remove silent 'e' at the end
-    let wordSyllableCount = word.replace(/e$/, '');
+    let wordForSyllCount = word.replace(/e$/, '');
     // Count vowel groups
-    const vowelGroups = word.match(/[aeiouy]+/g);
+    const vowelGroups = wordForSyllCount.match(/[aeiouy]+/g);
     syllableCount += vowelGroups ? vowelGroups.length : 1;
   }
   
