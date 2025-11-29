@@ -231,12 +231,14 @@ export default function QueueItemDetailPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between relative z-50" style={{ isolation: 'isolate' }}>
-        <div className="flex items-center gap-4">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        {/* Title and back button */}
+        <div className="flex items-start gap-4">
           <button
+            type="button"
             onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors shrink-0"
           >
             <ArrowLeftIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
@@ -249,59 +251,74 @@ export default function QueueItemDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap relative z-50">
-          {/* Edit in Drafts button - redirects to draft editor */}
+        
+        {/* Action Buttons - completely rebuilt */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Primary Action: Edit in Drafts */}
           {hasGeneratedContent && postId && (
-            <button
-              onClick={() => router.push(`/contentmanagement/drafts/edit/${postId}`)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors cursor-pointer"
+            <a
+              href={`/contentmanagement/drafts/edit/${postId}`}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium no-underline"
             >
               <PencilIcon className="w-5 h-5" />
               Edit in Drafts
-            </button>
+            </a>
           )}
-          {/* Create & Edit Draft button - if content exists but no post_id yet */}
+          
+          {/* Primary Action: Create & Edit Draft */}
           {hasGeneratedContent && !postId && (
             <button
+              type="button"
               onClick={handleCreateDraft}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
             >
               <PencilIcon className="w-5 h-5" />
               Create & Edit Draft
             </button>
           )}
-          {/* Regenerate button - show when blog is generated */}
+          
+          {/* Regenerate */}
           {item.status === "generated" && (
             <button
+              type="button"
               onClick={handleRegenerate}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-medium"
             >
               <ArrowPathIcon className="w-5 h-5" />
               Regenerate
             </button>
           )}
+          
+          {/* Request Approval */}
           {item.status === "generated" && (
             <button
+              type="button"
               onClick={handleRequestApproval}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
             >
               <DocumentCheckIcon className="w-5 h-5" />
               Request Approval
             </button>
           )}
+          
+          {/* Retry */}
           {item.status === "failed" && (
             <button
+              type="button"
               onClick={handleRetry}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
             >
               <ArrowPathIcon className="w-5 h-5" />
               Retry
             </button>
           )}
+          
+          {/* Cancel */}
           {!["published", "cancelled"].includes(item.status) && (
             <button
+              type="button"
               onClick={handleCancel}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
             >
               <XMarkIcon className="w-5 h-5" />
               Cancel
