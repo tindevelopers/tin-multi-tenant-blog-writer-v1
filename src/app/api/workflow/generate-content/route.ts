@@ -1,0 +1,92 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { logger } from '@/utils/logger';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+
+/**
+ * POST /api/workflow/generate-content
+ * 
+ * Phase 1: Generate blog content using enhanced generation endpoint
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const {
+      topic,
+      keywords,
+      target_audience,
+      tone,
+      word_count,
+      quality_level,
+      custom_instructions,
+    } = body;
+
+    if (!topic) {
+      return NextResponse.json(
+        { error: 'Topic is required' },
+        { status: 400 }
+      );
+    }
+
+    logger.info('Phase 1: Starting content generation', { topic });
+
+    // Call the enhanced generation endpoint
+    const apiUrl = BLOG_WRITER_API_URL;
+    const response = await fetch(`${apiUrl}/api/v1/content/generate-enhanced`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.BLOG_WRITER_API_KEY || ''}`,
+      },
+      body: JSON.stringify({
+        topic,
+        keywords: keywords || [],
+        target_audience,
+        tone: tone || 'professional',
+        word_count: word_count || 1500,
+        quality_level: quality_level || 'high',
+        custom_instructions,
+        use_consensus_generation: true,
+        fallback_to_openai: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Content generation API error', { status: response.status, error: errorText });
+      throw new Error(`Content generation failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Extract relevant fields
+    const result = {
+      title: data.title || data.generated_title || topic,
+      content: data.content || data.generated_content || '',
+      excerpt: data.excerpt || data.summary || '',
+      word_count: data.word_count || 0,
+      seo_data: {
+        meta_title: data.meta_title || data.seo_title || data.title,
+        meta_description: data.meta_description || data.excerpt,
+        keywords: data.keywords || keywords,
+        slug: data.slug || topic.toLowerCase().replace(/\s+/g, '-'),
+      },
+      quality_score: data.quality_score,
+      generation_time: data.generation_time,
+    };
+
+    logger.info('Phase 1: Content generation completed', {
+      title: result.title,
+      wordCount: result.word_count,
+    });
+
+    return NextResponse.json(result);
+
+  } catch (error: any) {
+    logger.error('Phase 1 error', { error: error.message });
+    return NextResponse.json(
+      { error: error.message || 'Content generation failed' },
+      { status: 500 }
+    );
+  }
+}
+

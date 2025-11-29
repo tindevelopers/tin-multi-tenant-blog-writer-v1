@@ -1,0 +1,524 @@
+'use client';
+
+/**
+ * useMultiPhaseWorkflow Hook
+ * 
+ * Manages the 5-phase blog creation workflow state and API interactions
+ */
+
+import { useState, useCallback, useRef } from 'react';
+import { logger } from '@/utils/logger';
+
+export interface WorkflowConfig {
+  // Content Generation
+  topic: string;
+  keywords: string[];
+  targetAudience?: string;
+  tone?: string;
+  wordCount?: number;
+  qualityLevel?: string;
+  customInstructions?: string;
+  templateType?: string;
+
+  // Image Generation
+  generateFeaturedImage?: boolean;
+  generateContentImages?: boolean;
+  imageStyle?: string;
+
+  // Content Enhancement
+  optimizeForSeo?: boolean;
+  generateStructuredData?: boolean;
+
+  // Interlinking
+  crawlWebsite?: boolean;
+  maxInternalLinks?: number;
+  maxExternalLinks?: number;
+  includeClusterLinks?: boolean;
+  webflowSiteId?: string;
+  webflowApiKey?: string;
+
+  // Publishing
+  targetPlatform?: 'webflow' | 'wordpress' | 'shopify';
+  isDraft?: boolean;
+}
+
+export interface WorkflowPhaseResult {
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  data?: Record<string, any>;
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface ContentResult extends WorkflowPhaseResult {
+  title?: string;
+  content?: string;
+  excerpt?: string;
+  wordCount?: number;
+  seoData?: Record<string, any>;
+}
+
+export interface ImageResult extends WorkflowPhaseResult {
+  featuredImage?: {
+    url: string;
+    alt: string;
+    width?: number;
+    height?: number;
+  };
+  contentImages?: Array<{
+    url: string;
+    alt: string;
+  }>;
+}
+
+export interface EnhancementResult extends WorkflowPhaseResult {
+  enhancedFields?: Record<string, any>;
+  seoScore?: number;
+  readabilityScore?: number;
+}
+
+export interface InterlinkingResult extends WorkflowPhaseResult {
+  internalLinks?: Array<{
+    url: string;
+    anchorText: string;
+    relevanceScore: number;
+  }>;
+  externalLinks?: Array<{
+    url: string;
+    anchorText: string;
+    authorityScore: number;
+  }>;
+  clusterAnalysis?: {
+    clusters: Array<{
+      name: string;
+      pillarContent?: string;
+      supportingCount: number;
+    }>;
+    recommendations: string[];
+  };
+}
+
+export interface PublishingResult extends WorkflowPhaseResult {
+  postId?: string;
+  publishingRecordId?: string;
+  contentScore?: {
+    overall: number;
+    seo: number;
+    quality: number;
+    interlinking: number;
+    images: number;
+  };
+  publishingReadiness?: {
+    isReady: boolean;
+    warnings: string[];
+    missingFields: string[];
+  };
+}
+
+export interface WorkflowState {
+  id: string;
+  phase: 'idle' | 'content_generation' | 'image_generation' | 'content_enhancement' | 'interlinking' | 'publishing_preparation' | 'completed' | 'failed';
+  progress: number;
+  startedAt: string;
+  updatedAt: string;
+  config: WorkflowConfig;
+  contentResult?: ContentResult;
+  imageResult?: ImageResult;
+  enhancementResult?: EnhancementResult;
+  interlinkingResult?: InterlinkingResult;
+  publishingResult?: PublishingResult;
+  error?: string;
+}
+
+const PHASE_PROGRESS = {
+  idle: 0,
+  content_generation: 10,
+  image_generation: 30,
+  content_enhancement: 50,
+  interlinking: 70,
+  publishing_preparation: 90,
+  completed: 100,
+  failed: 0,
+};
+
+const PHASE_LABELS = {
+  idle: 'Ready to start',
+  content_generation: 'Generating content...',
+  image_generation: 'Creating images...',
+  content_enhancement: 'Enhancing content...',
+  interlinking: 'Analyzing interlinking...',
+  publishing_preparation: 'Preparing for publishing...',
+  completed: 'Workflow complete',
+  failed: 'Workflow failed',
+};
+
+export function useMultiPhaseWorkflow() {
+  const [state, setState] = useState<WorkflowState | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Start the workflow
+  const startWorkflow = useCallback(async (config: WorkflowConfig) => {
+    if (!config.topic) {
+      setError('Topic is required');
+      return;
+    }
+
+    setIsRunning(true);
+    setError(null);
+    
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
+    // Initialize state
+    const workflowId = `workflow_${Date.now()}`;
+    const initialState: WorkflowState = {
+      id: workflowId,
+      phase: 'content_generation',
+      progress: 10,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      config,
+    };
+    setState(initialState);
+
+    try {
+      // Phase 1: Content Generation
+      logger.info('Starting Phase 1: Content Generation');
+      const contentResult = await executePhase1(config, signal);
+      
+      if (signal.aborted) throw new Error('Workflow cancelled');
+      
+      setState(prev => ({
+        ...prev!,
+        phase: 'image_generation',
+        progress: 30,
+        updatedAt: new Date().toISOString(),
+        contentResult: { ...contentResult, status: 'completed' },
+      }));
+
+      // Phase 2: Image Generation
+      logger.info('Starting Phase 2: Image Generation');
+      const imageResult = await executePhase2(config, contentResult, signal);
+      
+      if (signal.aborted) throw new Error('Workflow cancelled');
+      
+      setState(prev => ({
+        ...prev!,
+        phase: 'content_enhancement',
+        progress: 50,
+        updatedAt: new Date().toISOString(),
+        imageResult: { ...imageResult, status: 'completed' },
+      }));
+
+      // Phase 3: Content Enhancement
+      logger.info('Starting Phase 3: Content Enhancement');
+      const enhancementResult = await executePhase3(config, contentResult, signal);
+      
+      if (signal.aborted) throw new Error('Workflow cancelled');
+      
+      setState(prev => ({
+        ...prev!,
+        phase: 'interlinking',
+        progress: 70,
+        updatedAt: new Date().toISOString(),
+        enhancementResult: { ...enhancementResult, status: 'completed' },
+      }));
+
+      // Phase 4: Advanced Interlinking
+      logger.info('Starting Phase 4: Advanced Interlinking');
+      const interlinkingResult = await executePhase4(config, contentResult, signal);
+      
+      if (signal.aborted) throw new Error('Workflow cancelled');
+      
+      setState(prev => ({
+        ...prev!,
+        phase: 'publishing_preparation',
+        progress: 90,
+        updatedAt: new Date().toISOString(),
+        interlinkingResult: { ...interlinkingResult, status: 'completed' },
+      }));
+
+      // Phase 5: Publishing Preparation
+      logger.info('Starting Phase 5: Publishing Preparation');
+      const publishingResult = await executePhase5(
+        config,
+        contentResult,
+        imageResult,
+        enhancementResult,
+        interlinkingResult,
+        signal
+      );
+      
+      if (signal.aborted) throw new Error('Workflow cancelled');
+
+      // Complete
+      setState(prev => ({
+        ...prev!,
+        phase: 'completed',
+        progress: 100,
+        updatedAt: new Date().toISOString(),
+        publishingResult: { ...publishingResult, status: 'completed' },
+      }));
+
+      logger.info('Multi-phase workflow completed successfully');
+
+    } catch (err: any) {
+      const errorMessage = err.message || 'Workflow failed';
+      logger.error('Multi-phase workflow failed', { error: errorMessage });
+      
+      if (errorMessage !== 'Workflow cancelled') {
+        setError(errorMessage);
+      }
+      
+      setState(prev => prev ? {
+        ...prev,
+        phase: 'failed',
+        progress: 0,
+        updatedAt: new Date().toISOString(),
+        error: errorMessage,
+      } : null);
+    } finally {
+      setIsRunning(false);
+      abortControllerRef.current = null;
+    }
+  }, []);
+
+  // Cancel the workflow
+  const cancelWorkflow = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  }, []);
+
+  // Refresh workflow status (for polling if needed)
+  const refreshStatus = useCallback(async () => {
+    // Currently state is managed client-side
+    // This could be extended to poll server-side status
+  }, []);
+
+  // Computed values
+  const progress = state ? PHASE_PROGRESS[state.phase] : 0;
+  const currentPhase = state ? PHASE_LABELS[state.phase] : 'Not started';
+
+  return {
+    state,
+    isRunning,
+    progress,
+    currentPhase,
+    error,
+    startWorkflow,
+    cancelWorkflow,
+    refreshStatus,
+    // Individual phase results
+    contentResult: state?.contentResult,
+    imageResult: state?.imageResult,
+    enhancementResult: state?.enhancementResult,
+    interlinkingResult: state?.interlinkingResult,
+    publishingResult: state?.publishingResult,
+  };
+}
+
+// Phase execution functions
+
+async function executePhase1(
+  config: WorkflowConfig,
+  signal: AbortSignal
+): Promise<ContentResult> {
+  const response = await fetch('/api/workflow/generate-content', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      topic: config.topic,
+      keywords: config.keywords,
+      target_audience: config.targetAudience,
+      tone: config.tone,
+      word_count: config.wordCount,
+      quality_level: config.qualityLevel,
+      custom_instructions: config.customInstructions,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Content generation failed');
+  }
+
+  const data = await response.json();
+  
+  return {
+    status: 'completed',
+    title: data.title,
+    content: data.content,
+    excerpt: data.excerpt,
+    wordCount: data.word_count,
+    seoData: data.seo_data,
+    data,
+  };
+}
+
+async function executePhase2(
+  config: WorkflowConfig,
+  contentResult: ContentResult,
+  signal: AbortSignal
+): Promise<ImageResult> {
+  if (!config.generateFeaturedImage && !config.generateContentImages) {
+    return { status: 'completed' };
+  }
+
+  const response = await fetch('/api/workflow/generate-images', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      topic: config.topic,
+      keywords: config.keywords,
+      title: contentResult.title,
+      generate_featured: config.generateFeaturedImage,
+      generate_content_images: config.generateContentImages,
+      style: config.imageStyle,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Image generation failed');
+  }
+
+  const data = await response.json();
+  
+  return {
+    status: 'completed',
+    featuredImage: data.featured_image,
+    contentImages: data.content_images,
+    data,
+  };
+}
+
+async function executePhase3(
+  config: WorkflowConfig,
+  contentResult: ContentResult,
+  signal: AbortSignal
+): Promise<EnhancementResult> {
+  if (!config.optimizeForSeo) {
+    return { status: 'completed' };
+  }
+
+  const response = await fetch('/api/workflow/enhance-content', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: contentResult.content,
+      title: contentResult.title,
+      topic: config.topic,
+      keywords: config.keywords,
+      generate_structured_data: config.generateStructuredData,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Content enhancement failed');
+  }
+
+  const data = await response.json();
+  
+  return {
+    status: 'completed',
+    enhancedFields: data.enhanced_fields,
+    seoScore: data.seo_score,
+    readabilityScore: data.readability_score,
+    data,
+  };
+}
+
+async function executePhase4(
+  config: WorkflowConfig,
+  contentResult: ContentResult,
+  signal: AbortSignal
+): Promise<InterlinkingResult> {
+  if (!config.crawlWebsite) {
+    return { status: 'completed' };
+  }
+
+  const response = await fetch('/api/workflow/analyze-interlinking', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: contentResult.content,
+      title: contentResult.title,
+      topic: config.topic,
+      keywords: config.keywords,
+      max_internal_links: config.maxInternalLinks,
+      max_external_links: config.maxExternalLinks,
+      include_cluster_links: config.includeClusterLinks,
+      webflow_site_id: config.webflowSiteId,
+      webflow_api_key: config.webflowApiKey,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Interlinking analysis failed');
+  }
+
+  const data = await response.json();
+  
+  return {
+    status: 'completed',
+    internalLinks: data.internal_links,
+    externalLinks: data.external_links,
+    clusterAnalysis: data.cluster_analysis,
+    data,
+  };
+}
+
+async function executePhase5(
+  config: WorkflowConfig,
+  contentResult: ContentResult,
+  imageResult: ImageResult,
+  enhancementResult: EnhancementResult,
+  interlinkingResult: InterlinkingResult,
+  signal: AbortSignal
+): Promise<PublishingResult> {
+  const response = await fetch('/api/workflow/prepare-publishing', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: contentResult.content,
+      title: contentResult.title,
+      excerpt: contentResult.excerpt,
+      seo_data: contentResult.seoData,
+      enhanced_fields: enhancementResult.enhancedFields,
+      featured_image: imageResult.featuredImage,
+      internal_links: interlinkingResult.internalLinks,
+      external_links: interlinkingResult.externalLinks,
+      target_platform: config.targetPlatform,
+      is_draft: config.isDraft,
+    }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Publishing preparation failed');
+  }
+
+  const data = await response.json();
+  
+  return {
+    status: 'completed',
+    postId: data.post_id,
+    publishingRecordId: data.publishing_record_id,
+    contentScore: data.content_score,
+    publishingReadiness: data.publishing_readiness,
+    data,
+  };
+}
+
+export default useMultiPhaseWorkflow;
