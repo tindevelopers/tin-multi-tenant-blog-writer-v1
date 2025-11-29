@@ -69,54 +69,132 @@ export function enhanceContentToRichHTML(
 }
 
 /**
+ * Clean content from common AI generation artifacts
+ */
+function cleanAIArtifacts(content: string): string {
+  let cleaned = content;
+  
+  // Remove common AI generation artifacts
+  cleaned = cleaned.replace(/Here's an enhanced version of.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified tasks.*?:/gi, '');
+  cleaned = cleaned.replace(/readability concerns:.*?(?=\n)/gi, '');
+  cleaned = cleaned.replace(/Enhancements Made:[\s\S]*?(?=\n\n|$)/gi, '');
+  cleaned = cleaned.replace(/Citations added where appropriate.*?(?=\n|$)/gi, '');
+  cleaned = cleaned.replace(/\*Last updated:.*?\*/gi, '');
+  
+  // Fix malformed markdown headers at start (like "# voice ai agent Here's...")
+  // Extract the topic and make it a proper H1, remove the rest
+  cleaned = cleaned.replace(/^#\s*([a-z\s]+?)\s+(Here's|Here is|This is|Learn|Discover|Explore|Have you)/i, '# $1\n\n$2');
+  
+  // Clean up broken punctuation patterns from DataForSEO
+  // Fix "." being used instead of "," (e.g., "learn . improve" → "learn, improve")
+  cleaned = cleaned.replace(/\s+\.\s+/g, ', ');
+  // Fix "f." being used instead of "for" 
+  cleaned = cleaned.replace(/\bf\.\s+/gi, 'for ');
+  // Fix isolated periods 
+  cleaned = cleaned.replace(/\s+\.\s*(?=[a-z])/gi, ' ');
+  
+  // Clean up exclamation marks used as image placeholders (like "!Featured Voice AI Technology")
+  cleaned = cleaned.replace(/!\s*([A-Z][^!\n]{5,50})(?:\s|$)/g, '');
+  cleaned = cleaned.replace(/!\[?[^\]]*\]?(?!\()/g, '');
+  
+  // Fix broken markdown links (like "[Voice AI Agent](/voice-ai-agent)s:")
+  cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)([a-z]+)/g, '[$1]($2) $3');
+  
+  // Clean up broken markdown links without URLs (keep the text)
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]*\)/g, '$1');
+  
+  // Fix section titles that should be headings (common pattern: "Section Title." or "Section Title:")
+  // Convert standalone capitalized phrases ending with period/colon to H2
+  cleaned = cleaned.replace(/^([A-Z][^.!?]{10,80})[.:]\s*$/gm, '## $1');
+  
+  // Remove extra whitespace
+  cleaned = cleaned.replace(/\s{3,}/g, ' ');
+  cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
+  
+  return cleaned.trim();
+}
+
+/**
  * Convert markdown to HTML
  */
 function markdownToHTML(markdown: string): string {
-  let html = markdown;
+  // First clean AI artifacts
+  let html = cleanAIArtifacts(markdown);
 
-  // Headers (must be at start of line)
+  // Headers (must be at start of line) - process longer patterns first
+  html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
+  html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
   html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  
+  // Ensure we have exactly ONE H1 (the title)
+  // If multiple H1s exist, convert extras to H2
+  const h1Matches = html.match(/<h1[^>]*>.*?<\/h1>/gi);
+  if (h1Matches && h1Matches.length > 1) {
+    // Keep first H1, convert rest to H2
+    let h1Count = 0;
+    html = html.replace(/<h1([^>]*)>(.*?)<\/h1>/gi, (match, attrs, content) => {
+      h1Count++;
+      if (h1Count === 1) {
+        return `<h1${attrs}>${content}</h1>`;
+      }
+      return `<h2${attrs}>${content}</h2>`;
+    });
+  }
 
   // Bold and italic
   html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Only apply italic if not part of a list marker
+  html = html.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<em>$1</em>');
 
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Links (only those with valid URLs)
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
-  // Images
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="blog-image" />');
+  // Images with valid URLs
+  html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<figure><img src="$2" alt="$1" class="blog-image" /></figure>');
 
   // Code blocks
   html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-  // Blockquotes
+  // Blockquotes (handle multiple lines)
   html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+  // Merge consecutive blockquotes
+  html = html.replace(/<\/blockquote>\n<blockquote>/g, '<br/>');
 
-  // Lists - handle unordered lists
-  const unorderedListRegex = /(?:^[\*\-\+] (.+)$\n?)+/gim;
-  html = html.replace(unorderedListRegex, (match) => {
-    const items = match.split('\n').filter(line => line.trim().match(/^[\*\-\+]/));
-    const listItems = items.map(item => `<li>${item.replace(/^[\*\-\+] /, '').trim()}</li>`).join('\n');
-    return `<ul>\n${listItems}\n</ul>`;
+  // Lists - handle unordered lists (improved regex)
+  html = html.replace(/(?:^[-\*\+] .+\n?)+/gim, (match) => {
+    const items = match.split('\n').filter(line => line.trim().match(/^[-\*\+]/));
+    if (items.length === 0) return match;
+    const listItems = items.map(item => {
+      const content = item.replace(/^[-\*\+]\s*/, '').trim();
+      return content ? `<li>${content}</li>` : '';
+    }).filter(Boolean).join('\n');
+    return listItems ? `<ul>\n${listItems}\n</ul>` : '';
   });
   
   // Lists - handle ordered lists
-  const orderedListRegex = /(?:^\d+\. (.+)$\n?)+/gim;
-  html = html.replace(orderedListRegex, (match) => {
+  html = html.replace(/(?:^\d+\.\s+.+\n?)+/gim, (match) => {
     const items = match.split('\n').filter(line => line.trim().match(/^\d+\./));
-    const listItems = items.map(item => `<li>${item.replace(/^\d+\. /, '').trim()}</li>`).join('\n');
-    return `<ol>\n${listItems}\n</ol>`;
+    if (items.length === 0) return match;
+    const listItems = items.map(item => {
+      const content = item.replace(/^\d+\.\s*/, '').trim();
+      return content ? `<li>${content}</li>` : '';
+    }).filter(Boolean).join('\n');
+    return listItems ? `<ol>\n${listItems}\n</ol>` : '';
   });
 
   // Horizontal rules
-  html = html.replace(/^---$/gim, '<hr />');
+  html = html.replace(/^[-_*]{3,}$/gim, '<hr />');
 
+  // Key Takeaways / Important sections - convert to callout
+  html = html.replace(/<h([234])>(Key Takeaways?|Important|Note|Tip|Warning):?<\/h\1>\s*<ul>/gi, 
+    '<div class="blog-callout blog-callout-key"><h$1>$2</h$1><ul>');
+  
   // Paragraphs (wrap non-block elements)
   const lines = html.split('\n');
   const processedLines: string[] = [];
@@ -133,7 +211,14 @@ function markdownToHTML(markdown: string): string {
     }
 
     // If it's a block element, close paragraph and add block
-    if (trimmed.match(/^<(h[1-6]|ul|ol|pre|blockquote|hr|div|figure|img)/i)) {
+    if (trimmed.match(/^<(h[1-6]|ul|ol|pre|blockquote|hr|div|figure|img|article|section)/i)) {
+      if (currentParagraph.length > 0) {
+        processedLines.push(`<p>${currentParagraph.join(' ')}</p>`);
+        currentParagraph = [];
+      }
+      processedLines.push(trimmed);
+    } else if (trimmed.match(/<\/?(h[1-6]|ul|ol|pre|blockquote|hr|div|figure|article|section)/i)) {
+      // Closing block tags
       if (currentParagraph.length > 0) {
         processedLines.push(`<p>${currentParagraph.join(' ')}</p>`);
         currentParagraph = [];

@@ -1163,13 +1163,66 @@ export async function POST(request: NextRequest) {
     
     // Enhance content to rich HTML (without images - they'll be added later)
     logger.debug('✨ Enhancing content to rich HTML...');
-    const enhancedContent = enhanceContentToRichHTML(rawContent, {
+    let enhancedContent = enhanceContentToRichHTML(rawContent, {
       featuredImage: null, // Images will be generated separately
       sectionImages: [], // Images will be generated separately
       includeImages: false, // Don't include images in initial generation
       enhanceFormatting: true,
       addStructure: true
     });
+    
+    // Phase 3: Additional content enhancement for formatting fixes
+    // This addresses DataForSEO formatting issues (malformed markdown, poor structure)
+    if (enhancedContent && enhancedContent.length > 0) {
+      try {
+        logger.debug('🔧 Running Phase 3: Content Enhancement (formatting fixes)...');
+        const enhancementResponse = await fetch(`${request.nextUrl.origin}/api/workflow/enhance-content`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content: enhancedContent,
+            title: blogTitle,
+            topic,
+            keywords: keywordsArray,
+            improve_formatting: true,
+            generate_structured_data: false, // Already handled above
+          }),
+        });
+        
+        if (enhancementResponse.ok) {
+          const enhancementData = await enhancementResponse.json();
+          if (enhancementData.enhanced_content && enhancementData.enhanced_content.length > enhancedContent.length * 0.5) {
+            enhancedContent = enhancementData.enhanced_content;
+            logger.debug('✅ Phase 3 enhancement applied successfully', {
+              originalLength: rawContent.length,
+              enhancedLength: enhancedContent.length,
+            });
+            
+            // Update excerpt and meta_description if enhanced versions are better
+            if (enhancementData.enhanced_fields?.excerpt && enhancementData.enhanced_fields.excerpt.length > 100) {
+              result.excerpt = enhancementData.enhanced_fields.excerpt;
+            }
+            if (enhancementData.enhanced_fields?.meta_description && enhancementData.enhanced_fields.meta_description.length > 100) {
+              result.meta_description = enhancementData.enhanced_fields.meta_description;
+            }
+            if (enhancementData.enhanced_fields?.meta_title) {
+              result.meta_title = enhancementData.enhanced_fields.meta_title;
+            }
+          }
+        } else {
+          logger.warn('⚠️ Phase 3 enhancement failed, using basic enhancement', {
+            status: enhancementResponse.status,
+          });
+        }
+      } catch (error) {
+        logger.warn('⚠️ Phase 3 enhancement error (non-critical), continuing with basic enhancement', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        // Continue with basic enhancement - non-critical
+      }
+    }
     
     logger.debug('📊 Content enhancement:', {
       originalLength: rawContent.length,
