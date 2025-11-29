@@ -6,7 +6,9 @@
 import cloudRunHealth from './cloud-run-health';
 import { logger } from '@/utils/logger';
 
-const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
+
+const API_BASE_URL = BLOG_WRITER_API_URL;
 const API_KEY = process.env.BLOG_WRITER_API_KEY; // Optional for open API
 
 // API Response types
@@ -72,13 +74,28 @@ class BlogWriterAPI {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     
-    const headers = {
+    // Build headers object - handle both Headers object and plain object
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      // Only add Authorization header if API key is provided (for open API, this is optional)
-      ...(this.apiKey && this.apiKey !== 'not-required-for-open-api' && { 'Authorization': `Bearer ${this.apiKey}` }),
-      ...options.headers,
     };
+    
+    // Convert Headers object to plain object if needed
+    if (options.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((value, key) => {
+          headers[key] = value;
+        });
+      } else if (typeof options.headers === 'object') {
+        Object.assign(headers, options.headers);
+      }
+    }
+    
+    // Only add Authorization header if API key is explicitly provided and not empty
+    // API is open, so authentication is optional
+    if (this.apiKey && this.apiKey.trim() !== '' && this.apiKey !== 'not-required-for-open-api') {
+      headers['Authorization'] = `Bearer ${this.apiKey}`;
+    }
 
     logger.debug('Making API request', { url, method: options.method || 'GET' });
 
@@ -354,11 +371,31 @@ class BlogWriterAPI {
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Even on error, check if queue_id is present (our API always returns it)
+        if (errorData.queue_id) {
+          logger.debug('API error but queue_id received', { 
+            queue_id: errorData.queue_id, 
+            error: errorData.error,
+            status: errorData.status 
+          });
+          // Return the error response with queue_id so frontend can track it
+          return {
+            job_id: '', // No backend job_id on error
+            status: errorData.status || 'failed',
+            message: errorData.error || 'Blog generation failed',
+            queue_id: errorData.queue_id
+          };
+        }
+        
         throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
       }
       
       const result = await response.json();
-      logger.debug('Async job created successfully', { job_id: result.job_id });
+      logger.debug('Async job created successfully', { 
+        job_id: result.job_id,
+        queue_id: result.queue_id 
+      });
       return result;
     } catch (error) {
       logger.logError(error instanceof Error ? error : new Error('Failed to create async job'), {
@@ -454,12 +491,14 @@ class BlogWriterAPI {
     use_knowledge_graph?: boolean; // Use knowledge graph
     use_semantic_keywords?: boolean; // Use semantic keywords
     use_quality_scoring?: boolean; // Enable quality scoring
+    use_dataforseo_content_generation?: boolean; // Use DataForSEO Content Generation API instead of backend API
   }): Promise<Record<string, unknown> | null> {
     try {
-      logger.debug('Starting blog generation via local API route', { params });
+      logger.debug('Starting blog generation via local API route (async mode)', { params });
       
-      // Use local API route instead of external API to avoid CORS issues
-      const response = await fetch('/api/blog-writer/generate', {
+      // Always use async_mode=true to force queue-based generation
+      // This ensures all generations go through the queue system for better tracking and reliability
+      const response = await fetch('/api/blog-writer/generate?async_mode=true', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -467,13 +506,42 @@ class BlogWriterAPI {
         body: JSON.stringify(params),
       });
       
+      // Parse response body first to check for queue_id even on errors
+      const result = await response.json().catch(() => ({}));
+      
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(`API request failed: ${response.status} ${errorData.error || response.statusText}`);
+        // Even on error, check if queue_id is present (our API always returns it)
+        if (result.queue_id) {
+          logger.debug('API error but queue_id received', { 
+            queue_id: result.queue_id, 
+            error: result.error,
+            status: result.status || 'failed',
+            httpStatus: response.status
+          });
+          // Return the error response with queue_id so frontend can track it
+          return {
+            ...result,
+            queue_id: result.queue_id,
+            status: result.status || 'failed',
+            error: result.error || `API request failed: ${response.status}`
+          };
+        }
+        
+        // No queue_id in error response - this shouldn't happen but handle gracefully
+        logger.warn('API error without queue_id', { 
+          status: response.status,
+          error: result.error || response.statusText 
+        });
+        throw new Error(`API request failed: ${response.status} ${result.error || response.statusText}`);
       }
       
-      const result = await response.json();
-      logger.debug('Blog generation successful', { hasResult: !!result });
+      logger.debug('Blog generation queued successfully', { 
+        queue_id: result.queue_id,
+        job_id: result.job_id 
+      });
+      
+      // In async mode, result will always have queue_id and possibly job_id
+      // Never expect immediate content
       return result;
     } catch (error) {
       logger.logError(error instanceof Error ? error : new Error('Failed to generate blog'), {
@@ -568,12 +636,14 @@ class BlogWriterAPI {
     }
   }
 
-  // Topic Recommendations API
+  // Topic Recommendations API - Now uses AI Topic Suggestions endpoint first
   async recommendTopics(params: {
     keywords?: string[];
     industry?: string;
     existing_topics?: string[];
     target_audience?: string;
+    objective?: string;
+    content_goal?: string;
     count?: number; // Default: 10, Max: 50
   }): Promise<{
     topics: Array<{
@@ -584,17 +654,409 @@ class BlogWriterAPI {
       difficulty: string;
       content_angle: string;
       estimated_traffic: number;
+      aiScore?: number;
+      aiSearchVolume?: number;
+      traditionalSearchVolume?: number;
+      recommended?: boolean;
+      // New fields from AI topic suggestions
+      ranking_score?: number;
+      opportunity_score?: number;
+      competition?: number;
+      cpc?: number;
+      reason?: string;
+      related_keywords?: string[];
+      source?: string;
+      // LLM Mentions fields (from ai_metrics.llm_mentions)
+      mentions_count?: number;
+      platform?: string; // "chat_gpt" or "google"
     }>;
   }> {
     try {
-      logger.debug('Getting topic recommendations', { count: params.count });
-      const response = await fetch('/api/blog-writer/topics/recommend', {
+      logger.debug('Getting AI-optimized topic recommendations', { count: params.count });
+      
+      // Step 1: Try new AI Topic Suggestions endpoint first (recommended)
+      try {
+        // Map content_goal to content_goals array format
+        const contentGoals = params.content_goal 
+          ? [params.content_goal === 'seo' ? 'SEO & Rankings' : 
+              params.content_goal === 'engagement' ? 'Engagement' :
+              params.content_goal === 'conversions' ? 'Conversions' :
+              params.content_goal === 'brand_awareness' ? 'Brand Awareness' : params.content_goal]
+          : undefined;
+
+        // Build request payload - prioritize content_objective over keywords
+        // Backend will extract keywords from content_objective automatically
+        const requestPayload: Record<string, unknown> = {
+          target_audience: params.target_audience,
+          industry: params.industry,
+          content_goals: contentGoals,
+          limit: params.count || 50,
+          include_ai_search_volume: true,
+          include_llm_mentions: true,
+        };
+
+        // If objective is provided, use it (backend will extract keywords)
+        if (params.objective) {
+          requestPayload.content_objective = params.objective;
+        } else if (params.keywords && params.keywords.length > 0) {
+          // Fallback: Only use keywords if objective is not provided
+          requestPayload.keywords = params.keywords;
+        }
+
+        const aiTopicSuggestionsResponse = await fetch('/api/keywords/ai-topic-suggestions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestPayload),
+          signal: AbortSignal.timeout(60000), // 60 second timeout
+        });
+
+        if (aiTopicSuggestionsResponse.ok) {
+          const aiTopicData = await aiTopicSuggestionsResponse.json();
+          
+          // According to FRONTEND_INTEGRATION_TESTING_GUIDE.md, response structure is:
+          // - topic_suggestions: Array of topic objects
+          // - ai_metrics.llm_mentions: Record<string, LLMMentionsData>
+          // - ai_metrics.search_volume: Record<string, any>
+          const topicSuggestions = aiTopicData.topic_suggestions || aiTopicData.topics || [];
+          const aiMetrics = aiTopicData.ai_metrics || {};
+          const llmMentions = aiMetrics.llm_mentions || {};
+          const searchVolume = aiMetrics.search_volume || {};
+          
+          logger.debug('AI topic suggestions response received', {
+            topicsCount: topicSuggestions.length,
+            hasTopics: topicSuggestions.length > 0,
+            hasLLMMentions: Object.keys(llmMentions).length > 0,
+            hasSearchVolume: Object.keys(searchVolume).length > 0,
+          });
+
+          // Transform AI topic suggestions response to topic recommendations format
+          if (topicSuggestions.length > 0) {
+            const topics = topicSuggestions
+              .map((topic: any) => {
+                // Map response fields to our format
+                const title = topic.topic || topic.title || '';
+                const sourceKeyword = topic.source_keyword || '';
+                const aiSearchVol = topic.ai_search_volume || 0;
+                const searchVol = topic.search_volume || 0;
+                const difficultyNum = topic.difficulty || 0;
+                const difficulty = difficultyNum >= 70 ? 'hard' : difficultyNum >= 50 ? 'medium' : 'easy';
+                const rankingScore = topic.ranking_score || 0;
+                const opportunityScore = topic.opportunity_score || 0;
+                const competition = topic.competition || 0;
+                const cpc = topic.cpc || 0;
+                const reason = topic.reason || '';
+                const relatedKeywords = topic.related_keywords || [];
+                const source = topic.source || 'ai_generated';
+                
+                // Extract LLM mentions data for this keyword from ai_metrics.llm_mentions
+                const keywordLower = sourceKeyword.toLowerCase();
+                const llmMentionData = llmMentions[keywordLower] || llmMentions[sourceKeyword] || {};
+                const mentionsCount = llmMentionData.mentions_count || llmMentionData.total_count || topic.mentions || 0;
+                const platform = llmMentionData.platform || 'chat_gpt';
+                const aiSearchVolumeFromMentions = llmMentionData.ai_search_volume || 0;
+                
+                // Also check ai_metrics.search_volume for additional AI search volume data
+                const searchVolumeData = searchVolume[keywordLower] || searchVolume[sourceKeyword] || {};
+                const aiSearchVolumeFromVolume = searchVolumeData.ai_search_volume || 0;
+                
+                // Use the highest AI search volume value available
+                const finalAiSearchVol = aiSearchVol || aiSearchVolumeFromMentions || aiSearchVolumeFromVolume || 0;
+
+                // Calculate AI score from ranking_score or opportunity_score
+                const aiScore = rankingScore || opportunityScore || 0;
+
+                return {
+                  title,
+                  description: reason || `AI-generated topic about ${sourceKeyword}`,
+                  keywords: [sourceKeyword, ...relatedKeywords].filter(Boolean).slice(0, 5),
+                  search_volume: searchVol || finalAiSearchVol,
+                  difficulty,
+                  content_angle: reason || `AI-optimized topic with ${opportunityScore}/100 opportunity score`,
+                  estimated_traffic: Math.floor((searchVol || finalAiSearchVol) * 0.1),
+                  aiScore,
+                  aiSearchVolume: finalAiSearchVol,
+                  traditionalSearchVolume: searchVol,
+                  recommended: aiScore >= 50 || opportunityScore >= 50,
+                  ranking_score: rankingScore,
+                  opportunity_score: opportunityScore,
+                  competition,
+                  cpc,
+                  reason,
+                  related_keywords: relatedKeywords,
+                  source,
+                  // Additional LLM mentions data
+                  mentions_count: mentionsCount,
+                  platform: platform,
+                };
+              })
+              .sort((a: any, b: any) => {
+                // Sort by recommended first, then by ranking_score/opportunity_score
+                if (a.recommended !== b.recommended) {
+                  return a.recommended ? -1 : 1;
+                }
+                return (b.ranking_score || b.opportunity_score || 0) - (a.ranking_score || a.opportunity_score || 0);
+              })
+              .slice(0, params.count || 10);
+
+            logger.debug('AI topic suggestions transformed successfully', { 
+              topicsCount: topics.length,
+              sampleTopic: topics[0] ? {
+                title: topics[0].title,
+                aiScore: topics[0].aiScore,
+                mentions_count: topics[0].mentions_count,
+                platform: topics[0].platform,
+              } : null,
+            });
+            return { topics };
+          }
+        }
+      } catch (aiTopicError) {
+        logger.warn('AI topic suggestions endpoint failed, falling back', { error: aiTopicError });
+      }
+
+      // Step 2: Fallback to AI Optimization endpoint for targeted recommendations
+      // Extract keywords from objective/industry if keywords not provided
+      // Preserve multi-word phrases - don't split into individual words
+      let keywordsToAnalyze = params.keywords || [];
+      
+      if (keywordsToAnalyze.length === 0) {
+        // Extract key phrases from objective or use industry
+        if (params.objective) {
+          // Extract meaningful phrases (2-3 words) from objective
+          const objectiveText = params.objective.toLowerCase();
+          
+          // Common stop words to filter out
+          const stopWords = new Set(['want', 'create', 'blogs', 'that', 'rank', 'for', 'are', 'looking', 'new', 'clients', 'about', 'with', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'from', 'of', 'a', 'an']);
+          
+          // Extract 2-3 word phrases
+          const words = objectiveText
+            .replace(/[^\w\s]/g, ' ')
+            .split(/\s+/)
+            .filter((word: string) => word.length > 2 && !stopWords.has(word));
+          
+          // Create 2-word and 3-word phrases
+          const phrases: string[] = [];
+          for (let i = 0; i < words.length - 1; i++) {
+            const twoWord = `${words[i]} ${words[i + 1]}`;
+            if (twoWord.length > 5) phrases.push(twoWord);
+            
+            if (i < words.length - 2) {
+              const threeWord = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+              if (threeWord.length > 8) phrases.push(threeWord);
+            }
+          }
+          
+          // Also include single important words (longer ones)
+          const importantWords = words.filter((word: string) => word.length > 4);
+          
+          keywordsToAnalyze = [...phrases, ...importantWords].slice(0, 10);
+        }
+        
+        if (keywordsToAnalyze.length === 0 && params.industry) {
+          keywordsToAnalyze = [params.industry.toLowerCase()];
+        }
+        
+        if (keywordsToAnalyze.length === 0) {
+          throw new Error('Please provide keywords, industry, or objective to get recommendations');
+        }
+      }
+      
+      // Ensure all keywords are trimmed and non-empty
+      keywordsToAnalyze = keywordsToAnalyze
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+
+      // Step 3: Use AI Optimization endpoint for targeted recommendations
+      try {
+        const aiOptimizationResponse = await fetch('/api/keywords/ai-optimization', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(params),
+          body: JSON.stringify({
+            keywords: keywordsToAnalyze.slice(0, 10), // AI optimization supports up to 10 keywords
+            location: 'United States',
+            language: 'en',
+          }),
+          signal: AbortSignal.timeout(30000), // 30 second timeout
+        });
+
+        if (aiOptimizationResponse.ok) {
+          let aiData;
+          try {
+            aiData = await aiOptimizationResponse.json();
+          } catch (parseError) {
+            logger.warn('Failed to parse AI optimization response, using fallback');
+            throw new Error('Invalid response format');
+          }
+          
+          // Validate response structure
+          if (!aiData || !aiData.ai_optimization_analysis) {
+            logger.warn('AI optimization response missing required fields, using fallback', {
+              responseKeys: aiData ? Object.keys(aiData) : [],
+              hasAnalysis: !!aiData?.ai_optimization_analysis
+            });
+            throw new Error('Invalid response structure');
+          }
+          
+          // Log detailed response structure for debugging
+          const analysisKeys = Object.keys(aiData.ai_optimization_analysis || {});
+          const firstKey = analysisKeys[0];
+          const firstAnalysis = firstKey ? aiData.ai_optimization_analysis[firstKey] : null;
+          
+          logger.debug('AI optimization response structure', {
+            analysisKeys,
+            firstKey,
+            firstAnalysisKeys: firstAnalysis ? Object.keys(firstAnalysis) : [],
+            firstAnalysisSample: firstAnalysis ? {
+              ai_optimization_score: firstAnalysis.ai_optimization_score,
+              aiOptimizationScore: firstAnalysis.aiOptimizationScore,
+              ai_search_volume: firstAnalysis.ai_search_volume,
+              aiSearchVolume: firstAnalysis.aiSearchVolume,
+              ai_recommended: firstAnalysis.ai_recommended,
+              aiRecommended: firstAnalysis.aiRecommended,
+            } : null
+          });
+          
+          // Log to console in development for easier debugging
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔍 AI Optimization Response Debug:', {
+              totalKeywords: analysisKeys.length,
+              keywords: analysisKeys,
+              sampleAnalysis: firstAnalysis,
+              responseStructure: {
+                has_ai_optimization_analysis: !!aiData.ai_optimization_analysis,
+                has_summary: !!aiData.summary,
+                topLevelKeys: Object.keys(aiData)
+              }
+            });
+          }
+          
+          // Transform AI optimization response to topic recommendations format
+          const topics = Object.entries(aiData.ai_optimization_analysis || {})
+            .map(([keyword, analysis]: [string, any]) => {
+              // Handle different possible response structures
+              const aiAnalysis = analysis as {
+                ai_search_volume?: number;
+                traditional_search_volume?: number;
+                ai_optimization_score?: number;
+                ai_recommended?: boolean;
+                ai_reason?: string;
+                comparison?: {
+                  ai_growth_trend?: 'increasing' | 'decreasing' | 'stable';
+                };
+                // Alternative field names
+                aiSearchVolume?: number;
+                traditionalSearchVolume?: number;
+                aiOptimizationScore?: number;
+                aiRecommended?: boolean;
+                aiReason?: string;
+              };
+
+              // Extract values with fallbacks
+              const aiScore = aiAnalysis.ai_optimization_score ?? aiAnalysis.aiOptimizationScore ?? 0;
+              const aiSearchVol = aiAnalysis.ai_search_volume ?? aiAnalysis.aiSearchVolume ?? 0;
+              const traditionalSearchVol = aiAnalysis.traditional_search_volume ?? aiAnalysis.traditionalSearchVolume ?? 0;
+              const isRecommended = aiAnalysis.ai_recommended ?? aiAnalysis.aiRecommended ?? false;
+              const reason = aiAnalysis.ai_reason ?? aiAnalysis.aiReason ?? 'AI-optimized topic';
+              const growthTrend = aiAnalysis.comparison?.ai_growth_trend ?? 'stable';
+
+              // Determine difficulty based on AI score
+              const difficulty = aiScore >= 70 ? 'easy' :
+                                aiScore >= 50 ? 'medium' : 'hard';
+
+              // Create content angle based on AI reason and trend
+              const contentAngle = growthTrend === 'increasing' 
+                ? `High AI visibility - ${reason}`
+                : isRecommended 
+                  ? `AI-optimized topic - ${reason}`
+                  : 'General content topic';
+
+              // Format keyword as title (capitalize first letter of each word)
+              const title = keyword
+                .split(/\s+/)
+                .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+
+              // Preserve keyword as a phrase, add related keywords
+              const keywordPhrases = [keyword];
+              if (params.keywords) {
+                // Add other keywords that are phrases (not single words)
+                params.keywords.forEach((kw: string) => {
+                  if (kw.includes(' ') && kw !== keyword) {
+                    keywordPhrases.push(kw);
+                  }
+                });
+              }
+              if (params.industry && !keywordPhrases.includes(params.industry.toLowerCase())) {
+                keywordPhrases.push(params.industry.toLowerCase());
+              }
+
+              return {
+                title,
+                description: `AI-optimized topic about ${keyword}${params.target_audience ? ` for ${params.target_audience}` : ''}${params.industry ? ` in the ${params.industry} industry` : ''}. ${reason}`,
+                keywords: keywordPhrases.slice(0, 5), // Keep as phrases
+                search_volume: traditionalSearchVol || aiSearchVol,
+                difficulty,
+                content_angle: contentAngle,
+                estimated_traffic: Math.floor((aiSearchVol || traditionalSearchVol) * 0.1),
+                aiScore: aiScore,
+                aiSearchVolume: aiSearchVol,
+                traditionalSearchVolume: traditionalSearchVol,
+                recommended: isRecommended,
+              };
+            })
+            .sort((a, b) => {
+              // Sort by recommended first, then by AI score
+              if (a.recommended !== b.recommended) {
+                return a.recommended ? -1 : 1;
+              }
+              return (b.aiScore || 0) - (a.aiScore || 0);
+            })
+            .slice(0, params.count || 10);
+
+          logger.debug('AI optimization successful', { topicsCount: topics.length });
+          return { topics };
+        }
+      } catch (aiError) {
+        logger.warn('AI optimization failed, falling back to standard recommendations', { error: aiError });
+      }
+
+      // Step 4: Fallback to original endpoints if AI optimization fails
+      let response = await fetch('/api/blog-writer/topics/recommend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...params,
+          keywords: keywordsToAnalyze,
+        }),
       });
+
+      // If original endpoint fails, try the AI-powered endpoint
+      if (!response.ok) {
+        logger.debug('Original topic recommendations endpoint failed, trying AI-powered endpoint', {
+          status: response.status
+        });
+        
+        response = await fetch('/api/blog-writer/topics/recommend-ai', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            keywords: keywordsToAnalyze,
+            industry: params.industry,
+            target_audience: params.target_audience,
+            objective: params.objective,
+            content_goal: params.content_goal,
+            count: params.count,
+          }),
+        });
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -604,7 +1066,8 @@ class BlogWriterAPI {
       return await response.json();
     } catch (error) {
       logger.logError(error instanceof Error ? error : new Error('Failed to get topic recommendations'), {
-        endpoint: '/api/blog-writer/topics/recommend'
+        endpoint: '/api/keywords/ai-optimization',
+        fallbackEndpoint: '/api/blog-writer/topics/recommend'
       });
       throw error;
     }

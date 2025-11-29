@@ -17,7 +17,7 @@ interface MasterKeywordTableProps {
   loading?: boolean;
 }
 
-type SortField = 'keyword' | 'search_volume' | 'keyword_difficulty' | 'easy_win_score' | 'high_value_score';
+type SortField = 'keyword' | 'search_volume' | 'keyword_difficulty' | 'easy_win_score' | 'high_value_score' | 'cpc' | 'search_intent';
 type SortDirection = 'asc' | 'desc';
 
 function MasterKeywordTable({
@@ -106,7 +106,7 @@ function MasterKeywordTable({
   };
 
   const exportToCSV = () => {
-    const headers = ['Keyword', 'Search Volume', 'Difficulty', 'Competition', 'Easy Win Score', 'High Value Score', 'CPC'];
+    const headers = ['Keyword', 'Search Volume', 'Difficulty', 'Competition', 'Easy Win Score', 'High Value Score', 'CPC', 'Intent', 'Type', 'Parent Topic'];
     const rows = filteredAndSortedKeywords.map((k) => [
       k.keyword,
       k.search_volume,
@@ -115,6 +115,9 @@ function MasterKeywordTable({
       k.easy_win_score,
       k.high_value_score,
       k.cpc || 0,
+      k.search_intent || '',
+      k.is_question ? 'Question' : '',
+      k.parent_topic || '',
     ]);
 
     const csvContent = [
@@ -299,14 +302,26 @@ function MasterKeywordTable({
                 </button>
               </TableCell>
               <TableCell isHeader className="px-6 py-4 text-right">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">CPC</span>
+                <button
+                  onClick={() => handleSort('cpc')}
+                  className="flex items-center gap-2 ml-auto text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  CPC
+                  <ArrowUpDown className="h-4 w-4" />
+                </button>
+              </TableCell>
+              <TableCell isHeader className="px-6 py-4">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Intent</span>
+              </TableCell>
+              <TableCell isHeader className="px-6 py-4">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Type</span>
               </TableCell>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <td className="px-6 py-8 text-center" colSpan={8}>
+                <td className="px-6 py-8 text-center" colSpan={10}>
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
                     <span className="ml-3 text-gray-500 dark:text-gray-400">Loading keywords...</span>
@@ -315,7 +330,7 @@ function MasterKeywordTable({
               </TableRow>
             ) : filteredAndSortedKeywords.length === 0 ? (
               <TableRow>
-                <td className="px-6 py-8 text-center text-gray-500 dark:text-gray-400" colSpan={8}>
+                <td className="px-6 py-8 text-center text-gray-500 dark:text-gray-400" colSpan={10}>
                   No keywords found. Try adjusting your filters.
                 </td>
               </TableRow>
@@ -361,6 +376,35 @@ function MasterKeywordTable({
                     <span className="text-gray-700 dark:text-gray-300">
                       ${keyword.cpc?.toFixed(2) || '0.00'}
                     </span>
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
+                    {keyword.search_intent ? (
+                      <Badge 
+                        color={
+                          keyword.search_intent === 'informational' ? 'info' :
+                          keyword.search_intent === 'commercial' ? 'warning' :
+                          keyword.search_intent === 'transactional' ? 'success' : 'light'
+                        } 
+                        size="sm"
+                      >
+                        {keyword.search_intent}
+                      </Badge>
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="px-6 py-4">
+                    {keyword.is_question ? (
+                      <Badge color="info" size="sm">
+                        Question
+                      </Badge>
+                    ) : keyword.parent_topic ? (
+                      <span className="text-xs text-gray-600 dark:text-gray-400" title={keyword.parent_topic}>
+                        {keyword.parent_topic.length > 20 ? `${keyword.parent_topic.substring(0, 20)}...` : keyword.parent_topic}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500 text-xs">—</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

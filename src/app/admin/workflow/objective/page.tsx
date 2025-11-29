@@ -152,6 +152,37 @@ export default function ObjectivePage() {
       return;
     }
 
+    // Store topic keywords if available from selected topic
+    if (typeof window !== 'undefined') {
+      const storedTopicKeywords = sessionStorage.getItem('topic_keywords');
+      if (storedTopicKeywords) {
+        try {
+          const topicKeywords = JSON.parse(storedTopicKeywords);
+          // Store in workflow_data for keyword research page
+          const supabase = createClient();
+          const sessionId = localStorage.getItem('workflow_session_id');
+          if (sessionId) {
+            const { data: session } = await supabase
+              .from('workflow_sessions')
+              .select('workflow_data')
+              .eq('session_id', sessionId)
+              .maybeSingle();
+            
+            const workflowData = (session?.workflow_data as Record<string, unknown>) || {};
+            workflowData.topic_keywords = topicKeywords;
+            workflowData.selected_topic = sessionStorage.getItem('selected_topic') || formData.objective;
+            
+            await supabase
+              .from('workflow_sessions')
+              .update({ workflow_data: workflowData })
+              .eq('session_id', sessionId);
+          }
+        } catch (e) {
+          console.error('Error storing topic keywords:', e);
+        }
+      }
+    }
+
     await handleSave();
     router.push('/admin/workflow/keywords');
   };
@@ -163,12 +194,31 @@ export default function ObjectivePage() {
     }
 
     setShowTopicRecommendations(true);
-    await recommendTopics({
-      industry: formData.industry || undefined,
-      target_audience: formData.target_audience || undefined,
-      keywords: formData.objective ? [formData.objective] : undefined,
-      count: 10
-    });
+    setError(null);
+    
+    try {
+      // Only extract keywords if objective is NOT provided
+      // When objective is provided, backend will extract keywords automatically from content_objective
+      let keywords: string[] | undefined = undefined;
+      
+      if (!formData.objective && formData.industry) {
+        // Fallback: Only extract keywords if we don't have an objective
+        // Use industry as a keyword (preserve as phrase)
+        keywords = [formData.industry.toLowerCase()];
+      }
+
+      await recommendTopics({
+        industry: formData.industry || undefined,
+        target_audience: formData.target_audience || undefined,
+        objective: formData.objective || undefined, // Backend will extract keywords from this
+        content_goal: formData.content_goal || undefined,
+        keywords: keywords, // Only used as fallback when objective is not provided
+        count: 10
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to get topic recommendations');
+      setShowTopicRecommendations(false);
+    }
   };
 
   return (
@@ -336,32 +386,141 @@ export default function ObjectivePage() {
 
             {showTopicRecommendations && topics && topics.length > 0 && (
               <div className="mt-4 space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Recommended Topics ({topics.length})
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                    Recommended Topics ({topics.length})
+                  </h4>
+                  {topics.some(t => t.recommended) && (
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                      ⭐ {topics.filter(t => t.recommended).length} AI-optimized
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
                   {topics.map((topic, index) => (
                     <div
                       key={index}
-                      className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600 transition-colors cursor-pointer"
+                      className={`p-4 rounded-lg border transition-colors cursor-pointer ${
+                        topic.recommended
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 hover:border-green-300 dark:hover:border-green-700'
+                          : 'bg-gray-50 dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-purple-300 dark:hover:border-purple-600'
+                      }`}
                       onClick={() => {
+                        // Store topic keywords for use in keyword research
+                        // Preserve keywords as phrases (not split)
+                        const topicKeywords = topic.keywords || [topic.title];
+                        
+                        // Store in sessionStorage for keyword research page
+                        if (typeof window !== 'undefined') {
+                          sessionStorage.setItem('topic_keywords', JSON.stringify(topicKeywords));
+                          sessionStorage.setItem('topic_ai_score', String(topic.aiScore || 0));
+                          sessionStorage.setItem('selected_topic', topic.title);
+                        }
+                        
                         setFormData({ ...formData, objective: topic.title });
                         setShowTopicRecommendations(false);
                       }}
                     >
-                      <h5 className="font-medium text-gray-900 dark:text-white mb-1">
-                        {topic.title}
-                      </h5>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        {topic.description}
-                      </p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                        <span>Volume: {topic.search_volume?.toLocaleString() || 'N/A'}</span>
-                        <span>Difficulty: {topic.difficulty || 'N/A'}</span>
-                        {topic.estimated_traffic && (
-                          <span>Traffic: {topic.estimated_traffic.toLocaleString()}</span>
+                      <div className="flex items-start justify-between mb-2">
+                        <h5 className="font-medium text-gray-900 dark:text-white flex-1">
+                          {topic.title}
+                        </h5>
+                        {topic.recommended && (
+                          <span className="ml-2 px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs font-medium">
+                            ⭐ Recommended
+                          </span>
                         )}
                       </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        {topic.description}
+                      </p>
+                      
+                      {/* AI Optimization Score / Ranking Score */}
+                      {(topic.aiScore !== undefined || topic.ranking_score !== undefined || topic.opportunity_score !== undefined) && (
+                        <div className="mb-3 p-2 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                              {topic.ranking_score !== undefined ? 'Ranking Score' :
+                               topic.opportunity_score !== undefined ? 'Opportunity Score' :
+                               'AI Optimization Score'}
+                            </span>
+                            <span className={`text-sm font-bold ${
+                              ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 70) ? 'text-green-600 dark:text-green-400' :
+                              ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 50) ? 'text-blue-600 dark:text-blue-400' :
+                              ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 30) ? 'text-amber-600 dark:text-amber-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                              {topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0}/100
+                              {((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) === 0) && (
+                                <span className="ml-1 text-xs">⚠️</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${
+                                ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 70) ? 'bg-green-500' :
+                                ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 50) ? 'bg-blue-500' :
+                                ((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) >= 30) ? 'bg-amber-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${Math.min((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0), 100)}%` }}
+                            />
+                          </div>
+                          {((topic.ranking_score ?? topic.opportunity_score ?? topic.aiScore ?? 0) === 0) && (
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 italic">
+                              No AI search volume detected - focus on traditional SEO
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        {topic.search_volume !== undefined && topic.search_volume > 0 && (
+                          <div>
+                            <span className="font-medium">Volume:</span> {topic.search_volume.toLocaleString()}
+                          </div>
+                        )}
+                        {topic.aiSearchVolume !== undefined && topic.aiSearchVolume > 0 && (
+                          <div>
+                            <span className="font-medium">AI Volume:</span> {topic.aiSearchVolume.toLocaleString()}
+                          </div>
+                        )}
+                        {topic.traditionalSearchVolume !== undefined && topic.traditionalSearchVolume > 0 && (
+                          <div>
+                            <span className="font-medium">Traditional:</span> {topic.traditionalSearchVolume.toLocaleString()}
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-medium">Difficulty:</span> {topic.difficulty || 'N/A'}
+                        </div>
+                        {topic.competition !== undefined && (
+                          <div>
+                            <span className="font-medium">Competition:</span> {(topic.competition * 100).toFixed(0)}%
+                          </div>
+                        )}
+                        {topic.estimated_traffic && (
+                          <div>
+                            <span className="font-medium">Traffic:</span> {topic.estimated_traffic.toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Reason / Why this ranks */}
+                      {topic.reason && (
+                        <div className="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
+                          <p className="text-xs text-blue-700 dark:text-blue-300">
+                            <span className="font-medium">Why this ranks:</span> {topic.reason}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Source */}
+                      {topic.source && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                          Source: <span className="font-medium">{topic.source.replace(/_/g, ' ')}</span>
+                        </div>
+                      )}
                       {topic.keywords && topic.keywords.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {topic.keywords.slice(0, 5).map((keyword, kwIndex) => (

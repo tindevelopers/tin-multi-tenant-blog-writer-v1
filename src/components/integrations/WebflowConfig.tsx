@@ -23,6 +23,7 @@ import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
+import { WebflowFieldMapping } from './WebflowFieldMapping';
 
 interface WebflowConfigProps {
   integrationId?: string;
@@ -620,6 +621,16 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
             <div className="font-medium text-red-800 dark:text-red-200">Error</div>
             <div className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</div>
           </div>
+        </div>
+      )}
+
+      {/* Field Mapping Section */}
+      {integrationId && collectionId && connectionStatus === 'connected' && (
+        <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
+          <WebflowFieldMapping 
+            integrationId={integrationId} 
+            collectionId={collectionId}
+          />
         </div>
       )}
     </div>

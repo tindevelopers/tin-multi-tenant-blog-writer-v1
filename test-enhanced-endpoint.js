@@ -1,130 +1,177 @@
 #!/usr/bin/env node
 
 /**
- * Test script for the enhanced blog writer endpoint
- * Usage: node test-enhanced-endpoint.js [local|production]
+ * Test /api/v1/blog/generate-enhanced endpoint
+ * This is now the PRIMARY and ONLY endpoint for blog generation
  */
 
-const fs = require('fs');
-const path = require('path');
+const https = require('https');
 
-// Read the test JSON file
-const testDataPath = path.join(__dirname, 'test-enhanced-endpoint.json');
-const testData = JSON.parse(fs.readFileSync(testDataPath, 'utf8'));
+const BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-kq42l26tuq-od.a.run.app';
+const ENDPOINT = '/api/v1/blog/generate-enhanced';
 
-// Determine environment
-const environment = process.argv[2] || 'local';
-const baseUrl = environment === 'production' 
-  ? 'https://your-production-url.vercel.app'
-  : 'http://localhost:3000';
+let testsPassed = 0;
+let testsFailed = 0;
+let testsTotal = 0;
 
-const endpoint = `${baseUrl}/api/blog-writer/generate`;
-
-console.log('🧪 Testing Enhanced Blog Writer Endpoint');
-console.log('==========================================');
-console.log(`Environment: ${environment}`);
-console.log(`Endpoint: ${endpoint}`);
-console.log(`Topic: ${testData.topic}`);
-console.log(`Keywords: ${testData.keywords.join(', ')}`);
-console.log(`Quality Level: ${testData.quality_level}`);
-console.log('');
-
-// Note: This requires authentication
-// You'll need to provide a valid session token
-async function testEndpoint() {
-  try {
-    console.log('📤 Sending request...');
-    console.log('Request payload:');
-    console.log(JSON.stringify(testData, null, 2));
-    console.log('');
-
-    const response = await fetch(endpoint, {
+function makeRequest(data) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(ENDPOINT, BASE_URL);
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: url.pathname + url.search,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Note: In a real scenario, you'd need to include authentication
-        // 'Authorization': 'Bearer YOUR_TOKEN',
-        // 'Cookie': 'your-session-cookie'
       },
-      body: JSON.stringify(testData),
-    });
+      timeout: 300000,
+    };
 
-    console.log(`📥 Response Status: ${response.status} ${response.statusText}`);
-    console.log('');
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log('❌ Error Response:');
-      console.log(errorText);
-      return;
-    }
-
-    const result = await response.json();
-    
-    console.log('✅ Success Response:');
-    console.log('===================');
-    console.log(`Title: ${result.title || 'N/A'}`);
-    console.log(`Word Count: ${result.word_count || 'N/A'}`);
-    console.log(`SEO Score: ${result.seo_score || 'N/A'}`);
-    console.log(`Readability Score: ${result.readability_score || 'N/A'}`);
-    console.log(`Total Cost: $${result.total_cost || 0}`);
-    console.log(`Total Tokens: ${result.total_tokens || 0}`);
-    console.log(`Generation Time: ${result.generation_time || 0}s`);
-    console.log('');
-
-    if (result.progress_updates && result.progress_updates.length > 0) {
-      console.log('📊 Progress Updates:');
-      result.progress_updates.forEach((update, idx) => {
-        console.log(`  ${idx + 1}. ${update.stage} (${update.progress_percentage}%)`);
-        if (update.details) {
-          console.log(`     ${update.details}`);
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        try {
+          const parsed = body ? JSON.parse(body) : {};
+          resolve({
+            status: res.statusCode,
+            body: parsed,
+          });
+        } catch (e) {
+          resolve({
+            status: res.statusCode,
+            body: body,
+          });
         }
       });
-      console.log('');
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+
+    req.write(JSON.stringify(data));
+    req.end();
+  });
+}
+
+async function runTest(testName, request) {
+  testsTotal++;
+  console.log(`\n[${testsTotal}] ${testName}`);
+  console.log(`  Blog Type: ${request.blog_type || 'default'}`);
+  console.log(`  Topic: ${request.topic}`);
+
+  const startTime = Date.now();
+  
+  try {
+    const response = await makeRequest(request);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    
+    const hasContent = response.body.content && response.body.content.length > 0;
+    const hasTitle = !!response.body.title;
+    const wordCount = response.body.content ? response.body.content.split(/\s+/).length : 0;
+    
+    if (response.status === 200 && hasContent && hasTitle) {
+      console.log(`  ✓ PASSED (${duration}s)`);
+      console.log(`    Title: ${response.body.title.substring(0, 60)}...`);
+      console.log(`    Content: ${wordCount} words`);
+      console.log(`    SEO Score: ${response.body.seo_score || 'N/A'}`);
+      if (response.body.seo_metadata?.word_count_range) {
+        const wc = response.body.seo_metadata.word_count_range;
+        console.log(`    Word Count: ${wc.actual} (target: ${wc.min}-${wc.max})`);
+      }
+      testsPassed++;
+      return { success: true };
+    } else {
+      console.log(`  ✗ FAILED (${duration}s)`);
+      console.log(`    Status: ${response.status}`);
+      console.log(`    Has Content: ${hasContent}, Content Length: ${response.body.content?.length || 0}`);
+      console.log(`    Has Title: ${hasTitle}`);
+      if (response.body.error) {
+        console.log(`    Error: ${response.body.error}`);
+      }
+      if (response.body.detail) {
+        console.log(`    Detail: ${JSON.stringify(response.body.detail).substring(0, 200)}`);
+      }
+      if (response.body.warnings) {
+        console.log(`    Warnings: ${JSON.stringify(response.body.warnings)}`);
+      }
+      testsFailed++;
+      return { success: false };
     }
-
-    if (result.citations && result.citations.length > 0) {
-      console.log(`📚 Citations: ${result.citations.length} found`);
-      result.citations.slice(0, 3).forEach((citation, idx) => {
-        console.log(`  ${idx + 1}. ${citation.title || citation.url}`);
-      });
-      console.log('');
-    }
-
-    if (result.semantic_keywords && result.semantic_keywords.length > 0) {
-      console.log(`🔑 Semantic Keywords: ${result.semantic_keywords.length} found`);
-      console.log(`  ${result.semantic_keywords.slice(0, 5).join(', ')}`);
-      console.log('');
-    }
-
-    if (result.warnings && result.warnings.length > 0) {
-      console.log('⚠️  Warnings:');
-      result.warnings.forEach((warning, idx) => {
-        console.log(`  ${idx + 1}. ${warning}`);
-      });
-      console.log('');
-    }
-
-    // Save full response to file
-    const outputPath = path.join(__dirname, 'test-enhanced-endpoint-result.json');
-    fs.writeFileSync(outputPath, JSON.stringify(result, null, 2));
-    console.log(`💾 Full response saved to: ${outputPath}`);
-
-    // Save content preview
-    if (result.content) {
-      const contentPreview = result.content.substring(0, 500);
-      console.log('');
-      console.log('📝 Content Preview (first 500 chars):');
-      console.log('=====================================');
-      console.log(contentPreview);
-      console.log('...');
-    }
-
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
-    console.error(error.stack);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`  ✗ ERROR (${duration}s): ${error.message}`);
+    testsFailed++;
+    return { success: false };
   }
 }
 
-// Run the test
-testEndpoint();
+async function runTests() {
+  console.log('========================================');
+  console.log('API v1.3.6 Endpoint Test');
+  console.log(`Endpoint: ${ENDPOINT}`);
+  console.log(`Base URL: ${BASE_URL}`);
+  console.log('========================================');
+
+  // Test various blog types
+  await runTest('Tutorial Type', {
+    topic: 'Introduction to Python Programming',
+    keywords: ['python', 'programming'],
+    blog_type: 'tutorial',
+    tone: 'professional',
+    length: 'short',
+    word_count_target: 300,
+    optimize_for_traffic: true,
+    use_dataforseo_content_generation: true,
+  });
+
+  await runTest('FAQ Type', {
+    topic: 'Frequently Asked Questions About SEO',
+    keywords: ['seo'],
+    blog_type: 'faq',
+    tone: 'professional',
+    length: 'medium',
+    optimize_for_traffic: true,
+  });
+
+  await runTest('Tips Type', {
+    topic: '10 Tips for Better Blog Writing',
+    keywords: ['blog writing'],
+    blog_type: 'tips',
+    tone: 'friendly',
+    length: 'short',
+    word_count_target: 500,
+    optimize_for_traffic: true,
+  });
+
+  await runTest('Custom Type (No SEO)', {
+    topic: 'Python Overview',
+    keywords: ['python'],
+    blog_type: 'custom',
+    optimize_for_traffic: false,
+  });
+
+  // Summary
+  console.log('\n========================================');
+  console.log('Test Summary');
+  console.log('========================================');
+  console.log(`Total Tests: ${testsTotal}`);
+  console.log(`Passed: ${testsPassed}`);
+  console.log(`Failed: ${testsFailed}`);
+  
+  if (testsFailed === 0) {
+    console.log('\n✓ All tests passed!');
+    process.exit(0);
+  } else {
+    console.log('\n✗ Some tests failed');
+    process.exit(1);
+  }
+}
+
+runTests().catch(console.error);

@@ -22,7 +22,14 @@ import {
   Target,
   Settings,
   ListOrdered,
-  CheckCircle
+  CheckCircle,
+  Building2,
+  Plug,
+  FileClock,
+  Shield,
+  History,
+  Layers2,
+  Search
 } from "lucide-react";
 
 type NavItem = {
@@ -37,7 +44,15 @@ type NavItem = {
     new?: boolean;
     isAccordionHeader?: boolean;
     icon?: React.ReactNode;
-    subItems?: { name: string; path: string; pro?: boolean; new?: boolean; icon?: React.ReactNode }[];
+    subItems?: { 
+      name: string; 
+      path?: string; 
+      pro?: boolean; 
+      new?: boolean; 
+      icon?: React.ReactNode;
+      isAccordionHeader?: boolean;
+      subItems?: { name: string; path: string; pro?: boolean; new?: boolean; icon?: React.ReactNode }[];
+    }[];
   }[];
 };
 
@@ -54,19 +69,16 @@ const blogWriterItems: NavItem[] = [
         icon: <LayoutDashboard className="w-4 h-4" />
       },
       { 
-        name: "Content Workflow", 
+        name: "SEO Tools", 
         icon: <Target className="w-4 h-4" />,
-        isAccordionHeader: true,
+        pro: true,
         new: true,
+        isAccordionHeader: true,
         subItems: [
-          { name: "Start Workflow", path: "/admin/workflow/objective", icon: <Target className="w-4 h-4" />, new: true },
-          { name: "Keyword Research", path: "/admin/workflow/keywords", icon: <TrendingUp className="w-4 h-4" />, new: true },
-          { name: "Clustering", path: "/admin/workflow/clusters", icon: <LayoutDashboard className="w-4 h-4" />, new: true },
-          { name: "Content Ideas", path: "/admin/workflow/ideas", icon: <FileText className="w-4 h-4" />, new: true },
-          { name: "Topic Suggestions", path: "/admin/workflow/topics", icon: <FileText className="w-4 h-4" />, new: true },
-          { name: "Strategy", path: "/admin/workflow/strategy", icon: <Target className="w-4 h-4" />, new: true },
-          { name: "Content Editor", path: "/admin/workflow/editor", icon: <FileText className="w-4 h-4" />, new: true },
-          { name: "My Posts", path: "/admin/workflow/posts", icon: <FolderOpen className="w-4 h-4" />, new: true },
+          { name: "Keyword Research", path: "/seo", icon: <Search className="w-4 h-4" />, new: true },
+          { name: "Keyword Results", path: "/seo?tab=keyword-results", icon: <TrendingUp className="w-4 h-4" />, new: true },
+          { name: "Saved Searches", path: "/seo/saved-searches", icon: <History className="w-4 h-4" />, new: true },
+          { name: "Content Clusters", path: "/seo/content-clusters", icon: <Layers2 className="w-4 h-4" />, new: true },
         ]
       },
       { 
@@ -75,12 +87,11 @@ const blogWriterItems: NavItem[] = [
         isAccordionHeader: true,
         new: true,
         subItems: [
-          { name: "Drafts", path: "/admin/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
-          { name: "Blog Queue", path: "/admin/blog-queue", icon: <ListOrdered className="w-4 h-4" />, new: true },
-          { name: "Approvals", path: "/admin/approvals", icon: <CheckCircle className="w-4 h-4" />, new: true },
-          { name: "Templates", path: "/admin/templates", icon: <FileText className="w-4 h-4" />, new: true },
-          { name: "Publishing", path: "/admin/publishing", icon: <Globe className="w-4 h-4" />, new: true },
-          { name: "Workflows", path: "/admin/workflows", icon: <CalendarDays className="w-4 h-4" />, new: true },
+          { name: "Drafts", path: "/contentmanagement/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
+          { name: "Content Ideas", path: "/contentmanagement/content-ideas", icon: <Target className="w-4 h-4" />, new: true },
+          { name: "Templates", path: "/contentmanagement/templates", icon: <FileText className="w-4 h-4" />, new: true },
+          { name: "Publishing", path: "/contentmanagement/publishing", icon: <Globe className="w-4 h-4" />, new: true },
+          { name: "Blog Queue", path: "/contentmanagement/blog-queue", icon: <FileClock className="w-4 h-4" />, new: true },
         ]
       },
       { 
@@ -90,7 +101,7 @@ const blogWriterItems: NavItem[] = [
         new: true,
         subItems: [
           { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, new: true },
-          { name: "Media", path: "/admin/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
+          { name: "Media", path: "/contentmanagement/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
         ]
       },
       { 
@@ -103,14 +114,12 @@ const blogWriterItems: NavItem[] = [
         ]
       },
       { 
-        name: "Analytics & SEO", 
+        name: "Analytics & Insights", 
         icon: <BarChart className="w-4 h-4" />,
         isAccordionHeader: true,
         pro: true,
         subItems: [
           { name: "Analytics", path: "/admin/analytics", icon: <TrendingUp className="w-4 h-4" />, pro: true },
-          { name: "SEO", path: "/admin/seo", icon: <Target className="w-4 h-4" />, pro: true },
-          { name: "Content Clusters", path: "/admin/content-clusters", icon: <LayoutDashboard className="w-4 h-4" />, new: true },
         ]
       },
     ],
@@ -124,12 +133,12 @@ const adminPanelItems: NavItem[] = [
     icon: <span className="w-5 h-5 flex items-center justify-center text-xs font-bold bg-purple-600 text-white rounded">A</span>,
     new: true,
     subItems: [
-      { name: "Admin Dashboard", path: "/admin/panel" },
-      { name: "User Management", path: "/admin/panel/users" },
-      { name: "Organizations", path: "/admin/panel/organizations" },
-      { name: "Integrations", path: "/admin/panel/integrations" },
-      { name: "Usage Logs", path: "/admin/panel/usage-logs" },
-      { name: "System Settings", path: "/admin/panel/system-settings" },
+      { name: "Admin Dashboard", path: "/admin/panel", icon: <LayoutDashboard className="w-4 h-4" /> },
+      { name: "User Management", path: "/admin/panel/users", icon: <Users className="w-4 h-4" /> },
+      { name: "Organizations", path: "/admin/panel/organizations", icon: <Building2 className="w-4 h-4" /> },
+      { name: "Integrations", path: "/admin/panel/integrations", icon: <Plug className="w-4 h-4" /> },
+      { name: "Usage Logs", path: "/admin/panel/usage-logs", icon: <FileClock className="w-4 h-4" /> },
+      { name: "System Settings", path: "/admin/panel/system-settings", icon: <Settings className="w-4 h-4" /> },
     ],
   },
 ];
@@ -139,21 +148,30 @@ const AppSidebar: React.FC = () => {
   const pathname = usePathname();
 
   // Smart state management with auto-expand and persistence
-  const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set());
+  // Default Blog Writer menu to open
+  const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set(['templates-0']));
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
-  // Load persisted state from localStorage
+  // Load persisted state from localStorage, default Blog Writer menu to open
   useEffect(() => {
     const savedOpenSubmenus = localStorage.getItem('sidebar-open-submenus');
     const savedOpenNestedSubmenus = localStorage.getItem('sidebar-open-nested-submenus');
     
     if (savedOpenSubmenus) {
       try {
-        setOpenSubmenus(new Set(JSON.parse(savedOpenSubmenus)));
+        const parsed = new Set<string>(JSON.parse(savedOpenSubmenus) as string[]);
+        // Ensure Blog Writer menu (templates-0) is always open
+        parsed.add('templates-0');
+        setOpenSubmenus(parsed);
       } catch (e) {
         console.warn('Failed to parse saved open submenus:', e);
+        // Default Blog Writer menu to open
+        setOpenSubmenus(new Set(['templates-0']));
       }
+    } else {
+      // Default Blog Writer menu to open if no saved state
+      setOpenSubmenus(new Set(['templates-0']));
     }
     
     if (savedOpenNestedSubmenus) {
@@ -344,6 +362,7 @@ const AppSidebar: React.FC = () => {
                       ? "lg:justify-center"
                       : "lg:justify-start"
                   }`}
+                  style={{ pointerEvents: 'auto' }}
                 >
                   <span
                     className={`${
@@ -359,19 +378,19 @@ const AppSidebar: React.FC = () => {
                       isSubmenuOpen
                         ? "menu-item-text-active"
                         : "menu-item-text-inactive"
-                    }`}
+                    } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                   >
                     {nav.name}
                   </span>
                   {nav.new && (
-                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                    <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                       NEW
                     </span>
                   )}
                   <ChevronDownIcon
-                    className={`${
+                    className={`transition-transform duration-200 ${
                       isSubmenuOpen ? "rotate-180" : ""
-                    } transition-transform duration-200`}
+                    } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                   />
                 </button>
               ) : (
@@ -386,6 +405,7 @@ const AppSidebar: React.FC = () => {
                       ? "lg:justify-center"
                       : "lg:justify-start"
                   }`}
+                  style={{ pointerEvents: 'auto' }}
                 >
                   <span
                     className={`${
@@ -401,12 +421,12 @@ const AppSidebar: React.FC = () => {
                       isActive(nav.path || "")
                         ? "menu-item-text-active"
                         : "menu-item-text-inactive"
-                    }`}
+                    } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                   >
                     {nav.name}
                   </span>
                   {nav.new && (
-                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                    <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                       NEW
                     </span>
                   )}
@@ -438,6 +458,7 @@ const AppSidebar: React.FC = () => {
                                     ? "lg:justify-center"
                                     : "lg:justify-start"
                                 }`}
+                                style={{ pointerEvents: 'auto' }}
                               >
                                 <span className="flex items-center gap-2">
                                   {subItem.icon && (
@@ -445,9 +466,11 @@ const AppSidebar: React.FC = () => {
                                       {subItem.icon}
                                     </span>
                                   )}
-                                  {subItem.name}
+                                  <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
+                                    {subItem.name}
+                                  </span>
                                   {subItem.new && (
-                                    <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                                    <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                       NEW
                                     </span>
                                   )}
@@ -455,7 +478,7 @@ const AppSidebar: React.FC = () => {
                                 <ChevronDownIcon
                                   className={`w-4 h-4 transition-transform duration-200 ${
                                     isNestedSubmenuOpen ? "rotate-180" : ""
-                                  }`}
+                                  } ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}
                                 />
                               </button>
                               {subItem.subItems && (
@@ -478,6 +501,7 @@ const AppSidebar: React.FC = () => {
                                               ? "lg:justify-center"
                                               : "lg:justify-start"
                                           }`}
+                                          style={{ pointerEvents: 'auto' }}
                                         >
                                           <span className="flex items-center gap-2">
                                             {nestedItem.icon && (
@@ -485,14 +509,16 @@ const AppSidebar: React.FC = () => {
                                                 {nestedItem.icon}
                                               </span>
                                             )}
-                                            {nestedItem.name}
+                                            <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
+                                              {nestedItem.name}
+                                            </span>
                                             {nestedItem.new && (
-                                              <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                                              <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                                 NEW
                                               </span>
                                             )}
                                             {nestedItem.pro && (
-                                              <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300">
+                                              <span className={`bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                                 PRO
                                               </span>
                                             )}
@@ -516,16 +542,24 @@ const AppSidebar: React.FC = () => {
                                   ? "lg:justify-center"
                                   : "lg:justify-start"
                               }`}
+                              style={{ pointerEvents: 'auto' }}
                             >
                               <span className="flex items-center gap-2">
-                                {subItem.name}
+                                {subItem.icon && (
+                                  <span className={`${isActive(subItem.path || "") ? "text-blue-600 dark:text-blue-400" : "text-gray-500 dark:text-gray-400"}`}>
+                                    {subItem.icon}
+                                  </span>
+                                )}
+                                <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
+                                  {subItem.name}
+                                </span>
                                 {subItem.new && (
-                                  <span className="bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300">
+                                  <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                     NEW
                                   </span>
                                 )}
                                 {subItem.pro && (
-                                  <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300">
+                                  <span className={`bg-purple-100 text-purple-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-purple-900 dark:text-purple-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                     PRO
                                   </span>
                                 )}
@@ -547,11 +581,12 @@ const AppSidebar: React.FC = () => {
 
   return (
     <aside
-      className={`sidebar group fixed z-50 h-screen w-72 overflow-hidden bg-white shadow-lg transition-all duration-300 ease-in-out dark:bg-gray-900 lg:left-0 ${
+      className={`sidebar group fixed h-screen w-72 overflow-hidden bg-white shadow-lg transition-all duration-300 ease-in-out dark:bg-gray-900 lg:left-0 ${
         isExpanded || isHovered || isMobileOpen
           ? "left-0"
           : "-left-72 lg:left-0 lg:w-20"
       }`}
+      style={{ zIndex: 9999, pointerEvents: 'auto' }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -585,7 +620,7 @@ const AppSidebar: React.FC = () => {
                 <h2
                   className={`mb-4 text-xs uppercase flex leading-5 text-gray-400 ${
                     !isExpanded && !isHovered
-                      ? "xl:justify-center"
+                      ? "xl:justify-center lg:hidden"
                       : "justify-start"
                   }`}
                 >
@@ -604,7 +639,7 @@ const AppSidebar: React.FC = () => {
                   <h2
                     className={`mb-4 text-xs uppercase flex leading-5 text-purple-400 ${
                       !isExpanded && !isHovered
-                        ? "xl:justify-center"
+                        ? "xl:justify-center lg:hidden"
                         : "justify-start"
                     }`}
                   >

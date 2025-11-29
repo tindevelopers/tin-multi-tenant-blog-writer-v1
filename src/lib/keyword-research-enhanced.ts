@@ -2,7 +2,7 @@ import { logger } from '@/utils/logger';
 /**
  * Enhanced Keyword Research Service
  * Integrates with Blog Writer API's keyword endpoints via Next.js API routes
- * Based on API documentation: https://blog-writer-api-dev-613248238610.europe-west1.run.app/docs
+ * Based on API documentation: https://blog-writer-api-dev-613248238610.europe-west9.run.app/docs
  */
 
 const API_BASE_URL = '/api/keywords'; // Use Next.js API routes as proxy
@@ -17,6 +17,8 @@ export interface KeywordData {
   cpc?: number;
   search_intent?: 'informational' | 'navigational' | 'commercial' | 'transactional';
   trend_score?: number;
+  parent_topic?: string;
+  is_question?: boolean;
   related_keywords?: string[];
   easy_win_score: number;
   high_value_score: number;
@@ -52,6 +54,8 @@ export interface KeywordAnalysisResponse {
 
 export interface KeywordSuggestionResponse {
   keyword_suggestions: string[];
+  related_keywords?: string[];
+  long_tail_keywords?: string[];
 }
 
 export interface KeywordCluster {
@@ -98,9 +102,10 @@ export class EnhancedKeywordResearchService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          keywords: keywords.slice(0, 75), // Optimized API limit
+          keywords: keywords.slice(0, 10), // Reduced from 75 to preserve credits
           location,
           language,
+          include_search_volume: true, // Request search volume data
         }),
       });
 
@@ -129,23 +134,46 @@ export class EnhancedKeywordResearchService {
    */
   async suggestKeywords(keyword: string): Promise<KeywordSuggestionResponse> {
     try {
+      // Increase timeout to 60 seconds to account for Cloud Run cold starts
       const response = await fetch(`${this.baseUrl}/suggest`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ keyword }),
+        signal: AbortSignal.timeout(60000), // 60 second timeout
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        // Check if response is HTML (404 error page)
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          logger.warn('Keyword suggestions endpoint returned HTML (likely 404)', { 
+            keyword, 
+            status: response.status,
+            url: `${this.baseUrl}/suggest`
+          });
+          // Return empty suggestions instead of throwing error
+          return {
+            keyword_suggestions: [],
+            related_keywords: [],
+            long_tail_keywords: [],
+          };
+        }
+        
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
         throw new Error(errorData.error || `Keyword suggestions failed: ${response.statusText}`);
       }
 
       const data = await response.json();
       return data;
     } catch (error) {
-      logger.error('Error getting keyword suggestions:', error);
+      const isTimeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      if (isTimeout) {
+        logger.error('Error getting keyword suggestions: Request timed out. The API may be cold-starting. Please try again.', error);
+      } else {
+        logger.error('Error getting keyword suggestions:', error);
+      }
       throw error;
     }
   }
@@ -196,21 +224,38 @@ export class EnhancedKeywordResearchService {
     suggestions: KeywordSuggestionResponse;
   }> {
     try {
-      // Step 1: Get suggestions for the primary keyword
-      const suggestions = await this.suggestKeywords(primaryKeyword);
+      // Step 1: Get suggestions for the primary keyword (gracefully handle if endpoint doesn't exist)
+      let suggestions: KeywordSuggestionResponse;
+      try {
+        suggestions = await this.suggestKeywords(primaryKeyword);
+      } catch (error) {
+        logger.warn('Keyword suggestions endpoint unavailable, continuing without suggestions', { error });
+        suggestions = {
+          keyword_suggestions: [],
+          related_keywords: [],
+          long_tail_keywords: [],
+        };
+      }
 
-      // Step 2: Collect all keyword variations
+      // Step 2: Collect all keyword variations (limited to preserve credits)
+      const maxSuggestions = 5; // Reduced to preserve credits
       const allKeywords = [
         primaryKeyword,
-        ...(suggestions.keyword_suggestions || []),
+        ...(suggestions.keyword_suggestions || []).slice(0, maxSuggestions),
       ];
 
-      // Step 3: Analyze all keywords in batches of 50
+      // Step 3: Analyze all keywords in smaller batches (reduced for credit preservation)
+      // Limit to first 10 keywords max to preserve credits
+      const limitedKeywords = allKeywords.slice(0, 10);
       const analysisResults: KeywordAnalysisResponse[] = [];
-      for (let i = 0; i < allKeywords.length; i += 50) {
-        const batch = allKeywords.slice(i, i + 50);
+      const BATCH_SIZE = 5; // Reduced batch size
+      
+      for (let i = 0; i < limitedKeywords.length; i += BATCH_SIZE) {
+        const batch = limitedKeywords.slice(i, i + BATCH_SIZE);
         const batchResults = await this.analyzeKeywords(batch, location, language);
-        analysisResults.push(...batchResults);
+        if (batchResults && Array.isArray(batchResults)) {
+          analysisResults.push(...batchResults.filter(r => r && r.keyword));
+        }
       }
 
       // Step 4: Transform to KeywordData format with scoring
@@ -220,8 +265,12 @@ export class EnhancedKeywordResearchService {
 
       // Step 5: Find primary keyword analysis
       const primaryAnalysis = analysisResults.find(
-        (a) => a.keyword.toLowerCase() === primaryKeyword.toLowerCase()
+        (a) => a && a.keyword && a.keyword.toLowerCase() === primaryKeyword.toLowerCase()
       ) || analysisResults[0];
+      
+      if (!primaryAnalysis || !primaryAnalysis.keyword) {
+        throw new Error(`Failed to analyze primary keyword: ${primaryKeyword}`);
+      }
 
       return {
         primary: primaryAnalysis,
@@ -442,4 +491,7 @@ export class EnhancedKeywordResearchService {
 
 // Export singleton instance
 export const keywordResearchService = new EnhancedKeywordResearchService();
+
+// Also export as default for compatibility
+export default keywordResearchService;
 

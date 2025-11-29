@@ -69,7 +69,7 @@ export default function QuickActionsMenu({
                     if (onViewQueue) {
                       onViewQueue();
                     } else if (queueId) {
-                      window.location.href = `/admin/blog-queue/${queueId}`;
+                      window.location.href = `/contentmanagement/blog-queue/${queueId}`;
                     }
                   }}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
@@ -86,7 +86,7 @@ export default function QuickActionsMenu({
                     if (onViewApproval) {
                       onViewApproval();
                     } else if (approvalId) {
-                      window.location.href = `/admin/approvals/${approvalId}`;
+                      window.location.href = `/contentmanagement/approvals/${approvalId}`;
                     }
                   }}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"

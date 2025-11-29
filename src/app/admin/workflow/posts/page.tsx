@@ -246,14 +246,14 @@ export default function PostsPage() {
 
               <div className="flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <Link
-                  href={`/admin/drafts/view/${post.post_id}`}
+                  href={`/contentmanagement/drafts/view/${post.post_id}`}
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors text-sm"
                 >
                   <Eye className="w-4 h-4" />
                   View
                 </Link>
                 <Link
-                  href={`/admin/drafts/edit/${post.post_id}`}
+                  href={`/contentmanagement/drafts/edit/${post.post_id}`}
                   className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-100 dark:bg-blue-900/20 hover:bg-blue-200 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg transition-colors text-sm"
                 >
                   <Pencil className="w-4 h-4" />

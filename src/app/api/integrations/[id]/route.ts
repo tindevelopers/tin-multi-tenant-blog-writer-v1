@@ -97,16 +97,28 @@ async function handleUpdate(
       config?: Record<string, unknown>;
       connection_method?: ConnectionMethod;
       status?: IntegrationStatus;
+      field_mappings?: FieldMapping[];
+      metadata?: Record<string, unknown>;
     }>(request);
     const { 
       connection,
       config,
       connection_method,
-      status 
+      status,
+      field_mappings,
+      metadata
     } = body;
 
     // Support both 'connection' and 'config' for backward compatibility
-    const connectionConfig = connection || config;
+    let connectionConfig = connection || config;
+
+    // If field_mappings are provided, merge them into connection config
+    if (field_mappings !== undefined) {
+      connectionConfig = {
+        ...(connectionConfig || {}),
+        field_mappings: field_mappings,
+      } as ConnectionConfig;
+    }
 
     // Get integration using new database adapter
     const dbAdapter = new EnvironmentIntegrationsDB();
@@ -138,6 +150,7 @@ async function handleUpdate(
         connection: connectionConfig as ConnectionConfig,
         connection_method: connectionMethod,
         status: status,
+        ...(metadata && { metadata }),
       },
       user.org_id
     );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
@@ -34,13 +34,6 @@ export default function OrganizationSettingsAdminPage() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
 
-  useEffect(() => {
-    if (orgId) {
-      fetchOrganization();
-      checkUserRole();
-    }
-  }, [orgId]);
-
   const checkUserRole = async () => {
     try {
       const supabase = createClient();
@@ -62,7 +55,7 @@ export default function OrganizationSettingsAdminPage() {
     }
   };
 
-  const fetchOrganization = async () => {
+  const fetchOrganization = useCallback(async () => {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -113,7 +106,14 @@ export default function OrganizationSettingsAdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [orgId]);
+
+  useEffect(() => {
+    if (orgId) {
+      fetchOrganization();
+      checkUserRole();
+    }
+  }, [orgId, fetchOrganization]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

@@ -44,8 +44,11 @@ export async function GET(request: NextRequest) {
  * Create a new integration connection
  */
 export async function POST(request: NextRequest) {
+  let user: Awaited<ReturnType<typeof requireRole>> | null = null;
+  let integrationType: IntegrationType | undefined;
+  
   try {
-    const user = await requireRole(request, ['system_admin', 'super_admin', 'admin', 'manager']);
+    user = await requireRole(request, ['system_admin', 'super_admin', 'admin', 'manager']);
 
     // Parse request body
     const body = await parseJsonBody<{
@@ -58,6 +61,7 @@ export async function POST(request: NextRequest) {
     validateRequiredFields(body, ['type', 'name', 'config']);
     
     const { type, name, config, field_mappings } = body;
+    integrationType = type;
 
     // Create integration using new database adapter
     const dbAdapter = new EnvironmentIntegrationsDB();
@@ -77,6 +81,39 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Provide user-friendly error message for unique constraint violations
+    if (errorMessage.includes('unique constraint') || errorMessage.includes('duplicate key')) {
+      logger.warn('Integration already exists, attempting to update instead', {
+        orgId: user?.org_id || 'unknown',
+        type: integrationType || 'unknown',
+      });
+      
+      // Try to get the existing integration and return it
+      if (user && integrationType) {
+        try {
+          const dbAdapter = new EnvironmentIntegrationsDB();
+          const existingIntegrations = await dbAdapter.getIntegrations(user.org_id);
+          const existing = existingIntegrations.find(int => int.type === integrationType);
+          
+          if (existing) {
+            return NextResponse.json({ 
+              success: true, 
+              data: existing,
+              message: 'Integration already exists and was updated'
+            }, { status: 200 });
+          }
+        } catch (updateError) {
+          logger.error('Failed to retrieve existing integration', updateError);
+        }
+      }
+      
+      return NextResponse.json({ 
+        error: `An integration of type "${integrationType || 'unknown'}" already exists for your organization. Please update the existing integration instead.` 
+      }, { status: 409 });
+    }
+    
     logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
       context: 'integrations-post',
     });

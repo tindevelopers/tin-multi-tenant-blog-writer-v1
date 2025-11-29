@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { parseJsonBody, handleApiError } from '@/lib/api-utils';
 
-const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
-  'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds
@@ -78,7 +77,7 @@ export async function POST(request: NextRequest) {
     const limit = body.limit || 150;
     
     // Try enhanced endpoint first (returns search volume, CPC, difficulty, competition)
-    // If unavailable, fallback to suggest endpoint
+    // If unavailable or returns error, fallback to suggest endpoint
     let endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/enhanced`;
     let requestBody: {
       keywords: string[];
@@ -105,18 +104,18 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // If enhanced endpoint returns 503 (not available), fallback to suggest endpoint
-    if (response.status === 503) {
-      logger.debug('⚠️ Enhanced endpoint unavailable, falling back to suggest endpoint');
+    // If enhanced endpoint returns 503 (not available) or 500 (error), fallback to suggest endpoint
+    if (response.status === 503 || response.status === 500) {
+      const errorText = response.status === 500 ? await response.text().catch(() => '') : '';
+      logger.debug(`⚠️ Enhanced endpoint unavailable (${response.status}), falling back to suggest endpoint`, {
+        error: errorText.substring(0, 200)
+      });
+      
       endpoint = `${BLOG_WRITER_API_URL}/api/v1/keywords/suggest`;
+      // Backend expects: { keyword: string, limit?: number }
       requestBody = {
         keyword: keyword,
-        limit: limit,
-        include_search_volume: true,
-        include_difficulty: true,
-        include_competition: true,
-        include_cpc: true,
-        location: body.location || 'United States'
+        limit: limit
       } as unknown as typeof requestBody;
       
       response = await fetchWithRetry(
@@ -132,9 +131,28 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response.ok) {
+      // Check if response is HTML (404 error page)
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        logger.warn('Blog Writer API returned HTML 404 page', { 
+          endpoint, 
+          status: response.status,
+          keyword 
+        });
+        // Return empty suggestions instead of error
+        return NextResponse.json({
+          suggestions: [],
+          suggestions_with_topics: [],
+          keyword_suggestions: [],
+          total_suggestions: 0,
+          clusters: [],
+          cluster_summary: {},
+        });
+      }
+      
       const errorText = await response.text();
       return NextResponse.json(
-        { error: `Blog Writer API error: ${errorText}` },
+        { error: `Blog Writer API error: ${errorText.substring(0, 500)}` },
         { status: response.status }
       );
     }
@@ -145,6 +163,21 @@ export async function POST(request: NextRequest) {
     if (data.enhanced_analysis) {
       // Enhanced endpoint returns analysis for the keyword with metadata
       const keywordAnalysis = data.enhanced_analysis[keyword];
+      
+      // Safely extract difficulty - backend may return 'difficulty' (string) or 'difficulty_score' (number)
+      // Convert to string format if needed
+      let difficultyValue: string | null = null;
+      if (keywordAnalysis) {
+        if (typeof keywordAnalysis.difficulty === 'string') {
+          difficultyValue = keywordAnalysis.difficulty;
+        } else if (typeof keywordAnalysis.difficulty_score === 'number') {
+          // Convert numeric difficulty_score to string
+          difficultyValue = keywordAnalysis.difficulty_score <= 30 ? 'easy' :
+                           keywordAnalysis.difficulty_score <= 60 ? 'medium' : 'hard';
+        } else if (keywordAnalysis.difficulty !== undefined) {
+          difficultyValue = String(keywordAnalysis.difficulty);
+        }
+      }
       
       // Extract suggested keywords from related_keywords and long_tail_keywords
       const suggestedKeywords = [
@@ -157,10 +190,10 @@ export async function POST(request: NextRequest) {
         const keywordText = typeof kw === 'string' ? kw : (kw.keyword || String(kw));
         return {
           keyword: keywordText,
-          search_volume: null, // Will need separate analysis for each suggestion
-          difficulty: keywordAnalysis?.difficulty || null,
-          competition: keywordAnalysis?.competition || null,
-          cpc: keywordAnalysis?.cpc || null
+          search_volume: keywordAnalysis?.search_volume ?? null,
+          difficulty: difficultyValue,
+          competition: keywordAnalysis?.competition ?? null,
+          cpc: keywordAnalysis?.cpc ?? null
         };
       });
       

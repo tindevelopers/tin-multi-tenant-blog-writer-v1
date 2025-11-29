@@ -23,8 +23,8 @@ export interface UseContentIdeasResult {
   contentIdeas: ContentIdea[];
   
   // Actions
-  generateContentIdeas: (request: ContentIdeaGenerationRequest) => Promise<void>;
-  saveContentCluster: () => Promise<{ success: boolean; cluster_id?: string; error?: string }>;
+  generateContentIdeas: (request: ContentIdeaGenerationRequest) => Promise<ContentIdeaGenerationResponse | null>;
+  saveContentCluster: (clusterOverride?: ContentIdeaGenerationResponse | null) => Promise<{ success: boolean; cluster_id?: string; error?: string }>;
   loadUserClusters: () => Promise<void>;
   loadClusterContent: (clusterId: string) => Promise<void>;
   selectIdea: (ideaId: string) => void;
@@ -44,8 +44,9 @@ export function useContentIdeas(): UseContentIdeasResult {
 
   /**
    * Generate content ideas from keywords
+   * Returns the generated cluster so it can be used immediately
    */
-  const generateContentIdeas = useCallback(async (request: ContentIdeaGenerationRequest) => {
+  const generateContentIdeas = useCallback(async (request: ContentIdeaGenerationRequest): Promise<ContentIdeaGenerationResponse | null> => {
     try {
       setLoading(true);
       setError(null);
@@ -67,60 +68,17 @@ export function useContentIdeas(): UseContentIdeasResult {
         longTail: result.long_tail_ideas.length,
         total: allIdeas.length,
       });
+      
+      return result;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate content ideas';
       setError(errorMessage);
       logger.error('Content ideas generation error:', err);
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
-
-  /**
-   * Save the current cluster and content ideas to database
-   */
-  const saveContentCluster = useCallback(async () => {
-    if (!currentCluster) {
-      return { success: false, error: 'No cluster to save' };
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      const supabase = createClient();
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !user) {
-        return { success: false, error: 'User not authenticated' };
-      }
-
-      const allIdeas = [
-        ...currentCluster.pillar_ideas,
-        ...currentCluster.supporting_ideas,
-        ...currentCluster.long_tail_ideas,
-      ];
-
-      const result = await contentIdeasService.saveContentCluster(
-        user.id,
-        currentCluster.cluster,
-        allIdeas
-      );
-
-      if (result.success) {
-        // Refresh clusters list
-        await loadUserClusters();
-      }
-
-      return result;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save cluster';
-      setError(errorMessage);
-      return { success: false, error: errorMessage };
-    } finally {
-      setLoading(false);
-    }
-  }, [currentCluster]);
 
   /**
    * Load user's content clusters
@@ -148,6 +106,55 @@ export function useContentIdeas(): UseContentIdeasResult {
       setLoading(false);
     }
   }, []);
+
+  /**
+   * Save the current cluster and content ideas to database
+   * Can optionally accept a cluster directly to avoid state timing issues
+   */
+  const saveContentCluster = useCallback(async (clusterOverride?: ContentIdeaGenerationResponse | null) => {
+    const clusterToSave = clusterOverride || currentCluster;
+    
+    if (!clusterToSave) {
+      return { success: false, error: 'No cluster to save' };
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      const allIdeas = [
+        ...clusterToSave.pillar_ideas,
+        ...clusterToSave.supporting_ideas,
+        ...clusterToSave.long_tail_ideas,
+      ];
+
+      const result = await contentIdeasService.saveContentCluster(
+        user.id,
+        clusterToSave.cluster,
+        allIdeas
+      );
+
+      if (result.success) {
+        // Refresh clusters list
+        await loadUserClusters();
+      }
+
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save cluster';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [currentCluster, loadUserClusters]);
 
   /**
    * Load content ideas for a specific cluster

@@ -7,12 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 import { getAuthenticatedUser, handleApiError } from '@/lib/api-utils';
-
-const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
-const API_KEY = process.env.BLOG_WRITER_API_KEY;
+import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload';
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,72 +47,61 @@ export async function POST(request: NextRequest) {
     const base64 = buffer.toString('base64');
     const dataUri = `data:${file.type};base64,${base64}`;
 
-    // Upload via Blog Writer API
-    const uploadResponse = await fetch(`${API_BASE_URL}/api/v1/media/upload/cloudinary`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` })
-      },
-      body: JSON.stringify({
-        image_data: dataUri,
-        file_name: file.name,
-        folder: `blog-images/${user.org_id}`,
-        // Note: Blog Writer API will fetch Cloudinary credentials from organization settings
-      }),
-      signal: AbortSignal.timeout(60000), // 60 second timeout
+    logger.debug('Uploading image to Cloudinary via backend API', {
+      fileName: file.name,
+      fileSize: file.size,
+      orgId: user.org_id,
     });
 
-    if (!uploadResponse.ok) {
-      const errorText = await uploadResponse.text();
-      logger.error('Blog Writer API upload error', {
-        status: uploadResponse.status,
-        error: errorText,
+    let uploadResult;
+    try {
+      uploadResult = await uploadViaBlogWriterAPI(
+        '',
+        dataUri,
+        user.org_id,
+        file.name,
+        `blog-images/${user.org_id}`,
+        file.name,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Upload failed. Please try again.';
+      logger.error('Cloudinary upload failed via blog writer API', {
+        error: message,
+        orgId: user.org_id,
       });
       return NextResponse.json(
-        { error: `Upload failed: ${uploadResponse.statusText}` },
-        { status: uploadResponse.status }
+        { error: message || 'Upload failed. Please try again.' },
+        { status: 502 },
       );
     }
 
-    const result = await uploadResponse.json();
-
-    // Save to media_assets table
-    const supabase = await createClient();
-    const { data: assetData, error: assetError } = await supabase
-      .from('media_assets')
-      .insert({
-        org_id: user.org_id,
-        uploaded_by: user.id,
-        file_name: file.name,
-        file_url: result.secure_url || result.url,
-        file_type: result.format || file.type.split('/')[1],
-        file_size: result.bytes || file.size,
-        provider: 'cloudinary',
-        metadata: {
-          public_id: result.public_id,
-          width: result.width,
-          height: result.height,
-          resource_type: result.resource_type || 'image',
-        },
-      })
-      .select('asset_id')
-      .single();
-
-    if (assetError) {
-      logger.error('Error saving media asset', {
-        error: assetError,
+    if (!uploadResult) {
+      logger.error('Cloudinary upload returned null result', {
         orgId: user.org_id,
       });
-      // Still return success if upload worked, even if saving to DB failed
+      return NextResponse.json(
+        { error: 'Upload failed. Please try again.' },
+        { status: 502 },
+      );
     }
 
+    const assetId = await saveMediaAsset(
+      user.org_id,
+      user.id,
+      uploadResult,
+      file.name,
+      {
+        source: 'manual_upload',
+        uploaded_via: 'editor',
+      }
+    );
+
     return NextResponse.json({
-      url: result.secure_url || result.url,
-      public_id: result.public_id,
-      width: result.width,
-      height: result.height,
-      asset_id: assetData?.asset_id,
+      url: uploadResult.secure_url || uploadResult.url,
+      public_id: uploadResult.public_id,
+      width: uploadResult.width,
+      height: uploadResult.height,
+      asset_id: assetId,
     });
 
   } catch (error: unknown) {

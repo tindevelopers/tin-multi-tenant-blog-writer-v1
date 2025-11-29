@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { PlatformStatus } from "@/lib/blog-queue-state-machine";
 import { logger } from '@/utils/logger';
+import { getWebflowFieldMappings, applyWebflowFieldMappings } from '@/lib/integrations/webflow-field-mapping';
 
 /**
  * GET /api/blog-publishing
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    // Build query
+    // Build query - ensure all fields including sync_status are selected
     let query = supabase
       .from("blog_platform_publishing")
       .select(`
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
         published_by_user:users!blog_platform_publishing_published_by_fkey(user_id, email, full_name)
       `)
       .eq("org_id", userProfile.org_id)
-      .order("created_at", { ascending: false })
+      .order("updated_at", { ascending: false }) // Order by updated_at to show latest changes first
       .range(offset, offset + limit - 1);
 
     // Apply filters
@@ -128,8 +129,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
+    // Check user's role - publishing requires admin, manager, or editor role
+    const { data: userWithRole } = await supabase
+      .from("users")
+      .select("role")
+      .eq("user_id", user.id)
+      .single();
+
+    const userRole = userWithRole?.role;
+    const allowedRoles = ['admin', 'manager', 'editor', 'system_admin', 'super_admin'];
+    
+    if (!userRole || !allowedRoles.includes(userRole)) {
+      logger.warn("User attempted to create publishing record without required role", {
+        userId: user.id,
+        role: userRole,
+      });
+      return NextResponse.json(
+        { error: "Insufficient permissions. Publishing requires admin, manager, or editor role." },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
-    const { post_id, queue_id, platform, scheduled_at, publish_metadata } = body;
+    const { post_id, queue_id, platform, scheduled_at, publish_metadata, is_draft = false } = body;
 
     if (!post_id && !queue_id) {
       return NextResponse.json(
@@ -145,27 +167,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the post or queue item exists and belongs to the org
-    if (post_id) {
-      const { data: post } = await supabase
-        .from("blog_posts")
-        .select("post_id, org_id")
-        .eq("post_id", post_id)
-        .eq("org_id", userProfile.org_id)
-        .single();
+    // Database requires post_id to be NOT NULL, so we need to ensure post_id exists
+    let finalPostId = post_id;
 
-      if (!post) {
-        return NextResponse.json(
-          { error: "Post not found" },
-          { status: 404 }
-        );
-      }
-    }
-
-    if (queue_id) {
+    // If only queue_id is provided, we need to get the post_id from the queue item
+    if (!finalPostId && queue_id) {
       const { data: queueItem } = await supabase
         .from("blog_generation_queue")
-        .select("queue_id, status, org_id")
+        .select("queue_id, status, org_id, post_id")
         .eq("queue_id", queue_id)
         .eq("org_id", userProfile.org_id)
         .single();
@@ -184,6 +193,39 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+
+      // If queue item has a post_id, use that
+      if (queueItem.post_id) {
+        finalPostId = queueItem.post_id;
+      } else {
+        return NextResponse.json(
+          { error: "Queue item does not have an associated blog post. Please generate content first." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Ensure we have a post_id (required by database)
+    if (!finalPostId) {
+      return NextResponse.json(
+        { error: "post_id is required. Please provide a post_id or ensure the queue item has an associated post." },
+        { status: 400 }
+      );
+    }
+
+    // Verify the post exists and belongs to the org
+    const { data: post } = await supabase
+      .from("blog_posts")
+      .select("post_id, org_id")
+      .eq("post_id", finalPostId)
+      .eq("org_id", userProfile.org_id)
+      .single();
+
+    if (!post) {
+      return NextResponse.json(
+        { error: "Post not found" },
+        { status: 404 }
+      );
     }
 
     // Determine initial status
@@ -191,18 +233,103 @@ export async function POST(request: NextRequest) {
       ? "scheduled"
       : "pending";
 
+    // For Webflow, get and apply field mappings
+    let finalPublishMetadata = publish_metadata || {};
+    if (platform === 'webflow') {
+      try {
+        // Get the blog post data
+        const { data: post } = await supabase
+          .from("blog_posts")
+          .select("title, content, excerpt, metadata, seo_data")
+          .eq("post_id", finalPostId)
+          .single();
+
+        if (post) {
+          // Get Webflow field mappings
+          const fieldMappings = await getWebflowFieldMappings(userProfile.org_id);
+          
+          // Prepare blog post data
+          const blogPostData = {
+            title: post.title,
+            content: post.content || '',
+            excerpt: post.excerpt || '',
+            slug: (post.metadata as Record<string, unknown>)?.slug as string | undefined,
+            featured_image: (post.metadata as Record<string, unknown>)?.featured_image as string | undefined,
+            seo_title: (post.seo_data as Record<string, unknown>)?.meta_title as string | undefined,
+            seo_description: (post.seo_data as Record<string, unknown>)?.meta_description as string | undefined,
+            published_at: new Date().toISOString(),
+          };
+
+          // Apply field mappings
+          const mappedFields = applyWebflowFieldMappings(blogPostData, fieldMappings);
+          
+          // Store mapped fields in publish_metadata
+          finalPublishMetadata = {
+            ...finalPublishMetadata,
+            field_mappings: fieldMappings,
+            mapped_fields: mappedFields,
+            original_fields: blogPostData,
+          };
+
+          logger.debug('Applied Webflow field mappings', {
+            orgId: userProfile.org_id,
+            postId: finalPostId,
+            mappingCount: fieldMappings.length,
+            mappedFields: Object.keys(mappedFields),
+          });
+        }
+      } catch (error) {
+        logger.error('Error applying Webflow field mappings:', error);
+        // Continue without mappings if there's an error
+      }
+    }
+
+    // Check if a publishing record already exists for this post+platform
+    const { data: existingPublishing } = await supabase
+      .from("blog_platform_publishing")
+      .select("publishing_id, status")
+      .eq("post_id", finalPostId)
+      .eq("platform", platform)
+      .eq("org_id", userProfile.org_id)
+      .single();
+
+    if (existingPublishing) {
+      // Return the existing record instead of creating a duplicate
+      logger.info("Publishing record already exists, returning existing record", {
+        publishingId: existingPublishing.publishing_id,
+        postId: finalPostId,
+        platform,
+      });
+
+      const { data: publishing } = await supabase
+        .from("blog_platform_publishing")
+        .select(`
+          *,
+          post:blog_posts(post_id, title, status),
+          queue:blog_generation_queue(queue_id, topic, generated_title, status),
+          published_by_user:users!blog_platform_publishing_published_by_fkey(user_id, email, full_name)
+        `)
+        .eq("publishing_id", existingPublishing.publishing_id)
+        .single();
+
+      return NextResponse.json(publishing, { status: 200 });
+    }
+
     // Create publishing record
     const { data: publishing, error } = await supabase
       .from("blog_platform_publishing")
       .insert({
         org_id: userProfile.org_id,
-        post_id: post_id || null,
+        post_id: finalPostId,
         queue_id: queue_id || null,
         platform,
         status: initialStatus,
         scheduled_at: scheduled_at || null,
         published_by: user.id,
-        publish_metadata: publish_metadata || {},
+        publish_metadata: finalPublishMetadata,
+        is_draft: is_draft,
+        platform_draft_status: is_draft ? 'draft' : null,
+        sync_status: 'never_synced',
         retry_count: 0,
       })
       .select(`
@@ -214,18 +341,138 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      logger.error("Error creating publishing record:", error);
+      logger.error("Error creating publishing record:", {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        post_id: finalPostId,
+        queue_id,
+        platform,
+        userRole,
+        org_id: userProfile.org_id,
+        userId: user.id,
+        insertData: {
+          org_id: userProfile.org_id,
+          post_id: finalPostId,
+          queue_id: queue_id || null,
+          platform,
+          status: initialStatus,
+          scheduled_at: scheduled_at || null,
+          published_by: user.id,
+          is_draft: is_draft,
+          platform_draft_status: is_draft ? 'draft' : null,
+          sync_status: 'never_synced',
+          retry_count: 0,
+        },
+      });
+
+      // Handle unique constraint violation
+      if (error.code === '23505') {
+        // Unique constraint violation - record already exists
+        logger.info("Unique constraint violation detected, fetching existing record", {
+          post_id: finalPostId,
+          platform,
+          org_id: userProfile.org_id,
+        });
+        
+        const { data: existingRecord, error: fetchError } = await supabase
+          .from("blog_platform_publishing")
+          .select(`
+            *,
+            post:blog_posts(post_id, title, status),
+            queue:blog_generation_queue(queue_id, topic, generated_title, status),
+            published_by_user:users!blog_platform_publishing_published_by_fkey(user_id, email, full_name)
+          `)
+          .eq("post_id", finalPostId)
+          .eq("platform", platform)
+          .eq("org_id", userProfile.org_id)
+          .single();
+
+        if (fetchError) {
+          logger.error("Error fetching existing record after unique constraint violation:", fetchError);
+        }
+
+        if (existingRecord) {
+          logger.info("Returning existing publishing record", {
+            publishing_id: existingRecord.publishing_id,
+          });
+          return NextResponse.json(existingRecord, { status: 200 });
+        }
+      }
+
+      // Handle RLS policy violation
+      if (error.code === '42501' || error.message?.includes('permission denied') || error.message?.includes('new row violates row-level security')) {
+        logger.warn("RLS policy violation detected", {
+          errorCode: error.code,
+          errorMessage: error.message,
+          userId: user.id,
+          orgId: userProfile.org_id,
+          userRole,
+        });
+        return NextResponse.json(
+          { 
+            error: "Insufficient permissions. Publishing requires admin, manager, or editor role.",
+            details: error.message,
+            code: error.code
+          },
+          { status: 403 }
+        );
+      }
+
+      // Handle check constraint violation (e.g., sync_status)
+      if (error.code === '23514') {
+        logger.error("Check constraint violation", {
+          errorMessage: error.message,
+          hint: error.hint,
+        });
+        return NextResponse.json(
+          { 
+            error: "Invalid data provided. Please check field values.",
+            details: error.message || error.hint,
+            code: error.code
+          },
+          { status: 400 }
+        );
+      }
+
       return NextResponse.json(
-        { error: "Failed to create publishing record" },
+        { 
+          error: "Failed to create publishing record",
+          details: error.message || error.details || error.hint,
+          code: error.code,
+          hint: "Check server logs for more details"
+        },
         { status: 500 }
       );
     }
 
-    // If not scheduled, trigger immediate publishing (async)
-    if (!scheduled_at) {
-      // In a real implementation, this would trigger an async job
-      // For now, we'll just return the record
-      // TODO: Trigger actual publishing job
+    // If not scheduled, trigger immediate publishing
+    if (!scheduled_at && publishing) {
+      // Trigger actual publishing job
+      try {
+        const publishResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/blog-publishing/${publishing.publishing_id}/publish`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': request.headers.get('authorization') || '',
+            },
+            body: JSON.stringify({ is_draft }),
+          }
+        );
+
+        if (!publishResponse.ok) {
+          logger.warn('Failed to trigger immediate publishing', {
+            publishingId: publishing.publishing_id,
+            status: publishResponse.status,
+          });
+        }
+      } catch (publishError) {
+        logger.error('Error triggering immediate publishing:', publishError);
+        // Don't fail the request, just log the error
+      }
     }
 
     return NextResponse.json(publishing, { status: 201 });

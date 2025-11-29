@@ -15,6 +15,22 @@ export interface TopicRecommendation {
   difficulty: string;
   content_angle: string;
   estimated_traffic: number;
+  // AI Optimization fields (optional)
+  aiScore?: number;
+  aiSearchVolume?: number;
+  traditionalSearchVolume?: number;
+  recommended?: boolean;
+  // New fields from AI topic suggestions
+  ranking_score?: number;
+  opportunity_score?: number;
+  competition?: number;
+  cpc?: number;
+  reason?: string;
+  related_keywords?: string[];
+  source?: string;
+  // LLM Mentions fields (from ai_metrics.llm_mentions)
+  mentions_count?: number;
+  platform?: string; // "chat_gpt" or "google"
 }
 
 export interface TopicRecommendationsResult {
@@ -31,6 +47,8 @@ export function useTopicRecommendations() {
     industry?: string;
     existing_topics?: string[];
     target_audience?: string;
+    objective?: string;
+    content_goal?: string;
     count?: number;
   }) => {
     setLoading(true);

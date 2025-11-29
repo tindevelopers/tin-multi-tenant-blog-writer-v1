@@ -5,6 +5,7 @@
 
 import { createServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/utils/logger';
+import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
 
 interface CloudinaryCredentials {
   cloud_name: string;
@@ -71,18 +72,12 @@ export async function uploadViaBlogWriterAPI(
   imageData: string | null,
   orgId: string,
   fileName: string,
-  folder?: string
+  folder?: string,
+  altText?: string | null,
 ): Promise<CloudinaryUploadResult | null> {
   try {
-    const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+    const API_BASE_URL = BLOG_WRITER_API_URL;
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
-
-    // Get organization's Cloudinary credentials
-    const credentials = await getCloudinaryCredentials(orgId);
-    if (!credentials) {
-      logger.error(`No Cloudinary credentials configured for org ${orgId}`);
-      return null;
-    }
 
     // Prepare image data
     let imageBase64: string | null = null;
@@ -103,29 +98,53 @@ export async function uploadViaBlogWriterAPI(
       throw new Error('No image data or URL provided');
     }
 
-    // Call Blog Writer API's Cloudinary upload endpoint
+    // Call Blog Writer API's Cloudinary upload endpoint (API already has credentials via secrets)
+    const payload = {
+      // newer API expects "media_data" and "filename"
+      media_data: imageBase64,
+      filename: fileName,
+      // keep backward compatibility with older "image_data" + "file_name"
+      image_data: imageBase64,
+      file_name: fileName,
+      folder: folder || (orgId ? `blog-images/${orgId}` : 'blog-images'),
+      alt_text: altText || undefined,
+      metadata: {
+        org_id: orgId,
+        source: 'manual_upload',
+      },
+    };
+
     const uploadResponse = await fetch(`${API_BASE_URL}/api/v1/media/upload/cloudinary`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` })
+        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
       },
-      body: JSON.stringify({
-        image_data: imageBase64,
-        file_name: fileName,
-        folder: folder || `blog-images/${orgId}`,
-        cloudinary_credentials: {
-          cloud_name: credentials.cloud_name,
-          api_key: credentials.api_key,
-          api_secret: credentials.api_secret,
-        },
-      }),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(60000),
     });
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      logger.error('Blog Writer API Cloudinary upload error:', errorText);
-      throw new Error(`Cloudinary upload failed: ${uploadResponse.statusText}`);
+      logger.error('Blog Writer API Cloudinary upload error:', {
+        status: uploadResponse.status,
+        statusText: uploadResponse.statusText,
+        response: errorText?.slice(0, 500),
+      });
+
+      let errorMessage = 'Cloudinary upload failed';
+      try {
+        if (errorText) {
+          const parsed = JSON.parse(errorText);
+          errorMessage = parsed.error || parsed.detail || parsed.message || errorMessage;
+        }
+      } catch {
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+
+      throw new Error(errorMessage);
     }
 
     const result = await uploadResponse.json();

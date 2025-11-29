@@ -17,8 +17,14 @@ interface SEOMetadata {
   og_title?: string;
   og_description?: string;
   og_image?: string;
+  og_type?: string;
   twitter_card?: string;
+  twitter_title?: string;
+  twitter_description?: string;
+  twitter_image?: string;
   canonical_url?: string;
+  meta_title?: string;
+  meta_description?: string;
   [key: string]: string | undefined;
 }
 
@@ -139,20 +145,91 @@ export function SEOMetadataEditor({
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
             Twitter Card
           </h4>
-          <div>
-            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
-              Twitter Card Type
-            </label>
-            <select
-              value={metadata.twitter_card || 'summary_large_image'}
-              onChange={(e) => updateMetadata('twitter_card', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
-            >
-              <option value="summary">Summary</option>
-              <option value="summary_large_image">Summary Large Image</option>
-              <option value="app">App</option>
-              <option value="player">Player</option>
-            </select>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                Twitter Card Type
+              </label>
+              <select
+                value={metadata.twitter_card || 'summary_large_image'}
+                onChange={(e) => updateMetadata('twitter_card', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+              >
+                <option value="summary">Summary</option>
+                <option value="summary_large_image">Summary Large Image</option>
+                <option value="app">App</option>
+                <option value="player">Player</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                Twitter Title
+              </label>
+              <input
+                type="text"
+                value={metadata.twitter_title || ''}
+                onChange={(e) => updateMetadata('twitter_title', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="Twitter card title"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                Twitter Description
+              </label>
+              <textarea
+                value={metadata.twitter_description || ''}
+                onChange={(e) => updateMetadata('twitter_description', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="Twitter card description"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                Twitter Image URL
+              </label>
+              <input
+                type="url"
+                value={metadata.twitter_image || ''}
+                onChange={(e) => updateMetadata('twitter_image', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="https://example.com/twitter-image.jpg"
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* Meta Tags */}
+        <div>
+          <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            Meta Tags
+          </h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                Meta Title
+              </label>
+              <input
+                type="text"
+                value={metadata.meta_title || ''}
+                onChange={(e) => updateMetadata('meta_title', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="Page title"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                Meta Description
+              </label>
+              <textarea
+                value={metadata.meta_description || ''}
+                onChange={(e) => updateMetadata('meta_description', e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white text-sm"
+                placeholder="Page description"
+              />
+            </div>
           </div>
         </div>
 

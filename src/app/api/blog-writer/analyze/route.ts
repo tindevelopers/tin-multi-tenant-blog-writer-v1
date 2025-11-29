@@ -13,8 +13,7 @@ import cloudRunHealthManager from '@/lib/cloud-run-health';
 import { logger } from '@/utils/logger';
 import { parseJsonBody, validateRequiredFields, handleApiError } from '@/lib/api-utils';
 
-const BLOG_WRITER_API_URL = process.env.BLOG_WRITER_API_URL || 
-  'https://blog-writer-api-dev-kq42l26tuq-ew.a.run.app';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 const BLOG_WRITER_API_KEY = process.env.BLOG_WRITER_API_KEY;
 
 export async function POST(request: NextRequest) {

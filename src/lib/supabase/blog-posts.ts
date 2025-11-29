@@ -22,6 +22,7 @@ export interface UpdateDraftParams {
   seo_data?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   status?: 'draft' | 'published' | 'scheduled' | 'archived';
+  published_at?: string | null;
 }
 
 class BlogPostsService {

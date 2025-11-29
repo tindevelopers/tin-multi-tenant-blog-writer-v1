@@ -7,8 +7,16 @@ import { logger } from '@/utils/logger';
 
 type BlogPost = Database['public']['Tables']['blog_posts']['Row'];
 
+type BlogPostWithRelations = BlogPost & {
+  created_by_user?: {
+    user_id: string;
+    email: string;
+    full_name: string | null;
+  } | null;
+};
+
 export function useBlogPosts(status?: 'draft' | 'published' | 'scheduled' | 'archived') {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [posts, setPosts] = useState<BlogPostWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

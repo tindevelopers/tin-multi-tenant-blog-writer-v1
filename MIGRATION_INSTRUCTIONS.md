@@ -1,122 +1,92 @@
-# How to Apply Content Goal Prompts Migration
+# Keyword Storage and Caching Migration Instructions
 
-## Option 1: Using Supabase Dashboard (Recommended)
+## Migration File to Run
 
-1. **Open Supabase SQL Editor**:
-   - Go to your Supabase project dashboard
-   - Click on **"SQL Editor"** in the left sidebar
-   - Click **"New query"**
+Run this migration file in your Supabase SQL Editor:
 
-2. **Copy the Migration File**:
-   - Open the file: `supabase/migrations/20250120000002_add_content_goal_prompts.sql`
-   - Copy **ALL** contents (233 lines)
+**File:** `supabase/migrations/20250124000000_enhanced_keyword_storage_with_caching.sql`
 
-3. **Paste and Run**:
-   - Paste the SQL into the SQL Editor
-   - Click **"RUN"** (or press `Ctrl+Enter` / `Cmd+Enter`)
-   - Wait for the success message ✅
+## What This Migration Creates
 
-4. **Verify the Migration**:
-   - Go to **"Table Editor"** in the left sidebar
-   - You should see a new table: `content_goal_prompts`
-   - Check that it has 4 rows (the default system prompts)
+### Tables Created:
+1. **keyword_cache** - 90-day cache for keyword research results
+2. **keyword_research_results** - Full storage of keyword research
+3. **keyword_terms** - Individual keyword storage (Ahrefs/SpyFu style)
 
-## Option 2: Using Supabase CLI (If Installed)
+### Functions Created:
+1. **get_cached_keyword()** - Retrieves cached keyword data if not expired
+2. **flush_keyword_cache()** - Flushes cache entries (for manual cache clearing)
+3. **clean_expired_keyword_cache()** - Removes expired cache entries
+4. **update_keyword_access()** - Updates access tracking
 
-If you have Supabase CLI installed:
+### Security:
+- Row Level Security (RLS) enabled on all tables
+- Policies ensure users can only access their own data
 
+## How to Run
+
+### Option 1: Supabase Dashboard
+1. Go to your Supabase project dashboard
+2. Navigate to **SQL Editor**
+3. Click **New Query**
+4. Copy and paste the entire contents of `supabase/migrations/20250124000000_enhanced_keyword_storage_with_caching.sql`
+5. Click **Run** or press `Cmd/Ctrl + Enter`
+
+### Option 2: Supabase CLI
 ```bash
-# Navigate to your project directory
-cd /Users/foo/projects/adminpanel-template-blog-writer-next-js
-
-# Link to your Supabase project (if not already linked)
-supabase link --project-ref your-project-ref
-
-# Apply the migration
+# If using Supabase CLI
 supabase db push
 ```
 
-## Verification Steps
+### Option 3: Direct SQL Connection
+```bash
+# Using psql
+psql -h your-db-host -U postgres -d postgres -f supabase/migrations/20250124000000_enhanced_keyword_storage_with_caching.sql
+```
 
-After applying the migration, verify:
+## Verification
 
-1. **Table Created**:
-   ```sql
-   SELECT COUNT(*) FROM content_goal_prompts;
-   ```
-   Should return: `4` (one for each content goal)
+After running the migration, verify the tables were created:
 
-2. **Default Prompts Exist**:
-   ```sql
-   SELECT content_goal, prompt_title, is_system_default 
-   FROM content_goal_prompts 
-   ORDER BY content_goal;
-   ```
-   Should show:
-   - `brand_awareness` - Brand Awareness - Default
-   - `conversions` - Conversions - Default
-   - `engagement` - Engagement - Default
-   - `seo` - SEO & Rankings - Default
+```sql
+-- Check tables exist
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+  AND table_name IN ('keyword_cache', 'keyword_research_results', 'keyword_terms');
 
-3. **RLS Policies Active**:
-   ```sql
-   SELECT tablename, policyname 
-   FROM pg_policies 
-   WHERE tablename = 'content_goal_prompts';
-   ```
-   Should show 4 policies (SELECT, INSERT, UPDATE, DELETE)
+-- Check functions exist
+SELECT routine_name 
+FROM information_schema.routines 
+WHERE routine_schema = 'public' 
+  AND routine_name IN ('get_cached_keyword', 'flush_keyword_cache', 'clean_expired_keyword_cache');
 
-4. **Function Created**:
-   ```sql
-   SELECT proname FROM pg_proc WHERE proname = 'get_content_goal_prompt';
-   ```
-   Should return the function name
+-- Check RLS is enabled
+SELECT tablename, rowsecurity 
+FROM pg_tables 
+WHERE schemaname = 'public' 
+  AND tablename IN ('keyword_cache', 'keyword_research_results', 'keyword_terms');
+```
+
+## Important Notes
+
+- This migration uses `CREATE TABLE IF NOT EXISTS`, so it's safe to run multiple times
+- All indexes are created with `IF NOT EXISTS` for safety
+- RLS policies are created without `IF NOT EXISTS` - if they already exist, you may need to drop them first
+- The migration references `auth.users` table which should already exist in Supabase
 
 ## Troubleshooting
 
-### Error: "relation already exists"
-- The table might already exist. Check if you've run this migration before.
-- If you need to re-run, you can drop the table first (be careful!):
-  ```sql
-  DROP TABLE IF EXISTS content_goal_prompts CASCADE;
-  ```
-  Then re-run the migration.
+If you encounter errors:
 
-### Error: "permission denied"
-- Make sure you're using the SQL Editor with proper permissions
-- Check that you're logged in as a project owner/admin
-
-### Error: "constraint violation"
-- The unique indexes might conflict with existing data
-- Check if there are duplicate prompts:
-  ```sql
-  SELECT content_goal, org_id, COUNT(*) 
-  FROM content_goal_prompts 
-  WHERE is_active = true 
-  GROUP BY content_goal, org_id 
-  HAVING COUNT(*) > 1;
-  ```
-
-## Next Steps After Migration
-
-1. **Access Admin Interface**:
-   - Navigate to `/admin/settings/content-prompts` in your app
-   - You should see all 4 content goals with their default prompts
-
-2. **Test Content Generation**:
-   - Create a workflow with a content goal selected
-   - Generate content
-   - Check console logs for: `📝 Adding content goal prompt to API request`
-
-3. **Customize Prompts** (Optional):
-   - Go to `/admin/settings/content-prompts`
-   - Click "Create Custom" for any content goal
-   - Edit the system prompt to match your needs
-   - Save
-
-## Migration File Location
-
-The migration file is located at:
+1. **Policy already exists**: Drop existing policies first:
+```sql
+DROP POLICY IF EXISTS "Users can view their own cached keywords" ON keyword_cache;
+DROP POLICY IF EXISTS "Users can insert their own cached keywords" ON keyword_cache;
+DROP POLICY IF EXISTS "Users can update their own cached keywords" ON keyword_cache;
+-- Repeat for other tables...
 ```
-supabase/migrations/20250120000002_add_content_goal_prompts.sql
-```
+
+2. **Function already exists**: The migration uses `CREATE OR REPLACE FUNCTION`, so this should be fine
+
+3. **Table already exists**: The migration uses `CREATE TABLE IF NOT EXISTS`, so existing tables won't be affected

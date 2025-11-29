@@ -1,4 +1,11 @@
 .env.local
 node_modules
 .next
-
+check-database-storage.ts
+test-supabase-direct.ts
+verify-migration.ts
+check-migration-data.ts
+check-keyword-storage.ts
+test-keyword-endpoint.ts
+test-api-endpoint-direct.ts
+test-sse-keyword-research.ts

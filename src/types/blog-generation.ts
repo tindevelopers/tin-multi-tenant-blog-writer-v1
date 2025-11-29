@@ -75,14 +75,34 @@ export interface EnhancedBlogResponse {
     url: string;
   }>;
   
-  // v1.3.1: Generated images
+  // v1.3.1: Generated images (null when images generated separately)
   generated_images?: Array<{
     type: 'featured' | 'section' | 'product';
     image_url: string;
     alt_text: string;
-  }>;
+  }> | null;
   
-  // Featured image
+  // Image placeholders for frontend-triggered generation
+  image_placeholders?: {
+    featured_image: {
+      prompt: string;
+      style: string;
+      aspect_ratio: string;
+      quality: string;
+      type: string;
+      keywords: string[];
+    };
+    section_images: Array<{
+      position: number;
+      prompt: string;
+      style: string;
+      aspect_ratio: string;
+      quality: string;
+      type: string;
+    }>;
+  };
+  
+  // Featured image (null when images generated separately)
   featured_image?: {
     image_id: string;
     image_url?: string;

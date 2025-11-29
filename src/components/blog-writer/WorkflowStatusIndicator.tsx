@@ -136,7 +136,7 @@ export default function WorkflowStatusIndicator({
       
       {queueId && (
         <Link
-          href={`/admin/blog-queue/${queueId}`}
+          href={`/contentmanagement/blog-queue/${queueId}`}
           className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
         >
           View Queue
@@ -145,7 +145,7 @@ export default function WorkflowStatusIndicator({
       
       {approvalId && (
         <Link
-          href={`/admin/approvals/${approvalId}`}
+          href={`/contentmanagement/approvals/${approvalId}`}
           className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
         >
           View Approval

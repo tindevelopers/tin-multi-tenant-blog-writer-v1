@@ -2,36 +2,72 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealth from '@/lib/cloud-run-health';
-import BlogImageGenerator, { type GeneratedImage } from '@/lib/image-generation';
-import { uploadViaBlogWriterAPI, saveMediaAsset } from '@/lib/cloudinary-upload';
+import { type GeneratedImage } from '@/lib/image-generation';
 import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
 import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 import { logger } from '@/utils/logger';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+import { LLMAnalysisService } from '@/lib/llm-analysis-service';
+import { validateBlogFields, type BlogFieldData } from '@/lib/blog-field-validator';
 
-// Create server-side image generator (uses direct Cloud Run URL)
-const imageGenerator = new BlogImageGenerator(
-  process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app',
-  process.env.BLOG_WRITER_API_KEY || '',
-  false // Don't use local route on server-side
-);
+// Image generation is now handled separately via /api/blog-writer/images/generate endpoint
 
 /**
  * Helper function to build the transformed blog generation response
  * This centralizes response building to avoid duplication between response paths
  */
+// v1.3.4 unified endpoint response types
 interface BlogGenerationResult {
+  // Standard/Abstraction format: { success, blog_post: { title, content, meta_description }, ... }
+  success?: boolean;
   blog_post?: {
     title?: string;
+    content?: string;
+    meta_description?: string;
     excerpt?: string;
     summary?: string;
   };
+  // Enhanced format: { title, content, meta_description, ... }
   title?: string;
-  excerpt?: string;
-  meta_title?: string;
+  content?: string;
+  meta_title?: string; // For backward compatibility
   meta_description?: string;
-  readability_score?: number;
+  excerpt?: string;
+  // Common fields across all formats
   seo_score?: number;
+  word_count?: number;
+  generation_time_seconds?: number;
+  error_message?: string;
+  // Enhanced-specific fields
+  quality_scores?: {
+    readability?: number;
+    seo?: number;
+    structure?: number;
+    factual?: number;
+    uniqueness?: number;
+    engagement?: number;
+  };
+  citations?: Array<{
+    text: string;
+    source: string;
+    url: string;
+  }>;
+  // Local Business-specific fields
+  businesses?: Array<{
+    name: string;
+    google_place_id?: string;
+    address?: string;
+    phone?: string;
+    website?: string;
+    rating?: number;
+    review_count?: number;
+    categories?: string[];
+  }>;
+  total_reviews_aggregated?: number;
+  metadata?: Record<string, unknown>;
+  // Legacy fields (for backward compatibility)
+  readability_score?: number;
   quality_score?: number | null;
   quality_dimensions?: Record<string, number>;
   stage_results?: Array<{
@@ -43,22 +79,14 @@ interface BlogGenerationResult {
   total_tokens?: number;
   total_cost?: number;
   generation_time?: number;
-  citations?: Array<{
-    text: string;
-    url: string;
-    title: string;
-  }>;
   semantic_keywords?: string[];
   structured_data?: Record<string, unknown> | null;
   knowledge_graph?: Record<string, unknown> | null;
   seo_metadata?: Record<string, unknown>;
   content_metadata?: Record<string, unknown>;
   warnings?: string[];
-  success?: boolean;
-  word_count?: number;
   suggestions?: string[];
-  quality_scores?: unknown;
-  // v1.3.2: Internal links and generated images
+  quality_scores_legacy?: unknown;
   internal_links?: Array<{
     anchor_text: string;
     url: string;
@@ -91,6 +119,24 @@ function buildBlogResponse(
   progressUpdates: ProgressUpdate[],
   featuredImage: GeneratedImage | null,
   sectionImages: Array<{ position: number; image: GeneratedImage }>,
+  imagePlaceholders: {
+    featured_image: {
+      prompt: string;
+      style: string;
+      aspect_ratio: string;
+      quality: string;
+      type: string;
+      keywords: string[];
+    };
+    section_images: Array<{
+      position: number;
+      prompt: string;
+      style: string;
+      aspect_ratio: string;
+      quality: string;
+      type: string;
+    }>;
+  },
   options: {
     topic: string;
     brandVoice: BrandVoice | null;
@@ -102,10 +148,10 @@ function buildBlogResponse(
 ): EnhancedBlogResponse {
   const { topic, brandVoice, contentPreset, endpoint, shouldUseEnhanced, requiresProductResearch } = options;
   
-  // v1.3.1: Title is guaranteed to be a valid string (never "**")
-  // Fallback chain: blog_post.title → title → meta_title → topic
+  // v1.3.4: Title extraction from unified endpoint response formats
+  // Fallback chain: blog_post.title → title → topic
   // All fallbacks ensure a valid string is always returned
-  const title = result.blog_post?.title || result.title || result.meta_title || topic;
+  const title = result.blog_post?.title || result.title || topic;
   const excerpt = result.blog_post?.excerpt || result.blog_post?.summary || result.excerpt || result.meta_description || '';
   
   return {
@@ -131,8 +177,12 @@ function buildBlogResponse(
     total_cost: result.total_cost || 0,
     generation_time: result.generation_time || 0,
     
-    // Citations and sources
-    citations: result.citations || [],
+    // Citations and sources - map API format to frontend format
+    citations: (result.citations || []).map((citation: { text: string; source?: string; url: string; title?: string }) => ({
+      text: citation.text,
+      url: citation.url,
+      title: citation.title || citation.source || citation.text.substring(0, 50), // Use source as fallback for title
+    })),
     
     // Enhanced features data
     semantic_keywords: result.semantic_keywords || [],
@@ -157,34 +207,12 @@ function buildBlogResponse(
     // v1.3.1: Internal links (3-5 automatically generated)
     internal_links: result.internal_links || [],
     
-    // v1.3.1: Generated images (featured + section images)
-    generated_images: [
-      ...(featuredImage?.image_url ? [{
-        type: 'featured' as const,
-        image_url: featuredImage.image_url,
-        alt_text: `Featured image for ${title}`
-      }] : []),
-      ...sectionImages
-        .filter(img => img.image.image_url)
-        .map(img => ({
-          type: 'section' as const,
-          image_url: img.image.image_url!,
-          alt_text: (img.image as any).alt_text || `Section image`
-        }))
-    ],
+    // Image placeholders (images will be generated separately via frontend)
+    generated_images: null, // Images not generated during blog creation
+    image_placeholders: imagePlaceholders, // Placeholders for frontend-triggered generation
     
-    // Include generated featured image if available
-    featured_image: featuredImage ? {
-      image_id: featuredImage.image_id,
-      image_url: featuredImage.image_url,
-      image_data: featuredImage.image_data,
-      width: featuredImage.width,
-      height: featuredImage.height,
-      format: featuredImage.format,
-      alt_text: `Featured image for ${title}`,
-      quality_score: featuredImage.quality_score,
-      safety_score: featuredImage.safety_score
-    } : null,
+    // Featured image placeholder (will be generated separately)
+    featured_image: null,
     
     // Metadata about the generation process
     metadata: {
@@ -192,8 +220,8 @@ function buildBlogResponse(
       used_preset: !!contentPreset,
       endpoint_used: endpoint,
       enhanced: shouldUseEnhanced,
-      image_generated: !!featuredImage,
-      section_images_generated: sectionImages.length,
+      image_generated: false, // Images generated separately
+      section_images_generated: 0, // Images generated separately
       content_enhanced: true,
       content_format: 'rich_html',
       product_research_requested: requiresProductResearch,
@@ -202,17 +230,18 @@ function buildBlogResponse(
       total_progress_stages: progressUpdates.length > 0 
         ? progressUpdates[progressUpdates.length - 1].total_stages 
         : null,
+      image_placeholders_created: true, // Indicates placeholders are available
     },
     
-    // Image generation status
+    // Image generation status (images not generated yet)
     image_generation_status: {
-      featured_image: featuredImage ? 'success' : 'failed',
-      featured_image_url: featuredImage?.image_url || null,
-      section_images_count: sectionImages.length,
-      section_images: sectionImages.map(img => ({
+      featured_image: 'pending', // Will be generated separately
+      featured_image_url: null,
+      section_images_count: imagePlaceholders.section_images.length,
+      section_images: imagePlaceholders.section_images.map(img => ({
         position: img.position,
-        url: img.image.image_url || null,
-        status: img.image.image_url ? 'success' : 'failed'
+        url: null,
+        status: 'pending' as const
       }))
     }
   };
@@ -270,6 +299,14 @@ export async function POST(request: NextRequest) {
       include_buying_guide,
       include_faq_section,
       research_depth,
+      // v1.3.4: Local business blog fields
+      location,
+      max_businesses,
+      max_reviews_per_business,
+      include_business_details,
+      include_review_sentiment,
+      use_google,
+      use_dataforseo_content_generation = true, // ALWAYS use DataForSEO as primary (default: true)
     } = body;
     
     logger.debug('📝 Generation parameters:', {
@@ -284,7 +321,8 @@ export async function POST(request: NextRequest) {
       quality_level,
       preset,
       preset_id,
-      use_enhanced
+      use_enhanced,
+      use_dataforseo_content_generation // Passed to backend API for provider selection
     });
     
     // Validate required fields
@@ -298,8 +336,8 @@ export async function POST(request: NextRequest) {
     // Convert keywords to array format (needed for queue entry)
     const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
     
-    // Always use enhanced endpoint for better content quality
-    const shouldUseEnhanced = true; // Always use enhanced endpoint
+    // Use enhanced endpoint (v1.3.6 - unified endpoint removed, enhanced is now primary)
+    const shouldUseEnhanced = true; // Always use enhanced blog type
     const endpoint = '/api/v1/blog/generate-enhanced';
     
     // Initialize variables that will be used in queue entry
@@ -521,12 +559,24 @@ export async function POST(request: NextRequest) {
     logger.debug('✅ Cloud Run is healthy, proceeding with blog generation...');
     
     // Call the external blog writer API
-    const API_BASE_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
-    const API_KEY = process.env.BLOG_WRITER_API_KEY;
+    // Note: DataForSEO Content Generation is handled by the backend API service
+    // The use_dataforseo_content_generation flag is passed to the backend,
+    // which will handle the provider selection and API calls
+    // Use the blog-writer-api-url.ts helper to get the correct URL based on branch
+    const { BLOG_WRITER_API_URL: resolvedApiUrl } = await import('@/lib/blog-writer-api-url');
+    const API_BASE_URL = process.env.BLOG_WRITER_API_URL || resolvedApiUrl || 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
     
-    // shouldUseEnhanced and endpoint already declared above for queue entry
-    logger.debug('🌐 Calling external API', { url: `${API_BASE_URL}${endpoint}` });
-    logger.debug('🔑 API Key present', { hasKey: !!API_KEY });
+    // API is open - no authentication required, but check for optional API key
+    // Only use API key if explicitly provided (for future use or special endpoints)
+    const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
+    
+    // Log API call details
+    logger.debug('🌐 Calling external API', { 
+      url: `${API_BASE_URL}${endpoint}`,
+      hasApiKey: !!API_KEY,
+      authentication: API_KEY ? 'Bearer token' : 'Open API (no auth required)'
+    });
+    
     logger.debug('🌐 Using endpoint (Enhanced - Always Enabled)', { endpoint });
     
     // Auto-enable quality features for premium/enterprise quality levels
@@ -635,17 +685,31 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // Build request payload with optional external links parameters
+    // Build request payload for enhanced endpoint (v1.3.6)
+    // Map template_type to blog_type, or use 'custom' as default
+    // Valid blog_type values: custom, brand, top_10, product_review, how_to, comparison, guide,
+    // tutorial, listicle, case_study, news, opinion, interview, faq, checklist, tips, definition,
+    // benefits, problem_solution, trend_analysis, statistics, resource_list, timeline, myth_busting,
+    // best_practices, getting_started, advanced, troubleshooting
+    const blogType = template_type && [
+      'custom', 'brand', 'top_10', 'product_review', 'how_to', 'comparison', 'guide',
+      'tutorial', 'listicle', 'case_study', 'news', 'opinion', 'interview', 'faq', 'checklist', 'tips',
+      'definition', 'benefits', 'problem_solution', 'trend_analysis', 'statistics', 'resource_list',
+      'timeline', 'myth_busting', 'best_practices', 'getting_started', 'advanced', 'troubleshooting'
+    ].includes(template_type) ? template_type : 'custom';
+    
     const requestPayload: Record<string, unknown> = {
+      blog_type: blogType,
       topic,
       keywords: keywordsArray,
       target_audience: target_audience || brandVoice?.target_audience || 'general',
-      tone: tone || brandVoice?.tone || 'professional',
-      word_count: word_count || contentPreset?.word_count || 1000,
-      // Request rich HTML format
-      content_format: 'html',
-      include_formatting: true,
-      include_images: true, // Request API to include image placeholders
+      tone: (tone || brandVoice?.tone || 'professional') as 'professional' | 'casual' | 'academic' | 'conversational' | 'instructional',
+      length: length ? convertLengthToAPI(length) : convertLengthToAPI(mapWordCountToLength(word_count || contentPreset?.word_count || 1000)),
+      format: 'html' as 'markdown' | 'html' | 'json',
+      // ALWAYS use DataForSEO as primary content generation provider
+      use_dataforseo_content_generation: true, // Force DataForSEO as primary
+      // OpenAI will be used as fallback for missing mandatory fields after DataForSEO response
+      use_openai_fallback: true, // Enable OpenAI fallback for missing fields
     };
 
     // Add custom instructions (use provided or default for premium)
@@ -657,18 +721,7 @@ export async function POST(request: NextRequest) {
       logger.debug('📝 Using default premium custom instructions');
     }
 
-    // Add template type if provided
-    if (template_type) {
-      requestPayload.template_type = template_type;
-    }
-
-    // Add length preference (map word_count to length if not provided)
-    // Convert UI length ('very_long') to API length ('extended')
-    if (length) {
-      requestPayload.length = convertLengthToAPI(length);
-    } else if (word_count) {
-      requestPayload.length = convertLengthToAPI(mapWordCountToLength(word_count));
-    }
+    // Note: template_type is now mapped to blog_type above, no need to set separately
 
     // Add quality features (enable automatically for premium, or use provided values)
     const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
@@ -697,152 +750,37 @@ export async function POST(request: NextRequest) {
       requestPayload.use_quality_scoring = use_quality_scoring !== undefined ? use_quality_scoring : recommendedQualityFeatures.use_quality_scoring;
     }
 
-    // Add enhanced keyword insights if available (v1.3.0)
-    if (enhancedKeywordInsights.serpAISummary) {
-      requestPayload.enhanced_keyword_insights = {
-        // SERP AI Summary for content structure
-        main_topics: enhancedKeywordInsights.mainTopics || [],
-        missing_topics: enhancedKeywordInsights.missingTopics || [],
-        common_questions: enhancedKeywordInsights.commonQuestions || [],
-        recommendations: enhancedKeywordInsights.recommendations || [],
-        content_summary: enhancedKeywordInsights.serpAISummary.summary,
-        // Trends data for timely content
-        is_trending: enhancedKeywordInsights.isTrending || false,
-        trend_score: enhancedKeywordInsights.trendsData?.trend_score,
-        related_topics: enhancedKeywordInsights.trendsData?.related_topics || [],
-        // Keyword ideas for content expansion
-        keyword_ideas: enhancedKeywordInsights.keywordIdeas?.slice(0, 10).map(idea => idea.keyword) || [],
-      };
-      
-      logger.debug('📊 Adding enhanced keyword insights to blog generation:', {
-        mainTopicsCount: enhancedKeywordInsights.mainTopics?.length || 0,
-        missingTopicsCount: enhancedKeywordInsights.missingTopics?.length || 0,
-        questionsCount: enhancedKeywordInsights.commonQuestions?.length || 0,
-        isTrending: enhancedKeywordInsights.isTrending,
-        keywordIdeasCount: enhancedKeywordInsights.keywordIdeas?.length || 0,
-      });
+    // Note: v1.3.6 enhanced endpoint handles keyword insights internally
+    
+    // v1.3.6: Add common fields supported by all blog types
+    // Add focus_keyword if available
+    if (keywordsArray.length > 0) {
+      requestPayload.focus_keyword = keywordsArray[0];
     }
     
-    // Add content goal prompt if available
-    // IMPORTANT: Ensure topic is always included in the prompt, even with content goal prompts
-    if (contentGoalPrompt?.system_prompt) {
-      // Combine content goal prompt with topic-specific instructions
-      // This ensures the AI knows what topic to write about
-      const topicSpecificInstruction = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
-      
-      // Combine system prompt with topic instruction
-      const systemPrompt = `${contentGoalPrompt.system_prompt}\n\n${topicSpecificInstruction}`;
-      requestPayload.system_prompt = systemPrompt;
-      requestPayload.content_goal = content_goal;
-      logger.debug('📝 Adding content goal prompt to API request:', {
-        content_goal,
-        prompt_length: systemPrompt.length,
-        has_user_template: !!contentGoalPrompt.user_prompt_template,
-        topic_included: systemPrompt.includes(topic)
-      });
-      
-      // Add user prompt template if available (should include {topic} placeholder)
-      if (contentGoalPrompt.user_prompt_template) {
-        // Replace {topic} placeholder if present, otherwise append topic
-        const userTemplate = contentGoalPrompt.user_prompt_template.includes('{topic}')
-          ? contentGoalPrompt.user_prompt_template.replace(/{topic}/g, topic)
-          : `${contentGoalPrompt.user_prompt_template}\n\nTopic: ${topic}`;
-        requestPayload.user_prompt_template = userTemplate;
-      } else {
-        // If no user template, create one with the topic
-        requestPayload.user_prompt_template = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
-      }
-      
-      // Add additional instructions if available
-      if (contentGoalPrompt.instructions && Object.keys(contentGoalPrompt.instructions).length > 0) {
-        requestPayload.additional_instructions = {
-          ...contentGoalPrompt.instructions,
-          topic: topic,
-          keywords: keywordsArray,
-        };
-      }
-    } else {
-      // Even without content goal prompt, ensure topic is in user prompt template
-      requestPayload.user_prompt_template = `Write a comprehensive blog post about: ${topic}${keywordsArray.length > 0 ? `\n\nTarget keywords: ${keywordsArray.join(', ')}` : ''}`;
+    // Add include flags (supported by all blog types)
+    requestPayload.include_introduction = true; // Default to true
+    requestPayload.include_conclusion = true; // Default to true
+    requestPayload.include_faq = include_faq_section !== undefined ? include_faq_section : false;
+    requestPayload.include_toc = false; // Default to false
+    
+    // Add word_count_target if word_count is provided
+    if (word_count) {
+      requestPayload.word_count_target = word_count;
     }
     
-    // Add web research and product research parameters
-    // Use explicit parameters if provided, otherwise auto-detect
-    const shouldIncludeProductResearch = include_product_research !== undefined 
-      ? include_product_research 
-      : requiresProductResearch;
-    
-    if (shouldIncludeProductResearch) {
-      logger.debug('📊 Adding product research parameters...');
-      requestPayload.include_web_research = true;
-      requestPayload.include_product_research = true;
-      
-      // Use provided values or defaults
-      requestPayload.research_depth = research_depth || 'comprehensive';
-      requestPayload.include_brands = include_brands !== undefined ? include_brands : true;
-      requestPayload.include_models = include_models !== undefined ? include_models : true;
-      requestPayload.include_prices = include_prices !== undefined ? include_prices : true;
-      requestPayload.include_features = include_features !== undefined ? include_features : true;
-      requestPayload.include_specifications = true; // Always include specifications
-      requestPayload.include_reviews = include_reviews !== undefined ? include_reviews : true;
-      requestPayload.include_pros_cons = include_pros_cons !== undefined ? include_pros_cons : true;
-      
-      // Content structure options
-      requestPayload.content_structure = {
-        include_product_table: include_product_table !== undefined ? include_product_table : true,
-        include_comparison_section: include_comparison_section !== undefined ? include_comparison_section : true,
-        include_buying_guide: include_buying_guide !== undefined ? include_buying_guide : true,
-        include_faq_section: include_faq_section !== undefined ? include_faq_section : true
-      };
+    // Add location if provided (for location-based content)
+    if (location) {
+      requestPayload.location = location;
     }
     
-    // Add brand voice settings if available
-    if (brandVoice) {
-      requestPayload.brand_voice = {
-        tone: brandVoice.tone,
-        style_guidelines: brandVoice.style_guidelines,
-        vocabulary: brandVoice.vocabulary,
-        industry_terms: brandVoice.industry_specific_terms,
-        examples: brandVoice.examples
-      };
-    }
-    
-    // Add content preset settings if available
-    if (contentPreset) {
-      if (contentPreset.content_format) {
-        requestPayload.content_format = contentPreset.content_format;
-      }
-      if (contentPreset.quality_level && !quality_level) {
-        requestPayload.quality_level = contentPreset.quality_level;
-      } else if (quality_level) {
-        requestPayload.quality_level = quality_level;
-      }
-      if (contentPreset.preset_config) {
-        Object.assign(requestPayload, contentPreset.preset_config);
-      }
-    } else if (quality_level) {
-      requestPayload.quality_level = quality_level;
-    }
-    
-    // Add preset string if provided (legacy support)
-    if (preset) {
-      requestPayload.preset = preset;
-    }
-    
-    // Add external links parameters if provided
-    if (include_external_links !== undefined) {
-      requestPayload.include_external_links = include_external_links;
-    }
-    if (include_backlinks !== undefined) {
-      requestPayload.include_backlinks = include_backlinks;
-    }
-    if (backlink_count !== undefined) {
-      requestPayload.backlink_count = backlink_count;
-    }
+    // v1.3.4: Abstraction blog type is not currently used in this implementation
+    // If needed in the future, add logic to determine when blogType should be 'abstraction'
+    // Abstraction blogs support content_strategy and quality_target fields
     
     logger.debug('📤 Request payload', { payload: JSON.stringify(requestPayload, null, 2) });
     const systemPromptForLog = typeof requestPayload.system_prompt === 'string' ? requestPayload.system_prompt : '';
-    logger.debug('📤 Key parameters being sent:', {
+    logger.debug('📤 Key parameters being sent to Cloud Run backend:', {
       topic: requestPayload.topic,
       keywords: requestPayload.keywords,
       target_audience: requestPayload.target_audience,
@@ -855,6 +793,9 @@ export async function POST(request: NextRequest) {
       has_content_goal: !!requestPayload.content_goal,
       system_prompt_length: systemPromptForLog.length,
       async_mode: asyncMode,
+      use_dataforseo_content_generation: requestPayload.use_dataforseo_content_generation,
+      use_openai_fallback: requestPayload.use_openai_fallback,
+      use_consensus_generation: requestPayload.use_consensus_generation,
     });
     
     // Add async_mode query parameter if requested
@@ -862,12 +803,20 @@ export async function POST(request: NextRequest) {
       ? `${API_BASE_URL}${endpoint}?async_mode=true`
       : `${API_BASE_URL}${endpoint}`;
     
+    // Build headers - only include Authorization if API key is provided
+    // API is open, so authentication is optional
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Only add Authorization header if API key is explicitly provided
+    if (API_KEY && API_KEY.trim() !== '') {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` })
-      },
+      headers,
       body: JSON.stringify(requestPayload),
     });
     
@@ -875,7 +824,14 @@ export async function POST(request: NextRequest) {
     
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error('❌ External API error', { status: response.status, error: errorText });
+      logger.error('❌ External API error', { 
+        status: response.status, 
+        error: errorText,
+        url: apiUrl,
+        hasApiKey: !!API_KEY,
+        authentication: API_KEY ? 'Bearer token' : 'Open API (no auth)',
+        queueId: queueId
+      });
       
       // Update queue entry with error if queue exists
       if (queueId) {
@@ -888,11 +844,25 @@ export async function POST(request: NextRequest) {
               generation_completed_at: new Date().toISOString()
             })
             .eq('queue_id', queueId);
+          logger.debug('✅ Queue entry updated with error status', { queueId });
         } catch (error) {
           logger.warn('⚠️ Failed to update queue entry with error:', error);
         }
       }
       
+      // Always return queue_id even on error so frontend can track the failed generation
+      if (queueId) {
+        return NextResponse.json(
+          { 
+            error: `External API error: ${response.status} ${errorText}`,
+            queue_id: queueId, // Include queue_id so frontend can track this failed generation
+            status: 'failed'
+          },
+          { status: 500 } // Return 500 to indicate server error, but include queue_id
+        );
+      }
+      
+      // If no queue_id, return error without queue_id
       return NextResponse.json(
         { error: `External API error: ${response.status} ${errorText}` },
         { status: response.status }
@@ -933,6 +903,39 @@ export async function POST(request: NextRequest) {
         estimated_completion_time: result.estimated_completion_time,
         queue_id: queueId // Include our internal queue_id for tracking
       });
+    }
+    
+    // If async_mode was requested but no job_id returned, check if it's an error
+    // The external API might not support async mode (missing GOOGLE_CLOUD_PROJECT)
+    if (asyncMode && !result.job_id) {
+      logger.warn('⚠️ Async mode requested but no job_id returned. External API may not support async mode.', {
+        resultKeys: Object.keys(result),
+        error: result.error || result.error_message
+      });
+      
+      // If queue exists, update it to indicate async mode failed
+      // But still return queue_id so frontend can track it
+      if (queueId) {
+        try {
+          await supabase
+            .from('blog_generation_queue')
+            .update({
+              status: 'generating', // Keep as generating - will be updated when content arrives
+              metadata: {
+                async_mode_requested: true,
+                async_mode_failed: true,
+                fallback_to_sync: true,
+                error: result.error || result.error_message || 'Async mode not available'
+              }
+            })
+            .eq('queue_id', queueId);
+        } catch (error) {
+          logger.warn('⚠️ Failed to update queue entry:', error);
+        }
+      }
+      
+      // Continue with synchronous processing - the content will be returned below
+      // But ensure queue_id is included in response
     }
     
     logger.debug('✅ Blog generated successfully from external API');
@@ -1033,216 +1036,137 @@ export async function POST(request: NextRequest) {
       });
     }
     
-    // Extract content for processing
-    const rawContent = result.blog_post?.content || result.blog_post?.body || result.content || '';
+    // Extract content for processing (v1.3.4 unified endpoint response formats)
+    // Handle Standard/Abstraction format: { success, blog_post: { title, content, meta_description }, ... }
+    // Handle Enhanced format: { title, content, meta_description, ... }
+    // Handle Local Business format: { title, content, businesses, ... }
+    const rawContent = result.blog_post?.content || result.content || '';
     const blogTitle = result.blog_post?.title || result.title || topic;
+    const metaDescription = result.blog_post?.meta_description || result.meta_description;
     
-    // Generate featured image (non-blocking, but wait for it)
-    let featuredImage: GeneratedImage | null = null;
-    const sectionImages: Array<{ position: number; image: GeneratedImage }> = [];
-    try {
-      logger.debug('🖼️ Starting featured image generation...');
-      const imageKeywords = Array.isArray(keywords) ? keywords : [];
-      const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
-      
-      // Generate image with timeout (don't block blog generation if it takes too long)
-      featuredImage = await Promise.race([
-        imageGenerator.generateFeaturedImage(
-          imageTopic,
-          imageKeywords,
-          {
-            style: 'photographic',
-            quality: 'high',
-            aspect_ratio: '16:9'
-          }
-        ),
-        new Promise<null>((resolve) => 
-          setTimeout(() => {
-            logger.warn('⏱️ Image generation timeout - continuing without image');
-            resolve(null);
-          }, 30000) // 30 second timeout
-        )
-      ]);
-      
-      if (featuredImage) {
-        logger.debug('✅ Featured image generated successfully:', {
-          imageId: featuredImage.image_id,
-          width: featuredImage.width,
-          height: featuredImage.height,
-          hasUrl: !!featuredImage.image_url,
-          imageUrl: featuredImage.image_url?.substring(0, 100) || 'No URL'
-        });
-      } else {
-        logger.error('❌ Featured image generation failed or returned null');
-        logger.error('   Topic:', imageTopic);
-        logger.error('   Keywords:', imageKeywords);
-        logger.error('   This may indicate:');
-        logger.error('   1. Stability AI API not configured');
-        logger.error('   2. Image generation endpoint not working');
-        logger.error('   3. Timeout (30 seconds exceeded)');
-        logger.error('   4. API returned error');
-      }
-
-      // Upload to Cloudinary if org has credentials configured
-      if (featuredImage) {
-        try {
-          const imageFileName = `blog-featured-${Date.now()}.${featuredImage.format || 'png'}`;
-          const folder = `blog-images/${orgId}`;
-          
-          logger.debug('☁️ Uploading featured image to Cloudinary...');
-          const cloudinaryResult = await uploadViaBlogWriterAPI(
-            featuredImage.image_url || '',
-            featuredImage.image_data || null,
-            orgId,
-            imageFileName,
-            folder
-          );
-
-          if (cloudinaryResult) {
-            logger.debug('✅ Featured image uploaded to Cloudinary:', {
-              publicId: cloudinaryResult.public_id,
-              secureUrl: cloudinaryResult.secure_url
-            });
-
-            // Save to media_assets table
-            const assetId = await saveMediaAsset(
-              orgId,
-              userId || null,
-              cloudinaryResult,
-              imageFileName,
-              {
-                source: 'ai_generated',
-                blog_topic: imageTopic,
-                keywords: imageKeywords,
-                original_image_id: featuredImage.image_id,
-                quality_score: featuredImage.quality_score,
-                safety_score: featuredImage.safety_score,
-                image_type: 'featured'
-              }
-            );
-
-            if (assetId) {
-              logger.debug('✅ Featured image saved to media_assets:', assetId);
-              // Update featuredImage to use Cloudinary URL
-              featuredImage.image_url = cloudinaryResult.secure_url;
-              featuredImage.image_data = undefined;
-            } else {
-              logger.warn('⚠️ Featured image uploaded to Cloudinary but failed to save to database');
-            }
-          }
-        } catch (uploadError) {
-          logger.warn('⚠️ Cloudinary upload error (non-critical):', uploadError);
-        }
-      }
-
-      // Generate section images for better visual engagement
-      try {
-        logger.debug('🖼️ Generating section images...');
-        const sections = extractSections(rawContent);
-        const imageKeywords = Array.isArray(keywords) ? keywords : [];
-        
-        // Generate images for every other section (to avoid too many images)
-        for (let i = 0; i < sections.length; i += 2) {
-          if (i >= 4) break; // Limit to 4 section images max
-          
-          const section = sections[i];
-          const sectionPrompt = `Professional blog image illustrating: ${section.title}, ${imageTopic}`;
-          
-          try {
-            const sectionImage = await imageGenerator.generateImage({
-              prompt: sectionPrompt,
-              style: 'photographic',
-              aspect_ratio: '16:9',
-              quality: 'high',
-              width: 1920,
-              height: 1080,
-              negative_prompt: 'blurry, low quality, watermark, text overlay'
-            });
-
-            if (sectionImage.success && sectionImage.images.length > 0) {
-              const img = sectionImage.images[0];
-              
-              // Upload to Cloudinary
-              const imageFileName = `blog-section-${i}-${Date.now()}.${img.format || 'png'}`;
-              const folder = `blog-images/${orgId}`;
-              
-              const cloudinaryResult = await uploadViaBlogWriterAPI(
-                img.image_url || '',
-                img.image_data || null,
-                orgId,
-                imageFileName,
-                folder
-              );
-
-              if (cloudinaryResult) {
-                img.image_url = cloudinaryResult.secure_url;
-                img.image_data = undefined;
-                
-                // Save to media_assets
-                const sectionAssetId = await saveMediaAsset(
-                  orgId,
-                  userId || null,
-                  cloudinaryResult,
-                  imageFileName,
-                  {
-                    source: 'ai_generated',
-                    blog_topic: imageTopic,
-                    section_title: section.title,
-                    original_image_id: img.image_id,
-                    image_type: 'section'
-                  }
-                );
-
-                if (sectionAssetId) {
-                  logger.debug(`✅ Section image ${i + 1} saved to media_assets:`, sectionAssetId);
-                } else {
-                  logger.warn(`⚠️ Section image ${i + 1} uploaded to Cloudinary but failed to save to database`);
-                }
-
-                sectionImages.push({
-                  position: section.wordPosition,
-                  image: img
-                });
-                
-                logger.debug(`✅ Section image ${i + 1} generated and uploaded`);
-              }
-            }
-          } catch (sectionImageError) {
-            logger.warn(`⚠️ Failed to generate section image ${i + 1}:`, sectionImageError);
-            // Continue with other sections
-          }
-        }
-      } catch (error) {
-        logger.warn('⚠️ Section image generation failed (non-critical):', error);
-      }
-    } catch (error) {
-      // Log detailed error information
-      const errorDetails = error instanceof Error ? {
-        message: error.message,
-        stack: error.stack,
-        name: error.name
-      } : { error: String(error) };
-      
-      const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
-      const imageKeywords = Array.isArray(keywords) ? keywords : [];
-      
-      logger.error('❌ Image generation failed:', {
-        ...errorDetails,
-        topic: imageTopic,
-        keywords: imageKeywords,
-        timestamp: new Date().toISOString()
+    // Check for missing mandatory fields from DataForSEO response
+    // If missing, use OpenAI to fill them in (fallback)
+    logger.debug('🔍 Checking for missing mandatory fields from DataForSEO response...');
+    const dataForSEOFields: BlogFieldData = {
+      title: blogTitle,
+      content: rawContent,
+      excerpt: result.blog_post?.excerpt || result.excerpt,
+      meta_description: metaDescription,
+      seo_title: result.meta_title || result.title || blogTitle,
+    };
+    
+    const validation = validateBlogFields(dataForSEOFields);
+    const missingFields = [...validation.missingRequired, ...validation.missingRecommended];
+    
+    if (missingFields.length > 0) {
+      logger.info('⚠️ Missing mandatory fields detected, using OpenAI fallback to fill them:', {
+        missingRequired: validation.missingRequired,
+        missingRecommended: validation.missingRecommended,
       });
       
-      // Don't fail blog generation, but log the error for debugging
-      logger.warn('⚠️ Continuing blog generation without images');
+      try {
+        // Use OpenAI to fill missing fields
+        const llmService = new LLMAnalysisService();
+        if (llmService.isConfigured()) {
+          const openAIResult = await llmService.analyzeBlogContent({
+            title: blogTitle || topic,
+            content: rawContent,
+            existingFields: {
+              excerpt: dataForSEOFields.excerpt,
+              metaDescription: dataForSEOFields.meta_description,
+              seoTitle: dataForSEOFields.seo_title,
+            },
+          });
+          
+          // Merge OpenAI results with DataForSEO results
+          if (!dataForSEOFields.excerpt && openAIResult.excerpt) {
+            result.excerpt = openAIResult.excerpt;
+            logger.debug('✅ OpenAI filled missing excerpt');
+          }
+          if (!dataForSEOFields.meta_description && openAIResult.metaDescription) {
+            result.meta_description = openAIResult.metaDescription;
+            logger.debug('✅ OpenAI filled missing meta_description');
+          }
+          if (!dataForSEOFields.seo_title && openAIResult.seoTitle) {
+            result.meta_title = openAIResult.seoTitle;
+            logger.debug('✅ OpenAI filled missing seo_title');
+          }
+          
+          logger.debug('✅ OpenAI fallback completed, merged results');
+        } else {
+          logger.warn('⚠️ OpenAI credentials not configured, cannot fill missing fields');
+        }
+      } catch (error) {
+        logger.error('❌ OpenAI fallback failed:', error);
+        // Continue with DataForSEO results even if OpenAI fails
+      }
+    } else {
+      logger.debug('✅ All mandatory fields present in DataForSEO response');
     }
     
-    // Enhance content to rich HTML with images embedded
+    // Map v1.3.4 response fields to our internal format
+    // Map generation_time_seconds to generation_time for backward compatibility
+    if (result.generation_time_seconds && !result.generation_time) {
+      result.generation_time = result.generation_time_seconds;
+    }
+    
+    // Map quality_scores structure if present
+    if (result.quality_scores && typeof result.quality_scores === 'object') {
+      const qs = result.quality_scores as Record<string, number>;
+      result.quality_dimensions = qs;
+      // Calculate overall quality_score as average
+      const scores = Object.values(qs).filter(v => typeof v === 'number');
+      if (scores.length > 0) {
+        result.quality_score = scores.reduce((a, b) => a + b, 0) / scores.length;
+      }
+    }
+    
+    // Image generation is now handled separately after blog creation
+    // Create placeholders for image generation that can be triggered from the frontend
+    const imageKeywords = Array.isArray(keywords) ? keywords : [];
+    const imageTopic = topic || result.title || result.blog_post?.title || 'blog post';
+    
+    // Extract sections for potential section images
+    const sections = extractSections(rawContent);
+    const sectionImagePlaceholders = sections
+      .slice(0, 4) // Limit to 4 section images max
+      .map((section, index) => ({
+        position: section.wordPosition,
+        prompt: `Professional blog image illustrating: ${section.title}, ${imageTopic}`,
+        style: 'photographic' as const,
+        aspect_ratio: '16:9' as const,
+        quality: 'high' as const,
+        type: 'section' as const
+      }));
+    
+    // Create image generation placeholders
+    const imagePlaceholders = {
+      featured_image: {
+        prompt: `Professional product photography: ${imageTopic}. High quality, clean background, professional lighting`,
+        style: 'photographic' as const,
+        aspect_ratio: '16:9' as const,
+        quality: 'high' as const,
+        type: 'featured' as const,
+        keywords: imageKeywords
+      },
+      section_images: sectionImagePlaceholders
+    };
+    
+    logger.debug('📸 Image generation placeholders created:', {
+      featuredImagePrompt: imagePlaceholders.featured_image.prompt,
+      sectionImageCount: imagePlaceholders.section_images.length
+    });
+    
+    // Set featuredImage and sectionImages to null (images will be generated separately)
+    const featuredImage: GeneratedImage | null = null;
+    const sectionImages: Array<{ position: number; image: GeneratedImage }> = [];
+    
+    // Enhance content to rich HTML (without images - they'll be added later)
     logger.debug('✨ Enhancing content to rich HTML...');
     const enhancedContent = enhanceContentToRichHTML(rawContent, {
-      featuredImage,
-      sectionImages,
-      includeImages: true,
+      featuredImage: null, // Images will be generated separately
+      sectionImages: [], // Images will be generated separately
+      includeImages: false, // Don't include images in initial generation
       enhanceFormatting: true,
       addStructure: true
     });
@@ -1263,6 +1187,7 @@ export async function POST(request: NextRequest) {
       progressUpdates,
       featuredImage,
       sectionImages,
+      imagePlaceholders,
       {
         topic,
         brandVoice,
@@ -1298,8 +1223,9 @@ export async function POST(request: NextRequest) {
       seoScore: transformedResult.seo_score,
       enhanced: shouldUseEnhanced,
       productResearchRequested: requiresProductResearch,
-      imageGenerated: !!featuredImage,
-      sectionImagesCount: sectionImages.length,
+      imageGenerated: false, // Images generated separately
+      sectionImagesCount: 0, // Images generated separately
+      imagePlaceholdersCreated: true,
       progressUpdatesCount: transformedResult.progress_updates.length,
       hasProgressUpdates: transformedResult.progress_updates.length > 0
     });
@@ -1307,11 +1233,12 @@ export async function POST(request: NextRequest) {
     // Update queue entry with final results if queue exists
     if (queueId && transformedResult) {
       try {
-        const rawContent = result.blog_post?.content || result.content || transformedResult.content || '';
+        // Save ENHANCED content (with Cloudinary URLs and proper HTML structure) instead of raw content
+        // This ensures drafts have images, proper headings (H1, H2, H3), and all formatting
         await supabase
           .from('blog_generation_queue')
           .update({
-            generated_content: rawContent,
+            generated_content: enhancedContent, // Use enhanced content with Cloudinary URLs and HTML structure
             generated_title: transformedResult.title,
             generation_metadata: {
               ...transformedResult.metadata,
@@ -1320,12 +1247,27 @@ export async function POST(request: NextRequest) {
               quality_score: transformedResult.quality_score,
               word_count: transformedResult.word_count,
               total_cost: transformedResult.total_cost,
-              generation_time: transformedResult.generation_time
+              generation_time: transformedResult.generation_time,
+              // Include SEO metadata (Twitter OG tags, etc.) from API response
+              seo_metadata: transformedResult.seo_metadata || {},
+              structured_data: transformedResult.structured_data || null,
+              meta_title: transformedResult.meta_title,
+              meta_description: transformedResult.meta_description,
+              // Image placeholders (images generated separately)
+              featured_image_url: null, // Will be generated separately
+              featured_image_alt_text: `Featured image for ${transformedResult.title}`,
+              // Include image placeholders for frontend-triggered generation
+              image_placeholders: imagePlaceholders,
+              generated_images: null, // Images not generated during blog creation
+              // Include internal links
+              internal_links: transformedResult.internal_links || [],
+              // Include excerpt
+              excerpt: transformedResult.excerpt,
             }
           })
           .eq('queue_id', queueId);
         
-        logger.debug('✅ Queue entry updated with generated content');
+        logger.debug('✅ Queue entry updated with enhanced content (includes Cloudinary URLs and HTML structure)');
       } catch (error) {
         logger.warn('⚠️ Failed to update queue entry with content:', error);
       }
@@ -1374,6 +1316,18 @@ export async function POST(request: NextRequest) {
         }
       }
       
+      // Always return queue_id even on error so frontend can track the failed generation
+      if (queueId) {
+        return NextResponse.json(
+          { 
+            error: result.error_message || result.error || 'Blog generation failed',
+            queue_id: queueId, // Include queue_id so frontend can track this failed generation
+            status: 'failed'
+          },
+          { status: 500 }
+        );
+      }
+      
       return NextResponse.json(
         { error: result.error_message || result.error || 'Blog generation failed' },
         { status: 500 }
@@ -1396,9 +1350,22 @@ export async function POST(request: NextRequest) {
             generation_completed_at: new Date().toISOString()
           })
           .eq('queue_id', queueId);
+        logger.debug('✅ Queue entry updated with error status in catch block', { queueId });
       } catch (updateError) {
         logger.warn('⚠️ Failed to update queue entry with error:', updateError);
       }
+    }
+    
+    // Always return queue_id even on error so frontend can track the failed generation
+    if (queueId) {
+      return NextResponse.json(
+        { 
+          error: 'Internal server error',
+          queue_id: queueId, // Include queue_id so frontend can track this failed generation
+          status: 'failed'
+        },
+        { status: 500 }
+      );
     }
     
     return NextResponse.json(

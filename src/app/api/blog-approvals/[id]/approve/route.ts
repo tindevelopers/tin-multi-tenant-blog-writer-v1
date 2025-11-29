@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ApprovalStatus } from "@/lib/blog-queue-state-machine";
 import { canTransitionApprovalStatus } from "@/lib/blog-queue-state-machine";
 import { logger } from '@/utils/logger';
+import { hasPermission } from '@/lib/rbac/permissions';
+import { PERMISSIONS } from '@/lib/rbac/types';
 
 /**
  * POST /api/blog-approvals/[id]/approve
@@ -31,10 +33,16 @@ export async function POST(
       return NextResponse.json({ error: "Organization not found" }, { status: 404 });
     }
 
+    // Check for content.moderate permission (required for approvals)
+    const canModerate = await hasPermission(user.id, PERMISSIONS.CONTENT_MODERATE);
+    
+    // Also check role as fallback (admin, manager, editor can approve)
     const allowedRoles = ["admin", "manager", "editor"];
-    if (!allowedRoles.includes(userProfile.role)) {
+    const hasRolePermission = allowedRoles.includes(userProfile.role);
+    
+    if (!canModerate && !hasRolePermission) {
       return NextResponse.json(
-        { error: "Insufficient permissions" },
+        { error: "Insufficient permissions. You need 'content.moderate' permission or be an admin/manager/editor to approve content." },
         { status: 403 }
       );
     }

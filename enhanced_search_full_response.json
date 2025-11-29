@@ -1,0 +1,666 @@
+{
+  "enhanced_analysis": {
+    "content marketing": {
+      "search_volume": 301000,
+      "global_search_volume": 0,
+      "search_volume_by_country": {},
+      "monthly_searches": [
+        {
+          "year": 2025,
+          "month": 10,
+          "search_volume": 33100
+        },
+        {
+          "year": 2025,
+          "month": 9,
+          "search_volume": 110000
+        },
+        {
+          "year": 2025,
+          "month": 8,
+          "search_volume": 1830000
+        },
+        {
+          "year": 2025,
+          "month": 7,
+          "search_volume": 1500000
+        },
+        {
+          "year": 2025,
+          "month": 6,
+          "search_volume": 301000
+        },
+        {
+          "year": 2025,
+          "month": 5,
+          "search_volume": 14800
+        },
+        {
+          "year": 2025,
+          "month": 4,
+          "search_volume": 18100
+        },
+        {
+          "year": 2025,
+          "month": 3,
+          "search_volume": 22200
+        },
+        {
+          "year": 2025,
+          "month": 2,
+          "search_volume": 14800
+        },
+        {
+          "year": 2025,
+          "month": 1,
+          "search_volume": 18100
+        },
+        {
+          "year": 2024,
+          "month": 12,
+          "search_volume": 14800
+        },
+        {
+          "year": 2024,
+          "month": 11,
+          "search_volume": 14800
+        }
+      ],
+      "difficulty": "medium",
+      "difficulty_score": 50.0,
+      "competition": 0.0,
+      "cpc": 14.86,
+      "cpc_currency": null,
+      "cps": null,
+      "clicks": null,
+      "trend_score": -0.13430127041742293,
+      "recommended": true,
+      "reason": "Good search volume with manageable competition",
+      "related_keywords": [
+        "best content marketing",
+        "top content marketing",
+        "free content marketing",
+        "online content marketing",
+        "professional content marketing",
+        "learn content marketing",
+        "understand content marketing",
+        "master content marketing"
+      ],
+      "related_keywords_enhanced": [],
+      "long_tail_keywords": [
+        "how to use content marketing",
+        "what is content marketing",
+        "why content marketing is important",
+        "benefits of content marketing",
+        "content marketing for beginners",
+        "content marketing problems",
+        "content marketing challenges"
+      ],
+      "questions": [],
+      "topics": [],
+      "keyword_ideas": [],
+      "parent_topic": "Content Marketing",
+      "category_type": "topic",
+      "cluster_score": 0.5,
+      "ai_search_volume": 0,
+      "ai_trend": 0.0,
+      "ai_monthly_searches": [],
+      "traffic_potential": null,
+      "serp_features": [],
+      "serp_feature_counts": {},
+      "primary_intent": null,
+      "intent_probabilities": {},
+      "also_rank_for": [],
+      "also_talk_about": [],
+      "top_competitors": [],
+      "first_seen": null,
+      "last_updated": null
+    }
+  },
+  "total_keywords": 1,
+  "original_keywords": [
+    "content marketing"
+  ],
+  "suggested_keywords": [],
+  "clusters": [
+    {
+      "parent_topic": "Content Marketing",
+      "keywords": [
+        "content marketing"
+      ],
+      "cluster_score": 0.5,
+      "category_type": "topic",
+      "keyword_count": 1
+    }
+  ],
+  "cluster_summary": {
+    "total_keywords": 1,
+    "cluster_count": 1,
+    "unclustered_count": 0
+  },
+  "location": {
+    "used": "United States",
+    "detected_from_ip": false,
+    "specified": false
+  },
+  "discovery": {
+    "matching_terms": [
+      {
+        "keyword": "content marketing",
+        "search_volume": 301000,
+        "keyword_difficulty": 0,
+        "cpc": 14.86,
+        "competition": 0.03,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing strategy",
+        "search_volume": 4400,
+        "keyword_difficulty": 0,
+        "cpc": 22.27,
+        "competition": 0.03,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "what is content marketing",
+        "search_volume": 2900,
+        "keyword_difficulty": 0,
+        "cpc": 3.16,
+        "competition": 0.06,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing examples",
+        "search_volume": 1300,
+        "keyword_difficulty": 0,
+        "cpc": 4.14,
+        "competition": 0.04,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing meaning",
+        "search_volume": 1300,
+        "keyword_difficulty": 0,
+        "cpc": 8.53,
+        "competition": 0.02,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing jobs",
+        "search_volume": 1000,
+        "keyword_difficulty": 0,
+        "cpc": 2.97,
+        "competition": 0.11,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "digital marketing books",
+        "search_volume": 720,
+        "keyword_difficulty": 0,
+        "cpc": 2.3,
+        "competition": 1,
+        "parent_topic": null,
+        "intent": "transactional"
+      },
+      {
+        "keyword": "types of content marketing",
+        "search_volume": 480,
+        "keyword_difficulty": 0,
+        "cpc": 11.73,
+        "competition": 0.12,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "why is content marketing important",
+        "search_volume": 480,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.02,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing course",
+        "search_volume": 390,
+        "keyword_difficulty": 0,
+        "cpc": 10.4,
+        "competition": 0.27,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing jobs remote",
+        "search_volume": 390,
+        "keyword_difficulty": 0,
+        "cpc": 1.64,
+        "competition": 0.21,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "digital marketing vs social media marketing",
+        "search_volume": 320,
+        "keyword_difficulty": 0,
+        "cpc": 0.02,
+        "competition": 0.04,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "b2b content marketing examples",
+        "search_volume": 260,
+        "keyword_difficulty": 0,
+        "cpc": 4.35,
+        "competition": 0.1,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing vs social media marketing",
+        "search_volume": 210,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.01,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "what is content marketing in digital marketing",
+        "search_volume": 170,
+        "keyword_difficulty": 0,
+        "cpc": 14.71,
+        "competition": 0.09,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing vs digital marketing",
+        "search_volume": 170,
+        "keyword_difficulty": 0,
+        "cpc": 8.33,
+        "competition": 0.01,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content design jobs",
+        "search_volume": 170,
+        "keyword_difficulty": 0,
+        "cpc": 0.09,
+        "competition": 0.05,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing book",
+        "search_volume": 110,
+        "keyword_difficulty": 0,
+        "cpc": 15.12,
+        "competition": 0.42,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "types of content social media",
+        "search_volume": 70,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.01,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "best content marketing book",
+        "search_volume": 50,
+        "keyword_difficulty": 0,
+        "cpc": 1.83,
+        "competition": 0.89,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "entry level content marketing jobs",
+        "search_volume": 50,
+        "keyword_difficulty": 0,
+        "cpc": 0.04,
+        "competition": 0.09,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "books on content creation",
+        "search_volume": 40,
+        "keyword_difficulty": 0,
+        "cpc": 2.65,
+        "competition": 0.97,
+        "parent_topic": null,
+        "intent": "transactional"
+      },
+      {
+        "keyword": "content marketing course online",
+        "search_volume": 40,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.11,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "examples of content marketing on social media",
+        "search_volume": 30,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.1,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing course free",
+        "search_volume": 30,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.37,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing pdf",
+        "search_volume": 20,
+        "keyword_difficulty": 0,
+        "cpc": 6.77,
+        "competition": 0.34,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "creative content examples",
+        "search_volume": 20,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "difference between content marketing and social media marketing",
+        "search_volume": 20,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "best content marketing courses",
+        "search_volume": 20,
+        "keyword_difficulty": 0,
+        "cpc": 16.38,
+        "competition": 0.98,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "4 types of content marketing",
+        "search_volume": 20,
+        "keyword_difficulty": 0,
+        "cpc": 17.98,
+        "competition": 0.38,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "types of content marketing strategy",
+        "search_volume": 20,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "digital content marketing examples",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing strategy examples pdf",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing examples 2020",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing books pdf",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "best content marketing books for beginners",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "transactional"
+      },
+      {
+        "keyword": "content creation and digital marketing course",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 9.44,
+        "competition": 0.96,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "difference between social media marketing and digital marketing with examples",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing jobs salary",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "content marketing course google",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing course syllabus",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 1.96,
+        "competition": 1,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing course hubspot",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.05,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing course udemy",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "types of content marketing with examples",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "types of content marketing pdf",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing pdf free download",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "social media content marketing pdf",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "digital content marketing pdf",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "epic content marketing pdf free download",
+        "search_volume": 10,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing jobs near california",
+        "search_volume": 0,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "content marketing jobs near texas",
+        "search_volume": 0,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "commercial"
+      },
+      {
+        "keyword": "introduction to content marketing pdf",
+        "search_volume": 0,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.0,
+        "parent_topic": null,
+        "intent": "transactional"
+      }
+    ],
+    "questions": [
+      {
+        "keyword": "what is content marketing",
+        "search_volume": 2900,
+        "keyword_difficulty": 0,
+        "cpc": 3.16,
+        "competition": 0.06,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "why is content marketing important",
+        "search_volume": 480,
+        "keyword_difficulty": 0,
+        "cpc": 0.0,
+        "competition": 0.02,
+        "parent_topic": null,
+        "intent": "informational"
+      },
+      {
+        "keyword": "what is content marketing in digital marketing",
+        "search_volume": 170,
+        "keyword_difficulty": 0,
+        "cpc": 14.71,
+        "competition": 0.09,
+        "parent_topic": null,
+        "intent": "commercial"
+      }
+    ],
+    "related_terms": []
+  },
+  "serp_analysis": {
+    "keyword": "content marketing",
+    "organic_results": [],
+    "people_also_ask": [],
+    "featured_snippet": null,
+    "video_results": [],
+    "image_results": [],
+    "related_searches": [],
+    "top_domains": [],
+    "competition_level": "medium",
+    "content_gaps": [],
+    "serp_features": {
+      "has_featured_snippet": false,
+      "has_people_also_ask": false,
+      "has_videos": false,
+      "has_images": false
+    }
+  }
+}

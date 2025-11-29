@@ -118,10 +118,15 @@ export function encryptConnectionConfig(config: Record<string, unknown>): Record
   const sensitiveFields = [
     'apiToken',
     'apiKey',
+    'api_key', // Webflow uses snake_case
     'apiSecret',
+    'api_secret', // Also support snake_case
     'accessToken',
+    'access_token', // Also support snake_case
     'refreshToken',
+    'refresh_token', // Also support snake_case
     'applicationPassword',
+    'application_password', // Also support snake_case
     'password',
   ];
   
@@ -144,10 +149,15 @@ export function decryptConnectionConfig(config: Record<string, unknown>): Record
   const sensitiveFields = [
     'apiToken',
     'apiKey',
+    'api_key', // Webflow uses snake_case
     'apiSecret',
+    'api_secret', // Also support snake_case
     'accessToken',
+    'access_token', // Also support snake_case
     'refreshToken',
+    'refresh_token', // Also support snake_case
     'applicationPassword',
+    'application_password', // Also support snake_case
     'password',
   ];
   

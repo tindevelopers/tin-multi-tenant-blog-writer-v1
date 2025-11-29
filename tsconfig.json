@@ -23,5 +23,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "check-database-storage.ts", "test-supabase-direct.ts", "verify-migration.ts", "check-migration-data.ts", "check-keyword-storage.ts", "test-keyword-endpoint.ts", "test-api-endpoint-direct.ts", "check-7-dwarfs-direct.ts", "check-7-dwarfs-storage.ts", "test-sse-keyword-research.ts"]
 }

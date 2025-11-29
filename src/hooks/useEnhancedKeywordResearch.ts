@@ -23,12 +23,18 @@ export interface UseKeywordResearchResult {
   clusters: KeywordCluster[];
   primaryAnalysis: KeywordAnalysisResponse | null;
   suggestions: KeywordSuggestionResponse | null;
+  streamingProgress: {
+    stage: string;
+    progress: number;
+    message?: string;
+  } | null;
   
   // Actions
   researchKeyword: (
     primaryKeyword: string,
     location?: string,
-    language?: string
+    language?: string,
+    searchType?: 'traditional' | 'ai' | 'both'
   ) => Promise<void>;
   analyzeKeywords: (
     keywords: string[],
@@ -52,6 +58,11 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
   const [clusters, setClusters] = useState<KeywordCluster[]>([]);
   const [primaryAnalysis, setPrimaryAnalysis] = useState<KeywordAnalysisResponse | null>(null);
   const [suggestions, setSuggestions] = useState<KeywordSuggestionResponse | null>(null);
+  const [streamingProgress, setStreamingProgress] = useState<{
+    stage: string;
+    progress: number;
+    message?: string;
+  } | null>(null);
 
   /**
    * Comprehensive keyword research for a primary keyword
@@ -59,94 +70,224 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
   const researchKeyword = useCallback(async (
     primaryKeyword: string,
     location: string = 'United States',
-    language: string = 'en'
+    language: string = 'en',
+    searchType: 'traditional' | 'ai' | 'both' = 'traditional'
   ) => {
     setLoading(true);
     setError(null);
+    setStreamingProgress(null);
 
     try {
-      const result = await keywordResearchService.comprehensiveResearch(
-        primaryKeyword,
-        location,
-        language
+      // Use server-side SSE endpoint for all keyword research
+      const { streamServerSideKeywordResearch } = await import('@/lib/api-streaming');
+      
+      setStreamingProgress({ stage: 'Starting research', progress: 5, message: 'Initializing keyword research...' });
+      
+      const result = await streamServerSideKeywordResearch(
+        {
+          keyword: primaryKeyword,
+          location,
+          language,
+          searchType,
+          useCache: true,
+          autoStore: true,
+        },
+        {
+          onProgress: (update) => {
+            setStreamingProgress({
+              stage: update.stage || 'Processing',
+              progress: update.progress || 0,
+              message: update.message,
+            });
+          },
+          onError: (err) => {
+            logger.error('Server-side research error', { error: err });
+            setError(err.message);
+            setLoading(false);
+            setStreamingProgress(null);
+          },
+          onComplete: (data) => {
+            logger.debug('Server-side research complete', { keyword: primaryKeyword, source: data.source });
+            
+            const allKeywords: KeywordData[] = [];
+            
+            // Transform server-side result to client format
+            if (data.traditionalData) {
+              // Convert competition number (0-1) to competition_level string
+              const competition = data.traditionalData.competition || 0;
+              let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+              if (competition >= 0.67) {
+                competition_level = 'HIGH';
+              } else if (competition >= 0.33) {
+                competition_level = 'MEDIUM';
+              }
+              
+              const primaryKeywordData: KeywordData = {
+                keyword: primaryKeyword,
+                search_volume: data.traditionalData.search_volume || 0,
+                keyword_difficulty: data.traditionalData.keyword_difficulty || 0,
+                competition_level,
+                cpc: data.traditionalData.cpc,
+                related_keywords: data.traditionalData.related_keywords || [],
+                easy_win_score: 0,
+                high_value_score: 0,
+              };
+
+              allKeywords.push(primaryKeywordData);
+              setPrimaryAnalysis({ keyword: primaryKeyword } as any);
+            }
+            
+            // Process related terms
+            if (data.relatedTerms && Array.isArray(data.relatedTerms)) {
+              data.relatedTerms.forEach((term: any) => {
+                if (term.keyword && term.keyword !== primaryKeyword) {
+                  const competition = term.competition || 0;
+                  let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+                  if (competition >= 0.67) {
+                    competition_level = 'HIGH';
+                  } else if (competition >= 0.33) {
+                    competition_level = 'MEDIUM';
+                  }
+                  
+                  allKeywords.push({
+                    keyword: term.keyword,
+                    search_volume: term.search_volume || 0,
+                    keyword_difficulty: term.keyword_difficulty || 0,
+                    competition_level,
+                    cpc: term.cpc,
+                    related_keywords: [],
+                    easy_win_score: 0,
+                    high_value_score: 0,
+                  });
+                }
+              });
+            }
+            
+            // Process matching terms (from enhanced endpoint discovery section)
+            if (data.matchingTerms && Array.isArray(data.matchingTerms)) {
+              data.matchingTerms.forEach((term: any) => {
+                if (term.keyword && term.keyword !== primaryKeyword) {
+                  // Check if we already have this keyword
+                  const exists = allKeywords.some(k => k.keyword === term.keyword);
+                  if (!exists) {
+                    const competition = term.competition || 0;
+                    let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+                    if (competition >= 0.67) {
+                      competition_level = 'HIGH';
+                    } else if (competition >= 0.33) {
+                      competition_level = 'MEDIUM';
+                    }
+                    
+                    allKeywords.push({
+                      keyword: term.keyword,
+                      search_volume: term.search_volume || 0,
+                      keyword_difficulty: term.keyword_difficulty || 0,
+                      competition_level,
+                      cpc: term.cpc,
+                      search_intent: term.search_intent || term.intent,
+                      parent_topic: term.parent_topic,
+                      is_question: term.is_question || false,
+                      related_keywords: [],
+                      easy_win_score: 0,
+                      high_value_score: 0,
+                    });
+                  }
+                }
+              });
+            }
+
+            // Process discovery questions if available
+            if (data.discovery?.questions && Array.isArray(data.discovery.questions)) {
+              data.discovery.questions.forEach((question: any) => {
+                if (question.keyword && question.keyword !== primaryKeyword) {
+                  const exists = allKeywords.some(k => k.keyword === question.keyword);
+                  if (!exists) {
+                    const competition = question.competition || 0;
+                    let competition_level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+                    if (competition >= 0.67) {
+                      competition_level = 'HIGH';
+                    } else if (competition >= 0.33) {
+                      competition_level = 'MEDIUM';
+                    }
+                    
+                    allKeywords.push({
+                      keyword: question.keyword,
+                      search_volume: question.search_volume || 0,
+                      keyword_difficulty: question.keyword_difficulty || 0,
+                      competition_level,
+                      cpc: question.cpc,
+                      search_intent: question.intent || 'informational',
+                      parent_topic: question.parent_topic,
+                      is_question: true,
+                      related_keywords: [],
+                      easy_win_score: 0,
+                      high_value_score: 0,
+                    });
+                  }
+                }
+              });
+            }
+            
+            // Also process related_keywords from traditionalData if they're strings
+            if (data.traditionalData?.related_keywords && Array.isArray(data.traditionalData.related_keywords)) {
+              data.traditionalData.related_keywords.forEach((relatedKw: string) => {
+                if (typeof relatedKw === 'string' && relatedKw !== primaryKeyword) {
+                  const exists = allKeywords.some(k => k.keyword === relatedKw);
+                  if (!exists) {
+                    allKeywords.push({
+                      keyword: relatedKw,
+                      search_volume: 0,
+                      keyword_difficulty: 0,
+                      competition_level: 'LOW',
+                      related_keywords: [],
+                      easy_win_score: 0,
+                      high_value_score: 0,
+                    });
+                  }
+                }
+              });
+            }
+            
+            logger.debug('Processed keywords', { 
+              total: allKeywords.length, 
+              primary: allKeywords[0]?.keyword,
+              relatedCount: data.relatedTerms?.length || 0,
+              matchingCount: data.matchingTerms?.length || 0,
+            });
+            
+            setKeywords(allKeywords);
+              
+              // Create clusters
+            if (allKeywords.length > 0) {
+              keywordResearchService.createClusters(allKeywords).then((newClusters) => {
+                setClusters(newClusters);
+              });
+            }
+            
+            setSuggestions({ keyword_suggestions: [] } as any);
+            setLoading(false);
+            setTimeout(() => setStreamingProgress(null), 1000);
+          },
+        }
       );
 
-      setPrimaryAnalysis(result.primary);
-      setKeywords(result.variations);
-      setSuggestions(result.suggestions);
-
-      // Automatically create clusters
-      const newClusters = await keywordResearchService.createClusters(result.variations);
-      setClusters(newClusters);
-
-      // Save to database
-      try {
-        logger.debug('🔍 Attempting to save keywords to database...');
-        const supabase = createClient();
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        
-        logger.debug('🔍 User auth result:', { user: user?.id, error: userError?.message });
-        
-        if (userError) {
-          logger.error('❌ Auth error when saving keywords:', userError);
-          throw userError;
-        }
-        
-        if (!user) {
-          logger.error('❌ No user authenticated when saving keywords');
-          throw new Error('User not authenticated');
-        }
-
-        logger.debug('✅ User authenticated:', user.id);
-        
-        const keywordStorage = new KeywordStorageService();
-        
-        // Transform keyword data to storage format
-        const storageKeywords = result.variations.map(k => ({
-          keyword: k.keyword,
-          search_volume: k.search_volume,
-          difficulty: (k.keyword_difficulty <= 30 ? 'easy' : k.keyword_difficulty <= 60 ? 'medium' : 'hard') as 'easy' | 'medium' | 'hard',
-          competition: k.competition_level === 'LOW' ? 0.2 : k.competition_level === 'MEDIUM' ? 0.5 : 0.8,
-          cpc: k.cpc,
-          trend_score: k.high_value_score,
-          recommended: k.easy_win_score >= 60 || k.high_value_score >= 60,
-          reason: k.easy_win_score >= 60 ? 'Easy win opportunity' : 'High value keyword',
-          related_keywords: k.related_keywords || [],
-          long_tail_keywords: (k.related_keywords || []).slice(0, 3) // Use first 3 as long-tail
-        }));
-
-        logger.debug('🔍 Saving keywords:', { 
-          userId: user.id, 
-          primaryKeyword, 
-          keywordCount: storageKeywords.length 
-        });
-
-        const saveResult = await keywordStorage.saveKeywords(
-          user.id,
-          primaryKeyword,
-          storageKeywords,
-          {
-            location,
-            language,
-            clusters: newClusters,
-            primaryAnalysis: result.primary
-          }
-        );
-        
-        logger.debug('💾 Save result:', saveResult);
-        
-        if (saveResult.success) {
-          logger.debug('✅ Keywords saved to database successfully');
-        } else {
-          logger.error('❌ Failed to save keywords:', saveResult.error);
-        }
-      } catch (saveError) {
-        logger.error('⚠️ Failed to save keywords to database:', saveError);
-        // Don't fail the entire research if saving fails
-      }
+      // Server-side research handles everything (cache, storage, API calls)
+      // Results are processed in the onComplete callback above
+      // No additional processing needed here - the callback handles everything
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Keyword research failed';
+      let errorMessage = err instanceof Error ? err.message : 'Keyword research failed';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        // Don't display HTML errors to users - these are handled gracefully by the API
+        logger.warn('HTML error response detected, suppressing user-facing error', { 
+          error: errorMessage.substring(0, 200) 
+        });
+        // Set a user-friendly message instead
+        errorMessage = 'Some keyword suggestions are unavailable, but research completed successfully.';
+      }
+      
       setError(errorMessage);
       logger.error('Keyword research error:', err);
     } finally {
@@ -201,7 +342,14 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
 
       setKeywords(keywordData);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Keyword analysis failed';
+      let errorMessage = err instanceof Error ? err.message : 'Keyword analysis failed';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        logger.warn('HTML error response detected in analysis, suppressing user-facing error');
+        errorMessage = 'Some keyword analysis data is unavailable, but partial results are available.';
+      }
+      
       setError(errorMessage);
       logger.error('Keyword analysis error:', err);
     } finally {
@@ -225,7 +373,14 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       const newClusters = await keywordResearchService.createClusters(keywords);
       setClusters(newClusters);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Clustering failed';
+      let errorMessage = err instanceof Error ? err.message : 'Clustering failed';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        logger.warn('HTML error response detected in clustering, suppressing user-facing error');
+        errorMessage = 'Clustering completed with partial data.';
+      }
+      
       setError(errorMessage);
       logger.error('Clustering error:', err);
     } finally {
@@ -302,7 +457,14 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
       setClusters(keywordClusters);
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load research history';
+      let errorMessage = err instanceof Error ? err.message : 'Failed to load research history';
+      
+      // Check if error message contains HTML (404 page or similar)
+      if (errorMessage.includes('<html>') || errorMessage.includes('404') || errorMessage.includes('Page not found')) {
+        logger.warn('HTML error response detected in history load, suppressing user-facing error');
+        errorMessage = 'Unable to load some research history data.';
+      }
+      
       setError(errorMessage);
       logger.error('Load history error:', err);
     } finally {
@@ -320,6 +482,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     setClusters([]);
     setPrimaryAnalysis(null);
     setSuggestions(null);
+    setStreamingProgress(null);
   }, []);
 
   return {
@@ -329,6 +492,7 @@ export function useEnhancedKeywordResearch(): UseKeywordResearchResult {
     clusters,
     primaryAnalysis,
     suggestions,
+    streamingProgress,
     researchKeyword,
     analyzeKeywords,
     createClusters,

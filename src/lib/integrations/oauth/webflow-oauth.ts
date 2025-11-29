@@ -3,6 +3,11 @@
  * 
  * Implements OAuth 2.0 authorization code flow for Webflow integration.
  * Reference: https://developers.webflow.com/oauth
+ * 
+ * Required Scopes for Publishing:
+ * - cms:write - Create, update, and delete CMS collections and items
+ * - sites:write - Publish site-wide changes (make CMS changes live)
+ * - sites:read - Read site information (optional but recommended)
  */
 
 import crypto from 'crypto';
@@ -13,6 +18,15 @@ export interface WebflowOAuthConfig {
   redirectUri: string;
   scopes?: string[];
 }
+
+/**
+ * Default scopes required for Webflow CMS publishing
+ */
+export const WEBFLOW_PUBLISH_SCOPES = [
+  'cms:write',    // Required: Create, update, delete CMS items
+  'sites:write',  // Required: Publish site-wide changes
+  'sites:read',   // Recommended: Read site information
+] as const;
 
 export interface OAuthState {
   state: string;
@@ -31,14 +45,21 @@ export class WebflowOAuth {
 
   /**
    * Generate OAuth authorization URL
+   * 
+   * @param state - CSRF protection state token
+   * @param scopes - Optional custom scopes. Defaults to publishing scopes if not provided.
+   *                 Required scopes for CMS publishing: cms:write, sites:write
    */
   getAuthorizationUrl(state: string, scopes?: string[]): string {
+    // Use provided scopes, config scopes, or default publishing scopes
+    const finalScopes = scopes || this.config.scopes || [...WEBFLOW_PUBLISH_SCOPES];
+    
     const params = new URLSearchParams({
       client_id: this.config.clientId,
       response_type: 'code',
       redirect_uri: this.config.redirectUri,
       state: state,
-      scope: (scopes || this.config.scopes || ['sites:read', 'sites:write']).join(' '),
+      scope: finalScopes.join(' '),
     });
 
     return `${this.authUrl}?${params.toString()}`;

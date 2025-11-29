@@ -10,7 +10,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 
-const CLOUD_RUN_URL = process.env.BLOG_WRITER_API_URL || 'https://blog-writer-api-dev-613248238610.europe-west1.run.app';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+
+const CLOUD_RUN_URL = BLOG_WRITER_API_URL;
 const HEALTH_CHECK_TIMEOUT = 10000; // 10 seconds
 
 export async function GET(request: NextRequest) {

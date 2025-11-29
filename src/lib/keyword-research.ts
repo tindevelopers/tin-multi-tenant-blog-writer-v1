@@ -1,5 +1,3 @@
-"use client";
-
 import cloudRunHealth from './cloud-run-health';
 import keywordStorageService from './keyword-storage';
 import { logger } from '@/utils/logger';
@@ -77,6 +75,30 @@ export interface KeywordData {
   // Related Keywords
   related_keywords: string[];
   long_tail_keywords: string[];
+  // Enhanced Related Keywords (with full metrics) - v1.3.0+
+  related_keywords_enhanced?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  // Question-type keywords - v1.3.0+
+  questions?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
+  // Topic-type keywords - v1.3.0+
+  topics?: Array<{
+    keyword: string;
+    search_volume: number;
+    cpc: number;
+    competition: number;
+    difficulty_score: number;
+  }>;
   // Additional Data (v1.3.0)
   also_rank_for?: string[];                  // Keywords that pages ranking for this also rank for
   also_talk_about?: string[];                // Related topics/entities
@@ -95,6 +117,95 @@ export interface KeywordData {
   keyword_ideas?: KeywordIdea[];
   relevant_pages?: RelevantPage[];
   serp_ai_summary?: SERPAISummary;
+}
+
+// Enhanced Keyword Analysis Request (v1.3.3)
+export interface EnhancedKeywordAnalysisRequest {
+  keywords: string[];
+  location?: string;
+  language?: string;
+  search_type?: 
+    | "competitor_analysis"
+    | "content_research"
+    | "quick_analysis"
+    | "comprehensive_analysis"
+    | "enhanced_keyword_analysis";
+  include_serp?: boolean;
+  max_suggestions_per_keyword?: number;
+  
+  // SERP Customization (v1.3.3)
+  serp_depth?: number;                    // Default: 20, Range: 5-100
+  serp_prompt?: string;                    // Custom prompt for AI summary
+  include_serp_features?: string[];        // Default: ["featured_snippet", "people_also_ask", "videos", "images"]
+  serp_analysis_type?: "basic" | "ai_summary" | "both";  // Default: "both"
+  
+  // Related Keywords Customization (v1.3.3)
+  related_keywords_depth?: number;        // Default: 1, Range: 1-4
+  related_keywords_limit?: number;        // Default: 20, Range: 5-100
+  
+  // Keyword Ideas Customization (v1.3.3)
+  keyword_ideas_limit?: number;            // Default: 50, Range: 10-200
+  keyword_ideas_type?: "all" | "questions" | "topics";  // Default: "all"
+  
+  // AI Volume Customization (v1.3.3)
+  include_ai_volume?: boolean;             // Default: true
+  ai_volume_timeframe?: number;            // Default: 12, Range: 1-24 (months)
+}
+
+// LLM Research Request (v1.3.3)
+export interface LLMResearchRequest {
+  keywords: string[];                      // Max 10 keywords
+  prompts?: string[];                      // Optional: Auto-generated if not provided
+  llm_models?: string[];                   // Default: ["chatgpt", "claude", "gemini"]
+  max_tokens?: number;                     // Default: 500, Range: 100-2000
+  location?: string;                       // Default: "United States"
+  language?: string;                       // Default: "en"
+  include_consensus?: boolean;             // Default: true
+  include_sources?: boolean;               // Default: true
+  research_type?: "quick" | "comprehensive" | "fact_check" | "content_research";  // Default: "comprehensive"
+}
+
+// Progress Update (for SSE streaming) (v1.3.3)
+export interface ProgressUpdate {
+  stage: string;
+  stage_number: number;
+  total_stages: number;
+  progress_percentage: number;
+  status: string;
+  details?: string;
+  metadata?: Record<string, any>;
+  timestamp: number;
+}
+
+// LLM Research Response (v1.3.3)
+export interface LLMResearchResponse {
+  llm_research: Record<string, {
+    prompts_used: string[];
+    responses: Record<string, Record<string, {
+      text: string;
+      tokens: number;
+      model: string;
+      timestamp: string;
+    }>>;
+    consensus?: string[];
+    differences?: string[];
+    sources?: Array<{ url: string; title: string }>;
+    confidence?: {
+      chatgpt: number;
+      claude: number;
+      gemini: number;
+      average: number;
+    };
+  }>;
+  summary: {
+    total_keywords_researched: number;
+    total_prompts: number;
+    total_llm_queries: number;
+    llm_models_used: string[];
+    average_confidence: number;
+    sources_found: number;
+    research_type: string;
+  };
 }
 
 export interface KeywordAnalysis {
@@ -198,8 +309,32 @@ class KeywordResearchService {
     this.baseURL = baseURL || 
       (typeof window !== 'undefined' 
         ? window.location.origin 
-        : 'https://blog-writer-api-dev-613248238610.europe-west1.run.app');
+        : (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              const { BLOG_WRITER_API_URL } = require('./blog-writer-api-url');
+              return BLOG_WRITER_API_URL;
+            } catch {
+              // Fallback to dev endpoint if module can't be loaded
+                  return 'https://blog-writer-api-dev-613248238610.europe-west9.run.app';
+            }
+          })());
     this.useApiRoutes = useApiRoutes;
+  }
+
+  /**
+   * Get absolute URL for API routes when server-side
+   */
+  private getApiUrl(relativePath: string): string {
+    const isServerSide = typeof window === 'undefined';
+    if (isServerSide) {
+      // When server-side, construct absolute URL
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+      return `${appUrl}${relativePath}`;
+    }
+    // Client-side: relative URL works fine
+    return relativePath;
   }
 
   /**
@@ -249,6 +384,7 @@ class KeywordResearchService {
       include_keyword_ideas?: boolean;
       include_relevant_pages?: boolean;
       include_serp_ai_summary?: boolean;
+      include_search_volume?: boolean; // Request search volume data
       competitor_domain?: string;
     }
   ): Promise<KeywordAnalysis> {
@@ -260,13 +396,13 @@ class KeywordResearchService {
       throw new Error(`Cannot analyze more than ${OPTIMAL_BATCH_SIZE} keywords at once. Received ${keywords.length} keywords. Please batch your requests.`);
     }
 
-    // Ensure maxSuggestionsPerKeyword is at least 5 (API requirement) and defaults to 75
-    const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 75);
+    // Reduced to minimum required by backend (backend requires >= 5, using 5 for testing)
+    const finalMaxSuggestions = Math.max(5, maxSuggestionsPerKeyword || 5);
     logger.debug(`📊 Using ${finalMaxSuggestions} suggestions per keyword for optimal long-tail results`);
 
     return await this.retryApiCall(async () => {
       const apiUrl = this.useApiRoutes 
-        ? '/api/keywords/analyze'
+        ? this.getApiUrl('/api/keywords/analyze')
         : `${this.baseURL}/api/v1/keywords/enhanced`;
       
       const requestBody: Record<string, unknown> = {
@@ -274,7 +410,8 @@ class KeywordResearchService {
         location,
         language: 'en',
         include_serp: false,
-        max_suggestions_per_keyword: finalMaxSuggestions
+        max_suggestions_per_keyword: finalMaxSuggestions,
+        include_search_volume: true, // Always request search volume data
       };
 
       // Add enhanced endpoint parameters if provided
@@ -290,6 +427,9 @@ class KeywordResearchService {
         }
         if (options.include_serp_ai_summary !== undefined) {
           requestBody.include_serp_ai_summary = options.include_serp_ai_summary;
+        }
+        if (options.include_search_volume !== undefined) {
+          requestBody.include_search_volume = options.include_search_volume;
         }
         if (options.competitor_domain) {
           requestBody.competitor_domain = options.competitor_domain;
@@ -309,17 +449,37 @@ class KeywordResearchService {
       });
 
       if (!response.ok) {
+        const contentType = response.headers.get('content-type') || '';
         const responseText = await response.text();
         let errorMessage = `API returned ${response.status}`;
+        
+        // Check if response is HTML (404 error page)
+        if (contentType.includes('text/html') || responseText.includes('<html>') || responseText.includes('404')) {
+          logger.warn(`⚠️ API returned HTML 404 page (${response.status}), endpoint may not exist`, {
+            url: apiUrl,
+            status: response.status
+          });
+          // Don't throw error for HTML 404 responses - return empty analysis instead
+          // This allows the research to continue with other data sources
+          return {
+            keyword_analysis: {},
+            overall_score: 0,
+            recommendations: [],
+            cluster_groups: []
+          };
+        }
         
         try {
           const errorData = JSON.parse(responseText);
           errorMessage = errorData.error || errorData.message || errorData.detail || errorMessage;
         } catch {
-          errorMessage = responseText || errorMessage;
+          // If parsing fails and it's not HTML, use sanitized error message
+          if (!responseText.includes('<html>')) {
+            errorMessage = responseText.substring(0, 200) || errorMessage;
+          }
         }
 
-        logger.error(`❌ API error (${response.status}):`, errorMessage);
+        logger.error(`❌ API error (${response.status}):`, errorMessage.substring(0, 200));
         logger.error(`❌ Request body:`, JSON.stringify(requestBody, null, 2));
         
         throw new Error(errorMessage);
@@ -461,7 +621,7 @@ class KeywordResearchService {
 
     try {
       const apiUrl = this.useApiRoutes 
-        ? '/api/keywords/extract'
+        ? this.getApiUrl('/api/keywords/extract')
         : `${this.baseURL}/api/v1/keywords/extract`;
 
       const response = await fetch(apiUrl, {
@@ -493,29 +653,54 @@ class KeywordResearchService {
   ): Promise<string[]> {
     try {
       const apiUrl = this.useApiRoutes 
-        ? '/api/keywords/suggest'
+        ? this.getApiUrl('/api/keywords/suggest')
         : `${this.baseURL}/api/v1/keywords/suggest`;
     
       const allSuggestions: string[] = [];
       
       for (const keyword of keywords) {
+        // Increase timeout to 60 seconds to account for Cloud Run cold starts
+        // The server-side API route already has retry logic with 30s timeout per attempt
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword, limit }),
-          signal: AbortSignal.timeout(30000),
+          body: JSON.stringify({ keyword, limit, location }),
+          signal: AbortSignal.timeout(60000), // Increased from 30s to 60s
         });
 
         if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          // Check if response is HTML (404 error page)
+          if (contentType.includes('text/html')) {
+            logger.warn(`⚠️ Keyword suggestions API returned HTML (likely 404), skipping suggestions for "${keyword}"`);
+            continue;
+          }
+          
           const data = await response.json();
           const suggestions = data.keyword_suggestions || data.suggestions || [];
           allSuggestions.push(...suggestions);
+        } else {
+          const contentType = response.headers.get('content-type') || '';
+          const errorText = await response.text();
+          
+          // Check if response is HTML (404 error page)
+          if (contentType.includes('text/html') || errorText.includes('<html>')) {
+            logger.warn(`⚠️ Keyword suggestions API returned HTML 404, skipping suggestions for "${keyword}"`);
+            continue;
+          }
+          
+          logger.warn(`Keyword suggestions API returned ${response.status}:`, errorText.substring(0, 200));
         }
       }
 
       return [...new Set(allSuggestions)].slice(0, limit);
     } catch (error) {
-      logger.error('Keyword suggestions failed:', error);
+      const isTimeout = error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+      if (isTimeout) {
+        logger.error('Keyword suggestions failed: Request timed out. The API may be cold-starting. Please try again.', error);
+      } else {
+        logger.error('Keyword suggestions failed:', error);
+      }
       return [];
     }
   }
@@ -545,9 +730,9 @@ class KeywordResearchService {
       // Combine keywords
       const allKeywords = [...new Set([...extractedKeywords, ...suggestedKeywords, topic])];
       
-      // Step 3: Analyze keywords in batches
-      const BATCH_SIZE = 20;
-      const MAX_SUGGESTIONS_PER_KEYWORD = 75; // Optimal for long-tail research
+      // Step 3: Analyze keywords in batches (reduced for credit preservation)
+      const BATCH_SIZE = 5; // Reduced from 20 to preserve credits
+      const MAX_SUGGESTIONS_PER_KEYWORD = 5; // Minimum required by backend (backend requires >= 5)
       
       let keywordAnalysis: KeywordAnalysis;
       
@@ -556,12 +741,12 @@ class KeywordResearchService {
         
         const batches: KeywordAnalysis[] = [];
         
-        // Enhanced options for better content quality
-        const enhancedOptions = useEnhancedFeatures ? {
-          include_trends: true, // Google Trends for trending topics
-          include_keyword_ideas: true, // Keyword ideas for content expansion
-          include_relevant_pages: true, // Competitor analysis
-          include_serp_ai_summary: true, // AI-powered SERP summary
+        // Enhanced options disabled in development to preserve credits
+        const enhancedOptions = false ? { // Disabled: useEnhancedFeatures
+          include_trends: false, // Disabled to preserve credits
+          include_keyword_ideas: false, // Disabled to preserve credits
+          include_relevant_pages: false, // Disabled to preserve credits
+          include_serp_ai_summary: false, // Disabled to preserve credits
         } : undefined;
         
         for (let i = 0; i < allKeywords.length; i += BATCH_SIZE) {
@@ -599,12 +784,12 @@ class KeywordResearchService {
         
         logger.debug(`✅ Merged ${batches.length} batches: ${Object.keys(mergedAnalysis).length} keywords`);
       } else {
-        // Enhanced options for better content quality
-        const enhancedOptions = useEnhancedFeatures ? {
-          include_trends: true,
-          include_keyword_ideas: true,
-          include_relevant_pages: true,
-          include_serp_ai_summary: true,
+        // Enhanced options disabled in development to preserve credits
+        const enhancedOptions = false ? { // Disabled: useEnhancedFeatures
+          include_trends: false, // Disabled to preserve credits
+          include_keyword_ideas: false, // Disabled to preserve credits
+          include_relevant_pages: false, // Disabled to preserve credits
+          include_serp_ai_summary: false, // Disabled to preserve credits
         } : undefined;
         
         keywordAnalysis = await this.analyzeKeywords(allKeywords, MAX_SUGGESTIONS_PER_KEYWORD, location, enhancedOptions);
@@ -791,4 +976,5 @@ class KeywordResearchService {
 // Export singleton instance
 const keywordResearchService = new KeywordResearchService();
 export default keywordResearchService;
+export { keywordResearchService };
 

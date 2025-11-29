@@ -9,11 +9,14 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   ArrowPathIcon,
-  SparklesIcon
+  SparklesIcon,
+  FireIcon
 } from '@heroicons/react/24/outline';
 import { useKeywordResearch, useResearchProgress } from '@/hooks/useKeywordResearch';
 import type { BlogResearchResults, TitleSuggestion, KeywordData } from '@/lib/keyword-research';
 import { logger } from '@/utils/logger';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+import { CloudRunHealthManager } from '@/lib/cloud-run-health';
 
 interface BlogResearchPanelProps {
   onResearchComplete?: (results: BlogResearchResults) => void;
@@ -29,6 +32,9 @@ const BlogResearchPanel: React.FC<BlogResearchPanelProps> = ({
   const [topic, setTopic] = useState('');
   const [targetAudience, setTargetAudience] = useState('general');
   const [selectedTitle, setSelectedTitle] = useState<TitleSuggestion | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [isWakingUp, setIsWakingUp] = useState(false);
+  const [wakeupProgress, setWakeupProgress] = useState(0);
   
   const {
     isResearching,
@@ -56,12 +62,51 @@ const BlogResearchPanel: React.FC<BlogResearchPanelProps> = ({
 
     reset();
     resetProgress();
+    setIsCheckingHealth(true);
+    setIsWakingUp(false);
+    setWakeupProgress(0);
 
     try {
+      // First, check if the API is available and wake it up if needed
+      const healthManager = new CloudRunHealthManager(BLOG_WRITER_API_URL);
+      
+      // Show wake-up message if needed
+      const wakeupInterval = setInterval(() => {
+        setWakeupProgress(prev => Math.min(prev + 2, 100));
+      }, 600); // Update every 600ms for ~30 second total
+
+      try {
+        const healthStatus = await healthManager.wakeUpAndWait();
+        
+        clearInterval(wakeupInterval);
+        setWakeupProgress(100);
+        
+        if (!healthStatus.isHealthy && healthStatus.isWakingUp) {
+          // API is waking up - show user-friendly message
+          setIsWakingUp(true);
+          setIsCheckingHealth(false);
+          
+          // Wait a bit more for the service to fully wake up
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        setIsCheckingHealth(false);
+        setIsWakingUp(false);
+      } catch (healthError) {
+        clearInterval(wakeupInterval);
+        logger.warn('Health check failed, proceeding anyway:', healthError);
+        setIsCheckingHealth(false);
+        setIsWakingUp(false);
+        // Continue with research even if health check fails
+      }
+
+      // Now proceed with the actual research
       const results = await performFullResearch(topic.trim(), targetAudience, userId);
       onResearchComplete?.(results);
     } catch (error) {
       logger.error('Research failed:', error);
+      setIsCheckingHealth(false);
+      setIsWakingUp(false);
     }
   };
 
@@ -148,13 +193,18 @@ const BlogResearchPanel: React.FC<BlogResearchPanelProps> = ({
 
         <button
           onClick={handleStartResearch}
-          disabled={isResearching || !topic.trim()}
+          disabled={isResearching || isCheckingHealth || isWakingUp || !topic.trim()}
           className="w-full flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isResearching ? (
             <>
               <ArrowPathIcon className="w-5 h-5 mr-2 animate-spin" />
               Researching...
+            </>
+          ) : isCheckingHealth || isWakingUp ? (
+            <>
+              <FireIcon className="w-5 h-5 mr-2 animate-pulse" />
+              Checking API...
             </>
           ) : (
             <>
@@ -164,6 +214,32 @@ const BlogResearchPanel: React.FC<BlogResearchPanelProps> = ({
           )}
         </button>
       </div>
+
+      {/* API Wake-up Message */}
+      {(isCheckingHealth || isWakingUp) && (
+        <div className="mb-6 p-4 bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 border-2 border-orange-200 dark:border-orange-800 rounded-lg">
+          <div className="flex items-start">
+            <FireIcon className="w-6 h-6 text-orange-600 dark:text-orange-400 mr-3 mt-0.5 animate-pulse flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-300 mb-1">
+                Content Engines Firing Up
+              </h3>
+              <p className="text-sm text-orange-800 dark:text-orange-200 mb-3">
+                The API is waking up from sleep mode. This typically takes about 30 seconds. Please wait while we prepare the content generation engines...
+              </p>
+              <div className="w-full bg-orange-200 dark:bg-orange-800 rounded-full h-2 mb-2">
+                <div 
+                  className="bg-gradient-to-r from-orange-500 to-yellow-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${wakeupProgress}%` }}
+                />
+              </div>
+              <p className="text-xs text-orange-700 dark:text-orange-300 text-center">
+                {wakeupProgress < 100 ? `Initializing... ${Math.round(wakeupProgress)}%` : 'Almost ready...'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Research Progress */}
       {isResearching && (
