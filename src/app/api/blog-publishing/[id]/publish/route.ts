@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import { publishBlogToWebflow } from '@/lib/integrations/webflow-publish';
+import { enhanceBlogFields } from '@/lib/integrations/enhance-fields';
 import { logger } from '@/utils/logger';
 import { PlatformStatus } from '@/lib/blog-queue-state-machine';
 
@@ -101,13 +102,26 @@ export async function POST(
           throw new Error('Blog post not found');
         }
 
-        // Prepare blog post data (following the same structure as test endpoint)
-        const blogPostData = {
+        // Prepare initial blog post data
+        const initialBlogPostData: {
+          title: string;
+          content: string;
+          excerpt?: string;
+          slug?: string;
+          featured_image?: string;
+          featured_image_alt?: string;
+          seo_title?: string;
+          seo_description?: string;
+          published_at: string;
+          tags?: string[];
+          categories?: string[];
+        } = {
           title: post.title,
           content: post.content || '',
           excerpt: post.excerpt || '',
           slug: (post.metadata as Record<string, unknown>)?.slug as string | undefined,
           featured_image: (post.metadata as Record<string, unknown>)?.featured_image as string | undefined,
+          featured_image_alt: (post.metadata as Record<string, unknown>)?.featured_image_alt as string | undefined,
           seo_title: (post.seo_data as Record<string, unknown>)?.meta_title as string | undefined,
           seo_description: (post.seo_data as Record<string, unknown>)?.meta_description as string | undefined,
           published_at: new Date().toISOString(),
@@ -116,11 +130,60 @@ export async function POST(
           categories: (post.metadata as Record<string, unknown>)?.categories as string[] | undefined,
         };
 
+        // Enhance mandatory fields using OpenAI before publishing to Webflow
+        let blogPostData = { ...initialBlogPostData };
+        try {
+          logger.debug('Enhancing mandatory fields before Webflow publishing', {
+            title: initialBlogPostData.title,
+            hasFeaturedImage: !!initialBlogPostData.featured_image,
+          });
+
+          const enhancedFields = await enhanceBlogFields({
+            title: initialBlogPostData.title,
+            content: initialBlogPostData.content || initialBlogPostData.excerpt || '',
+            featured_image_url: initialBlogPostData.featured_image,
+            enhance_seo_title: true,
+            enhance_meta_description: true,
+            enhance_slug: true,
+            enhance_image_alt: !!initialBlogPostData.featured_image, // Only enhance alt if image exists
+            keywords: (post.seo_data as Record<string, unknown>)?.keywords as string[] | undefined,
+            target_audience: (post.metadata as Record<string, unknown>)?.target_audience as string | undefined,
+          });
+
+          // Merge enhanced fields with existing data (enhanced fields take priority)
+          blogPostData = {
+            ...initialBlogPostData,
+            slug: enhancedFields.enhanced_fields.slug || initialBlogPostData.slug,
+            seo_title: enhancedFields.enhanced_fields.seo_title || initialBlogPostData.seo_title,
+            seo_description: enhancedFields.enhanced_fields.meta_description || initialBlogPostData.seo_description,
+            // Store enhanced image alt text in metadata for Webflow field mapping
+            featured_image_alt: enhancedFields.enhanced_fields.featured_image_alt,
+          };
+
+          logger.debug('Successfully enhanced fields', {
+            enhancedSeoTitle: !!enhancedFields.enhanced_fields.seo_title,
+            enhancedMetaDescription: !!enhancedFields.enhanced_fields.meta_description,
+            enhancedSlug: !!enhancedFields.enhanced_fields.slug,
+            enhancedImageAlt: !!enhancedFields.enhanced_fields.featured_image_alt,
+            provider: enhancedFields.provider,
+            model: enhancedFields.model,
+          });
+        } catch (enhanceError: any) {
+          // Log error but continue with original data (non-blocking)
+          logger.warn('Field enhancement failed, proceeding with original fields', {
+            error: enhanceError.message,
+            title: initialBlogPostData.title,
+          });
+          // Continue with original blogPostData
+        }
+
         logger.debug('Publishing blog to Webflow', {
           collectionId,
           siteId: siteId || 'auto-detect',
           orgId: userProfile.org_id,
           title: blogPostData.title,
+          seoTitle: blogPostData.seo_title,
+          slug: blogPostData.slug,
           isDraft: is_draft,
           publishImmediately: !is_draft,
         });
@@ -130,7 +193,10 @@ export async function POST(
           apiKey,
           collectionId,
           siteId: siteId || '', // Will be auto-detected if not provided (same as test)
-          blogPost: blogPostData,
+          blogPost: {
+            ...blogPostData,
+            featured_image_alt: blogPostData.featured_image_alt,
+          },
           orgId: userProfile.org_id,
           isDraft: is_draft, // Use the is_draft flag from request
           publishImmediately: !is_draft, // If not draft, publish immediately (same as test)

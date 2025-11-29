@@ -13,6 +13,7 @@ export interface BlogPostData {
   excerpt?: string;
   slug?: string;
   featured_image?: string;
+  featured_image_alt?: string;
   published_at?: string;
   seo_title?: string;
   seo_description?: string;
@@ -310,6 +311,8 @@ function getBlogFieldValue(blogPost: BlogPostData, field: string): unknown {
       return blogPost.slug || generateSlug(blogPost.title);
     case 'featured_image':
       return blogPost.featured_image;
+    case 'featured_image_alt':
+      return blogPost.featured_image_alt;
     case 'published_at':
       return blogPost.published_at || new Date().toISOString();
     case 'seo_title':

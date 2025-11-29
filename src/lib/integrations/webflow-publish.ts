@@ -132,6 +132,7 @@ export async function publishBlogToWebflow(params: {
     excerpt?: string;
     slug?: string;
     featured_image?: string;
+    featured_image_alt?: string;
     seo_title?: string;
     seo_description?: string;
     published_at?: string;
@@ -210,6 +211,7 @@ export async function publishBlogToWebflow(params: {
           excerpt: blogPost.excerpt || '',
           slug: blogPost.slug,
           featured_image: blogPost.featured_image,
+          featured_image_alt: blogPost.featured_image_alt,
           seo_title: blogPost.seo_title,
           seo_description: blogPost.seo_description,
           published_at: blogPost.published_at || new Date().toISOString(),
