@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     // Call the enhanced generation endpoint
     const apiUrl = BLOG_WRITER_API_URL;
-    const response = await fetch(`${apiUrl}/api/v1/content/generate-enhanced`, {
+    const response = await fetch(`${apiUrl}/api/v1/blog/generate-enhanced`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -51,12 +51,36 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      logger.error('Content generation API error', { status: response.status, error: errorText });
-      throw new Error(`Content generation failed: ${response.status}`);
+      let errorText: string;
+      try {
+        errorText = await response.text();
+        // Try to parse as JSON for better error messages
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorText = errorJson.error || errorJson.message || errorText;
+        } catch {
+          // Keep as text if not JSON
+        }
+      } catch {
+        errorText = `HTTP ${response.status}: ${response.statusText}`;
+      }
+      logger.error('Content generation API error', { 
+        status: response.status, 
+        error: errorText,
+        endpoint: `${apiUrl}/api/v1/blog/generate-enhanced`
+      });
+      throw new Error(`Content generation failed: ${errorText}`);
     }
 
     const data = await response.json();
+    
+    // Log response structure for debugging
+    logger.debug('Content generation API response', {
+      hasTitle: !!data.title,
+      hasContent: !!data.content,
+      hasExcerpt: !!data.excerpt,
+      keys: Object.keys(data),
+    });
 
     // Extract relevant fields
     const result = {
