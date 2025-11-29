@@ -8,6 +8,8 @@ import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountT
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+import { LLMAnalysisService } from '@/lib/llm-analysis-service';
+import { validateBlogFields, type BlogFieldData } from '@/lib/blog-field-validator';
 
 // Image generation is now handled separately via /api/blog-writer/images/generate endpoint
 
@@ -304,7 +306,7 @@ export async function POST(request: NextRequest) {
       include_business_details,
       include_review_sentiment,
       use_google,
-      use_dataforseo_content_generation = false, // Flag passed to backend API to use DataForSEO Content Generation
+      use_dataforseo_content_generation = true, // ALWAYS use DataForSEO as primary (default: true)
     } = body;
     
     logger.debug('📝 Generation parameters:', {
@@ -704,11 +706,10 @@ export async function POST(request: NextRequest) {
       tone: (tone || brandVoice?.tone || 'professional') as 'professional' | 'casual' | 'academic' | 'conversational' | 'instructional',
       length: length ? convertLengthToAPI(length) : convertLengthToAPI(mapWordCountToLength(word_count || contentPreset?.word_count || 1000)),
       format: 'html' as 'markdown' | 'html' | 'json',
-      use_dataforseo_content_generation: use_dataforseo_content_generation, // Pass flag to backend API for provider selection
-      // Explicitly enable OpenAI generation (default provider)
-      // If use_dataforseo_content_generation is false or undefined, OpenAI will be used
-      use_openai: !use_dataforseo_content_generation, // Enable OpenAI when DataForSEO is not selected
-      llm_provider: use_dataforseo_content_generation ? 'dataforseo' : 'openai', // Explicit provider selection
+      // ALWAYS use DataForSEO as primary content generation provider
+      use_dataforseo_content_generation: true, // Force DataForSEO as primary
+      // OpenAI will be used as fallback for missing mandatory fields after DataForSEO response
+      use_openai_fallback: true, // Enable OpenAI fallback for missing fields
     };
 
     // Add custom instructions (use provided or default for premium)
@@ -792,9 +793,8 @@ export async function POST(request: NextRequest) {
       has_content_goal: !!requestPayload.content_goal,
       system_prompt_length: systemPromptForLog.length,
       async_mode: asyncMode,
-      llm_provider: requestPayload.llm_provider,
-      use_openai: requestPayload.use_openai,
       use_dataforseo_content_generation: requestPayload.use_dataforseo_content_generation,
+      use_openai_fallback: requestPayload.use_openai_fallback,
       use_consensus_generation: requestPayload.use_consensus_generation,
     });
     
@@ -1043,6 +1043,66 @@ export async function POST(request: NextRequest) {
     const rawContent = result.blog_post?.content || result.content || '';
     const blogTitle = result.blog_post?.title || result.title || topic;
     const metaDescription = result.blog_post?.meta_description || result.meta_description;
+    
+    // Check for missing mandatory fields from DataForSEO response
+    // If missing, use OpenAI to fill them in (fallback)
+    logger.debug('🔍 Checking for missing mandatory fields from DataForSEO response...');
+    const dataForSEOFields: BlogFieldData = {
+      title: blogTitle,
+      content: rawContent,
+      excerpt: result.blog_post?.excerpt || result.excerpt,
+      meta_description: metaDescription,
+      seo_title: result.meta_title || result.title || blogTitle,
+    };
+    
+    const validation = validateBlogFields(dataForSEOFields);
+    const missingFields = [...validation.missingRequired, ...validation.missingRecommended];
+    
+    if (missingFields.length > 0) {
+      logger.info('⚠️ Missing mandatory fields detected, using OpenAI fallback to fill them:', {
+        missingRequired: validation.missingRequired,
+        missingRecommended: validation.missingRecommended,
+      });
+      
+      try {
+        // Use OpenAI to fill missing fields
+        const llmService = new LLMAnalysisService();
+        if (llmService.isConfigured()) {
+          const openAIResult = await llmService.analyzeBlogContent({
+            title: blogTitle || topic,
+            content: rawContent,
+            existingFields: {
+              excerpt: dataForSEOFields.excerpt,
+              metaDescription: dataForSEOFields.meta_description,
+              seoTitle: dataForSEOFields.seo_title,
+            },
+          });
+          
+          // Merge OpenAI results with DataForSEO results
+          if (!dataForSEOFields.excerpt && openAIResult.excerpt) {
+            result.excerpt = openAIResult.excerpt;
+            logger.debug('✅ OpenAI filled missing excerpt');
+          }
+          if (!dataForSEOFields.meta_description && openAIResult.metaDescription) {
+            result.meta_description = openAIResult.metaDescription;
+            logger.debug('✅ OpenAI filled missing meta_description');
+          }
+          if (!dataForSEOFields.seo_title && openAIResult.seoTitle) {
+            result.meta_title = openAIResult.seoTitle;
+            logger.debug('✅ OpenAI filled missing seo_title');
+          }
+          
+          logger.debug('✅ OpenAI fallback completed, merged results');
+        } else {
+          logger.warn('⚠️ OpenAI credentials not configured, cannot fill missing fields');
+        }
+      } catch (error) {
+        logger.error('❌ OpenAI fallback failed:', error);
+        // Continue with DataForSEO results even if OpenAI fails
+      }
+    } else {
+      logger.debug('✅ All mandatory fields present in DataForSEO response');
+    }
     
     // Map v1.3.4 response fields to our internal format
     // Map generation_time_seconds to generation_time for backward compatibility
