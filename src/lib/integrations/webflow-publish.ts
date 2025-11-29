@@ -59,10 +59,13 @@ export async function createWebflowItem(params: CreateWebflowItemParams): Promis
     }
 
     const item: WebflowItem = await response.json();
-    logger.debug('Successfully created Webflow item', { 
+    logger.info('✅ Successfully created Webflow CMS item', { 
       itemId: item.id, 
       collectionId,
-      isDraft: item.isDraft 
+      isDraft: item.isDraft,
+      createdOn: item.createdOn,
+      lastUpdated: item.lastUpdated,
+      isArchived: item.isArchived,
     });
     return item;
   } catch (error: any) {
@@ -111,7 +114,11 @@ export async function publishWebflowSite(
     }
 
     const result = await response.json();
-    logger.debug('Successfully published Webflow site', { siteId, itemIds });
+    logger.info('✅ Successfully published Webflow site', { 
+      siteId, 
+      itemIds,
+      result,
+    });
     return { published: true };
   } catch (error: any) {
     logger.error('Error publishing Webflow site:', error);
@@ -221,12 +228,30 @@ export async function publishBlogToWebflow(params: {
         finalMappings
       );
       
-      // Filter out fields that don't exist in the collection
+      // Filter out fields that don't exist in the collection and format them correctly
       fieldData = {};
       const missingFields: string[] = [];
       for (const [fieldSlug, value] of Object.entries(mappedData)) {
         if (availableFieldSlugs.has(fieldSlug)) {
-          fieldData[fieldSlug] = value;
+          const fieldType = fieldTypeMap.get(fieldSlug);
+          
+          // Format ImageRef fields correctly - Webflow expects { url: string }
+          if (fieldType === 'ImageRef' && typeof value === 'string') {
+            const imageUrl = value;
+            // validateImageUrl is async, but we'll proceed anyway and let Webflow validate
+            // For now, format the field correctly - Webflow will validate the URL
+            fieldData[fieldSlug] = { url: imageUrl };
+            logger.debug(`Formatted ImageRef field ${fieldSlug}`, { url: imageUrl });
+          } else if (fieldType === 'RichText' && typeof value === 'string') {
+            // Webflow RichText fields expect HTML
+            fieldData[fieldSlug] = value;
+          } else if (fieldType === 'Date' && typeof value === 'string') {
+            // Webflow Date fields expect ISO 8601 format
+            fieldData[fieldSlug] = new Date(value).toISOString();
+          } else {
+            // For other field types, use value as-is
+            fieldData[fieldSlug] = value;
+          }
         } else {
           missingFields.push(fieldSlug);
           logger.warn(`Field "${fieldSlug}" not found in Webflow collection, skipping`, {
@@ -279,35 +304,28 @@ export async function publishBlogToWebflow(params: {
       // Image fields - handle image upload/validation
       const imageFields = ['main-image', 'featured-image', 'post-image', 'image', 'thumbnail', 'cover-image', 'hero-image'];
       if (blogPost.featured_image) {
-        // Validate image URL first
-        const isValidImage = await validateImageUrl(blogPost.featured_image).catch(() => false);
-        if (!isValidImage) {
-          logger.warn('Featured image URL validation failed, but proceeding', { 
-            imageUrl: blogPost.featured_image 
-          });
-        }
-        
-        // Try to upload image to Webflow if needed (or use URL directly)
-        let imageUrl = blogPost.featured_image;
-        try {
-          // For now, use external URL directly (Webflow supports this)
-          // If you need to upload to Webflow assets, uncomment:
-          // imageUrl = await uploadImageToWebflow(apiKey, finalSiteId, blogPost.featured_image);
-        } catch (uploadError) {
-          logger.warn('Failed to upload image to Webflow, using original URL', { 
-            error: uploadError,
-            imageUrl: blogPost.featured_image 
-          });
-        }
+        // Use external URL directly (Webflow supports this for ImageRef fields)
+        // Webflow will validate the URL when creating the item
+        const imageUrl = blogPost.featured_image;
         
         // Find matching image field
         for (const fieldName of imageFields) {
           if (availableFieldSlugs.has(fieldName)) {
             const fieldType = fieldTypeMap.get(fieldName);
-            // Webflow image fields expect a URL string
-            if (fieldType === 'ImageRef' || fieldType === 'FileRef' || fieldType === 'Image') {
+            // Webflow ImageRef fields expect { url: string } format
+            if (fieldType === 'ImageRef' || fieldType === 'FileRef') {
+              fieldData[fieldName] = { url: imageUrl };
+              logger.debug('Mapped featured image to Webflow ImageRef field', { 
+                fieldName, 
+                imageUrl,
+                fieldType,
+                formatted: { url: imageUrl }
+              });
+              break;
+            } else if (fieldType === 'Image' || !fieldType) {
+              // Fallback for other image types - try URL string format
               fieldData[fieldName] = imageUrl;
-              logger.debug('Mapped featured image to Webflow field', { 
+              logger.debug('Mapped featured image to Webflow field (string format)', { 
                 fieldName, 
                 imageUrl,
                 fieldType 
@@ -360,8 +378,9 @@ export async function publishBlogToWebflow(params: {
     }
     
     // Log final field data for debugging
-    logger.debug('Final field data prepared for Webflow', {
+    logger.info('Final field data prepared for Webflow', {
       collectionId,
+      siteId: finalSiteId,
       fieldCount: Object.keys(fieldData).length,
       fields: Object.keys(fieldData),
       fieldData: Object.fromEntries(
@@ -369,43 +388,80 @@ export async function publishBlogToWebflow(params: {
           key,
           typeof value === 'string' && value.length > 100 
             ? `${value.substring(0, 100)}...` 
+            : typeof value === 'object' && value !== null
+            ? JSON.stringify(value).substring(0, 100)
             : value
         ])
-      )
+      ),
+      isDraft,
+      publishImmediately,
     });
     
     logger.debug('Final field data to publish', { 
       fieldSlugs: Object.keys(fieldData),
-      collectionId 
+      collectionId,
+      fieldDataKeys: Object.keys(fieldData),
     });
 
     // Create the item (published immediately if isDraft is false)
+    logger.info('Creating Webflow CMS item', {
+      collectionId,
+      siteId: finalSiteId,
+      isDraft: publishImmediately ? false : isDraft,
+      publishImmediately,
+      fieldCount: Object.keys(fieldData).length,
+    });
+    
     const item = await createWebflowItem({
       apiKey,
       collectionId,
       fieldData,
       isDraft: publishImmediately ? false : isDraft, // If publishImmediately, set isDraft to false
     });
+    
+    logger.info('Webflow CMS item created successfully', {
+      itemId: item.id,
+      isDraft: item.isDraft,
+      collectionId,
+      siteId: finalSiteId,
+    });
 
     // In Webflow, even if an item is created with isDraft: false, 
     // the site itself must be published for the item to appear on the live site.
     // We need to publish the site to make the item visible.
     let published = false;
+    
+    logger.info('Attempting to publish Webflow site', {
+      itemId: item.id,
+      siteId: finalSiteId,
+      itemIsDraft: item.isDraft,
+      publishImmediately,
+      isDraft,
+    });
+    
     if (publishImmediately && !isDraft && finalSiteId) {
       try {
         // Publish the site to make the item live
+        logger.info('Publishing Webflow site with new item', {
+          itemId: item.id,
+          siteId: finalSiteId,
+          itemIsDraft: item.isDraft,
+        });
+        
         await publishWebflowSite(apiKey, finalSiteId, [item.id]);
         published = true;
-        logger.debug('Published Webflow site with new item', { 
+        
+        logger.info('✅ Successfully published Webflow site with new item', { 
           itemId: item.id, 
           siteId: finalSiteId,
-          itemIsDraft: item.isDraft 
+          itemIsDraft: item.isDraft,
         });
       } catch (publishError: any) {
-        logger.warn('Failed to publish Webflow site, item may not be visible on live site', {
+        logger.error('❌ Failed to publish Webflow site, item may not be visible on live site', {
           itemId: item.id,
           siteId: finalSiteId,
           error: publishError?.message || publishError,
+          errorStack: publishError?.stack,
         });
         // Item was created successfully, but site wasn't published
         // The item exists in CMS but won't be visible until site is published manually
@@ -413,24 +469,42 @@ export async function publishBlogToWebflow(params: {
       }
     } else if (isDraft) {
       // Item was created as draft
+      logger.info('Item created as draft, site publishing skipped', {
+        itemId: item.id,
+        isDraft,
+      });
       published = false;
     } else {
       // Item was created without draft flag, but site still needs to be published
       // Try to publish the site anyway
       if (finalSiteId) {
         try {
+          logger.info('Publishing Webflow site after item creation (fallback)', {
+            siteId: finalSiteId,
+            itemId: item.id,
+          });
+          
           await publishWebflowSite(apiKey, finalSiteId, [item.id]);
           published = true;
-          logger.debug('Published Webflow site after item creation', { itemId: item.id, siteId: finalSiteId });
+          
+          logger.info('✅ Published Webflow site after item creation', {
+            itemId: item.id,
+            siteId: finalSiteId,
+          });
         } catch (publishError: any) {
-          logger.warn('Failed to publish Webflow site', {
+          logger.error('❌ Failed to publish Webflow site (fallback)', {
             itemId: item.id,
             siteId: finalSiteId,
             error: publishError?.message || publishError,
+            errorStack: publishError?.stack,
           });
           published = false;
         }
       } else {
+        logger.warn('⚠️ No siteId available, cannot publish site', {
+          itemId: item.id,
+          itemIsDraft: item.isDraft,
+        });
         published = !item.isDraft;
       }
     }
