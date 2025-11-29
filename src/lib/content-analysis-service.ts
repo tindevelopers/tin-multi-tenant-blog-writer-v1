@@ -537,8 +537,8 @@ function analyzeContentStructure(
 
   return {
     has_title: !!title,
-    has_meta_description: !!meta_description,
-    has_featured_image: !!featured_image,
+    has_meta_description: !!metaDescription,
+    has_featured_image: !!featuredImage,
     heading_structure: {
       h1: h1Count,
       h2: h2Count,
