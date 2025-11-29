@@ -70,7 +70,7 @@ export async function enhanceBlogFields(
         enhance_seo_title: request.enhance_seo_title ?? true,
         enhance_meta_description: request.enhance_meta_description ?? true,
         enhance_slug: request.enhance_slug ?? true,
-        enhance_image_alt: request.enhance_image_alt ?? true,
+        enhance_image_alt: request.featured_image_url ? (request.enhance_image_alt ?? true) : false,
         keywords: request.keywords,
         target_audience: request.target_audience,
       }),
