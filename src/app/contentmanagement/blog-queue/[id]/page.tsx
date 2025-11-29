@@ -455,38 +455,12 @@ export default function QueueItemDetailPage() {
         )}
       </div>
 
-      {/* Generation Complete - Action Card */}
-      {hasGeneratedContent && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  Blog Generation Complete
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {postId 
-                    ? "Your draft has been created and is ready to edit."
-                    : "Click below to create a draft and start editing your blog post."
-                  }
-                </p>
-              </div>
-              <button
-                onClick={handleCreateDraft}
-                className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
-              >
-                <PencilIcon className="w-5 h-5" />
-                {postId ? "Edit in Drafts" : "Create & Edit Draft"}
-              </button>
-            </div>
-            {postId && (
-              <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                <p className="text-sm text-green-800 dark:text-green-200">
-                  ✅ Draft created successfully. All fields have been auto-populated from the generated content.
-                </p>
-              </div>
-            )}
-          </div>
+      {/* Success Message - shown when draft is created */}
+      {hasGeneratedContent && postId && (
+        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <p className="text-sm text-green-800 dark:text-green-200">
+            ✅ Draft created successfully. All fields have been auto-populated from the generated content.
+          </p>
         </div>
       )}
 
