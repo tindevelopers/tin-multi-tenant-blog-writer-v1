@@ -125,8 +125,10 @@ export async function POST(request: NextRequest) {
     });
 
     // Step 3: Generate enhanced metadata with OpenAI
+    // Extract clean text from HTML for metadata generation
+    const plainTextContent = enhancedContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     const keywordArray = Array.isArray(keywords) ? keywords : [keywords].filter(Boolean);
-    const enhancedMetadata = await generateEnhancedMetadata(enhancedContent, title, keywordArray);
+    const enhancedMetadata = await generateEnhancedMetadata(plainTextContent, title, keywordArray);
 
     // Step 4: Try backend enhancement for additional fields
     let backendFields: Record<string, any> = {};

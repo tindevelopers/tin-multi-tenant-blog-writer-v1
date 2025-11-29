@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealth from '@/lib/cloud-run-health';
 import { type GeneratedImage } from '@/lib/image-generation';
-import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
+import { enhanceContentToRichHTML, extractSections, cleanExcerpt } from '@/lib/content-enhancer';
 import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 import { logger } from '@/utils/logger';
@@ -152,7 +152,8 @@ function buildBlogResponse(
   // Fallback chain: blog_post.title → title → topic
   // All fallbacks ensure a valid string is always returned
   const title = result.blog_post?.title || result.title || topic;
-  const excerpt = result.blog_post?.excerpt || result.blog_post?.summary || result.excerpt || result.meta_description || '';
+  // Use cleaned excerpt if available, otherwise fallback chain
+  const excerpt = result.excerpt || result.blog_post?.excerpt || result.blog_post?.summary || result.meta_description || '';
   
   return {
     // Core content fields
@@ -1044,13 +1045,24 @@ export async function POST(request: NextRequest) {
     const blogTitle = result.blog_post?.title || result.title || topic;
     const metaDescription = result.blog_post?.meta_description || result.meta_description;
     
+    // Clean excerpt immediately if it contains artifacts (before any processing)
+    const rawExcerpt = result.blog_post?.excerpt || result.excerpt || '';
+    let cleanedExcerpt = rawExcerpt;
+    if (rawExcerpt && (rawExcerpt.includes("enhanced version") || rawExcerpt.includes("addressing the specified") || rawExcerpt.includes("readability concerns") || rawExcerpt.includes("!AI"))) {
+      cleanedExcerpt = cleanExcerpt(rawExcerpt);
+      // If excerpt is still bad after cleaning, force regeneration
+      if (cleanedExcerpt.length < 50 || cleanedExcerpt.includes("enhanced version") || cleanedExcerpt.includes("addressing")) {
+        cleanedExcerpt = ''; // Force regeneration from cleaned content
+      }
+    }
+    
     // Check for missing mandatory fields from DataForSEO response
     // If missing, use OpenAI to fill them in (fallback)
     logger.debug('🔍 Checking for missing mandatory fields from DataForSEO response...');
     const dataForSEOFields: BlogFieldData = {
       title: blogTitle,
       content: rawContent,
-      excerpt: result.blog_post?.excerpt || result.excerpt,
+      excerpt: cleanedExcerpt || result.blog_post?.excerpt || result.excerpt || '',
       meta_description: metaDescription,
       seo_title: result.meta_title || result.title || blogTitle,
     };

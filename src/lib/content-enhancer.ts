@@ -14,6 +14,48 @@ export interface ContentEnhancementOptions {
 }
 
 /**
+ * Clean excerpt from AI artifacts
+ */
+export function cleanExcerpt(excerpt: string): string {
+  if (!excerpt) return '';
+  
+  let cleaned = excerpt;
+  
+  // Remove common artifacts that appear in excerpts (order matters - most specific first)
+  cleaned = cleaned.replace(/Here's the enhanced version of the blog post.*?:/gi, '');
+  cleaned = cleaned.replace(/Here's the enhanced version.*?:/gi, '');
+  cleaned = cleaned.replace(/enhanced version of the blog post.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified improvement tasks.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified.*?:/gi, '');
+  cleaned = cleaned.replace(/readability concerns:.*?/gi, '');
+  cleaned = cleaned.replace(/!AI\s+[^!\n]{5,50}/gi, '');
+  cleaned = cleaned.replace(/!Featured\s+[^!\n]{5,50}/gi, '');
+  cleaned = cleaned.replace(/!AI.*?/gi, '');
+  cleaned = cleaned.replace(/!Featured.*?/gi, '');
+  
+  // Remove topic/keyword prefix if it's just repeated (e.g., "best ai voice agents Here's...")
+  cleaned = cleaned.replace(/^([a-z\s]{5,50})\s+(Here's|Here is|Best|Top|Discover|Learn)/i, '$2');
+  
+  // Clean up broken punctuation
+  cleaned = cleaned.replace(/\s+\.\s+/g, '. ');
+  cleaned = cleaned.replace(/\s+,\s+/g, ', ');
+  
+  // Remove markdown artifacts
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]*\)/g, '$1');
+  cleaned = cleaned.replace(/!\[?[^\]]*\]?/g, '');
+  
+  // Trim and clean whitespace
+  cleaned = cleaned.trim().replace(/\s{2,}/g, ' ');
+  
+  // If excerpt is too short or still contains artifacts, return empty to force regeneration
+  if (cleaned.length < 50 || cleaned.includes("enhanced version") || cleaned.includes("addressing")) {
+    return '';
+  }
+  
+  return cleaned;
+}
+
+/**
  * Enhance content to rich HTML with proper formatting and images
  */
 export function enhanceContentToRichHTML(
@@ -74,28 +116,44 @@ export function enhanceContentToRichHTML(
 function cleanAIArtifacts(content: string): string {
   let cleaned = content;
   
-  // Remove common AI generation artifacts
+  // Remove common AI generation artifacts (more aggressive patterns)
   cleaned = cleaned.replace(/Here's an enhanced version of.*?:/gi, '');
-  cleaned = cleaned.replace(/addressing the specified tasks.*?:/gi, '');
-  cleaned = cleaned.replace(/readability concerns:.*?(?=\n)/gi, '');
+  cleaned = cleaned.replace(/Here's the enhanced version.*?:/gi, '');
+  cleaned = cleaned.replace(/enhanced version of the blog post.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified improvement tasks.*?:/gi, '');
+  cleaned = cleaned.replace(/readability concerns:.*?(?=\n|$)/gi, '');
   cleaned = cleaned.replace(/Enhancements Made:[\s\S]*?(?=\n\n|$)/gi, '');
+  cleaned = cleaned.replace(/Key Enhancements:[\s\S]*?(?=\n\n|$)/gi, '');
   cleaned = cleaned.replace(/Citations added where appropriate.*?(?=\n|$)/gi, '');
+  cleaned = cleaned.replace(/Methodology Note:.*?(?=\n|$)/gi, '');
   cleaned = cleaned.replace(/\*Last updated:.*?\*/gi, '');
+  cleaned = cleaned.replace(/The revised content.*?(?=\n|$)/gi, '');
   
-  // Fix malformed markdown headers at start (like "# voice ai agent Here's...")
+  // Remove "enhanced version" text that appears in content (catch all variations)
+  cleaned = cleaned.replace(/\benhanced version\b.*?:/gi, '');
+  
+  // Fix malformed markdown headers at start (like "# voice ai agent Here's..." or "# best ai voice agents Here's...")
   // Extract the topic and make it a proper H1, remove the rest
-  cleaned = cleaned.replace(/^#\s*([a-z\s]+?)\s+(Here's|Here is|This is|Learn|Discover|Explore|Have you)/i, '# $1\n\n$2');
+  cleaned = cleaned.replace(/^#\s*([a-z\s]+?)\s+(Here's|Here is|This is|Learn|Discover|Explore|Have you|Best|Top|Discover)/i, '# $1\n\n$2');
+  
+  // Remove topic/keyword prefixes that appear before "Here's" or "Best" (e.g., "best ai voice agents Here's...")
+  cleaned = cleaned.replace(/^([a-z\s]{5,40})\s+(Here's|Here is|Best|Top|Discover|Learn)/i, '$2');
   
   // Clean up broken punctuation patterns from DataForSEO
   // Fix "." being used instead of "," (e.g., "learn . improve" → "learn, improve")
   cleaned = cleaned.replace(/\s+\.\s+/g, ', ');
   // Fix "f." being used instead of "for" 
   cleaned = cleaned.replace(/\bf\.\s+/gi, 'for ');
-  // Fix isolated periods 
-  cleaned = cleaned.replace(/\s+\.\s*(?=[a-z])/gi, ' ');
+  // Fix isolated periods that break words (e.g., "Underst." → "Understand", "Superi." → "Superior")
+  cleaned = cleaned.replace(/\b([A-Z][a-z]+)\.\s+/g, '$1 ');
+  // Fix isolated periods before lowercase (e.g., "2024 . beyond" → "2024 and beyond")
+  cleaned = cleaned.replace(/\s+\.\s+(?=[a-z])/gi, ' and ');
   
-  // Clean up exclamation marks used as image placeholders (like "!Featured Voice AI Technology")
+  // Clean up exclamation marks used as image placeholders (like "!Featured Voice AI Technology" or "!AI Voice Technology Landscape")
   cleaned = cleaned.replace(/!\s*([A-Z][^!\n]{5,50})(?:\s|$)/g, '');
+  cleaned = cleaned.replace(/!AI\s+[^!\n]{5,50}(?:\s|$)/gi, '');
+  cleaned = cleaned.replace(/!Featured\s+[^!\n]{5,50}(?:\s|$)/gi, '');
   cleaned = cleaned.replace(/!\[?[^\]]*\]?(?!\()/g, '');
   
   // Fix broken markdown links (like "[Voice AI Agent](/voice-ai-agent)s:")
@@ -107,6 +165,9 @@ function cleanAIArtifacts(content: string): string {
   // Fix section titles that should be headings (common pattern: "Section Title." or "Section Title:")
   // Convert standalone capitalized phrases ending with period/colon to H2
   cleaned = cleaned.replace(/^([A-Z][^.!?]{10,80})[.:]\s*$/gm, '## $1');
+  
+  // Remove "Pro Tip:" and similar artifacts at end
+  cleaned = cleaned.replace(/Pro Tip:.*?(?=\n|$)/gi, '');
   
   // Remove extra whitespace
   cleaned = cleaned.replace(/\s{3,}/g, ' ');
