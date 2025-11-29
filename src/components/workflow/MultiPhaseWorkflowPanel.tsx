@@ -311,95 +311,165 @@ export function MultiPhaseWorkflowPanel({
             </div>
           </div>
 
-          {/* Advanced Options Toggle */}
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="text-sm text-brand-600 dark:text-brand-400 hover:underline"
-          >
-            {showAdvanced ? 'Hide' : 'Show'} Advanced Options
-          </button>
+          {/* Phase Configuration Section */}
+          <div className="space-y-4 p-4 bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+              <SparklesIcon className="w-4 h-4" />
+              Phase Configuration
+            </h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
+              Enable or disable specific phases. Phase 1 (Content Generation) and Phase 3 (Content Enhancement) always run.
+            </p>
 
-          {/* Advanced Options */}
-          {showAdvanced && (
-            <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-              {/* Image Options */}
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={config.generateFeaturedImage}
-                    onChange={(e) => updateConfig({ generateFeaturedImage: e.target.checked })}
-                    className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Generate Featured Image
-                  </span>
-                </label>
-              </div>
-
-              {/* Interlinking Options */}
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={config.crawlWebsite}
-                    onChange={(e) => updateConfig({ crawlWebsite: e.target.checked })}
-                    className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Enable Website Crawling & Interlinking
-                  </span>
-                </label>
-              </div>
-
-              {config.crawlWebsite && (
-                <div className="grid grid-cols-2 gap-4 ml-6">
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Max Internal Links
-                    </label>
-                    <input
-                      type="number"
-                      value={config.maxInternalLinks}
-                      onChange={(e) => updateConfig({ maxInternalLinks: parseInt(e.target.value) })}
-                      min={0}
-                      max={10}
-                      className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                    />
+            {/* Phase 2: Image Generation */}
+            <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.generateFeaturedImage || false}
+                  onChange={(e) => updateConfig({ generateFeaturedImage: e.target.checked })}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <PhotoIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      Phase 2: Image Generation
+                    </span>
                   </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                      Max External Links
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Generate featured images and content images using AI
+                  </p>
+                  {config.generateFeaturedImage && (
+                    <div className="mt-2 space-y-2">
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          Image Style
+                        </label>
+                        <select
+                          value={config.imageStyle || 'photographic'}
+                          onChange={(e) => updateConfig({ imageStyle: e.target.value })}
+                          className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                        >
+                          <option value="photographic">Photographic</option>
+                          <option value="digital-art">Digital Art</option>
+                          <option value="3d-model">3D Model</option>
+                          <option value="anime">Anime</option>
+                          <option value="cinematic">Cinematic</option>
+                        </select>
+                      </div>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={config.generateContentImages || false}
+                          onChange={(e) => updateConfig({ generateContentImages: e.target.checked })}
+                          className="w-3 h-3 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-xs text-gray-700 dark:text-gray-300">
+                          Also generate content images (inline images)
+                        </span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
+
+            {/* Phase 4: Advanced Interlinking */}
+            <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.crawlWebsite || false}
+                  onChange={(e) => updateConfig({ crawlWebsite: e.target.checked })}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <LinkIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      Phase 4: Advanced Interlinking
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    Crawl your website and add strategic internal/external links
+                  </p>
+                  {config.crawlWebsite && (
+                    <div className="mt-2 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          Max Internal Links
+                        </label>
+                        <input
+                          type="number"
+                          value={config.maxInternalLinks || 5}
+                          onChange={(e) => updateConfig({ maxInternalLinks: parseInt(e.target.value) || 5 })}
+                          min={0}
+                          max={10}
+                          className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          Max External Links
+                        </label>
+                        <input
+                          type="number"
+                          value={config.maxExternalLinks || 3}
+                          onChange={(e) => updateConfig({ maxExternalLinks: parseInt(e.target.value) || 3 })}
+                          min={0}
+                          max={10}
+                          className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
+
+            {/* Phase 5: Publishing Preparation */}
+            <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-start gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CloudArrowUpIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      Phase 5: Publishing Preparation
+                    </span>
+                    <span className="text-xs text-green-600 dark:text-green-400 font-medium">(Always Enabled)</span>
+                  </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                    Validates fields, calculates content scores, and prepares for Webflow publishing
+                  </p>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={config.generateStructuredData !== false}
+                        onChange={(e) => updateConfig({ generateStructuredData: e.target.checked })}
+                        className="w-3 h-3 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      <span className="text-xs text-gray-700 dark:text-gray-300">
+                        Generate structured data (Schema.org)
+                      </span>
                     </label>
-                    <input
-                      type="number"
-                      value={config.maxExternalLinks}
-                      onChange={(e) => updateConfig({ maxExternalLinks: parseInt(e.target.value) })}
-                      min={0}
-                      max={10}
-                      className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                    />
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={config.isDraft !== false}
+                        onChange={(e) => updateConfig({ isDraft: e.target.checked })}
+                        className="w-3 h-3 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      <span className="text-xs text-gray-700 dark:text-gray-300">
+                        Save as Draft (don't publish immediately)
+                      </span>
+                    </label>
                   </div>
                 </div>
-              )}
-
-              {/* Publishing Options */}
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={config.isDraft}
-                    onChange={(e) => updateConfig({ isDraft: e.target.checked })}
-                    className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                  />
-                  <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Save as Draft (don't publish immediately)
-                  </span>
-                </label>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Start Button */}
           <button
