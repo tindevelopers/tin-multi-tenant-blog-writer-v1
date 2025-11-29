@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('blog_posts')
       .insert(draftData)
-      .select()
+      .select('post_id, title, content, excerpt, status, org_id, created_at, updated_at')
       .single();
 
     if (error) {
@@ -203,8 +203,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    logger.debug('Draft saved successfully', { postId: data?.id });
-    return NextResponse.json({ success: true, data });
+    logger.debug('Draft saved successfully', { postId: data?.post_id });
+    return NextResponse.json({ 
+      success: true, 
+      data: {
+        ...data,
+        post_id: data?.post_id, // Ensure post_id is explicitly included
+      }
+    });
 
   } catch (error: unknown) {
     logger.logError(error instanceof Error ? error : new Error('Unknown error'), {

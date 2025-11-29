@@ -79,10 +79,12 @@
     }
 
     const createData = await createResponse.json();
-    const postId = createData.data?.post_id;
+    // Supabase returns primary key as 'id', but the column is 'post_id'
+    const postId = createData.data?.post_id || createData.data?.id;
     console.log('✅ Blog post created:', {
       post_id: postId,
       title: createData.data?.title,
+      full_data: createData.data, // Debug: show full response
     });
 
     // Step 2: Create publishing record
