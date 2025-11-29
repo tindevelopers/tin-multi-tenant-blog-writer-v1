@@ -22,7 +22,7 @@ export interface ContentAnalysisResult {
   keyword_density: Record<string, number>;
   missing_keywords: string[];
   recommendations: string[];
-  content_structure: {
+  content_structure?: {
     has_title: boolean;
     has_meta_description: boolean;
     has_featured_image: boolean;

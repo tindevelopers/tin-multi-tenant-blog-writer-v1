@@ -103,22 +103,39 @@ export function ContentAnalysisPanel({
       } finally {
         setLoading(false);
       }
-    } else {
-      // Use API analysis
-      try {
-        const analysisResult = await analyzeViaAPI({
-          content,
-          topic,
-          keywords,
-          target_audience: targetAudience
-        });
-        if (onAnalysisComplete) {
-          onAnalysisComplete(analysisResult);
+      } else {
+        // Use API analysis
+        try {
+          const analysisResult = await analyzeViaAPI({
+            content,
+            topic,
+            keywords,
+            target_audience: targetAudience
+          });
+          // Convert API result to match ContentAnalysisResult type
+          const convertedResult: ContentAnalysisResult = {
+            ...analysisResult,
+            content_structure: {
+              has_title: !!title,
+              has_meta_description: !!metaDescription,
+              has_featured_image: !!featuredImage,
+              heading_structure: {
+                h1: (content.match(/<h1[^>]*>/gi) || []).length,
+                h2: (content.match(/<h2[^>]*>/gi) || []).length,
+                h3: (content.match(/<h3[^>]*>/gi) || []).length,
+                h4: (content.match(/<h4[^>]*>/gi) || []).length,
+              },
+              paragraph_count: (content.match(/<p[^>]*>/gi) || []).length,
+              list_count: (content.match(/<(ul|ol)[^>]*>/gi) || []).length,
+            },
+          };
+          if (onAnalysisComplete) {
+            onAnalysisComplete(convertedResult);
+          }
+        } catch (err) {
+          logger.error('API analysis failed:', err);
         }
-      } catch (err) {
-        logger.error('API analysis failed:', err);
       }
-    }
   };
 
   return (
