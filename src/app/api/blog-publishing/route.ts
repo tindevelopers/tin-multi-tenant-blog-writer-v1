@@ -350,12 +350,33 @@ export async function POST(request: NextRequest) {
         queue_id,
         platform,
         userRole,
+        org_id: userProfile.org_id,
+        userId: user.id,
+        insertData: {
+          org_id: userProfile.org_id,
+          post_id: finalPostId,
+          queue_id: queue_id || null,
+          platform,
+          status: initialStatus,
+          scheduled_at: scheduled_at || null,
+          published_by: user.id,
+          is_draft: is_draft,
+          platform_draft_status: is_draft ? 'draft' : null,
+          sync_status: 'never_synced',
+          retry_count: 0,
+        },
       });
 
       // Handle unique constraint violation
       if (error.code === '23505') {
         // Unique constraint violation - record already exists
-        const { data: existingRecord } = await supabase
+        logger.info("Unique constraint violation detected, fetching existing record", {
+          post_id: finalPostId,
+          platform,
+          org_id: userProfile.org_id,
+        });
+        
+        const { data: existingRecord, error: fetchError } = await supabase
           .from("blog_platform_publishing")
           .select(`
             *,
@@ -368,19 +389,50 @@ export async function POST(request: NextRequest) {
           .eq("org_id", userProfile.org_id)
           .single();
 
+        if (fetchError) {
+          logger.error("Error fetching existing record after unique constraint violation:", fetchError);
+        }
+
         if (existingRecord) {
+          logger.info("Returning existing publishing record", {
+            publishing_id: existingRecord.publishing_id,
+          });
           return NextResponse.json(existingRecord, { status: 200 });
         }
       }
 
       // Handle RLS policy violation
-      if (error.code === '42501' || error.message?.includes('permission denied')) {
+      if (error.code === '42501' || error.message?.includes('permission denied') || error.message?.includes('new row violates row-level security')) {
+        logger.warn("RLS policy violation detected", {
+          errorCode: error.code,
+          errorMessage: error.message,
+          userId: user.id,
+          orgId: userProfile.org_id,
+          userRole,
+        });
         return NextResponse.json(
           { 
             error: "Insufficient permissions. Publishing requires admin, manager, or editor role.",
-            details: error.message
+            details: error.message,
+            code: error.code
           },
           { status: 403 }
+        );
+      }
+
+      // Handle check constraint violation (e.g., sync_status)
+      if (error.code === '23514') {
+        logger.error("Check constraint violation", {
+          errorMessage: error.message,
+          hint: error.hint,
+        });
+        return NextResponse.json(
+          { 
+            error: "Invalid data provided. Please check field values.",
+            details: error.message || error.hint,
+            code: error.code
+          },
+          { status: 400 }
         );
       }
 
@@ -388,7 +440,8 @@ export async function POST(request: NextRequest) {
         { 
           error: "Failed to create publishing record",
           details: error.message || error.details || error.hint,
-          code: error.code
+          code: error.code,
+          hint: "Check server logs for more details"
         },
         { status: 500 }
       );
