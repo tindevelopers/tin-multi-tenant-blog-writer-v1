@@ -417,12 +417,12 @@ export default function ViewDraftPage() {
           {activeTab === 'analysis' && (
             <div className="space-y-6">
               <ContentAnalysisPanel
-                title={post.title}
+                title={draft?.title}
                 metaDescription={metadata?.meta_description as string | undefined}
                 targetKeyword={seoData?.keywords?.[0] as string | undefined}
                 featuredImage={metadata?.featured_image as string | undefined}
                 useLocalAnalysis={true}
-                content={draft.content || ''}
+                content={draft?.content || ''}
                 topic={topic}
                 keywords={keywords}
                 targetAudience={seoData?.target_audience}
