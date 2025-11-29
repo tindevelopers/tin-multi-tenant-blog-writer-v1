@@ -79,12 +79,17 @@
     }
 
     const createData = await createResponse.json();
-    // Supabase returns primary key as 'id', but the column is 'post_id'
+    // Supabase returns primary key as 'post_id' (the actual column name)
     const postId = createData.data?.post_id || createData.data?.id;
+    
+    if (!postId) {
+      throw new Error('Post ID not found in response. Response: ' + JSON.stringify(createData));
+    }
+    
     console.log('✅ Blog post created:', {
       post_id: postId,
       title: createData.data?.title,
-      full_data: createData.data, // Debug: show full response
+      org_id: createData.data?.org_id,
     });
 
     // Step 2: Create publishing record

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/service';
+import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 import { logger } from '@/utils/logger';
 import { parseJsonBody, validateRequiredFields, handleApiError } from '@/lib/api-utils';
@@ -10,6 +10,26 @@ type BlogPostInsert = Database['public']['Tables']['blog_posts']['Insert'];
 export async function POST(request: NextRequest) {
   try {
     logger.debug('API route /api/drafts/save called');
+    
+    // Authenticate user and get their org_id
+    const supabase = await createClient(request);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    
+    // Get user's org_id
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .single();
+    
+    if (!userProfile?.org_id) {
+      logger.warn('User profile not found, using default org_id');
+      // Fallback to default org if user profile not found
+    }
     const body = await parseJsonBody<{
       title: string;
       content: string;
@@ -156,17 +176,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Use service client for server-side operations
-    const supabase = createServiceClient();
-    
-    // Use default system values
-    const orgId = '00000000-0000-0000-0000-000000000001';
-    const userId = '00000000-0000-0000-0000-000000000002';
-    logger.debug('Using system defaults', { orgId, userId });
+    // Use authenticated user's org_id
+    const orgId = userProfile?.org_id || '00000000-0000-0000-0000-000000000001';
+    logger.debug('Using org_id', { orgId, userId: user.id });
 
     const draftData: BlogPostInsert = {
       org_id: orgId,
-      // created_by: userId, // Leave null for system-created posts
+      created_by: user.id, // Use authenticated user's ID
       title,
       content,
       excerpt: excerpt || '',
@@ -182,6 +198,7 @@ export async function POST(request: NextRequest) {
       title: draftData.title,
       contentLength: draftData.content?.length || 0,
       orgId: draftData.org_id,
+      created_by: draftData.created_by,
     });
 
     const { data, error } = await supabase
