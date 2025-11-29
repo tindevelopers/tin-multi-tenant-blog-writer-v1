@@ -705,6 +705,10 @@ export async function POST(request: NextRequest) {
       length: length ? convertLengthToAPI(length) : convertLengthToAPI(mapWordCountToLength(word_count || contentPreset?.word_count || 1000)),
       format: 'html' as 'markdown' | 'html' | 'json',
       use_dataforseo_content_generation: use_dataforseo_content_generation, // Pass flag to backend API for provider selection
+      // Explicitly enable OpenAI generation (default provider)
+      // If use_dataforseo_content_generation is false or undefined, OpenAI will be used
+      use_openai: !use_dataforseo_content_generation, // Enable OpenAI when DataForSEO is not selected
+      llm_provider: use_dataforseo_content_generation ? 'dataforseo' : 'openai', // Explicit provider selection
     };
 
     // Add custom instructions (use provided or default for premium)
@@ -775,7 +779,7 @@ export async function POST(request: NextRequest) {
     
     logger.debug('📤 Request payload', { payload: JSON.stringify(requestPayload, null, 2) });
     const systemPromptForLog = typeof requestPayload.system_prompt === 'string' ? requestPayload.system_prompt : '';
-    logger.debug('📤 Key parameters being sent:', {
+    logger.debug('📤 Key parameters being sent to Cloud Run backend:', {
       topic: requestPayload.topic,
       keywords: requestPayload.keywords,
       target_audience: requestPayload.target_audience,
@@ -788,6 +792,10 @@ export async function POST(request: NextRequest) {
       has_content_goal: !!requestPayload.content_goal,
       system_prompt_length: systemPromptForLog.length,
       async_mode: asyncMode,
+      llm_provider: requestPayload.llm_provider,
+      use_openai: requestPayload.use_openai,
+      use_dataforseo_content_generation: requestPayload.use_dataforseo_content_generation,
+      use_consensus_generation: requestPayload.use_consensus_generation,
     });
     
     // Add async_mode query parameter if requested
