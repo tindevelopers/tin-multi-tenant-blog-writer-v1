@@ -183,8 +183,23 @@ export default function EditDraftPage() {
         ? formData.excerpt
         : plainText.substring(0, 220).concat(plainText.length > 220 ? '…' : '');
 
-      const meta = await dataForSEOContentGenerationClient.generateMetaTags(plainText || formData.title || '');
+      // Generate meta tags with fallback handling
+      const meta = await dataForSEOContentGenerationClient.generateMetaTags(
+        plainText || formData.title || '',
+        'en',
+        formData.title
+      );
 
+      // Show info message if fallback was used
+      if (meta.fallback && meta.message) {
+        logger.info('Field generation used fallback', {
+          message: meta.message,
+          context: 'edit-draft-generate-fields',
+        });
+        // Don't show alert for fallback - it's expected behavior
+      }
+
+      // Update form data with generated or fallback values
       setFormData(prev => ({
         ...prev,
         slug: prev.slug || generateSlug(prev.title || 'untitled'),
@@ -192,11 +207,53 @@ export default function EditDraftPage() {
         metaDescription: meta.meta_description || prev.metaDescription || excerptFallback,
         excerpt: prev.excerpt || excerptFallback,
       }));
+
+      // Show success message
+      if (!meta.fallback) {
+        logger.debug('Fields generated successfully using DataForSEO', {
+          context: 'edit-draft-generate-fields',
+        });
+      }
     } catch (error) {
       logger.logError(error instanceof Error ? error : new Error('Failed to auto-generate fields'), {
         context: 'edit-draft-generate-fields',
       });
-      alert('Unable to generate fields automatically. Please try again.');
+      
+      // Try fallback extraction as last resort
+      try {
+        const plainText = stripHtml(formData.content).trim();
+        const excerptFallback = formData.excerpt && formData.excerpt.trim().length > 0
+          ? formData.excerpt
+          : plainText.substring(0, 220).concat(plainText.length > 220 ? '…' : '');
+        
+        // Use simple fallback extraction
+        const cleanText = plainText || formData.title || '';
+        const metaTitle = formData.title || cleanText.substring(0, 60);
+        const metaDescription = cleanText.substring(0, 155);
+        
+        const fallbackMeta = {
+          meta_title: metaTitle.length > 60 ? metaTitle.substring(0, 57) + '...' : metaTitle,
+          meta_description: metaDescription.length > 155 ? metaDescription.substring(0, 152) + '...' : metaDescription,
+        };
+        
+        setFormData(prev => ({
+          ...prev,
+          slug: prev.slug || generateSlug(prev.title || 'untitled'),
+          seoTitle: fallbackMeta.meta_title || prev.seoTitle || prev.title,
+          metaDescription: fallbackMeta.meta_description || prev.metaDescription || excerptFallback,
+          excerpt: prev.excerpt || excerptFallback,
+        }));
+        
+        logger.info('Used fallback extraction after error', {
+          context: 'edit-draft-generate-fields',
+        });
+      } catch (fallbackError) {
+        logger.error('Fallback extraction also failed', {
+          error: fallbackError,
+          context: 'edit-draft-generate-fields',
+        });
+        alert('Unable to generate fields automatically. Please fill them manually.');
+      }
     } finally {
       setAiGenerating(false);
     }

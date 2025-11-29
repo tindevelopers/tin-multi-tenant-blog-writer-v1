@@ -155,15 +155,24 @@ export class DataForSEOContentGeneration {
   private username: string;
   private password: string;
   private baseUrl: string;
+  private credentialsConfigured: boolean;
 
   constructor(username?: string, password?: string) {
     this.username = username || DATAFORSEO_USERNAME;
     this.password = password || DATAFORSEO_PASSWORD;
     this.baseUrl = DATAFORSEO_API_URL;
+    this.credentialsConfigured = !!(this.username && this.password);
 
-    if (!this.username || !this.password) {
+    if (!this.credentialsConfigured) {
       logger.warn('DataForSEO credentials not configured. Content generation will not work.');
     }
+  }
+
+  /**
+   * Check if credentials are configured
+   */
+  isConfigured(): boolean {
+    return this.credentialsConfigured;
   }
 
   /**
@@ -181,8 +190,10 @@ export class DataForSEOContentGeneration {
     endpoint: string,
     payload: unknown
   ): Promise<T> {
-    if (!this.username || !this.password) {
-      throw new Error('DataForSEO credentials not configured');
+    if (!this.credentialsConfigured) {
+      const error = new Error('DataForSEO credentials not configured');
+      (error as any).code = 'CREDENTIALS_NOT_CONFIGURED';
+      throw error;
     }
 
     const url = `${this.baseUrl}${endpoint}`;
@@ -192,51 +203,74 @@ export class DataForSEOContentGeneration {
       url,
     });
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': this.getAuthHeader(),
-      },
-      body: JSON.stringify([payload]), // DataForSEO expects array of tasks
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error('DataForSEO API error', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText,
-        endpoint,
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': this.getAuthHeader(),
+        },
+        body: JSON.stringify([payload]), // DataForSEO expects array of tasks
       });
-      throw new Error(`DataForSEO API error: ${response.status} ${response.statusText}`);
-    }
 
-    const data = await response.json();
-    
-    // DataForSEO returns array of responses, get first one
-    if (Array.isArray(data) && data.length > 0) {
-      return data[0] as T;
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error('DataForSEO API error', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText,
+        });
+        const error = new Error(`DataForSEO API error: ${response.status} ${response.statusText}`);
+        (error as any).status = response.status;
+        (error as any).response = errorText;
+        throw error;
+      }
+
+      const data = await response.json();
+      
+      // Check for API-level errors
+      if (data.status_code && data.status_code !== 20000) {
+        logger.error('DataForSEO API returned error status', {
+          status_code: data.status_code,
+          status_message: data.status_message,
+        });
+        const error = new Error(`DataForSEO API error: ${data.status_message || 'Unknown error'}`);
+        (error as any).status_code = data.status_code;
+        throw error;
+      }
+
+      return data as T;
+    } catch (error: any) {
+      // Re-throw if it's already our custom error
+      if (error.code === 'CREDENTIALS_NOT_CONFIGURED') {
+        throw error;
+      }
+      
+      // Wrap network errors
+      logger.error('DataForSEO API request failed', {
+        endpoint,
+        error: error.message,
+        status: error.status,
+      });
+      throw error;
     }
-    
-    return data as T;
   }
 
   /**
-   * Generate text based on input text and parameters
+   * Generate text content
    * Pricing: $0.00005 per new token ($50 for 1M tokens)
    */
   async generateText(request: GenerateTextRequest): Promise<GenerateTextResponse> {
     const payload = {
       text: request.text,
       creativity_index: request.creativity_index ?? 0.5,
-      text_length: request.text_length,
+      text_length: request.text_length ?? 500,
       tone: request.tone || 'professional',
       language: request.language || 'en',
     };
 
     return this.makeRequest<GenerateTextResponse>(
-      '/content_generation/generate/live',
+      '/content_generation/generate_text/live',
       payload
     );
   }
@@ -337,7 +371,7 @@ export class DataForSEOContentGeneration {
         logger.debug('Generating blog content with DataForSEO', { 
           topic, 
           estimatedTokens,
-          word_count 
+          word_count,
         });
         
         const contentResponse = await this.generateText({
@@ -348,36 +382,26 @@ export class DataForSEOContentGeneration {
           language,
         });
         
-        if (contentResponse.tasks && contentResponse.tasks.length > 0) {
-          totalCost += contentResponse.cost || 0;
-          const generatedText = contentResponse.tasks[0].result?.[0]?.text || '';
-          
-          // Step 3: Generate meta tags
-          logger.debug('Generating meta tags with DataForSEO', { topic });
-          const metaResponse = await this.generateMetaTags({
-            text: generatedText.substring(0, 5000), // Limit to first 5000 chars for meta generation
-            language,
-          });
-          
-          if (metaResponse.tasks && metaResponse.tasks.length > 0) {
-            totalCost += metaResponse.cost || 0;
-            const metaResult = metaResponse.tasks[0].result?.[0];
-            
-            return {
-              content: generatedText,
-              subtopics,
-              meta_title: metaResult?.meta_title,
-              meta_description: metaResult?.meta_description,
-              cost: totalCost,
-            };
-          }
-          
-          return {
-            content: generatedText,
-            subtopics,
-            cost: totalCost,
-          };
-        }
+        totalCost += contentResponse.cost || 0;
+        const content = contentResponse.tasks?.[0]?.result?.[0]?.text || '';
+        
+        // Step 3: Generate meta tags
+        logger.debug('Generating meta tags with DataForSEO', { topic });
+        const metaResponse = await this.generateMetaTags({
+          text: content || prompt,
+          language,
+        });
+        
+        totalCost += metaResponse.cost || 0;
+        const metaResult = metaResponse.tasks?.[0]?.result?.[0];
+        
+        return {
+          content,
+          subtopics,
+          meta_title: metaResult?.meta_title,
+          meta_description: metaResult?.meta_description,
+          cost: totalCost,
+        };
       }
       
       throw new Error('Failed to generate content from DataForSEO');
@@ -390,4 +414,3 @@ export class DataForSEOContentGeneration {
 
 // Export singleton instance
 export const dataForSEOContentGeneration = new DataForSEOContentGeneration();
-

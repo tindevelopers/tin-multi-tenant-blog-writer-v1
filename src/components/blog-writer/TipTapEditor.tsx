@@ -123,6 +123,9 @@ export default function TipTapEditor({
         },
         // Exclude Link from StarterKit since we're configuring it separately
         link: false,
+        // Explicitly exclude underline to prevent duplicate extension warning
+        // StarterKit doesn't include underline by default, but being explicit prevents conflicts
+        underline: false,
         // Configure paragraph with better defaults
         paragraph: {
           HTMLAttributes: {
@@ -176,7 +179,12 @@ export default function TipTapEditor({
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Underline,
+      // Underline extension - StarterKit doesn't include it by default
+      Underline.configure({
+        HTMLAttributes: {
+          class: 'underline',
+        },
+      }),
     ],
     content,
     editable,
