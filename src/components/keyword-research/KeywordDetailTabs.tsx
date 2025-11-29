@@ -59,6 +59,8 @@ interface KeywordDetailTabsProps {
   serpData?: SERPData;
   onSelectKeywords?: (keywords: string[]) => void;
   onCreateBlog?: (keyword: string, searchType?: string) => void;
+  onSendToContentIdeas?: (keywords: string[]) => void;
+  onSendToContentClusters?: (keywords: string[]) => void;
   searchType?: string;
 }
 
@@ -69,6 +71,8 @@ export function KeywordDetailTabs({
   serpData,
   onSelectKeywords,
   onCreateBlog,
+  onSendToContentIdeas,
+  onSendToContentClusters,
   searchType = 'general',
 }: KeywordDetailTabsProps) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -432,10 +436,42 @@ export function KeywordDetailTabs({
             {/* Bulk Actions */}
             {selectedKeywords.size > 0 && (
               <div className="flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <button className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium">
-                  <Send className="h-4 w-4 inline mr-2" />
-                  Send to Content Brief
-                </button>
+                {onSendToContentIdeas && (
+                  <button 
+                    onClick={() => {
+                      const selectedArray = Array.from(selectedKeywords);
+                      onSendToContentIdeas(selectedArray);
+                    }}
+                    className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-sm font-medium"
+                  >
+                    <Send className="h-4 w-4 inline mr-2" />
+                    Send to Content Ideas ({selectedKeywords.size})
+                  </button>
+                )}
+                {onSendToContentClusters && (
+                  <button 
+                    onClick={() => {
+                      const selectedArray = Array.from(selectedKeywords);
+                      onSendToContentClusters(selectedArray);
+                    }}
+                    className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium"
+                  >
+                    <Send className="h-4 w-4 inline mr-2" />
+                    Send to Content Clusters ({selectedKeywords.size})
+                  </button>
+                )}
+                {!onSendToContentIdeas && !onSendToContentClusters && onSelectKeywords && (
+                  <button 
+                    onClick={() => {
+                      const selectedArray = Array.from(selectedKeywords);
+                      onSelectKeywords(selectedArray);
+                    }}
+                    className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-medium"
+                  >
+                    <Send className="h-4 w-4 inline mr-2" />
+                    Send Selected ({selectedKeywords.size})
+                  </button>
+                )}
                 <button className="px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium">
                   <Download className="h-4 w-4 inline mr-2" />
                   Export CSV

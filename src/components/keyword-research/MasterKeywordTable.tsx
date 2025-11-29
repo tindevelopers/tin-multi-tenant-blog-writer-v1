@@ -14,6 +14,8 @@ interface MasterKeywordTableProps {
   onToggleKeyword: (keyword: string) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
+  onSendToContentIdeas?: (keywords: string[]) => void;
+  onSendToContentClusters?: (keywords: string[]) => void;
   loading?: boolean;
 }
 
@@ -26,6 +28,8 @@ function MasterKeywordTable({
   onToggleKeyword,
   onSelectAll,
   onClearSelection,
+  onSendToContentIdeas,
+  onSendToContentClusters,
   loading = false,
 }: MasterKeywordTableProps) {
   const [sortField, setSortField] = useState<SortField>('search_volume');
@@ -347,7 +351,42 @@ function MasterKeywordTable({
                     />
                   </TableCell>
                   <TableCell className="px-6 py-4">
-                    <span className="font-medium text-gray-900 dark:text-white">{keyword.keyword}</span>
+                    <div className="flex items-center gap-2">
+                      <span 
+                        className="font-medium text-gray-900 dark:text-white cursor-pointer hover:text-brand-600 dark:hover:text-brand-400 transition-colors flex-1"
+                        onClick={() => onToggleKeyword(keyword.keyword)}
+                      >
+                        {keyword.keyword}
+                      </span>
+                      {(onSendToContentIdeas || onSendToContentClusters) && (
+                        <div className="flex items-center gap-1">
+                          {onSendToContentIdeas && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSendToContentIdeas([keyword.keyword]);
+                              }}
+                              className="px-2 py-1 text-xs font-medium text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
+                              title="Send to Content Ideas"
+                            >
+                              Ideas
+                            </button>
+                          )}
+                          {onSendToContentClusters && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onSendToContentClusters([keyword.keyword]);
+                              }}
+                              className="px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                              title="Send to Content Clusters"
+                            >
+                              Clusters
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="px-6 py-4 text-right">
                     <span className="font-semibold text-gray-900 dark:text-white">

@@ -498,6 +498,28 @@ function SEOToolsPageContent() {
                     onToggleKeyword={toggleKeyword}
                     onSelectAll={handleSelectAll}
                     onClearSelection={clearSelection}
+                    onSendToContentIdeas={async (keywordList) => {
+                      // Select the keywords first
+                      keywordList.forEach(kw => {
+                        const keyword = keywords.find(k => k.keyword === kw);
+                        if (keyword) {
+                          toggleKeyword(kw);
+                        }
+                      });
+                      // Then generate content ideas
+                      await handleGenerateContentIdeas();
+                    }}
+                    onSendToContentClusters={async (keywordList) => {
+                      // Select the keywords first
+                      keywordList.forEach(kw => {
+                        const keyword = keywords.find(k => k.keyword === kw);
+                        if (keyword) {
+                          toggleKeyword(kw);
+                        }
+                      });
+                      // Navigate to content clusters page
+                      router.push('/seo/content-clusters');
+                    }}
                     loading={loading}
                   />
 
