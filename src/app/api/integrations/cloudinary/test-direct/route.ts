@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
     try {
       const authString = Buffer.from(`${credentials.api_key}:${credentials.api_secret}`).toString('base64');
       const testUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
+      testUrl.searchParams.append('type', 'upload'); // Required parameter
       testUrl.searchParams.append('max_results', '10');
       testUrl.searchParams.append('resource_type', 'image');
 
@@ -119,6 +120,7 @@ export async function GET(request: NextRequest) {
       const params: Record<string, string> = {
         max_results: '10',
         resource_type: 'image',
+        type: 'upload', // Required parameter
         timestamp: timestamp.toString(),
       };
 
@@ -138,6 +140,7 @@ export async function GET(request: NextRequest) {
       signedUrl.searchParams.append('api_key', credentials.api_key);
       signedUrl.searchParams.append('max_results', '10');
       signedUrl.searchParams.append('resource_type', 'image');
+      signedUrl.searchParams.append('type', 'upload'); // Required parameter
       signedUrl.searchParams.append('timestamp', timestamp.toString());
       signedUrl.searchParams.append('signature', signature);
 

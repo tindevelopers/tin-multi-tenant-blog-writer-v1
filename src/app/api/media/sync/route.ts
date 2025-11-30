@@ -141,7 +141,10 @@ export async function POST(request: NextRequest) {
     const authString = Buffer.from(`${credentials.api_key}:${credentials.api_secret}`).toString('base64');
     
     // Build Cloudinary Admin API URL
+    // Note: Cloudinary Admin API requires 'type' parameter (upload, private, authenticated)
+    // Default to 'upload' which is the most common type
     const cloudinaryUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
+    cloudinaryUrl.searchParams.append('type', 'upload'); // Required parameter
     cloudinaryUrl.searchParams.append('max_results', '500');
     cloudinaryUrl.searchParams.append('prefix', folder);
     cloudinaryUrl.searchParams.append('resource_type', 'image');
