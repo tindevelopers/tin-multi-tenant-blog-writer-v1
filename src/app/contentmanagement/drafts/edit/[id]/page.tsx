@@ -9,8 +9,6 @@ import {
   CheckIcon,
   ArrowsRightLeftIcon,
   SparklesIcon,
-  XMarkIcon,
-  ChevronRightIcon,
   DocumentTextIcon,
   PhotoIcon,
   CheckCircleIcon,
@@ -24,7 +22,6 @@ import { llmAnalysisClient } from "@/lib/llm-analysis-client";
 import { extractImagesFromContent, extractFeaturedImage } from "@/lib/image-extractor";
 import { logger } from "@/utils/logger";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
-import { ContentInsightsSidebar } from "@/components/content/ContentInsightsSidebar";
 import WorkflowStagesHorizontal from "@/components/workflow/WorkflowStagesHorizontal";
 import type { WorkflowPhase } from "@/lib/workflow-phase-manager";
 
@@ -91,7 +88,6 @@ export default function EditDraftPage() {
   const [fieldValidation, setFieldValidation] = useState<ReturnType<typeof validateBlogFields> | null>(null);
   const [showFieldConfig, setShowFieldConfig] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
 
   // Determine phase completion status
@@ -568,24 +564,6 @@ export default function EditDraftPage() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
-            {/* Toggle Sidebar Button */}
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              title={sidebarOpen ? "Hide Content Score" : "Show Content Score"}
-            >
-              {sidebarOpen ? (
-                <>
-                  <XMarkIcon className="w-4 h-4" />
-                  <span className="hidden sm:inline">Hide Score</span>
-                </>
-              ) : (
-                <>
-                  <ChevronRightIcon className="w-4 h-4" />
-                  <span className="hidden sm:inline">Show Score</span>
-                </>
-              )}
-            </button>
             <button
               onClick={handleSave}
               disabled={saving}
@@ -627,10 +605,8 @@ export default function EditDraftPage() {
         </div>
       )}
 
-      {/* Two Column Layout: Content Editor + Sidebar */}
-      <div className={`grid gap-6 transition-all duration-300 ${sidebarOpen ? 'lg:grid-cols-[1fr_400px]' : 'lg:grid-cols-1'}`}>
-        {/* Main Content Area */}
-        <div className={`transition-all duration-300 ${sidebarOpen ? 'max-w-none' : 'max-w-7xl mx-auto'}`}>
+      {/* Main Content Area */}
+      <div className="max-w-7xl mx-auto">
           {/* Form */}
           <div className="space-y-6">
         {/* Title */}
@@ -1138,20 +1114,6 @@ export default function EditDraftPage() {
           </div>
         </div>
 
-        {/* Content Score Sidebar */}
-        {sidebarOpen && (
-          <div className="lg:sticky lg:top-6 lg:self-start">
-            <ContentInsightsSidebar
-              contentScore={fieldValidation?.isValid ? 75 : 57}
-              wordCount={contentStats.wordCount}
-              readingTimeMinutes={contentStats.readTime}
-              metadata={draft?.metadata as Record<string, any> | null}
-              seoData={draft?.seo_data as Record<string, any> | null}
-              keywords={[]}
-              topic={formData.title || draft?.title || undefined}
-            />
-          </div>
-        )}
       </div>
 
       {/* Field Configuration Modal */}
