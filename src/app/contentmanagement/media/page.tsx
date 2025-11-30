@@ -54,6 +54,7 @@ export default function MediaPage() {
   const [mediaFiles, setMediaFiles] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [testingCredentials, setTestingCredentials] = useState(false);
   const [stats, setStats] = useState<MediaStats>({
     total: 0,
     images: 0,
@@ -91,6 +92,67 @@ export default function MediaPage() {
   useEffect(() => {
     loadMediaAssets();
   }, [loadMediaAssets]);
+
+  // Test Cloudinary credentials
+  const handleTestCredentials = async () => {
+    setTestingCredentials(true);
+    try {
+      const response = await fetch('/api/integrations/cloudinary/test-direct', {
+        method: 'GET',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const method = result.summary?.recommendedMethod || 'Unknown';
+        const passedTests = result.summary?.passedTests || 0;
+        const totalTests = result.summary?.totalTests || 0;
+        
+        let message = `✅ Cloudinary Credentials Test Results:\n\n`;
+        message += `Status: Valid ✓\n`;
+        message += `Working Method: ${method}\n`;
+        message += `Tests Passed: ${passedTests}/${totalTests}\n\n`;
+        
+        if (result.tests && result.tests.length > 0) {
+          message += `Test Details:\n`;
+          result.tests.forEach((test: any) => {
+            message += `  • ${test.method}: ${test.success ? '✅ Success' : '❌ Failed'}`;
+            if (test.resourceCount !== undefined) {
+              message += ` (${test.resourceCount} resources found)`;
+            }
+            if (test.error) {
+              message += ` - ${test.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        
+        alert(message);
+      } else {
+        let message = `❌ Cloudinary Credentials Test Failed:\n\n`;
+        message += `All authentication methods failed.\n\n`;
+        
+        if (result.tests && result.tests.length > 0) {
+          message += `Test Details:\n`;
+          result.tests.forEach((test: any) => {
+            message += `  • ${test.method}: ❌ Failed`;
+            if (test.error) {
+              message += ` - ${test.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        
+        message += `\nPlease verify your credentials in Settings → Integrations → Cloudinary.`;
+        alert(message);
+      }
+    } catch (error) {
+      logger.error('Error testing Cloudinary credentials:', error);
+      alert(`Failed to test Cloudinary credentials: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setTestingCredentials(false);
+    }
+  };
 
   // Sync with Cloudinary
   const handleSyncCloudinary = async () => {
@@ -306,6 +368,26 @@ export default function MediaPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleTestCredentials}
+              disabled={testingCredentials}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              title="Test Cloudinary credentials"
+            >
+              {testingCredentials ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Testing...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Test Credentials</span>
+                </>
+              )}
+            </button>
             <button
               onClick={handleSyncCloudinary}
               disabled={syncing}
