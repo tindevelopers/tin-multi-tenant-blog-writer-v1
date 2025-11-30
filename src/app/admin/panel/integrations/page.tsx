@@ -7,6 +7,7 @@ import EditIntegrationModal from "@/components/admin/EditIntegrationModal";
 import { WebflowConfig } from "@/components/integrations/WebflowConfig";
 import { CloudinaryConfig } from "@/components/integrations/CloudinaryConfig";
 import { IntegrationRequirementsCard } from "@/components/integrations/IntegrationRequirementsCard";
+import { WebflowStructureScanner } from "@/components/integrations/WebflowStructureScanner";
 import type { IntegrationType } from "@/lib/integrations/types";
 
 interface Integration {
@@ -1141,6 +1142,16 @@ export default function IntegrationsManagementPage() {
                     Disconnect
                   </button>
                 </div>
+                
+                {/* Webflow Structure Scanner */}
+                {integration.type === 'webflow' && integration.status === 'active' && (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <WebflowStructureScanner
+                      siteId={(integration.config.site_id || integration.config.siteId) as string}
+                      integrationId={integration.integration_id}
+                    />
+                  </div>
+                )}
               </div>
             ) : integration.type === 'cloudinary' && ['owner', 'admin'].includes(userRole) ? (
               <div className="space-y-2">

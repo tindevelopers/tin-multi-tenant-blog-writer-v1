@@ -61,7 +61,8 @@ async function generateEnhancedMetadata(
 
 /**
  * Insert internal hyperlinks into content based on Webflow site analysis
- * Integrates with Webflow structure discovery to find relevant CMS and static pages
+ * Uses stored Webflow structure scans for efficient hyperlink insertion
+ * Falls back to on-the-fly discovery if no scan exists
  */
 async function insertInternalLinks(
   content: string,
@@ -88,11 +89,58 @@ async function insertInternalLinks(
       orgId,
     });
     
-    // Discover Webflow structure (CMS + static pages)
-    const { existing_content } = await discoverWebflowStructure(
-      webflowConfig.apiToken,
-      webflowConfig.siteId
-    );
+    // Try to get existing content from stored scan first
+    let existing_content: any[] = [];
+    const supabase = createServiceClient();
+    
+    try {
+      // Get latest completed scan for this site
+      const { data: latestScan, error: scanError } = await supabase
+        .from('webflow_structure_scans')
+        .select('existing_content, scan_completed_at, total_content_items')
+        .eq('org_id', orgId)
+        .eq('site_id', webflowConfig.siteId)
+        .eq('status', 'completed')
+        .order('scan_completed_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!scanError && latestScan?.existing_content) {
+        existing_content = latestScan.existing_content as any[];
+        logger.info('Using stored Webflow structure scan', {
+          siteId: webflowConfig.siteId,
+          contentItems: existing_content.length,
+          scanDate: latestScan.scan_completed_at,
+        });
+      } else {
+        // No stored scan found, discover on-the-fly
+        logger.info('No stored scan found, discovering Webflow structure on-the-fly', {
+          siteId: webflowConfig.siteId,
+        });
+        
+        const structure = await discoverWebflowStructure(
+          webflowConfig.apiToken,
+          webflowConfig.siteId
+        );
+        existing_content = structure.existing_content;
+        
+        // Optionally trigger a background scan for future use
+        // (don't await - let it run in background)
+        triggerBackgroundScan(orgId, webflowConfig.siteId, webflowConfig.apiToken)
+          .catch(err => logger.warn('Background scan trigger failed', { error: err.message }));
+      }
+    } catch (error: any) {
+      logger.warn('Error fetching stored scan, falling back to on-the-fly discovery', {
+        error: error.message,
+      });
+      
+      // Fallback to on-the-fly discovery
+      const structure = await discoverWebflowStructure(
+        webflowConfig.apiToken,
+        webflowConfig.siteId
+      );
+      existing_content = structure.existing_content;
+    }
     
     if (existing_content.length === 0) {
       logger.debug('No Webflow content found for hyperlinking', { siteId: webflowConfig.siteId });
@@ -133,6 +181,31 @@ async function insertInternalLinks(
       orgId,
     });
     return content; // Return original content on error
+  }
+}
+
+/**
+ * Trigger a background Webflow structure scan (non-blocking)
+ */
+async function triggerBackgroundScan(
+  orgId: string,
+  siteId: string,
+  apiToken: string
+): Promise<void> {
+  try {
+    // Call the scan endpoint internally (don't await)
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/webflow/scan-structure`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ site_id: siteId }),
+    }).catch(err => {
+      logger.debug('Background scan trigger failed (non-critical)', { error: err.message });
+    });
+  } catch (error) {
+    // Silently fail - this is a background operation
+    logger.debug('Background scan trigger error (non-critical)', { error });
   }
 }
 
