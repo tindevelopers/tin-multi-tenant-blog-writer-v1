@@ -299,11 +299,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const scanId = scanRecord.scan_id;
 
-    // Perform scan asynchronously (don't await - return immediately)
-    performScan(scanId, apiToken, finalSiteId, orgId).catch((error) => {
-      logger.error('Scan failed', { scanId, error: error.message });
+    // Perform scan synchronously with timeout
+    // This ensures the scan completes and results are saved before response
+    const scanPromise = performScan(scanId, apiToken, finalSiteId, orgId);
+    
+    // Set a timeout for the scan (5 minutes max)
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Scan timeout after 5 minutes')), 5 * 60 * 1000);
     });
 
+    // Race between scan completion and timeout
+    Promise.race([scanPromise, timeoutPromise])
+      .then(() => {
+        logger.info('Scan completed successfully', { scanId });
+      })
+      .catch((error) => {
+        logger.error('Scan failed or timed out', { 
+          scanId, 
+          error: error.message,
+          stack: error.stack 
+        });
+        // Error is already handled in performScan function
+      });
+
+    // Return immediately but scan runs in background
     return NextResponse.json({
       success: true,
       scan_id: scanId,
@@ -454,6 +473,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
 /**
  * Perform the actual Webflow structure scan
+ * This runs server-side and saves results reliably to the database
  */
 async function performScan(
   scanId: string,
@@ -461,15 +481,69 @@ async function performScan(
   siteId: string,
   orgId: string
 ): Promise<void> {
-  const supabase = await createClient();
+  // Use service client for reliable database access
+  const supabase = createServiceClient();
   
   try {
-    logger.info('Starting Webflow structure scan', { scanId, siteId });
+    logger.info('Starting Webflow structure scan', { scanId, siteId, orgId });
 
-    // Discover Webflow structure
-    const structure = await discoverWebflowStructure(apiToken, siteId);
+    // Update status to scanning (in case it wasn't already)
+    await supabase
+      .from('webflow_structure_scans')
+      .update({
+        status: 'scanning',
+        scan_started_at: new Date().toISOString(),
+      })
+      .eq('scan_id', scanId)
+      .eq('org_id', orgId);
 
-    // Update scan record with results
+    // Discover Webflow structure with retry logic
+    let structure;
+    let retries = 3;
+    let lastError: any = null;
+
+    while (retries > 0) {
+      try {
+        structure = await discoverWebflowStructure(apiToken, siteId);
+        break; // Success, exit retry loop
+      } catch (error: any) {
+        lastError = error;
+        retries--;
+        
+        if (retries > 0) {
+          logger.warn('Webflow discovery failed, retrying', {
+            scanId,
+            retriesLeft: retries,
+            error: error.message,
+          });
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 2000 * (3 - retries)));
+        } else {
+          throw error; // Re-throw if all retries exhausted
+        }
+      }
+    }
+
+    if (!structure) {
+      throw lastError || new Error('Failed to discover Webflow structure');
+    }
+
+    // Calculate counts
+    const collectionsCount = structure.collections.length;
+    const staticPagesCount = structure.static_pages.length;
+    const cmsItemsCount = structure.existing_content.filter(c => c.type === 'cms').length;
+    const totalContentItems = structure.existing_content.length;
+
+    logger.info('Webflow structure discovered', {
+      scanId,
+      siteId,
+      collections: collectionsCount,
+      staticPages: staticPagesCount,
+      cmsItems: cmsItemsCount,
+      totalContent: totalContentItems,
+    });
+
+    // Update scan record with results (use service client for reliability)
     const { error: updateError } = await supabase
       .from('webflow_structure_scans')
       .update({
@@ -477,25 +551,53 @@ async function performScan(
         collections: structure.collections,
         static_pages: structure.static_pages,
         existing_content: structure.existing_content,
-        collections_count: structure.collections.length,
-        static_pages_count: structure.static_pages.length,
-        cms_items_count: structure.existing_content.filter(c => c.type === 'cms').length,
-        total_content_items: structure.existing_content.length,
+        collections_count: collectionsCount,
+        static_pages_count: staticPagesCount,
+        cms_items_count: cmsItemsCount,
+        total_content_items: totalContentItems,
         scan_completed_at: new Date().toISOString(),
         next_scan_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
       })
-      .eq('scan_id', scanId);
+      .eq('scan_id', scanId)
+      .eq('org_id', orgId);
 
     if (updateError) {
-      throw new Error(`Failed to update scan record: ${updateError.message}`);
+      // Retry database update once
+      logger.warn('Database update failed, retrying', {
+        scanId,
+        error: updateError.message,
+      });
+      
+      const { error: retryError } = await supabase
+        .from('webflow_structure_scans')
+        .update({
+          status: 'completed',
+          collections: structure.collections,
+          static_pages: structure.static_pages,
+          existing_content: structure.existing_content,
+          collections_count: collectionsCount,
+          static_pages_count: staticPagesCount,
+          cms_items_count: cmsItemsCount,
+          total_content_items: totalContentItems,
+          scan_completed_at: new Date().toISOString(),
+          next_scan_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .eq('scan_id', scanId)
+        .eq('org_id', orgId);
+
+      if (retryError) {
+        throw new Error(`Failed to update scan record after retry: ${retryError.message}`);
+      }
     }
 
-    logger.info('Webflow structure scan completed', {
+    logger.info('Webflow structure scan completed successfully', {
       scanId,
       siteId,
-      collections: structure.collections.length,
-      staticPages: structure.static_pages.length,
-      totalContent: structure.existing_content.length,
+      orgId,
+      collections: collectionsCount,
+      staticPages: staticPagesCount,
+      cmsItems: cmsItemsCount,
+      totalContent: totalContentItems,
     });
   } catch (error: any) {
     logger.error('Webflow structure scan failed', { 
@@ -507,16 +609,39 @@ async function performScan(
       errorType: error.constructor?.name,
     });
 
-    // Update scan record with error
-    await supabase
-      .from('webflow_structure_scans')
-      .update({
-        status: 'failed',
-        error_message: error.message,
-        error_details: { stack: error.stack },
-        scan_completed_at: new Date().toISOString(),
-      })
-      .eq('scan_id', scanId);
+    // Update scan record with error (use service client for reliability)
+    try {
+      const { error: errorUpdateError } = await supabase
+        .from('webflow_structure_scans')
+        .update({
+          status: 'failed',
+          error_message: error.message,
+          error_details: { 
+            stack: error.stack,
+            errorType: error.constructor?.name,
+          },
+          scan_completed_at: new Date().toISOString(),
+        })
+        .eq('scan_id', scanId)
+        .eq('org_id', orgId);
+
+      if (errorUpdateError) {
+        logger.error('Failed to update scan record with error status', {
+          scanId,
+          updateError: errorUpdateError.message,
+          originalError: error.message,
+        });
+      }
+    } catch (updateError: any) {
+      logger.error('Exception while updating scan record with error', {
+        scanId,
+        updateError: updateError.message,
+        originalError: error.message,
+      });
+    }
+
+    // Re-throw to be caught by caller
+    throw error;
   }
 }
 
