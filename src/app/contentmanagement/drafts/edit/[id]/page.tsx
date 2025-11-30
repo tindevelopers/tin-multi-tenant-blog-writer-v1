@@ -53,7 +53,7 @@ export default function EditDraftPage() {
   const params = useParams();
   const draftId = params.id as string;
   
-  const { post: draft, loading, error } = useBlogPost(draftId);
+  const { post: draft, loading, error, refetch } = useBlogPost(draftId);
   const { updatePost } = useBlogPostMutations();
   
   const [saving, setSaving] = useState(false);
@@ -131,6 +131,8 @@ export default function EditDraftPage() {
       // Extract images from metadata (Phase 2 stores them here)
       const featuredImageFromMetadata = metadata.featured_image as string | undefined;
       const featuredImageAltFromMetadata = metadata.featured_image_alt as string | undefined;
+      const thumbnailImageFromMetadata = metadata.thumbnail_image as string | undefined;
+      const thumbnailImageAltFromMetadata = metadata.thumbnail_image_alt as string | undefined;
       const contentImagesFromMetadata = metadata.content_images as Array<{ url: string; alt: string }> | undefined;
 
       // Set content images for display
@@ -150,8 +152,8 @@ export default function EditDraftPage() {
         metaDescription: extractedFields.meta_description || normalized.excerpt || '',
         featuredImage: featuredImageFromMetadata || extractedFields.featured_image || '',
         featuredImageAlt: featuredImageAltFromMetadata || extractedFields.featured_image_alt || '',
-        thumbnailImage: extractedFields.thumbnail_image || '',
-        thumbnailImageAlt: extractedFields.thumbnail_image_alt || '',
+        thumbnailImage: thumbnailImageFromMetadata || extractedFields.thumbnail_image || '',
+        thumbnailImageAlt: thumbnailImageAltFromMetadata || extractedFields.thumbnail_image_alt || '',
         authorName: extractedFields.author_name || '',
         authorImage: extractedFields.author_image || '',
         authorBio: extractedFields.author_bio || '',
@@ -210,6 +212,8 @@ export default function EditDraftPage() {
     if (formData.authorImage) metadataPayload.author_image = formData.authorImage;
     if (formData.authorBio) metadataPayload.author_bio = formData.authorBio;
     if (formData.publishedAt) metadataPayload.published_at = formData.publishedAt;
+    // Include content images from Phase 2
+    if (contentImages.length > 0) metadataPayload.content_images = contentImages;
 
     return {
       ...existingMetadata,
@@ -578,11 +582,46 @@ export default function EditDraftPage() {
         }
 
         // Update content images state
-        if (result.content_images && result.content_images.length > 0) {
-          setContentImages(result.content_images.map((img: { url: string; alt: string }) => ({
-            url: img.url,
-            alt: img.alt,
-          })));
+        const updatedContentImages = result.content_images && result.content_images.length > 0
+          ? result.content_images.map((img: { url: string; alt: string }) => ({
+              url: img.url,
+              alt: img.alt,
+            }))
+          : contentImages;
+        
+        setContentImages(updatedContentImages);
+
+        // Save images to draft immediately using updatePost
+        try {
+          const updatedMetadata = buildMetadataPayload();
+          // Update metadata with new images
+          updatedMetadata.featured_image = result.header_image?.url || result.featured_image?.url || formData.featuredImage;
+          updatedMetadata.featured_image_alt = result.header_image?.alt || result.featured_image?.alt || formData.featuredImageAlt;
+          updatedMetadata.thumbnail_image = result.thumbnail_image?.url || formData.thumbnailImage;
+          updatedMetadata.thumbnail_image_alt = result.thumbnail_image?.alt || formData.thumbnailImageAlt;
+          updatedMetadata.content_images = updatedContentImages;
+          updatedMetadata.workflow_phase = 'phase_2_images';
+
+          const savedPost = await updatePost(draftId, {
+            metadata: updatedMetadata,
+          });
+
+          if (savedPost) {
+            logger.info('✅ Images saved to draft successfully', {
+              hasFeaturedImage: !!updatedMetadata.featured_image,
+              hasThumbnail: !!updatedMetadata.thumbnail_image,
+              contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
+            });
+            // Reload draft to get updated images
+            if (refetch) {
+              await refetch();
+            }
+          } else {
+            logger.warn('⚠️ Failed to save images to draft - updatePost returned null');
+          }
+        } catch (saveError) {
+          logger.warn('Error saving images to draft', { error: saveError });
+          // Don't fail the entire operation if save fails
         }
 
         setWorkflowPhase('phase_2_images');
@@ -630,11 +669,46 @@ export default function EditDraftPage() {
           }));
         }
 
-        if (result.content_images && result.content_images.length > 0) {
-          setContentImages(result.content_images.map((img: { url: string; alt: string }) => ({
-            url: img.url,
-            alt: img.alt,
-          })));
+        const updatedContentImages = result.content_images && result.content_images.length > 0
+          ? result.content_images.map((img: { url: string; alt: string }) => ({
+              url: img.url,
+              alt: img.alt,
+            }))
+          : contentImages;
+        
+        setContentImages(updatedContentImages);
+
+        // Save images to draft immediately using updatePost
+        try {
+          const updatedMetadata = buildMetadataPayload();
+          // Update metadata with new images
+          updatedMetadata.featured_image = result.header_image?.url || result.featured_image?.url || formData.featuredImage;
+          updatedMetadata.featured_image_alt = result.header_image?.alt || result.featured_image?.alt || formData.featuredImageAlt;
+          updatedMetadata.thumbnail_image = result.thumbnail_image?.url || formData.thumbnailImage;
+          updatedMetadata.thumbnail_image_alt = result.thumbnail_image?.alt || formData.thumbnailImageAlt;
+          updatedMetadata.content_images = updatedContentImages;
+          updatedMetadata.workflow_phase = 'phase_2_images';
+
+          const savedPost = await updatePost(draftId, {
+            metadata: updatedMetadata,
+          });
+
+          if (savedPost) {
+            logger.info('✅ Images saved to draft successfully', {
+              hasFeaturedImage: !!updatedMetadata.featured_image,
+              hasThumbnail: !!updatedMetadata.thumbnail_image,
+              contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
+            });
+            // Reload draft to get updated images
+            if (refetch) {
+              await refetch();
+            }
+          } else {
+            logger.warn('⚠️ Failed to save images to draft - updatePost returned null');
+          }
+        } catch (saveError) {
+          logger.warn('Error saving images to draft', { error: saveError });
+          // Don't fail the entire operation if save fails
         }
 
         setWorkflowPhase('phase_2_images');
