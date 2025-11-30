@@ -194,8 +194,9 @@ export default function TipTapEditor({
     editorProps: {
       attributes: {
         class: `prose prose-lg dark:prose-invert max-w-none focus:outline-none px-6 py-4 min-h-[500px] ${
-          !editable ? 'pointer-events-none select-none' : ''
+          !editable ? 'pointer-events-none select-none' : 'cursor-text'
         }`,
+        'data-editable': editable ? 'true' : 'false',
       },
       // Enhanced paste handling
       transformPastedHTML(html) {
