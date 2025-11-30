@@ -561,8 +561,8 @@ export default function QueueItemDetailPage() {
         )}
       </div>
 
-      {/* Workflow Phase Manager */}
-      {item.metadata?.workflow_type === 'multi_phase' && (
+      {/* Workflow Phase Manager - Show for multi-phase workflows or if content is generated */}
+      {(item.metadata?.workflow_type === 'multi_phase' || hasGeneratedContent) && (
         <WorkflowPhaseManager
           queueId={queueId}
           currentPhase={workflowPhase}
