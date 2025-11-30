@@ -9,9 +9,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/utils/logger';
 import { discoverWebflowStructure } from '@/lib/integrations/webflow-structure-discovery';
 import { autoDetectWebflowSiteId } from '@/lib/integrations/webflow-api';
+import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 
 /**
  * POST /api/integrations/webflow/scan-structure
@@ -45,109 +47,86 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json().catch(() => ({}));
     const targetSiteId = body.site_id || siteId;
 
-    // Get Webflow integration FIRST (before checking site_id)
-    // This allows us to use site_id from integration config if not provided
-    // Check for active status, but also log what we find
+    // Get Webflow integration using EnvironmentIntegrationsDB adapter
+    // This handles environment-specific tables and uses service client (avoids schema cache issues)
     let integration: any = null;
-    let integrationError: any = null;
     
     try {
-      const result = await supabase
-        .from('integrations')
-        .select('integration_id, config, metadata, status, name')
-        .eq('org_id', orgId)
-        .eq('type', 'webflow')
-        .eq('status', 'active')
-        .maybeSingle();
+      // Use EnvironmentIntegrationsDB adapter (handles environment tables and uses service client)
+      const dbAdapter = new EnvironmentIntegrationsDB();
+      const allIntegrations = await dbAdapter.getIntegrations(orgId);
       
-      integration = result.data;
-      integrationError = result.error;
-    } catch (error: any) {
-      // Catch any unexpected errors (like schema cache issues)
-      logger.error('Unexpected error querying integrations table', {
-        orgId,
-        error: error.message,
-        stack: error.stack,
-      });
-      integrationError = error;
-    }
-
-    if (integrationError) {
-      // Check if it's a schema cache issue
-      const isSchemaCacheError = integrationError.message?.includes('schema cache') || 
-                                 integrationError.message?.includes('Could not find the table');
+      // Find active Webflow integration
+      integration = allIntegrations.find(
+        (int: any) => int.type === 'webflow' && int.status === 'active'
+      );
       
-      logger.error('Error querying Webflow integration', {
+      if (integration) {
+        logger.info('Found Webflow integration via EnvironmentIntegrationsDB', {
+          integrationId: integration.id || integration.integration_id,
+          orgId,
+        });
+      }
+    } catch (adapterError: any) {
+      logger.error('EnvironmentIntegrationsDB failed', {
+        error: adapterError.message,
         orgId,
-        error: integrationError.message,
-        code: integrationError.code,
-        isSchemaCacheError,
+        stack: adapterError.stack,
       });
       
-      // If it's a schema cache error, try using service client as fallback
-      if (isSchemaCacheError) {
-        logger.warn('Schema cache error detected, trying service client fallback', { orgId });
-        try {
-          const { createServiceClient } = await import('@/lib/supabase/service');
-          const serviceClient = createServiceClient();
-          
-          const serviceResult = await serviceClient
-            .from('integrations')
-            .select('integration_id, config, metadata, status, name')
-            .eq('org_id', orgId)
-            .eq('type', 'webflow')
-            .eq('status', 'active')
-            .maybeSingle();
-          
-          if (!serviceResult.error && serviceResult.data) {
-            logger.info('Service client fallback succeeded', { orgId });
-            integration = serviceResult.data;
-            integrationError = null;
-          } else {
-            logger.error('Service client fallback also failed', {
-              error: serviceResult.error?.message,
-            });
-          }
-        } catch (fallbackError: any) {
-          logger.error('Service client fallback failed', {
-            error: fallbackError.message,
+      // Fallback: Try direct query with service client (unified table)
+      try {
+        const serviceClient = createServiceClient();
+        const result = await serviceClient
+          .from('integrations')
+          .select('integration_id, config, metadata, status, name')
+          .eq('org_id', orgId)
+          .eq('type', 'webflow')
+          .eq('status', 'active')
+          .maybeSingle();
+        
+        if (!result.error && result.data) {
+          integration = result.data;
+          logger.info('Found Webflow integration via service client fallback', {
+            integrationId: integration.integration_id,
+            orgId,
+          });
+        } else if (result.error) {
+          logger.error('Service client query failed', {
+            error: result.error.message,
+            code: result.error.code,
+            orgId,
           });
         }
-      }
-      
-      // If still have error after fallback attempt
-      if (integrationError && !integration) {
-        return NextResponse.json(
-          { 
-            error: 'Failed to query Webflow integration',
-            details: integrationError.message,
-            hint: isSchemaCacheError 
-              ? 'Database schema cache issue. Please try again in a moment or contact support.'
-              : undefined,
-          },
-          { status: 500 }
-        );
+      } catch (directError: any) {
+        logger.error('Direct query also failed', {
+          error: directError.message,
+          orgId,
+        });
       }
     }
 
     if (!integration) {
-      // Check if there are any Webflow integrations with different status
-      const { data: allWebflow } = await supabase
-        .from('integrations')
-        .select('integration_id, status, name')
-        .eq('org_id', orgId)
-        .eq('type', 'webflow');
+      // Try to get all Webflow integrations to provide helpful error message
+      let allWebflow: any[] = [];
+      try {
+        const dbAdapter = new EnvironmentIntegrationsDB();
+        const allIntegrations = await dbAdapter.getIntegrations(orgId);
+        allWebflow = allIntegrations.filter((int: any) => int.type === 'webflow');
+      } catch (e) {
+        // Ignore error - we're just trying to get helpful info
+      }
       
       logger.warn('No active Webflow integration found', {
         orgId,
-        foundIntegrations: allWebflow?.length || 0,
-        statuses: allWebflow?.map(i => ({ id: i.integration_id, status: i.status, name: i.name })) || [],
+        foundIntegrations: allWebflow.length,
+        statuses: allWebflow.map(i => ({ id: i.id || i.integration_id, status: i.status, name: i.name })),
       });
       
       return NextResponse.json(
         { 
           error: 'No active Webflow integration found',
-          hint: allWebflow && allWebflow.length > 0 
+          hint: allWebflow.length > 0 
             ? `Found ${allWebflow.length} integration(s) with status: ${allWebflow.map(i => i.status).join(', ')}. Status must be 'active'.`
             : 'Please configure a Webflow integration first.'
         },
@@ -155,13 +134,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const config = integration.config as any;
-    const metadata = integration.metadata as any;
-    const apiToken = config?.api_key || config?.apiToken || config?.token;
+    // Handle both adapter format and direct query format
+    const integrationId = integration.id || integration.integration_id;
+    const config = integration.config || integration.connection || {};
+    const metadata = integration.metadata || {};
+    const apiToken = config?.api_key || config?.apiToken || config?.token || config?.api_token;
     const integrationSiteId = config?.site_id || config?.siteId || metadata?.site_id;
 
     logger.info('Webflow integration found', {
-      integrationId: integration.integration_id,
+      integrationId,
       integrationName: integration.name,
       hasApiToken: !!apiToken,
       hasSiteId: !!integrationSiteId,
@@ -213,12 +194,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               site_id: finalSiteId,
             };
             
-            const { error: updateError } = await supabase
+            // Use service client for update to avoid schema cache issues
+            const serviceClient = createServiceClient();
+            const { error: updateError } = await serviceClient
               .from('integrations')
               .update({
                 config: updatedConfig,
               })
-              .eq('integration_id', integration.integration_id);
+              .eq('integration_id', integrationId);
             
             if (updateError) {
               logger.warn('Failed to store auto-detected site_id in config', {
@@ -291,12 +274,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Create scan record
-    const { data: scanRecord, error: scanError } = await supabase
+    // Create scan record (use service client for reliability)
+    const serviceClient = createServiceClient();
+    const { data: scanRecord, error: scanError } = await serviceClient
       .from('webflow_structure_scans')
       .insert({
         org_id: orgId,
-        integration_id: integration.integration_id,
+        integration_id: integrationId,
         site_id: finalSiteId,
         scan_type: rescan ? 'full' : 'full',
         status: 'scanning',
