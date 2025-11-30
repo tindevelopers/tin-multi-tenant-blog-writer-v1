@@ -388,12 +388,35 @@ export async function getWorkflowPhase(queueId: string): Promise<WorkflowPhase |
     const supabase = createServiceClient();
     const { data: queueItem } = await supabase
       .from('blog_generation_queue')
-      .select('metadata')
+      .select('metadata, status')
       .eq('queue_id', queueId)
       .single();
 
-    return (queueItem?.metadata as any)?.workflow_phase || null;
-  } catch {
+    if (!queueItem) return null;
+
+    // Check metadata first
+    const phaseFromMetadata = (queueItem.metadata as any)?.workflow_phase;
+    if (phaseFromMetadata) {
+      return phaseFromMetadata as WorkflowPhase;
+    }
+
+    // Infer phase from status
+    if (queueItem.status === 'generated' || queueItem.status === 'completed') {
+      // Check if we have post_id to determine if draft was created
+      const { data: queueItemWithPost } = await supabase
+        .from('blog_generation_queue')
+        .select('post_id')
+        .eq('queue_id', queueId)
+        .single();
+      
+      if (queueItemWithPost?.post_id) {
+        return 'phase_1_content'; // At least Phase 1 is done
+      }
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Error getting workflow phase', { error, queueId });
     return null;
   }
 }

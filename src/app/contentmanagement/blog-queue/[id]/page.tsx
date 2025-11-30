@@ -22,6 +22,9 @@ import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
 import { normalizeBlogContent } from "@/lib/content-sanitizer";
 import HeadingStructure from "@/components/blog-writer/HeadingStructure";
+import WorkflowPhaseManager from "@/components/workflow/WorkflowPhaseManager";
+import { getWorkflowPhase } from "@/lib/workflow-phase-manager";
+import type { WorkflowPhase } from "@/lib/workflow-phase-manager";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -39,6 +42,7 @@ export default function QueueItemDetailPage() {
   const [normalizedContent, setNormalizedContent] = useState<ReturnType<typeof normalizeBlogContent> | null>(null);
   const [phase2Loading, setPhase2Loading] = useState(false);
   const [phase3Loading, setPhase3Loading] = useState(false);
+  const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -95,6 +99,21 @@ export default function QueueItemDetailPage() {
       }
     }
   }, [item]);
+
+  // Fetch workflow phase
+  useEffect(() => {
+    const fetchWorkflowPhase = async () => {
+      if (queueId) {
+        try {
+          const phase = await getWorkflowPhase(queueId);
+          setWorkflowPhase(phase);
+        } catch (error) {
+          logger.error("Error fetching workflow phase", { error });
+        }
+      }
+    };
+    fetchWorkflowPhase();
+  }, [queueId, item]);
 
 
   const handleCancel = async () => {
@@ -541,6 +560,27 @@ export default function QueueItemDetailPage() {
         </div>
         )}
       </div>
+
+      {/* Workflow Phase Manager */}
+      {item.metadata?.workflow_type === 'multi_phase' && (
+        <WorkflowPhaseManager
+          queueId={queueId}
+          currentPhase={workflowPhase}
+          postId={postId || null}
+          onPhaseComplete={(phase, postId) => {
+            logger.info('Phase completed', { phase, postId });
+            router.push(`/contentmanagement/drafts/edit/${postId}`);
+          }}
+          onResumePhase={(phase) => {
+            if (phase === 'phase_2_images') {
+              handlePhase2ImageGeneration();
+            } else if (phase === 'phase_3_enhancement') {
+              handlePhase3ContentEnhancement();
+            }
+          }}
+          className="mb-6"
+        />
+      )}
 
       {/* Generation Details */}
       <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
