@@ -124,7 +124,7 @@ export function extractHeadings(html: string): Array<{ level: number; text: stri
  */
 export function normalizeBlogContent(data: any): {
   title: string;
- ript: string;
+  excerpt: string;
   content: string;
   wordCount: number;
   headings: Array<{ level: number; text: string; id: string }>;
