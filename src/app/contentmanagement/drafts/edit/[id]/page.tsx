@@ -10,7 +10,12 @@ import {
   ArrowsRightLeftIcon,
   SparklesIcon,
   XMarkIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  DocumentTextIcon,
+  PhotoIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon
 } from "@heroicons/react/24/outline";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 import { extractBlogFields, generateSlug, calculateReadTime, validateBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
@@ -18,9 +23,10 @@ import { dataForSEOContentGenerationClient } from "@/lib/dataforseo-content-gene
 import { llmAnalysisClient } from "@/lib/llm-analysis-client";
 import { extractImagesFromContent, extractFeaturedImage } from "@/lib/image-extractor";
 import { logger } from "@/utils/logger";
-import { ExclamationTriangleIcon, InformationCircleIcon, CheckCircleIcon } from "@heroicons/react/24/outline";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
 import { ContentInsightsSidebar } from "@/components/content/ContentInsightsSidebar";
+import WorkflowStagesHorizontal from "@/components/workflow/WorkflowStagesHorizontal";
+import type { WorkflowPhase } from "@/lib/workflow-phase-manager";
 
 type DraftFormState = {
   title: string;
@@ -86,11 +92,27 @@ export default function EditDraftPage() {
   const [showFieldConfig, setShowFieldConfig] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
+
+  // Determine phase completion status
+  const phase1Complete = workflowPhase && ['phase_1_content', 'phase_2_images', 'phase_3_enhancement', 'completed'].includes(workflowPhase);
+  const phase2Complete = workflowPhase && ['phase_2_images', 'phase_3_enhancement', 'completed'].includes(workflowPhase);
+  const phase3Complete = workflowPhase && ['phase_3_enhancement', 'completed'].includes(workflowPhase);
 
   useEffect(() => {
     if (draft) {
       const metadata = (draft.metadata as Record<string, unknown>) || {};
       const seoData = (draft.seo_data as Record<string, unknown>) || {};
+      
+      // Extract workflow phase from metadata
+      const phase = metadata.workflow_phase as WorkflowPhase | undefined;
+      if (phase) {
+        setWorkflowPhase(phase);
+      } else if (draft.content && draft.title) {
+        // If content exists but no phase set, assume Phase 1 is complete
+        setWorkflowPhase('phase_1_content');
+      }
+      
       const extractedFields = extractBlogFields({
         title: draft.title || '',
         content: draft.content || '',
@@ -576,6 +598,35 @@ export default function EditDraftPage() {
         </div>
       </div>
 
+      {/* Workflow Stages - Horizontal */}
+      {workflowPhase && (
+        <div className="mb-6">
+          <WorkflowStagesHorizontal currentPhase={workflowPhase} />
+          
+          {/* Phase-specific indicators */}
+          <div className="mt-4 flex flex-wrap gap-3">
+            {phase1Complete && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                <CheckCircleIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                <span className="text-sm text-green-700 dark:text-green-300 font-medium">Phase 1: Content Generated</span>
+              </div>
+            )}
+            {phase2Complete && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                <CheckCircleIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <span className="text-sm text-purple-700 dark:text-purple-300 font-medium">Phase 2: Images Added</span>
+              </div>
+            )}
+            {phase3Complete && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+                <CheckCircleIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">Phase 3: Enhanced Metadata</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Two Column Layout: Content Editor + Sidebar */}
       <div className={`grid gap-6 transition-all duration-300 ${sidebarOpen ? 'lg:grid-cols-[1fr_400px]' : 'lg:grid-cols-1'}`}>
         {/* Main Content Area */}
@@ -639,7 +690,15 @@ export default function EditDraftPage() {
         {/* Content */}
         <div>
           <label htmlFor="content" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Content
+            <span className="flex items-center gap-2">
+              Content
+              {phase1Complete && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
+                  <DocumentTextIcon className="w-3 h-3" />
+                  Phase 1 Complete
+                </span>
+              )}
+            </span>
           </label>
           <TipTapEditor
             content={formData.content || ''}
@@ -859,8 +918,14 @@ export default function EditDraftPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 flex-wrap">
                   SEO Title
+                  {phase3Complete && formData.seoTitle && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 rounded">
+                      <SparklesIcon className="w-3 h-3" />
+                      Phase 3
+                    </span>
+                  )}
                   {formData.seoTitle && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded">
                       <CheckCircleIcon className="w-3 h-3" />
@@ -879,8 +944,14 @@ export default function EditDraftPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 flex-wrap">
                   Meta Description
+                  {phase3Complete && formData.metaDescription && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300 rounded">
+                      <SparklesIcon className="w-3 h-3" />
+                      Phase 3
+                    </span>
+                  )}
                   {fieldValidation?.missingRecommended.includes('meta_description') && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded">
                       <ExclamationTriangleIcon className="w-3 h-3" />
@@ -908,8 +979,14 @@ export default function EditDraftPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 flex-wrap">
                   Featured Image URL
+                  {phase2Complete && formData.featuredImage && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded">
+                      <PhotoIcon className="w-3 h-3" />
+                      Phase 2
+                    </span>
+                  )}
                   {fieldValidation?.missingRecommended.includes('featured_image') && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded">
                       <ExclamationTriangleIcon className="w-3 h-3" />
