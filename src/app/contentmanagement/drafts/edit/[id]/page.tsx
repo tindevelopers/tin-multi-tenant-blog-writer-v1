@@ -498,6 +498,152 @@ export default function EditDraftPage() {
     }
   };
 
+  const handlePhase2ImageGeneration = async () => {
+    if (!formData.content || !formData.title) {
+      alert('Please generate content (Phase 1) before generating images.');
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      // Get queue_id from draft metadata if available
+      const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+      const queueId = draftMetadata?.workflow_queue_id as string | undefined;
+
+      if (!queueId) {
+        // Create a temporary queue entry for Phase 2
+        const queueResponse = await fetch('/api/workflow/multi-phase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            topic: formData.title,
+            keywords: [],
+            target_audience: 'general',
+            tone: 'professional',
+            word_count: 1500,
+          }),
+        });
+
+        if (!queueResponse.ok) {
+          throw new Error('Failed to create queue entry');
+        }
+
+        const queueResult = await queueResponse.json();
+        const tempQueueId = queueResult.queue_id;
+
+        // Now generate images
+        const response = await fetch('/api/workflow/generate-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            queue_id: tempQueueId,
+            topic: formData.title,
+            title: formData.title,
+            content: formData.content, // Pass content for analysis
+            excerpt: formData.excerpt,
+            generate_featured: true,
+            generate_content_images: true,
+            generate_thumbnail: true, // Generate thumbnail
+            style: 'photographic',
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Image generation failed');
+        }
+
+        const result = await response.json();
+
+        // Update form data with generated images
+        if (result.header_image || result.featured_image) {
+          const headerImage = result.header_image || result.featured_image;
+          setFormData(prev => ({
+            ...prev,
+            featuredImage: headerImage.url,
+            featuredImageAlt: headerImage.alt || `Header image for ${formData.title}`,
+          }));
+        }
+
+        if (result.thumbnail_image) {
+          setFormData(prev => ({
+            ...prev,
+            thumbnailImage: result.thumbnail_image.url,
+            thumbnailImageAlt: result.thumbnail_image.alt || `Thumbnail for ${formData.title}`,
+          }));
+        }
+
+        // Update content images state
+        if (result.content_images && result.content_images.length > 0) {
+          setContentImages(result.content_images.map((img: { url: string; alt: string }) => ({
+            url: img.url,
+            alt: img.alt,
+          })));
+        }
+
+        setWorkflowPhase('phase_2_images');
+        alert('✅ Phase 2: Images generated successfully! Header, thumbnail, and content images have been added.');
+      } else {
+        // Use existing queue_id
+        const response = await fetch('/api/workflow/generate-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            queue_id: queueId,
+            topic: formData.title,
+            title: formData.title,
+            content: formData.content,
+            excerpt: formData.excerpt,
+            generate_featured: true,
+            generate_content_images: true,
+            generate_thumbnail: true,
+            style: 'photographic',
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Image generation failed');
+        }
+
+        const result = await response.json();
+
+        // Update form data with generated images
+        if (result.header_image || result.featured_image) {
+          const headerImage = result.header_image || result.featured_image;
+          setFormData(prev => ({
+            ...prev,
+            featuredImage: headerImage.url,
+            featuredImageAlt: headerImage.alt || `Header image for ${formData.title}`,
+          }));
+        }
+
+        if (result.thumbnail_image) {
+          setFormData(prev => ({
+            ...prev,
+            thumbnailImage: result.thumbnail_image.url,
+            thumbnailImageAlt: result.thumbnail_image.alt || `Thumbnail for ${formData.title}`,
+          }));
+        }
+
+        if (result.content_images && result.content_images.length > 0) {
+          setContentImages(result.content_images.map((img: { url: string; alt: string }) => ({
+            url: img.url,
+            alt: img.alt,
+          })));
+        }
+
+        setWorkflowPhase('phase_2_images');
+        alert('✅ Phase 2: Images generated successfully!');
+      }
+    } catch (error) {
+      logger.error('Phase 2 image generation failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate images. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   const handlePhase3ContentEnhancement = async () => {
     if (!formData.content) {
       alert('Please add content before enhancing metadata.');
@@ -791,14 +937,32 @@ export default function EditDraftPage() {
                   {aiGenerating ? 'Generating...' : 'Generate Content (Phase 1)'}
                 </button>
               )}
-              {!phase3Complete && phase1Complete && (
+              {phase1Complete && !phase2Complete && (
+                <button
+                  onClick={handlePhase2ImageGeneration}
+                  disabled={aiGenerating}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 dark:bg-purple-500 text-white rounded-lg hover:bg-purple-700 dark:hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {aiGenerating ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <PhotoIcon className="w-4 h-4" />
+                  )}
+                  {aiGenerating ? 'Generating Images...' : 'Generate Images (Phase 2)'}
+                </button>
+              )}
+              {phase2Complete && !phase3Complete && (
                 <button
                   onClick={handlePhase3ContentEnhancement}
                   disabled={aiGenerating}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                 >
-                  <SparklesIcon className="w-4 h-4" />
-                  {aiGenerating ? 'Enhancing...' : 'Enhance Metadata (Phase 3)'}
+                  {aiGenerating ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <SparklesIcon className="w-4 h-4" />
+                  )}
+                  {aiGenerating ? 'Enhancing...' : 'Enhance & Add Links (Phase 3)'}
                 </button>
               )}
             </div>

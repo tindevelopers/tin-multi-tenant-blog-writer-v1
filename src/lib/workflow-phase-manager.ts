@@ -174,7 +174,9 @@ export async function handlePhase2Completion(
   queueId: string,
   images: {
     featured_image?: { url: string; alt: string };
-    content_images?: Array<{ url: string; alt: string }>;
+    header_image?: { url: string; alt: string }; // NEW: Header image
+    thumbnail_image?: { url: string; alt: string }; // NEW: Thumbnail image
+    content_images?: Array<{ url: string; alt: string; position?: number }>;
   }
 ): Promise<PhaseCompletionResult> {
   try {
@@ -195,15 +197,23 @@ export async function handlePhase2Completion(
       throw new Error('Draft not found. Phase 1 must complete first.');
     }
 
-    // Update draft with images
+    // Update draft with images (organized for Webflow)
     const updateData: BlogPostUpdate = {
       updated_at: new Date().toISOString(),
       metadata: {
         ...(queueItem.generation_metadata || {}),
         workflow_phase: 'phase_2_images',
         workflow_queue_id: queueId,
-        featured_image: images.featured_image?.url || null,
-        featured_image_alt: images.featured_image?.alt || null,
+        // Featured/Header image (for Webflow header)
+        featured_image: images.header_image?.url || images.featured_image?.url || null,
+        featured_image_alt: images.header_image?.alt || images.featured_image?.alt || null,
+        // Header image (explicit for Webflow)
+        header_image: images.header_image?.url || null,
+        header_image_alt: images.header_image?.alt || null,
+        // Thumbnail image (for Webflow thumbnail)
+        thumbnail_image: images.thumbnail_image?.url || null,
+        thumbnail_image_alt: images.thumbnail_image?.alt || null,
+        // Content images (for body placement)
         content_images: images.content_images || [],
       },
     };

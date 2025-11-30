@@ -53,6 +53,51 @@ async function generateEnhancedMetadata(
 }
 
 /**
+ * Insert internal hyperlinks into content based on website analysis
+ * This is a placeholder - should integrate with website analysis service
+ */
+async function insertInternalLinks(
+  content: string,
+  title: string,
+  keywords: string[]
+): Promise<string> {
+  // TODO: Integrate with website analysis service to get relevant internal links
+  // For now, this is a placeholder that can be enhanced
+  
+  // Extract potential anchor text from content
+  const anchorTexts: string[] = [];
+  const headingRegex = /<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi;
+  let match;
+  
+  while ((match = headingRegex.exec(content)) !== null) {
+    const headingText = match[1].replace(/<[^>]+>/g, '').trim();
+    if (headingText && headingText.length > 5 && headingText.length < 50) {
+      anchorTexts.push(headingText);
+    }
+  }
+  
+  // Also extract keywords as potential anchor text
+  keywords.forEach(keyword => {
+    if (keyword.length > 3 && keyword.length < 30) {
+      anchorTexts.push(keyword);
+    }
+  });
+  
+  // For now, return content as-is (no actual links inserted)
+  // This should be replaced with actual website analysis integration
+  logger.info('Hyperlink insertion requested', {
+    anchorTextsFound: anchorTexts.length,
+    keywordsCount: keywords.length,
+  });
+  
+  // TODO: Call website analysis API to get relevant internal links
+  // TODO: Insert links into content at appropriate positions
+  // TODO: Ensure links are natural and contextually relevant
+  
+  return content; // Placeholder - return unchanged for now
+}
+
+/**
  * Clean and improve HTML structure using OpenAI
  */
 async function improveContentStructure(
@@ -101,6 +146,7 @@ export async function POST(request: NextRequest) {
       keywords = [],
       generate_structured_data,
       improve_formatting = true,
+      insert_hyperlinks = false, // NEW: Option to insert hyperlinks
     } = body;
 
     // Validate required fields with better error messages
@@ -139,6 +185,19 @@ export async function POST(request: NextRequest) {
       enhancedContent = await improveContentStructure(content, finalTitle);
     }
 
+    // Step 1.5: Insert hyperlinks if requested (before other enhancements)
+    if (insert_hyperlinks) {
+      try {
+        enhancedContent = await insertInternalLinks(enhancedContent, finalTitle, keywordArray);
+        logger.info('Hyperlinks inserted into content');
+      } catch (linkError: any) {
+        logger.warn('Hyperlink insertion failed, continuing without links', {
+          error: linkError.message,
+        });
+        // Continue without hyperlinks
+      }
+    }
+
     // Step 2: Perform local content analysis
     const analysis = analyzeContent({
       content: enhancedContent,
@@ -150,7 +209,6 @@ export async function POST(request: NextRequest) {
     // Step 3: Generate enhanced metadata with OpenAI
     // Extract clean text from HTML for metadata generation
     const plainTextContent = enhancedContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const keywordArray = Array.isArray(keywords) ? keywords : [keywords].filter(Boolean);
     const enhancedMetadata = await generateEnhancedMetadata(plainTextContent, finalTitle, keywordArray);
 
     // Step 4: Try backend enhancement for additional fields
