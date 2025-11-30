@@ -54,7 +54,6 @@ export default function HeadingStructure({ headings, className = "" }: HeadingSt
           <div className="space-y-1 max-h-96 overflow-y-auto">
             {headings.map((heading, index) => {
               const indent = (heading.level - 1) * 16;
-              const Tag = `h${heading.level}` as keyof JSX.IntrinsicElements;
               
               return (
                 <div
