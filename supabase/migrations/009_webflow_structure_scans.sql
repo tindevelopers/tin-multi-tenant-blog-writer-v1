@@ -9,7 +9,7 @@
 CREATE TABLE IF NOT EXISTS webflow_structure_scans (
   scan_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   org_id UUID REFERENCES organizations(org_id) ON DELETE CASCADE NOT NULL,
-  integration_id UUID REFERENCES integrations(integration_id) ON DELETE CASCADE,
+  integration_id UUID, -- Will add FK constraint later if integrations table exists
   site_id TEXT NOT NULL,
   
   -- Scan Metadata
@@ -155,4 +155,31 @@ COMMENT ON TABLE webflow_structure_scans IS 'Stores discovered Webflow site stru
 COMMENT ON COLUMN webflow_structure_scans.scan_type IS 'full: complete site scan, incremental: only new/changed items';
 COMMENT ON COLUMN webflow_structure_scans.status IS 'pending: queued, scanning: in progress, completed: success, failed: error occurred';
 COMMENT ON COLUMN webflow_structure_scans.existing_content IS 'Array of ExistingContent objects with id, title, url, slug, keywords, published_at, type (cms|static)';
+
+-- ============================================
+-- 7. Add Foreign Key Constraint (if integrations table exists)
+-- ============================================
+
+-- Add foreign key constraint to integrations table if it exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name = 'integrations'
+  ) THEN
+    -- Check if constraint already exists
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE constraint_name = 'webflow_structure_scans_integration_id_fkey'
+      AND table_name = 'webflow_structure_scans'
+    ) THEN
+      ALTER TABLE webflow_structure_scans
+      ADD CONSTRAINT webflow_structure_scans_integration_id_fkey
+      FOREIGN KEY (integration_id) 
+      REFERENCES integrations(integration_id) 
+      ON DELETE CASCADE;
+    END IF;
+  END IF;
+END $$;
 
