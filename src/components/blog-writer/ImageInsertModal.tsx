@@ -44,6 +44,8 @@ export default function ImageInsertModal({
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [generatePrompt, setGeneratePrompt] = useState(excerpt);
+  const [imageAlignment, setImageAlignment] = useState<'left' | 'center' | 'right' | 'full'>('center');
+  const [imageSize, setImageSize] = useState<'small' | 'medium' | 'large' | 'full'>('large');
 
   // Load media assets when library tab is active or search term changes
   useEffect(() => {
@@ -108,7 +110,7 @@ export default function ImageInsertModal({
     } finally {
       setUploading(false);
     }
-  }, [onImageSelect, onClose]);
+  }, [onImageSelect, onClose, imageAlignment, imageSize]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
