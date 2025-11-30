@@ -1111,8 +1111,6 @@ export default function EditDraftPage() {
             Updating the status removes this post from the Draft queue when set to Published/Scheduled and makes it appear in the Publishing dashboard.
           </p>
         </div>
-        </div>
-      </div>
       </div>
 
       {/* Field Configuration Modal */}
