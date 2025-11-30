@@ -1331,11 +1331,7 @@ export default function IntegrationsManagementPage() {
                       const { data: { session } } = await supabase.auth.getSession();
                       if (!session) return;
 
-                      const response = await fetch('/api/integrations', {
-                        headers: {
-                          'Authorization': `Bearer ${session.access_token}`,
-                        },
-                      });
+                      const response = await fetch('/api/integrations');
 
                       if (response.ok) {
                         const result = await response.json();

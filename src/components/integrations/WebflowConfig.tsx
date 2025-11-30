@@ -57,11 +57,7 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/integrations/${integrationId}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
+      const response = await fetch(`/api/integrations/${integrationId}`);
 
       if (response.ok) {
         const result = await response.json();
@@ -125,15 +121,6 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     setSuccess(null);
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        setError("Not authenticated");
-        setLoading(false);
-        return;
-      }
-
       if (!apiKey || (!apiKey.includes('****') && !collectionId)) {
         setError("API Key and Collection ID are required");
         setLoading(false);
@@ -175,18 +162,17 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
       if (integrationId) {
         // Update existing integration - need to merge with existing config
         // First get current integration to merge configs
-        const getResponse = await fetch(`/api/integrations/${integrationId}`, {
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        });
+        const getResponse = await fetch(`/api/integrations/${integrationId}`);
         
         if (!getResponse.ok) {
           throw new Error("Failed to fetch current integration");
         }
         
         const getData = await getResponse.json();
-        const currentConfig = getData.success && getData.data ? getData.data.config : {};
+        // Handle both 'config' and 'connection' properties for backward compatibility
+        const currentConfig = getData.success && getData.data 
+          ? (getData.data.config || getData.data.connection || {})
+          : {};
         
         // Merge configs
         const mergedConfig = {
@@ -207,7 +193,6 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         response = await fetch(`/api/integrations/${integrationId}`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(updateBody),
@@ -217,7 +202,6 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         response = await fetch('/api/integrations/connect-api-key', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(requestBody),
@@ -262,19 +246,8 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     setSuccess(null);
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError("Not authenticated");
-        setTesting(false);
-        return;
-      }
-
       const response = await fetch(`/api/integrations/${integrationId}/test`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
       });
 
       const data = await response.json();
@@ -313,19 +286,8 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     setSuccess(null);
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError("Not authenticated");
-        setSyncing(false);
-        return;
-      }
-
       const response = await fetch(`/api/integrations/${integrationId}/sync`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
       });
 
       const data = await response.json();
@@ -349,18 +311,7 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     }
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError("Not authenticated");
-        return;
-      }
-
-      const response = await fetch(`/api/integrations/${integrationId}/export`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
+      const response = await fetch(`/api/integrations/${integrationId}/export`);
 
       const data = await response.json();
 
