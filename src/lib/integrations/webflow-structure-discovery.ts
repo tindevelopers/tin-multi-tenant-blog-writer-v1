@@ -278,8 +278,11 @@ export async function discoverWebflowStructure(
         const url = `https://${siteId}.webflow.io/${slug}`;
         
         // Extract keywords from title and content
-        const title = item.fieldData?.name || item.fieldData?.title || '';
-        const content = item.fieldData?.['post-body'] || item.fieldData?.content || '';
+        // Handle unknown types from fieldData index signature
+        const titleValue = item.fieldData?.name || item.fieldData?.title;
+        const title: string = typeof titleValue === 'string' ? titleValue : '';
+        const contentValue = item.fieldData?.['post-body'] || item.fieldData?.content;
+        const content: string = typeof contentValue === 'string' ? contentValue : '';
         const keywords = extractKeywords(title + ' ' + content);
         
         existingContent.push({
