@@ -823,12 +823,59 @@ export default function EditDraftPage() {
 
       const result = await response.json();
       
-      // Extract image URL from response
+      logger.debug('Thumbnail generation response', {
+        resultKeys: Object.keys(result),
+        hasSuccess: 'success' in result,
+        hasImages: 'images' in result,
+        imagesLength: result.images?.length,
+        hasImageUrl: 'image_url' in result,
+        fullResult: JSON.stringify(result).substring(0, 500), // First 500 chars for debugging
+      });
+      
+      // Extract image URL from response - handle multiple response formats
       let imageUrl = '';
-      if (result.images && result.images.length > 0) {
-        imageUrl = result.images[0].image_url || result.images[0].image_data || '';
-      } else if (result.image_url) {
+      
+      // Format 1: { success: true, images: [{ image_url: '...' }] }
+      if (result.success && result.images && Array.isArray(result.images) && result.images.length > 0) {
+        const image = result.images[0];
+        imageUrl = image.image_url || image.url || image.secure_url || image.image_data || '';
+        logger.debug('Extracted URL from result.images[0]', { imageUrl: imageUrl.substring(0, 100) });
+      }
+      // Format 2: { images: [{ image_url: '...' }] } (without success field)
+      else if (result.images && Array.isArray(result.images) && result.images.length > 0) {
+        const image = result.images[0];
+        imageUrl = image.image_url || image.url || image.secure_url || image.image_data || '';
+        logger.debug('Extracted URL from result.images[0] (no success field)', { imageUrl: imageUrl.substring(0, 100) });
+      }
+      // Format 3: { image_url: '...' } (direct URL)
+      else if (result.image_url) {
         imageUrl = result.image_url;
+        logger.debug('Extracted URL from result.image_url', { imageUrl: imageUrl.substring(0, 100) });
+      }
+      // Format 4: { url: '...' } (alternative field name)
+      else if (result.url) {
+        imageUrl = result.url;
+        logger.debug('Extracted URL from result.url', { imageUrl: imageUrl.substring(0, 100) });
+      }
+      // Format 5: { image: { url: '...' } } (nested)
+      else if (result.image?.url || result.image?.image_url) {
+        imageUrl = result.image.url || result.image.image_url;
+        logger.debug('Extracted URL from result.image', { imageUrl: imageUrl.substring(0, 100) });
+      }
+      // Format 6: { data: { image_url: '...' } } (nested data)
+      else if (result.data?.image_url || result.data?.url) {
+        imageUrl = result.data.image_url || result.data.url;
+        logger.debug('Extracted URL from result.data', { imageUrl: imageUrl.substring(0, 100) });
+      }
+      // Format 7: Base64 data URL
+      else if (result.image_data) {
+        const format = result.format || 'png';
+        if (result.image_data.startsWith('data:image/')) {
+          imageUrl = result.image_data;
+        } else {
+          imageUrl = `data:image/${format};base64,${result.image_data}`;
+        }
+        logger.debug('Extracted base64 image data', { format, hasData: !!result.image_data });
       }
 
       if (imageUrl) {
@@ -837,9 +884,18 @@ export default function EditDraftPage() {
           thumbnailImage: imageUrl,
           thumbnailImageAlt: prev.thumbnailImageAlt || `Thumbnail for ${formData.title}`,
         }));
+        logger.info('✅ Thumbnail generated and set successfully', {
+          imageUrl: imageUrl.substring(0, 100),
+          title: formData.title,
+        });
         alert('Thumbnail generated successfully!');
       } else {
-        throw new Error('No image URL returned');
+        logger.error('❌ No image URL found in response', {
+          resultKeys: Object.keys(result),
+          resultType: typeof result,
+          resultString: JSON.stringify(result).substring(0, 500),
+        });
+        throw new Error(`No image URL returned. Response format: ${JSON.stringify(result).substring(0, 200)}`);
       }
     } catch (error) {
       logger.error('Thumbnail generation failed:', error);
