@@ -80,6 +80,29 @@ export default function MediaPage() {
       }
 
       const result = await response.json();
+      
+      // Debug: Log what we received
+      logger.debug('Media assets loaded:', {
+        count: result.data?.length || 0,
+        files: result.data?.map((f: MediaAsset) => ({
+          asset_id: f.asset_id,
+          file_name: f.file_name,
+          file_type: f.file_type,
+          file_url: f.file_url ? f.file_url.substring(0, 50) + '...' : 'MISSING',
+          has_file_url: !!f.file_url,
+        })),
+      });
+      
+      // Check for missing URLs
+      const missingUrls = result.data?.filter((f: MediaAsset) => !f.file_url) || [];
+      if (missingUrls.length > 0) {
+        logger.warn('Media assets with missing file_url:', {
+          count: missingUrls.length,
+          asset_ids: missingUrls.map((f: MediaAsset) => f.asset_id),
+        });
+        console.warn('⚠️ Found', missingUrls.length, 'media assets without file_url');
+      }
+      
       setMediaFiles(result.data || []);
       setStats(result.stats || stats);
     } catch (error) {

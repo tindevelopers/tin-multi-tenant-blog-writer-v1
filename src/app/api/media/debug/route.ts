@@ -63,38 +63,62 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('org_id', userProfile.org_id);
 
-    return NextResponse.json({
-      user: {
-        id: user.id,
-        orgId: userProfile.org_id,
-      },
-      userClient: {
-        count: userClientCount || 0,
-        data: userClientData || [],
-        error: userClientError ? {
-          message: userClientError.message,
-          code: userClientError.code,
-          details: userClientError.details,
-          hint: userClientError.hint,
-        } : null,
-      },
-      serviceClient: {
-        count: serviceClientCount || 0,
-        data: serviceClientData || [],
-        error: serviceClientError ? {
-          message: serviceClientError.message,
-          code: serviceClientError.code,
-          details: serviceClientError.details,
-          hint: serviceClientError.hint,
-        } : null,
-      },
-      rlsIssue: (serviceClientCount || 0) > (userClientCount || 0),
-      summary: {
-        assetsInDb: serviceClientCount || 0,
-        assetsVisibleToUser: userClientCount || 0,
-        rlsBlocking: (serviceClientCount || 0) > (userClientCount || 0),
-      },
-    });
+      // Check file_url values
+      const userClientWithUrls = (userClientData || []).filter((a: any) => a.file_url);
+      const userClientWithoutUrls = (userClientData || []).filter((a: any) => !a.file_url);
+      const serviceClientWithUrls = (serviceClientData || []).filter((a: any) => a.file_url);
+      const serviceClientWithoutUrls = (serviceClientData || []).filter((a: any) => !a.file_url);
+
+      return NextResponse.json({
+        user: {
+          id: user.id,
+          orgId: userProfile.org_id,
+        },
+        userClient: {
+          count: userClientCount || 0,
+          withFileUrl: userClientWithUrls.length,
+          withoutFileUrl: userClientWithoutUrls.length,
+          data: userClientData || [],
+          missingUrls: userClientWithoutUrls.map((a: any) => ({
+            asset_id: a.asset_id,
+            file_name: a.file_name,
+            file_type: a.file_type,
+            metadata: a.metadata,
+          })),
+          error: userClientError ? {
+            message: userClientError.message,
+            code: userClientError.code,
+            details: userClientError.details,
+            hint: userClientError.hint,
+          } : null,
+        },
+        serviceClient: {
+          count: serviceClientCount || 0,
+          withFileUrl: serviceClientWithUrls.length,
+          withoutFileUrl: serviceClientWithoutUrls.length,
+          data: serviceClientData || [],
+          missingUrls: serviceClientWithoutUrls.map((a: any) => ({
+            asset_id: a.asset_id,
+            file_name: a.file_name,
+            file_type: a.file_type,
+            metadata: a.metadata,
+          })),
+          error: serviceClientError ? {
+            message: serviceClientError.message,
+            code: serviceClientError.code,
+            details: serviceClientError.details,
+            hint: serviceClientError.hint,
+          } : null,
+        },
+        rlsIssue: (serviceClientCount || 0) > (userClientCount || 0),
+        fileUrlIssue: userClientWithoutUrls.length > 0,
+        summary: {
+          assetsInDb: serviceClientCount || 0,
+          assetsVisibleToUser: userClientCount || 0,
+          rlsBlocking: (serviceClientCount || 0) > (userClientCount || 0),
+          fileUrlMissing: userClientWithoutUrls.length,
+        },
+      });
 
   } catch (error: unknown) {
     logger.logError(error instanceof Error ? error : new Error('Unknown error'), {
