@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 import { discoverWebflowStructure } from '@/lib/integrations/webflow-structure-discovery';
+import { autoDetectWebflowSiteId } from '@/lib/integrations/webflow-api';
 
 /**
  * POST /api/integrations/webflow/scan-structure
@@ -46,17 +47,51 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Get Webflow integration FIRST (before checking site_id)
     // This allows us to use site_id from integration config if not provided
+    // Check for active status, but also log what we find
     const { data: integration, error: integrationError } = await supabase
       .from('integrations')
-      .select('integration_id, config, metadata')
+      .select('integration_id, config, metadata, status, name')
       .eq('org_id', orgId)
       .eq('type', 'webflow')
       .eq('status', 'active')
       .maybeSingle();
 
-    if (integrationError || !integration) {
+    if (integrationError) {
+      logger.error('Error querying Webflow integration', {
+        orgId,
+        error: integrationError.message,
+        code: integrationError.code,
+      });
       return NextResponse.json(
-        { error: 'No active Webflow integration found' },
+        { 
+          error: 'Failed to query Webflow integration',
+          details: integrationError.message 
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!integration) {
+      // Check if there are any Webflow integrations with different status
+      const { data: allWebflow } = await supabase
+        .from('integrations')
+        .select('integration_id, status, name')
+        .eq('org_id', orgId)
+        .eq('type', 'webflow');
+      
+      logger.warn('No active Webflow integration found', {
+        orgId,
+        foundIntegrations: allWebflow?.length || 0,
+        statuses: allWebflow?.map(i => ({ id: i.integration_id, status: i.status, name: i.name })) || [],
+      });
+      
+      return NextResponse.json(
+        { 
+          error: 'No active Webflow integration found',
+          hint: allWebflow && allWebflow.length > 0 
+            ? `Found ${allWebflow.length} integration(s) with status: ${allWebflow.map(i => i.status).join(', ')}. Status must be 'active'.`
+            : 'Please configure a Webflow integration first.'
+        },
         { status: 404 }
       );
     }
@@ -66,31 +101,98 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const apiToken = config?.api_key || config?.apiToken || config?.token;
     const integrationSiteId = config?.site_id || config?.siteId || metadata?.site_id;
 
+    logger.info('Webflow integration found', {
+      integrationId: integration.integration_id,
+      integrationName: integration.name,
+      hasApiToken: !!apiToken,
+      hasSiteId: !!integrationSiteId,
+      configKeys: Object.keys(config || {}),
+      metadataKeys: Object.keys(metadata || {}),
+    });
+
     if (!apiToken) {
+      logger.warn('Webflow API token missing', {
+        integrationId: integration.integration_id,
+        configKeys: Object.keys(config || {}),
+      });
       return NextResponse.json(
-        { error: 'Webflow API token not found in integration config' },
+        { 
+          error: 'Webflow API token not found in integration config',
+          hint: 'Check that api_key, apiToken, or token is set in the integration config',
+          integration_id: integration.integration_id,
+        },
         { status: 400 }
       );
     }
 
     // Use provided site_id or fall back to integration's site_id
-    const finalSiteId = targetSiteId || integrationSiteId;
+    let finalSiteId = targetSiteId || integrationSiteId;
 
+    // If site_id is still not found, try to auto-detect it
     if (!finalSiteId) {
-      logger.warn('Site ID not provided and not found in integration config', {
+      logger.info('Site ID not found in config, attempting auto-detection', {
         orgId,
         integrationId: integration.integration_id,
-        configKeys: Object.keys(config || {}),
-        metadataKeys: Object.keys(metadata || {}),
       });
-      return NextResponse.json(
-        { 
-          error: 'site_id is required',
-          hint: 'Provide site_id in request body or ensure it is configured in the Webflow integration',
-          integration_id: integration.integration_id,
-        },
-        { status: 400 }
-      );
+      
+      try {
+        // Try to get collection_id from config to improve auto-detection
+        const collectionId = config?.collection_id || config?.collectionId || metadata?.collection_id;
+        const detectedSiteId = await autoDetectWebflowSiteId(apiToken, collectionId || undefined);
+        
+        if (detectedSiteId) {
+          finalSiteId = detectedSiteId;
+          logger.info('Auto-detected Webflow site ID', {
+            siteId: finalSiteId,
+            integrationId: integration.integration_id,
+          });
+          
+          // Store the detected site_id in the integration config for future use
+          const updatedConfig = {
+            ...config,
+            site_id: finalSiteId,
+          };
+          
+          await supabase
+            .from('integrations')
+            .update({
+              config: updatedConfig,
+            })
+            .eq('integration_id', integration.integration_id);
+          
+          logger.info('Stored auto-detected site_id in integration config', {
+            integrationId: integration.integration_id,
+            siteId: finalSiteId,
+          });
+        } else {
+          logger.warn('Could not auto-detect Webflow site ID', {
+            orgId,
+            integrationId: integration.integration_id,
+          });
+          return NextResponse.json(
+            { 
+              error: 'site_id is required',
+              hint: 'Could not auto-detect site_id. Please provide site_id in request body or configure it in the Webflow integration.',
+              integration_id: integration.integration_id,
+            },
+            { status: 400 }
+          );
+        }
+      } catch (autoDetectError: any) {
+        logger.error('Failed to auto-detect Webflow site ID', {
+          error: autoDetectError.message,
+          orgId,
+          integrationId: integration.integration_id,
+        });
+        return NextResponse.json(
+          { 
+            error: 'site_id is required',
+            hint: `Auto-detection failed: ${autoDetectError.message}. Please provide site_id in request body or configure it in the Webflow integration.`,
+            integration_id: integration.integration_id,
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // Check if there's an existing scan in progress
@@ -329,7 +431,14 @@ async function performScan(
       totalContent: structure.existing_content.length,
     });
   } catch (error: any) {
-    logger.error('Webflow structure scan failed', { scanId, error: error.message });
+    logger.error('Webflow structure scan failed', { 
+      scanId, 
+      siteId,
+      orgId,
+      error: error.message,
+      stack: error.stack,
+      errorType: error.constructor?.name,
+    });
 
     // Update scan record with error
     await supabase

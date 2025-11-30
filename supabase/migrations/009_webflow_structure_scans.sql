@@ -97,7 +97,19 @@ CREATE POLICY "Managers can delete org webflow scans"
   );
 
 -- ============================================
--- 4. Triggers
+-- 4. Create update_updated_at_column function if it doesn't exist
+-- ============================================
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- 5. Triggers
 -- ============================================
 
 CREATE TRIGGER update_webflow_scans_updated_at 
@@ -106,7 +118,7 @@ CREATE TRIGGER update_webflow_scans_updated_at
   EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
--- 5. Helper Functions
+-- 6. Helper Functions
 -- ============================================
 
 -- Function to get latest scan for a site
@@ -148,7 +160,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================
--- 6. Comments
+-- 7. Comments
 -- ============================================
 
 COMMENT ON TABLE webflow_structure_scans IS 'Stores discovered Webflow site structure (CMS collections, items, and static pages) for efficient hyperlink insertion';
@@ -157,7 +169,7 @@ COMMENT ON COLUMN webflow_structure_scans.status IS 'pending: queued, scanning: 
 COMMENT ON COLUMN webflow_structure_scans.existing_content IS 'Array of ExistingContent objects with id, title, url, slug, keywords, published_at, type (cms|static)';
 
 -- ============================================
--- 7. Add Foreign Key Constraint (if integrations table exists)
+-- 8. Add Foreign Key Constraint (if integrations table exists)
 -- ============================================
 
 -- Add foreign key constraint to integrations table if it exists
