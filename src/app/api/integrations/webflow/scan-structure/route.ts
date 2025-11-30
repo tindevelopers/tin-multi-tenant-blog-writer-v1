@@ -269,35 +269,69 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Check if there's an existing scan in progress
+    // Check if there's an existing scan (using service client for reliable access)
+    const serviceClientForCheck = createServiceClient();
+    
     if (!rescan) {
-      const { data: existingScan } = await supabase
+      // Check for existing scan with same org_id, site_id, and scan_type
+      const { data: existingScans } = await serviceClientForCheck
         .from('webflow_structure_scans')
         .select('scan_id, status')
         .eq('org_id', orgId)
         .eq('site_id', finalSiteId)
-        .eq('status', 'scanning')
-        .single();
+        .eq('scan_type', 'full')
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      if (existingScan) {
-        return NextResponse.json({
-          success: true,
-          scan_id: existingScan.scan_id,
-          status: 'scanning',
-          message: 'Scan already in progress',
+      if (existingScans && existingScans.length > 0) {
+        const existingScan = existingScans[0];
+        if (existingScan.status === 'scanning') {
+          return NextResponse.json({
+            success: true,
+            scan_id: existingScan.scan_id,
+            status: 'scanning',
+            message: 'Scan already in progress',
+          });
+        } else {
+          // If there's a completed/failed scan, we need to delete it first due to unique constraint
+          logger.info('Found existing scan, will delete for new scan', {
+            scanId: existingScan.scan_id,
+            status: existingScan.status,
+          });
+          await serviceClientForCheck
+            .from('webflow_structure_scans')
+            .delete()
+            .eq('scan_id', existingScan.scan_id);
+        }
+      }
+    } else {
+      // For rescan, delete all existing scans for this org/site/type
+      const { error: deleteError } = await serviceClientForCheck
+        .from('webflow_structure_scans')
+        .delete()
+        .eq('org_id', orgId)
+        .eq('site_id', finalSiteId)
+        .eq('scan_type', 'full');
+      
+      if (deleteError) {
+        logger.warn('Failed to delete old scans for rescan', {
+          error: deleteError.message,
+          orgId,
+          siteId: finalSiteId,
         });
       }
     }
 
     // Create scan record (use service client for reliability)
     const serviceClient = createServiceClient();
+    
     const { data: scanRecord, error: scanError } = await serviceClient
       .from('webflow_structure_scans')
       .insert({
         org_id: orgId,
-        integration_id: integrationId,
+        integration_id: integrationId || null, // Allow null if not available
         site_id: finalSiteId,
-        scan_type: rescan ? 'full' : 'full',
+        scan_type: 'full',
         status: 'scanning',
         scan_started_at: new Date().toISOString(),
       })
@@ -305,9 +339,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .single();
 
     if (scanError || !scanRecord) {
-      logger.error('Failed to create scan record', { error: scanError });
+      logger.error('Failed to create scan record', { 
+        error: scanError,
+        errorCode: scanError?.code,
+        errorMessage: scanError?.message,
+        errorDetails: scanError?.details,
+        orgId,
+        integrationId,
+        siteId: finalSiteId,
+      });
+      
+      // Provide more detailed error message
+      let errorMessage = 'Failed to create scan record';
+      let hint = '';
+      
+      if (scanError?.code === '23505') {
+        // Unique constraint violation
+        errorMessage = 'A scan already exists for this site';
+        hint = 'Use ?rescan=true to force a new scan';
+      } else if (scanError?.code === '23503') {
+        // Foreign key violation
+        errorMessage = 'Invalid organization or integration ID';
+        hint = 'Please verify your integration configuration';
+      } else if (scanError?.message) {
+        errorMessage = scanError.message;
+        hint = scanError.details || '';
+      }
+      
       return NextResponse.json(
-        { error: 'Failed to create scan record' },
+        { 
+          error: errorMessage,
+          hint,
+          details: process.env.NODE_ENV === 'development' ? scanError : undefined,
+        },
         { status: 500 }
       );
     }
