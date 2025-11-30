@@ -48,6 +48,7 @@
   },
   "scripts": {
     "test:webflow-scan": "tsx scripts/test-webflow-scan.ts",
+    "test:webflow-scan-api": "tsx scripts/test-webflow-scan-api.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

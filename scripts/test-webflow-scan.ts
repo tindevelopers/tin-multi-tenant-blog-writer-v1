@@ -47,53 +47,54 @@ async function testWebflowScan() {
     // Step 1: Get Webflow integration
     console.log('Step 1: Finding Webflow integration...');
     
-    let orgId = ORG_ID;
-    if (!orgId) {
-      // Get first organization with Webflow integration
-      const { data: integrations, error: intError } = await supabase
-        .from('integrations')
-        .select('org_id, integration_id, config, metadata')
-        .eq('type', 'webflow')
-        .eq('status', 'active')
-        .limit(1);
-
-      if (intError || !integrations || integrations.length === 0) {
-        console.error('❌ No active Webflow integration found');
-        console.error('   Please configure a Webflow integration first');
-        process.exit(1);
-      }
-
-      orgId = integrations[0].org_id;
-      console.log(`✓ Found Webflow integration for org: ${orgId}`);
-    } else {
-      const { data: integration } = await supabase
-        .from('integrations')
-        .select('integration_id, config, metadata')
-        .eq('org_id', orgId)
-        .eq('type', 'webflow')
-        .eq('status', 'active')
-        .single();
-
-      if (!integration) {
-        console.error(`❌ No active Webflow integration found for org: ${orgId}`);
-        process.exit(1);
-      }
-      console.log(`✓ Using Webflow integration for org: ${orgId}`);
-    }
-
-    // Get integration details
-    const { data: integration, error: integrationError } = await supabase
+    // First, try to find ANY Webflow integration (active or inactive)
+    let { data: allWebflowIntegrations, error: allError } = await supabase
       .from('integrations')
-      .select('integration_id, config, metadata')
-      .eq('org_id', orgId)
+      .select('org_id, integration_id, type, status, config, metadata, name')
       .eq('type', 'webflow')
-      .eq('status', 'active')
-      .single();
+      .order('created_at', { ascending: false });
 
-    if (integrationError || !integration) {
-      throw new Error('Failed to fetch Webflow integration');
+    if (allError) {
+      console.error('❌ Error querying integrations:', allError.message);
+      console.error('   Make sure SUPABASE_SERVICE_ROLE_KEY has proper permissions');
+      process.exit(1);
     }
 
+    if (!allWebflowIntegrations || allWebflowIntegrations.length === 0) {
+      console.error('❌ No Webflow integrations found in database');
+      console.error('   Please configure a Webflow integration first via the admin panel');
+      process.exit(1);
+    }
+
+    console.log(`✓ Found ${allWebflowIntegrations.length} Webflow integration(s)`);
+    
+    // Prefer active integrations, but use any if available
+    const activeIntegrations = allWebflowIntegrations.filter(i => i.status === 'active');
+    const integrationsToUse = activeIntegrations.length > 0 ? activeIntegrations : allWebflowIntegrations;
+    
+    if (activeIntegrations.length === 0 && allWebflowIntegrations.length > 0) {
+      console.log('⚠️  No active integrations found, but found inactive ones. Will try to use them...');
+    }
+
+    // Use the first integration (or specified org_id)
+    let targetIntegration = integrationsToUse[0];
+    
+    if (ORG_ID) {
+      const orgIntegration = integrationsToUse.find(i => i.org_id === ORG_ID);
+      if (orgIntegration) {
+        targetIntegration = orgIntegration;
+      } else {
+        console.log(`⚠️  Org ID ${ORG_ID} not found, using first available integration`);
+      }
+    }
+
+    const orgId = targetIntegration.org_id;
+    console.log(`✓ Using integration: ${targetIntegration.name || 'Unnamed'} (${targetIntegration.status})`);
+    console.log(`✓ Org ID: ${orgId}`);
+    console.log(`✓ Integration ID: ${targetIntegration.integration_id}\n`);
+
+    // Use the integration we already found
+    const integration = targetIntegration;
     const config = integration.config as any;
     const metadata = integration.metadata as any;
     const apiToken = WEBFLOW_API_KEY || config?.api_key || config?.apiToken || config?.token;
