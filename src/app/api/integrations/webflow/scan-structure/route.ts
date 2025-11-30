@@ -44,11 +44,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json().catch(() => ({}));
     const targetSiteId = body.site_id || siteId;
 
-    if (!targetSiteId) {
-      return NextResponse.json({ error: 'site_id is required' }, { status: 400 });
-    }
-
-    // Get Webflow integration
+    // Get Webflow integration FIRST (before checking site_id)
+    // This allows us to use site_id from integration config if not provided
     const { data: integration, error: integrationError } = await supabase
       .from('integrations')
       .select('integration_id, config, metadata')
