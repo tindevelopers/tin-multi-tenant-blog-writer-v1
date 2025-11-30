@@ -136,6 +136,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Handle both adapter format and direct query format
     const integrationId = integration.id || integration.integration_id;
+    
+    if (!integrationId) {
+      logger.error('Integration ID is missing', {
+        integration: integration,
+        orgId,
+      });
+      return NextResponse.json(
+        { 
+          error: 'Invalid integration configuration',
+          hint: 'Integration ID is missing. Please reconfigure your Webflow integration.'
+        },
+        { status: 500 }
+      );
+    }
+    
     const config = integration.config || integration.connection || {};
     const metadata = integration.metadata || {};
     const apiToken = config?.api_key || config?.apiToken || config?.token || config?.api_token;
@@ -152,14 +167,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     if (!apiToken) {
       logger.warn('Webflow API token missing', {
-        integrationId: integration.integration_id,
+        integrationId,
         configKeys: Object.keys(config || {}),
       });
       return NextResponse.json(
         { 
           error: 'Webflow API token not found in integration config',
           hint: 'Check that api_key, apiToken, or token is set in the integration config',
-          integration_id: integration.integration_id,
+          integration_id: integrationId,
         },
         { status: 400 }
       );
@@ -172,7 +187,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!finalSiteId) {
       logger.info('Site ID not found in config, attempting auto-detection', {
         orgId,
-        integrationId: integration.integration_id,
+        integrationId: integrationId,
       });
       
       try {
@@ -184,7 +199,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           finalSiteId = detectedSiteId;
           logger.info('Auto-detected Webflow site ID', {
             siteId: finalSiteId,
-            integrationId: integration.integration_id,
+            integrationId: integrationId,
           });
           
           // Store the detected site_id in the integration config for future use
@@ -206,33 +221,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             if (updateError) {
               logger.warn('Failed to store auto-detected site_id in config', {
                 error: updateError.message,
-                integrationId: integration.integration_id,
+                integrationId: integrationId,
                 siteId: finalSiteId,
               });
               // Continue anyway - site_id is detected and will be used for this scan
             } else {
               logger.info('Stored auto-detected site_id in integration config', {
-                integrationId: integration.integration_id,
+                integrationId: integrationId,
                 siteId: finalSiteId,
               });
             }
           } catch (updateError: any) {
             logger.warn('Error storing auto-detected site_id', {
               error: updateError.message,
-              integrationId: integration.integration_id,
+              integrationId: integrationId,
             });
             // Continue anyway - site_id is detected and will be used for this scan
           }
         } else {
           logger.warn('Could not auto-detect Webflow site ID', {
             orgId,
-            integrationId: integration.integration_id,
+            integrationId: integrationId,
           });
           return NextResponse.json(
             { 
               error: 'site_id is required',
               hint: 'Could not auto-detect site_id. Please provide site_id in request body or configure it in the Webflow integration.',
-              integration_id: integration.integration_id,
+              integration_id: integrationId,
             },
             { status: 400 }
           );
@@ -241,13 +256,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         logger.error('Failed to auto-detect Webflow site ID', {
           error: autoDetectError.message,
           orgId,
-          integrationId: integration.integration_id,
+          integrationId: integrationId,
         });
         return NextResponse.json(
           { 
             error: 'site_id is required',
             hint: `Auto-detection failed: ${autoDetectError.message}. Please provide site_id in request body or configure it in the Webflow integration.`,
-            integration_id: integration.integration_id,
+            integration_id: integrationId,
           },
           { status: 400 }
         );
@@ -299,30 +314,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const scanId = scanRecord.scan_id;
 
-    // Perform scan synchronously with timeout
-    // This ensures the scan completes and results are saved before response
-    const scanPromise = performScan(scanId, apiToken, finalSiteId, orgId);
-    
-    // Set a timeout for the scan (5 minutes max)
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Scan timeout after 5 minutes')), 5 * 60 * 1000);
-    });
-
-    // Race between scan completion and timeout
-    Promise.race([scanPromise, timeoutPromise])
+    // Perform scan asynchronously (don't await - return immediately)
+    // The scan runs in the background and updates the database when complete
+    performScan(scanId, apiToken, finalSiteId, orgId)
       .then(() => {
-        logger.info('Scan completed successfully', { scanId });
+        logger.info('Scan completed successfully', { scanId, siteId: finalSiteId, orgId });
       })
       .catch((error) => {
-        logger.error('Scan failed or timed out', { 
+        // Error is already handled in performScan function, but log it here too
+        logger.error('Scan promise rejected', { 
           scanId, 
-          error: error.message,
-          stack: error.stack 
+          siteId: finalSiteId,
+          orgId,
+          error: error?.message || 'Unknown error',
+          stack: error?.stack 
         });
-        // Error is already handled in performScan function
       });
 
-    // Return immediately but scan runs in background
+    // Return immediately - scan runs in background
     return NextResponse.json({
       success: true,
       scan_id: scanId,
