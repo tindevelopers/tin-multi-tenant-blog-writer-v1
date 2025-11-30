@@ -243,33 +243,49 @@ export default function MediaPage() {
 
   // Handle file upload
   const handleFileUpload = async (files: FileList) => {
-    const formData = new FormData();
-    Array.from(files).forEach((file) => {
-      formData.append('file', file);
-    });
+    const fileArray = Array.from(files);
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
 
-    try {
-      const response = await fetch('/api/images/upload', {
-        method: 'POST',
-        body: formData,
-      });
+    // Upload files one by one (Cloudinary API accepts one file per request)
+    for (const file of fileArray) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
+        const response = await fetch('/api/images/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+
+        successCount++;
+        logger.debug('File uploaded successfully:', file.name);
+      } catch (error) {
+        failCount++;
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        errors.push(`${file.name}: ${errorMessage}`);
+        logger.error('Error uploading file:', { fileName: file.name, error: errorMessage });
       }
+    }
 
-      const uploadResult = await response.json();
-      
-      // Reload media assets after a short delay to ensure DB is updated
-      setTimeout(async () => {
-        await loadMediaAssets();
-      }, 500);
-      
-      alert(`Files uploaded successfully!${uploadResult.asset_id ? ' Asset ID: ' + uploadResult.asset_id : ''}`);
-    } catch (error) {
-      logger.error('Error uploading files:', error);
-      alert(error instanceof Error ? error.message : 'Failed to upload files. Please try again.');
+    // Reload media assets after a short delay to ensure DB is updated
+    setTimeout(async () => {
+      await loadMediaAssets();
+    }, 1000);
+
+    // Show results
+    if (successCount > 0 && failCount === 0) {
+      alert(`✅ ${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully!`);
+    } else if (successCount > 0 && failCount > 0) {
+      alert(`⚠️ ${successCount} file${successCount > 1 ? 's' : ''} uploaded, ${failCount} failed.\n\nErrors:\n${errors.join('\n')}`);
+    } else {
+      alert(`❌ Upload failed for all files.\n\nErrors:\n${errors.join('\n')}`);
     }
   };
 
