@@ -11,7 +11,6 @@ import { logger } from '@/utils/logger';
 import { getAuthenticatedUser, handleApiError } from '@/lib/api-utils';
 import { getCloudinaryCredentials } from '@/lib/cloudinary-upload';
 import { createServiceClient } from '@/lib/supabase/service';
-import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
 interface CloudinaryResource {
   public_id: string;
@@ -51,23 +50,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch resources from Cloudinary via Blog Writer API
-    const API_BASE_URL = BLOG_WRITER_API_URL;
-    const API_KEY = process.env.BLOG_WRITER_API_KEY;
-
-    // Get all resources from Cloudinary
+    // Fetch resources directly from Cloudinary API
     const folder = `blog-images/${user.org_id}`;
-    const syncResponse = await fetch(`${API_BASE_URL}/api/v1/media/cloudinary/list`, {
-      method: 'POST',
+    const crypto = await import('crypto');
+    
+    // Create Cloudinary Admin API signature for listing resources
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    const paramsToSign = `max_results=500&prefix=${folder}&resource_type=image&timestamp=${timestamp}`;
+    const signature = crypto.createHash('sha1')
+      .update(paramsToSign + credentials.api_secret)
+      .digest('hex');
+    
+    // Build Cloudinary Admin API URL
+    const cloudinaryUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
+    cloudinaryUrl.searchParams.append('max_results', '500');
+    cloudinaryUrl.searchParams.append('prefix', folder);
+    cloudinaryUrl.searchParams.append('resource_type', 'image');
+    cloudinaryUrl.searchParams.append('timestamp', timestamp.toString());
+    cloudinaryUrl.searchParams.append('signature', signature);
+    cloudinaryUrl.searchParams.append('api_key', credentials.api_key);
+    
+    logger.debug('Fetching Cloudinary resources', {
+      url: cloudinaryUrl.toString().replace(credentials.api_key, '***'),
+      folder,
+      orgId: user.org_id,
+    });
+
+    const syncResponse = await fetch(cloudinaryUrl.toString(), {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
       },
-      body: JSON.stringify({
-        folder: folder,
-        resource_type: 'image',
-        max_results: 500, // Limit to 500 images per sync
-      }),
       signal: AbortSignal.timeout(120000), // 2 minute timeout
     });
 
@@ -78,20 +91,6 @@ export async function POST(request: NextRequest) {
         error: errorText,
       });
       
-      // If endpoint doesn't exist (404), return helpful message
-      if (syncResponse.status === 404) {
-        return NextResponse.json(
-          { 
-            error: 'Cloudinary list endpoint not available. Please ensure your Blog Writer API supports media listing, or sync will be available once images are uploaded through the system.',
-            synced: 0,
-            updated: 0,
-            skipped: 0,
-            total: 0,
-          },
-          { status: 404 }
-        );
-      }
-      
       return NextResponse.json(
         { error: `Failed to fetch Cloudinary resources: ${syncResponse.status} - ${errorText}` },
         { status: syncResponse.status }
@@ -99,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     const cloudinaryData = await syncResponse.json();
-    const resources: CloudinaryResource[] = cloudinaryData.resources || cloudinaryData.data || [];
+    const resources: CloudinaryResource[] = cloudinaryData.resources || [];
 
     logger.debug('Fetched Cloudinary resources', {
       count: resources.length,
