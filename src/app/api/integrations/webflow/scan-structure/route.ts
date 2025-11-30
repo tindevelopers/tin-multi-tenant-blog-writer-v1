@@ -148,22 +148,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           });
           
           // Store the detected site_id in the integration config for future use
-          const updatedConfig = {
-            ...config,
-            site_id: finalSiteId,
-          };
-          
-          await supabase
-            .from('integrations')
-            .update({
-              config: updatedConfig,
-            })
-            .eq('integration_id', integration.integration_id);
-          
-          logger.info('Stored auto-detected site_id in integration config', {
-            integrationId: integration.integration_id,
-            siteId: finalSiteId,
-          });
+          try {
+            const updatedConfig = {
+              ...(config || {}),
+              site_id: finalSiteId,
+            };
+            
+            const { error: updateError } = await supabase
+              .from('integrations')
+              .update({
+                config: updatedConfig,
+              })
+              .eq('integration_id', integration.integration_id);
+            
+            if (updateError) {
+              logger.warn('Failed to store auto-detected site_id in config', {
+                error: updateError.message,
+                integrationId: integration.integration_id,
+                siteId: finalSiteId,
+              });
+              // Continue anyway - site_id is detected and will be used for this scan
+            } else {
+              logger.info('Stored auto-detected site_id in integration config', {
+                integrationId: integration.integration_id,
+                siteId: finalSiteId,
+              });
+            }
+          } catch (updateError: any) {
+            logger.warn('Error storing auto-detected site_id', {
+              error: updateError.message,
+              integrationId: integration.integration_id,
+            });
+            // Continue anyway - site_id is detected and will be used for this scan
+          }
         } else {
           logger.warn('Could not auto-detect Webflow site ID', {
             orgId,
@@ -252,9 +269,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       site_id: finalSiteId,
     });
   } catch (error: any) {
-    logger.error('Failed to start Webflow structure scan', { error: error.message });
+    logger.error('Failed to start Webflow structure scan', { 
+      error: error.message,
+      stack: error.stack,
+      errorType: error.constructor?.name,
+    });
     return NextResponse.json(
-      { error: error.message || 'Failed to start scan' },
+      { 
+        error: error.message || 'Failed to start scan',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      },
       { status: 500 }
     );
   }
