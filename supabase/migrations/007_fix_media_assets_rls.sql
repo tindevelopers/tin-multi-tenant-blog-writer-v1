@@ -2,6 +2,9 @@
 -- The issue is that the SELECT policy uses a subquery that might not work correctly
 -- We'll make it more explicit and add a helper function if needed
 
+-- Ensure uuid extension is enabled (if not already)
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Drop existing policies
 DROP POLICY IF EXISTS "Users can view org media" ON media_assets;
 DROP POLICY IF EXISTS "Users can upload media" ON media_assets;
@@ -46,4 +49,3 @@ CREATE POLICY "Users can delete own media"
 -- Add index to help with RLS policy performance
 CREATE INDEX IF NOT EXISTS idx_media_assets_org_id_uploaded_by 
   ON media_assets(org_id, uploaded_by);
-
