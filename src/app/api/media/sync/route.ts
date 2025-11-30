@@ -186,87 +186,22 @@ export async function POST(request: NextRequest) {
         authMethod: 'Basic Auth',
       });
       
-      // If Basic Auth fails with 401, try signed URL method as fallback
+      // Basic Auth is the primary and only method (Signed URL has issues with these credentials)
+      // If Basic Auth fails, provide helpful error message
       if (syncResponse.status === 401) {
-        logger.info('Basic Auth failed, trying signed URL method as fallback');
-        
-        // Try signed URL method
-        const crypto = await import('crypto');
-        const timestamp = Math.round(new Date().getTime() / 1000);
-        
-        const params: Record<string, string> = {
-          max_results: '500',
-          prefix: folder,
-          resource_type: 'image',
-          timestamp: timestamp.toString(),
-        };
-        
-        // Sort parameters alphabetically for signature
-        const sortedParamKeys = Object.keys(params).sort();
-        const sortedParamsString = sortedParamKeys
-          .map(key => `${key}=${encodeURIComponent(params[key])}`)
-          .join('&');
-        
-        // Calculate SHA1 signature: sorted_params_string + api_secret
-        const signature = crypto.createHash('sha1')
-          .update(sortedParamsString + credentials.api_secret)
-          .digest('hex');
-        
-        // Build signed URL
-        const signedUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
-        signedUrl.searchParams.append('api_key', credentials.api_key);
-        signedUrl.searchParams.append('max_results', '500');
-        signedUrl.searchParams.append('prefix', folder);
-        signedUrl.searchParams.append('resource_type', 'image');
-        signedUrl.searchParams.append('timestamp', timestamp.toString());
-        signedUrl.searchParams.append('signature', signature);
-        
-        logger.debug('Retrying with signed URL', {
-          url: signedUrl.toString().replace(credentials.api_key, '***'),
-          signaturePrefix: signature.substring(0, 8) + '...',
+        logger.error('Basic Auth failed - credentials may be invalid', {
+          cloudName: credentials.cloud_name,
+          error: errorText,
         });
         
-        const retryResponse = await fetch(signedUrl.toString(), {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
+        return NextResponse.json(
+          { 
+            error: 'Invalid Cloudinary credentials. Basic Auth authentication failed.',
+            details: errorText,
+            suggestion: 'Please verify your Cloud Name, API Key, and API Secret in Settings → Integrations → Cloudinary. Use the "Test Credentials" button to verify.',
           },
-          signal: AbortSignal.timeout(120000),
-        });
-        
-        if (retryResponse.ok) {
-          // Signed URL worked, continue with this response
-          const cloudinaryData = await retryResponse.json();
-          const resources: CloudinaryResource[] = cloudinaryData.resources || [];
-          
-          logger.info('Signed URL method succeeded', {
-            resourceCount: resources.length,
-          });
-          
-          // Sync resources to database
-          const { syncedCount, updatedCount, skippedCount } = await syncResourcesToDatabase(resources);
-
-          return NextResponse.json({
-            success: true,
-            synced: syncedCount,
-            updated: updatedCount,
-            skipped: skippedCount,
-            total: resources.length,
-            message: `Synced ${syncedCount} new assets, updated ${updatedCount} existing assets (using signed URL fallback)`,
-          });
-        } else {
-          // Both methods failed
-          const retryErrorText = await retryResponse.text();
-          return NextResponse.json(
-            { 
-              error: 'Invalid Cloudinary credentials. Both Basic Auth and Signed URL methods failed.',
-              details: errorText,
-              retryDetails: retryErrorText,
-              suggestion: 'Please verify your Cloud Name, API Key, and API Secret in Settings → Integrations → Cloudinary.',
-            },
-            { status: 401 }
-          );
-        }
+          { status: 401 }
+        );
       }
       
       return NextResponse.json(
