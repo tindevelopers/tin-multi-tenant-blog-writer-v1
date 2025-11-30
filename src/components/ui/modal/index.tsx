@@ -1,5 +1,6 @@
 "use client";
 import React, { useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   isOpen: boolean;
@@ -48,13 +49,11 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const contentClasses = isFullscreen
     ? "w-full h-full"
     : "relative w-full rounded-3xl bg-white  dark:bg-gray-900";
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 flex items-center justify-center overflow-y-auto modal px-4 py-4" 
       style={{ zIndex: 999999 }}
@@ -98,4 +97,13 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
+
+  if (!isOpen) return null;
+
+  // Use portal to render modal at document body level, ensuring it's above everything
+  if (typeof window !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 };
