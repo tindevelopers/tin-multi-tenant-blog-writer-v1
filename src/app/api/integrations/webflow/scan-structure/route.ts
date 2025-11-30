@@ -80,8 +80,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const finalSiteId = targetSiteId || integrationSiteId;
 
     if (!finalSiteId) {
+      logger.warn('Site ID not provided and not found in integration config', {
+        orgId,
+        integrationId: integration.integration_id,
+        configKeys: Object.keys(config || {}),
+        metadataKeys: Object.keys(metadata || {}),
+      });
       return NextResponse.json(
-        { error: 'site_id is required' },
+        { 
+          error: 'site_id is required',
+          hint: 'Provide site_id in request body or ensure it is configured in the Webflow integration',
+          integration_id: integration.integration_id,
+        },
         { status: 400 }
       );
     }
