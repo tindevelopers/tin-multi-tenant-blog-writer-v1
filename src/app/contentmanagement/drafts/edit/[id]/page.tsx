@@ -829,10 +829,84 @@ export default function EditDraftPage() {
         hasImages: 'images' in result,
         imagesLength: result.images?.length,
         hasImageUrl: 'image_url' in result,
+        hasJobId: 'job_id' in result,
+        status: result.status,
         fullResult: JSON.stringify(result).substring(0, 500), // First 500 chars for debugging
       });
       
-      // Extract image URL from response - handle multiple response formats
+      // Handle async job response (status: 'queued')
+      if (result.job_id && (result.status === 'queued' || result.status === 'processing')) {
+        logger.info('Thumbnail generation queued, polling for completion', {
+          job_id: result.job_id,
+          estimated_completion_time: result.estimated_completion_time,
+        });
+        
+        // Poll for job completion
+        const maxAttempts = 30; // 30 attempts * 2 seconds = 60 seconds max
+        let attempt = 0;
+        let imageUrl = '';
+        
+        while (attempt < maxAttempts) {
+          attempt++;
+          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between polls
+          
+          try {
+            const statusResponse = await fetch(`/api/images/jobs/${result.job_id}`, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            
+            if (!statusResponse.ok) {
+              logger.warn(`Job status check failed (attempt ${attempt})`, { status: statusResponse.status });
+              continue;
+            }
+            
+            const statusResult = await statusResponse.json();
+            logger.debug('Job status poll', { attempt, status: statusResult.status, progress: statusResult.progress_percentage });
+            
+            if (statusResult.status === 'completed') {
+              // Extract image URL from completed job
+              if (statusResult.result?.images && statusResult.result.images.length > 0) {
+                const image = statusResult.result.images[0];
+                imageUrl = image.image_url || image.url || image.secure_url || '';
+              } else if (statusResult.result?.image_url) {
+                imageUrl = statusResult.result.image_url;
+              } else if (statusResult.image_url) {
+                imageUrl = statusResult.image_url;
+              }
+              
+              if (imageUrl) {
+                break; // Found URL, exit polling loop
+              }
+            } else if (statusResult.status === 'failed') {
+              throw new Error(statusResult.error_message || statusResult.error || 'Image generation failed');
+            }
+          } catch (pollError) {
+            logger.warn(`Error polling job status (attempt ${attempt})`, { error: pollError });
+            // Continue polling unless it's a critical error
+          }
+        }
+        
+        if (!imageUrl) {
+          throw new Error('Thumbnail generation timed out. The job may still be processing. Please try again in a moment.');
+        }
+        
+        // Set the thumbnail image URL
+        setFormData(prev => ({
+          ...prev,
+          thumbnailImage: imageUrl,
+          thumbnailImageAlt: prev.thumbnailImageAlt || `Thumbnail for ${formData.title}`,
+        }));
+        logger.info('✅ Thumbnail generated and set successfully (async)', {
+          imageUrl: imageUrl.substring(0, 100),
+          title: formData.title,
+          attempts: attempt,
+        });
+        alert('Thumbnail generated successfully!');
+        return;
+      }
+      
+      // Handle synchronous response - extract image URL from response
       let imageUrl = '';
       
       // Format 1: { success: true, images: [{ image_url: '...' }] }
