@@ -1112,6 +1112,7 @@ export default function EditDraftPage() {
           </p>
         </div>
       </div>
+      </div>
 
       {/* Field Configuration Modal */}
       {showFieldConfig && (
