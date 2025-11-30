@@ -218,12 +218,31 @@ export async function saveMediaAsset(
       return null;
     }
 
+    // Ensure file_type is in MIME format (image/png, image/jpeg, etc.)
+    let fileType = cloudinaryResult.format || 'png';
+    if (!fileType.includes('/')) {
+      // Convert format to MIME type
+      const formatToMime: Record<string, string> = {
+        'png': 'image/png',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'svg': 'image/svg+xml',
+        'mp4': 'video/mp4',
+        'webm': 'video/webm',
+        'mp3': 'audio/mpeg',
+        'wav': 'audio/wav',
+      };
+      fileType = formatToMime[fileType.toLowerCase()] || `image/${fileType}`;
+    }
+
     const insertData = {
       org_id: orgId,
       uploaded_by: userId,
       file_name: fileName,
       file_url: cloudinaryResult.secure_url,
-      file_type: cloudinaryResult.format || 'image/png',
+      file_type: fileType,
       file_size: cloudinaryResult.bytes || 0,
       provider: 'cloudinary' as const,
       metadata: {
@@ -231,6 +250,7 @@ export async function saveMediaAsset(
         width: cloudinaryResult.width,
         height: cloudinaryResult.height,
         resource_type: cloudinaryResult.resource_type || 'image',
+        format: cloudinaryResult.format, // Keep original format in metadata
         ...metadata,
       },
     };

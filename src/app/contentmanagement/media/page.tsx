@@ -259,9 +259,14 @@ export default function MediaPage() {
         throw new Error(error.error || 'Upload failed');
       }
 
-      // Reload media assets
-      await loadMediaAssets();
-      alert('Files uploaded successfully!');
+      const uploadResult = await response.json();
+      
+      // Reload media assets after a short delay to ensure DB is updated
+      setTimeout(async () => {
+        await loadMediaAssets();
+      }, 500);
+      
+      alert(`Files uploaded successfully!${uploadResult.asset_id ? ' Asset ID: ' + uploadResult.asset_id : ''}`);
     } catch (error) {
       logger.error('Error uploading files:', error);
       alert(error instanceof Error ? error.message : 'Failed to upload files. Please try again.');
