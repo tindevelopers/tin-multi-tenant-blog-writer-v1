@@ -29,6 +29,87 @@ interface ImageInsertModalProps {
 
 type TabType = 'upload' | 'library' | 'generate';
 
+/**
+ * Media Thumbnail Component
+ * Handles image loading states and error handling
+ */
+function MediaThumbnail({ 
+  asset, 
+  onSelect 
+}: { 
+  asset: MediaAsset; 
+  onSelect: (url: string) => void;
+}) {
+  const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+
+  const handleClick = () => {
+    if (asset.file_url && !imageError) {
+      onSelect(asset.file_url);
+    }
+  };
+
+  return (
+    <div
+      onClick={handleClick}
+      className={`relative group rounded-lg overflow-hidden border transition-all ${
+        asset.file_url && !imageError
+          ? 'cursor-pointer border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400'
+          : 'cursor-not-allowed border-gray-300 dark:border-gray-600 opacity-60'
+      } bg-gray-100 dark:bg-gray-700`}
+    >
+      {asset.file_url && !imageError ? (
+        <>
+          {imageLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200 dark:bg-gray-600 z-10">
+              <div className="w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+          <img
+            src={asset.file_url}
+            alt={asset.file_name}
+            className={`w-full h-32 object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+            onError={() => {
+              setImageError(true);
+              setImageLoading(false);
+              logger.warn('Image failed to load', { 
+                file_url: asset.file_url?.substring(0, 50),
+                file_name: asset.file_name,
+                asset_id: asset.asset_id 
+              });
+            }}
+            onLoad={() => {
+              setImageLoading(false);
+            }}
+            loading="lazy"
+          />
+          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
+            <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
+              Select
+            </span>
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
+            <p className="text-white text-xs truncate">{asset.file_name}</p>
+          </div>
+        </>
+      ) : (
+        <div className="w-full h-32 flex items-center justify-center bg-gray-200 dark:bg-gray-600">
+          <div className="text-center p-2">
+            <PhotoIcon className="w-8 h-8 mx-auto text-gray-400 mb-1" />
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate px-1">{asset.file_name}</p>
+            {imageError && (
+              <p className="text-xs text-red-500 mt-1">Failed to load</p>
+            )}
+            {!asset.file_url && (
+              <p className="text-xs text-red-500 mt-1">No URL</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ImageInsertModal({
   isOpen,
   onClose,
@@ -77,7 +158,21 @@ export default function ImageInsertModal({
       }
 
       const result = await response.json();
-      setMediaAssets(result.data || []);
+      const assets = result.data || [];
+      
+      // Validate and log image URLs
+      logger.debug('Loaded media assets', {
+        count: assets.length,
+        assets: assets.map((a: MediaAsset) => ({
+          asset_id: a.asset_id,
+          file_name: a.file_name,
+          has_url: !!a.file_url,
+          url_preview: a.file_url ? a.file_url.substring(0, 80) : 'MISSING',
+          url_valid: a.file_url ? (a.file_url.startsWith('http://') || a.file_url.startsWith('https://') || a.file_url.startsWith('data:')) : false,
+        })),
+      });
+      
+      setMediaAssets(assets);
     } catch (error) {
       logger.error('Error loading media assets:', error);
     } finally {
@@ -447,25 +542,11 @@ export default function ImageInsertModal({
               ) : (
                 <div className="grid grid-cols-3 gap-4">
                   {filteredMedia.map((asset) => (
-                    <div
+                    <MediaThumbnail
                       key={asset.asset_id}
-                      onClick={() => handleLibraryImageSelect(asset.file_url)}
-                      className="relative group cursor-pointer rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 transition-all"
-                    >
-                      <img
-                        src={asset.file_url}
-                        alt={asset.file_name}
-                        className="w-full h-32 object-cover"
-                      />
-                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
-                        <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
-                          Select
-                        </span>
-                      </div>
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                        <p className="text-white text-xs truncate">{asset.file_name}</p>
-                      </div>
-                    </div>
+                      asset={asset}
+                      onSelect={handleLibraryImageSelect}
+                    />
                   ))}
                 </div>
               )}
