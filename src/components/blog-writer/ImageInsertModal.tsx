@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/ui/modal/index';
-import { Button } from '@/components/ui/button/Button';
+import Button from '@/components/ui/button/Button';
 import Input from '@/components/form/input/InputField';
 import Select from '@/components/form/Select';
 import { Card } from '@/components/ui/card/index';
