@@ -273,6 +273,27 @@ export default function ViewDraftPage() {
             <EyeIcon className="w-4 h-4" />
             Preview HTML
           </button>
+          <button
+            onClick={handleEdit}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <PencilIcon className="w-4 h-4" />
+            Edit
+          </button>
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <ShareIcon className="w-4 h-4" />
+            Share
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            <TrashIcon className="w-4 h-4" />
+            Delete
+          </button>
         </div>
       </div>
 
@@ -540,31 +561,6 @@ export default function ViewDraftPage() {
               keywords={keywords}
               topic={topic}
             />
-
-            {/* Action Buttons in Sidebar */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
-              <button
-                onClick={handleEdit}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <PencilIcon className="w-4 h-4" />
-                Edit
-              </button>
-              <button
-                onClick={handleShare}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <ShareIcon className="w-4 h-4" />
-                Share
-              </button>
-              <button
-                onClick={handleDelete}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <TrashIcon className="w-4 h-4" />
-                Delete
-              </button>
-            </div>
 
             {/* Table of Contents */}
             {showTOC && contentMetadata && (
