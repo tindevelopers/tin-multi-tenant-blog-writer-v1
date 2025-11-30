@@ -13,7 +13,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 import { logger } from '@/utils/logger';
@@ -428,12 +427,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 /**
- * DELETE /api/workflow/multi-phase?id=xxx
- * Cancel a workflow
+ * DELETE /api/workflow/multi-phase?id=xxx or ?queue_id=xxx
+ * Cancel a workflow by updating queue status
  */
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
   try {
-    const supabase = createServiceClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -441,32 +440,81 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     }
 
     const { searchParams } = new URL(request.url);
-    const workflowId = searchParams.get('id');
+    const queueId = searchParams.get('queue_id') || searchParams.get('id');
 
-    if (!workflowId) {
+    if (!queueId) {
       return NextResponse.json(
-        { error: 'Workflow ID is required' },
+        { error: 'Queue ID is required' },
         { status: 400 }
       );
     }
 
-    const stored = activeWorkflows.get(workflowId);
-    
-    if (!stored) {
+    // Get user's organization
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!userProfile?.org_id) {
+      return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+    }
+
+    // Get workflow from queue
+    const { data: queueItem, error: fetchError } = await supabase
+      .from('blog_generation_queue')
+      .select('*')
+      .eq('queue_id', queueId)
+      .single();
+
+    if (fetchError || !queueItem) {
       return NextResponse.json(
         { error: 'Workflow not found' },
         { status: 404 }
       );
     }
 
-    // Remove workflow
-    activeWorkflows.delete(workflowId);
+    // Verify user has access to this workflow
+    if (queueItem.org_id !== userProfile.org_id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 403 }
+      );
+    }
 
-    logger.info('Workflow cancelled', { workflowId });
+    // Only allow cancellation if workflow is in a cancellable state
+    const cancellableStates = ['queued', 'generating'];
+    if (!cancellableStates.includes(queueItem.status)) {
+      return NextResponse.json(
+        { error: `Cannot cancel workflow in ${queueItem.status} state` },
+        { status: 400 }
+      );
+    }
+
+    // Update queue entry to cancelled status
+    const { error: updateError } = await supabase
+      .from('blog_generation_queue')
+      .update({
+        status: 'cancelled',
+        generation_completed_at: new Date().toISOString(),
+        generation_error: 'Workflow cancelled by user',
+      })
+      .eq('queue_id', queueId);
+
+    if (updateError) {
+      logger.error('Failed to cancel workflow', { error: updateError });
+      return NextResponse.json(
+        { error: 'Failed to cancel workflow' },
+        { status: 500 }
+      );
+    }
+
+    logger.info('Workflow cancelled', { queueId });
 
     return NextResponse.json({
       success: true,
-      message: 'Workflow cancelled',
+      queue_id: queueId,
+      message: 'Workflow cancelled successfully',
     });
   } catch (error: any) {
     logger.error('Failed to cancel workflow', { error: error.message });
