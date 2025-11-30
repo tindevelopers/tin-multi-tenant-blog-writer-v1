@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Modal } from '@/components/ui/modal/index';
+import { Button } from '@/components/ui/button/Button';
+import Input from '@/components/form/input/InputField';
+import Select from '@/components/form/Select';
+import { Card } from '@/components/ui/card/index';
 import { 
   PhotoIcon, 
   CloudArrowUpIcon, 
@@ -9,7 +13,6 @@ import {
   MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 import { logger } from '@/utils/logger';
-import { createClient } from '@/lib/supabase/client';
 
 interface MediaAsset {
   asset_id: string;
@@ -29,8 +32,7 @@ interface ImageInsertModalProps {
 type TabType = 'upload' | 'library' | 'generate';
 
 /**
- * Media Thumbnail Component
- * Handles image loading states and error handling
+ * Media Thumbnail Component using TailAdmin card styling
  */
 function MediaThumbnail({ 
   asset, 
@@ -51,24 +53,25 @@ function MediaThumbnail({
   return (
     <div
       onClick={handleClick}
-      className={`relative group rounded-lg overflow-hidden border transition-all ${
+      className={`group relative rounded-xl border overflow-hidden cursor-pointer transition-all ${
         asset.file_url && !imageError
-          ? 'cursor-pointer border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400'
-          : 'cursor-not-allowed border-gray-300 dark:border-gray-600 opacity-60'
-      } bg-gray-100 dark:bg-gray-700`}
+          ? 'border-gray-200 dark:border-gray-700 hover:border-brand-500 hover:shadow-lg dark:hover:border-brand-500'
+          : 'border-gray-300 dark:border-gray-600 opacity-60 cursor-not-allowed'
+      } bg-white dark:bg-gray-800`}
     >
-      {asset.file_url && !imageError ? (
-        <>
-          {imageLoading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-200 dark:bg-gray-600 z-10">
-              <div className="w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-          <div className="w-full h-32 bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+      {/* Image Container - Aspect Square */}
+      <div className="aspect-square relative bg-gray-100 dark:bg-gray-700 overflow-hidden">
+        {asset.file_url && !imageError ? (
+          <>
+            {imageLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 z-10">
+                <div className="w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
             <img
               src={asset.file_url}
               alt={asset.file_name}
-              className={`max-w-full max-h-full object-contain ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+              className={`w-full h-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
               onError={() => {
                 setImageError(true);
                 setImageLoading(false);
@@ -83,30 +86,32 @@ function MediaThumbnail({
               }}
               loading="lazy"
             />
+            {/* Hover Overlay */}
+            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
+              <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
+                Select
+              </span>
+            </div>
+            {/* File Name Overlay */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
+              <p className="text-white text-xs truncate font-medium">{asset.file_name}</p>
+            </div>
+          </>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="text-center p-4">
+              <PhotoIcon className="w-10 h-10 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+              <p className="text-xs text-gray-600 dark:text-gray-400 truncate px-2">{asset.file_name}</p>
+              {imageError && (
+                <p className="text-xs text-red-500 mt-1">Failed to load</p>
+              )}
+              {!asset.file_url && (
+                <p className="text-xs text-red-500 mt-1">No URL</p>
+              )}
+            </div>
           </div>
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
-            <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
-              Select
-            </span>
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-            <p className="text-white text-xs truncate">{asset.file_name}</p>
-          </div>
-        </>
-      ) : (
-        <div className="w-full h-32 flex items-center justify-center bg-gray-200 dark:bg-gray-600">
-          <div className="text-center p-2">
-            <PhotoIcon className="w-8 h-8 mx-auto text-gray-400 mb-1" />
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate px-1">{asset.file_name}</p>
-            {imageError && (
-              <p className="text-xs text-red-500 mt-1">Failed to load</p>
-            )}
-            {!asset.file_url && (
-              <p className="text-xs text-red-500 mt-1">No URL</p>
-            )}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -146,7 +151,6 @@ export default function ImageInsertModal({
   const loadMediaAssets = async () => {
     setLoadingMedia(true);
     try {
-      // Use API endpoint for better compatibility and consistency
       const params = new URLSearchParams({
         type: 'image',
         limit: '50',
@@ -161,7 +165,6 @@ export default function ImageInsertModal({
       const result = await response.json();
       const assets = result.data || [];
       
-      // Validate and log image URLs
       logger.debug('Loaded media assets', {
         count: assets.length,
         assets: assets.map((a: MediaAsset) => ({
@@ -241,29 +244,23 @@ export default function ImageInsertModal({
 
       const result = await response.json();
       
-      // Reset progress when starting new generation
       setGenerationProgress(0);
       setGenerationStatus('');
       
-      // Check if async mode (job_id returned)
       if (result.job_id) {
         logger.debug('Async mode detected, polling job status...', { job_id: result.job_id });
         setGenerationStatus('Starting image generation...');
         setGenerationProgress(5);
         
-        // Poll job status until completed
         const maxAttempts = 30;
         let attempt = 0;
         let imageUrl: string | null = null;
         
         while (attempt < maxAttempts) {
           attempt++;
-          
-          // Update progress based on attempt (with some randomness for realism)
           const baseProgress = Math.min(10 + (attempt * 3), 90);
           setGenerationProgress(baseProgress);
           
-          // Update status message
           if (attempt < 5) {
             setGenerationStatus('Initializing image generation...');
           } else if (attempt < 15) {
@@ -274,7 +271,7 @@ export default function ImageInsertModal({
             setGenerationStatus('Almost done...');
           }
           
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between polls
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
           const statusResponse = await fetch(`/api/images/jobs/${result.job_id}`, {
             method: 'GET',
@@ -291,7 +288,6 @@ export default function ImageInsertModal({
           const jobStatus = statusResult.status;
           const progress = statusResult.progress_percentage || 0;
           
-          // Use actual progress if available, otherwise use estimated
           if (progress > 0) {
             setGenerationProgress(progress);
           }
@@ -301,13 +297,11 @@ export default function ImageInsertModal({
           if (jobStatus === 'completed') {
             setGenerationProgress(100);
             setGenerationStatus('Image generated successfully!');
-            // Extract image from completed job
             if (statusResult.result?.images && statusResult.result.images.length > 0) {
               const imageData = statusResult.result.images[0];
               if (imageData.image_url) {
                 imageUrl = imageData.image_url;
               } else if (imageData.image_data) {
-                // Convert base64 to data URL
                 const format = imageData.format || 'png';
                 if (imageData.image_data.startsWith('data:image/')) {
                   imageUrl = imageData.image_data;
@@ -337,29 +331,24 @@ export default function ImageInsertModal({
         return;
       }
       
-      // Synchronous mode - extract image URL directly
+      // Synchronous mode
       let imageUrl: string | null = null;
       
       if (result.images && result.images.length > 0) {
         const imageData = result.images[0];
-        // Prefer image_url, fallback to image_data (base64)
         if (imageData.image_url) {
           imageUrl = imageData.image_url;
         } else if (imageData.image_data) {
-          // Convert base64 to data URL if needed
           if (imageData.image_data.startsWith('data:image/')) {
             imageUrl = imageData.image_data;
           } else {
-            // Assume it's base64 without data URL prefix
             const format = imageData.format || 'png';
             imageUrl = `data:image/${format};base64,${imageData.image_data}`;
           }
         }
       } else if (result.image) {
-        // Alternative structure: { image: { image_url: "..." } }
         imageUrl = result.image.image_url || result.image.url || result.image.secure_url || null;
       } else {
-        // Fallback to top-level fields
         imageUrl = result.image_url || result.url || result.secure_url || null;
       }
       
@@ -378,7 +367,7 @@ export default function ImageInsertModal({
     } finally {
       setGenerating(false);
     }
-  }, [generatePrompt, onImageSelect, onClose]);
+  }, [generatePrompt, onImageSelect, onClose, imageAlignment, imageSize]);
 
   const handleLibraryImageSelect = useCallback((imageUrl: string) => {
     onImageSelect(imageUrl, { alignment: imageAlignment, size: imageSize });
@@ -391,35 +380,37 @@ export default function ImageInsertModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} showCloseButton={true}>
-      <div className="w-full max-w-5xl max-h-[85vh] mx-auto flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow-2xl">
+      <div className="w-full max-w-5xl max-h-[85vh] mx-auto flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
             Insert Image
           </h2>
-          {/* Removed duplicate close button - Modal component already provides one */}
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 dark:border-gray-700">
+        {/* Tabs - Using TailAdmin style */}
+        <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
           <button
             onClick={() => setActiveTab('upload')}
-            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors relative ${
               activeTab === 'upload'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                ? 'text-brand-600 dark:text-brand-400'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
               <CloudArrowUpIcon className="w-5 h-5" />
-              <span>Upload from Computer</span>
+              <span>Upload</span>
             </div>
+            {activeTab === 'upload' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
+            )}
           </button>
           <button
             onClick={() => setActiveTab('library')}
-            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors relative ${
               activeTab === 'library'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                ? 'text-brand-600 dark:text-brand-400'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
@@ -427,19 +418,25 @@ export default function ImageInsertModal({
               <PhotoIcon className="w-5 h-5" />
               <span>Media Library</span>
             </div>
+            {activeTab === 'library' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
+            )}
           </button>
           <button
             onClick={() => setActiveTab('generate')}
-            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors ${
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors relative ${
               activeTab === 'generate'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                ? 'text-brand-600 dark:text-brand-400'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
             <div className="flex items-center justify-center gap-2">
               <SparklesIcon className="w-5 h-5" />
-              <span>Generate from Excerpt</span>
+              <span>Generate</span>
             </div>
+            {activeTab === 'generate' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
+            )}
           </button>
         </div>
 
@@ -447,8 +444,8 @@ export default function ImageInsertModal({
         <div className="flex-1 overflow-y-auto p-6">
           {/* Upload Tab */}
           {activeTab === 'upload' && (
-            <div className="space-y-4">
-              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center hover:border-blue-500 dark:hover:border-blue-400 transition-colors">
+            <Card>
+              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-12 text-center hover:border-brand-500 dark:hover:border-brand-400 transition-colors">
                 <input
                   type="file"
                   accept="image/*"
@@ -472,71 +469,74 @@ export default function ImageInsertModal({
               </div>
               {uploading && (
                 <div className="flex items-center justify-center py-4">
-                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
           {/* Library Tab */}
           {activeTab === 'library' && (
             <div className="space-y-4">
+              {/* Search */}
               <div className="relative">
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
+                <Input
                   type="text"
                   placeholder="Search media library..."
-                  value={searchTerm}
+                  defaultValue={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="pl-10"
                 />
               </div>
 
-              {/* Image Layout Options for Library */}
+              {/* Image Options */}
               <div className="grid grid-cols-2 gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Image Size
                   </label>
-                  <select
-                    value={imageSize}
-                    onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large' | 'full')}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-sm"
-                  >
-                    <option value="small">Small (~300px)</option>
-                    <option value="medium">Medium (~600px)</option>
-                    <option value="large">Large (~900px)</option>
-                    <option value="full">Full Width</option>
-                  </select>
+                  <Select
+                    options={[
+                      { value: 'small', label: 'Small (~300px)' },
+                      { value: 'medium', label: 'Medium (~600px)' },
+                      { value: 'large', label: 'Large (~900px)' },
+                      { value: 'full', label: 'Full Width' },
+                    ]}
+                    defaultValue={imageSize}
+                    onChange={(value) => setImageSize(value as typeof imageSize)}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Alignment
                   </label>
-                  <select
-                    value={imageAlignment}
-                    onChange={(e) => setImageAlignment(e.target.value as 'left' | 'center' | 'right' | 'full')}
-                    disabled={imageSize === 'full'}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                  >
-                    <option value="left">Left</option>
-                    <option value="center">Center</option>
-                    <option value="right">Right</option>
-                    <option value="full">Full Width</option>
-                  </select>
+                  <Select
+                    options={[
+                      { value: 'left', label: 'Left' },
+                      { value: 'center', label: 'Center' },
+                      { value: 'right', label: 'Right' },
+                      { value: 'full', label: 'Full Width' },
+                    ]}
+                    defaultValue={imageAlignment}
+                    onChange={(value) => setImageAlignment(value as typeof imageAlignment)}
+                  />
                 </div>
               </div>
 
+              {/* Media Grid - Using TailAdmin pattern */}
               {loadingMedia ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-8 h-8 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
                 </div>
               ) : filteredMedia.length === 0 ? (
-                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                  {searchTerm ? 'No images found matching your search.' : 'No images in your media library yet.'}
-                </div>
+                <Card>
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    {searchTerm ? 'No images found matching your search.' : 'No images in your media library yet.'}
+                  </div>
+                </Card>
               ) : (
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {filteredMedia.map((asset) => (
                     <MediaThumbnail
                       key={asset.asset_id}
@@ -551,63 +551,61 @@ export default function ImageInsertModal({
 
           {/* Generate Tab */}
           {activeTab === 'generate' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Image Prompt (based on excerpt)
-                </label>
-                <textarea
-                  value={generatePrompt}
-                  onChange={(e) => setGeneratePrompt(e.target.value)}
-                  placeholder="Enter a description of the image you want to generate..."
-                  rows={6}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                />
-                {excerpt && (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    Pre-filled from excerpt: {excerpt.substring(0, 100)}...
-                  </p>
+            <Card>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Image Prompt (based on excerpt)
+                  </label>
+                  <textarea
+                    value={generatePrompt}
+                    onChange={(e) => setGeneratePrompt(e.target.value)}
+                    placeholder="Enter a description of the image you want to generate..."
+                    rows={6}
+                    className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-none"
+                  />
+                  {excerpt && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Pre-filled from excerpt: {excerpt.substring(0, 100)}...
+                    </p>
+                  )}
+                </div>
+                <Button
+                  onClick={handleGenerateImage}
+                  disabled={generating || !generatePrompt.trim()}
+                  startIcon={generating ? undefined : <SparklesIcon className="w-5 h-5" />}
+                >
+                  {generating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Generating...</span>
+                    </>
+                  ) : (
+                    'Generate Image'
+                  )}
+                </Button>
+                {generating && (
+                  <div className="space-y-3">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                      <div
+                        className="bg-brand-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                        style={{ width: `${generationProgress}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">{generationStatus}</span>
+                      <span className="text-gray-500 dark:text-gray-500 font-medium">{generationProgress}%</span>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                      This usually takes 10-30 seconds...
+                    </p>
+                  </div>
                 )}
               </div>
-              <button
-                onClick={handleGenerateImage}
-                disabled={generating || !generatePrompt.trim()}
-                className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center gap-2 font-medium"
-              >
-                {generating ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Generating Image...</span>
-                  </>
-                ) : (
-                  <>
-                    <SparklesIcon className="w-5 h-5" />
-                    <span>Generate Image</span>
-                  </>
-                )}
-              </button>
-              {generating && (
-                <div className="space-y-3">
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                    <div
-                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
-                      style={{ width: `${generationProgress}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">{generationStatus}</span>
-                    <span className="text-gray-500 dark:text-gray-500 font-medium">{generationProgress}%</span>
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                    This usually takes 10-30 seconds...
-                  </p>
-                </div>
-              )}
-            </div>
+            </Card>
           )}
         </div>
       </div>
     </Modal>
   );
 }
-
