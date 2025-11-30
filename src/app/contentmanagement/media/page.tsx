@@ -94,6 +94,47 @@ export default function MediaPage() {
     loadMediaAssets();
   }, [loadMediaAssets]);
 
+  // Debug media assets
+  const handleDebugMedia = async () => {
+    try {
+      const response = await fetch('/api/media/debug', {
+        method: 'GET',
+      });
+
+      const result = await response.json();
+
+      let message = `🔍 Media Assets Debug:\n\n`;
+      message += `User: ${result.user?.id}\n`;
+      message += `Org ID: ${result.user?.orgId}\n\n`;
+      message += `Assets in DB (Service Client): ${result.serviceClient?.count || 0}\n`;
+      message += `Assets Visible (User Client): ${result.userClient?.count || 0}\n\n`;
+
+      if (result.rlsIssue) {
+        message += `⚠️ RLS ISSUE DETECTED!\n`;
+        message += `Service client can see ${result.serviceClient?.count || 0} assets,\n`;
+        message += `but user client can only see ${result.userClient?.count || 0} assets.\n\n`;
+      }
+
+      if (result.userClient?.error) {
+        message += `❌ User Client Error:\n`;
+        message += `${result.userClient.error.message}\n`;
+        message += `Code: ${result.userClient.error.code}\n\n`;
+      }
+
+      if (result.serviceClient?.data && result.serviceClient.data.length > 0) {
+        message += `Recent Assets:\n`;
+        result.serviceClient.data.slice(0, 5).forEach((asset: any, idx: number) => {
+          message += `${idx + 1}. ${asset.file_name} (${asset.file_type}) - ${asset.created_at}\n`;
+        });
+      }
+
+      alert(message);
+    } catch (error) {
+      logger.error('Error debugging media:', error);
+      alert(error instanceof Error ? error.message : 'Failed to debug media assets.');
+    }
+  };
+
   // Check Cloudinary root directory access
   const handleCheckRoot = async () => {
     setCheckingRoot(true);
