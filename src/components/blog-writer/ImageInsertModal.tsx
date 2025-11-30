@@ -65,24 +65,26 @@ function MediaThumbnail({
               <div className="w-6 h-6 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          <img
-            src={asset.file_url}
-            alt={asset.file_name}
-            className={`w-full h-32 object-cover bg-white dark:bg-gray-800 ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
-            onError={() => {
-              setImageError(true);
-              setImageLoading(false);
-              logger.warn('Image failed to load', { 
-                file_url: asset.file_url?.substring(0, 50),
-                file_name: asset.file_name,
-                asset_id: asset.asset_id 
-              });
-            }}
-            onLoad={() => {
-              setImageLoading(false);
-            }}
-            loading="lazy"
-          />
+          <div className="w-full h-32 bg-gray-100 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+            <img
+              src={asset.file_url}
+              alt={asset.file_name}
+              className={`max-w-full max-h-full object-contain ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+              onError={() => {
+                setImageError(true);
+                setImageLoading(false);
+                logger.warn('Image failed to load', { 
+                  file_url: asset.file_url?.substring(0, 100),
+                  file_name: asset.file_name,
+                  asset_id: asset.asset_id 
+                });
+              }}
+              onLoad={() => {
+                setImageLoading(false);
+              }}
+              loading="lazy"
+            />
+          </div>
           <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
             <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
               Select
@@ -389,19 +391,14 @@ export default function ImageInsertModal({
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose}>
+    <Modal isOpen={isOpen} onClose={onClose} showCloseButton={true}>
       <div className="w-full max-w-5xl max-h-[85vh] mx-auto flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
             Insert Image
           </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
-          >
-            <XMarkIcon className="w-6 h-6" />
-          </button>
+          {/* Removed duplicate close button - Modal component already provides one */}
         </div>
 
         {/* Tabs */}
