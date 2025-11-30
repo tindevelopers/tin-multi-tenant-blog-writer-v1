@@ -23,7 +23,7 @@ interface MediaAsset {
 interface ImageInsertModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImageSelect: (imageUrl: string) => void;
+  onImageSelect: (imageUrl: string, options?: { alignment?: 'left' | 'center' | 'right' | 'full'; size?: 'small' | 'medium' | 'large' | 'full' }) => void;
   excerpt?: string;
 }
 
@@ -38,6 +38,8 @@ export default function ImageInsertModal({
   const [activeTab, setActiveTab] = useState<TabType>('upload');
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationStatus, setGenerationStatus] = useState<string>('');
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,7 +100,7 @@ export default function ImageInsertModal({
       }
 
       const result = await response.json();
-      onImageSelect(result.url);
+      onImageSelect(result.url, { alignment: imageAlignment, size: imageSize });
       onClose();
     } catch (error) {
       logger.error('Error uploading image:', error);
@@ -141,9 +143,15 @@ export default function ImageInsertModal({
 
       const result = await response.json();
       
+      // Reset progress when starting new generation
+      setGenerationProgress(0);
+      setGenerationStatus('');
+      
       // Check if async mode (job_id returned)
       if (result.job_id) {
         logger.debug('Async mode detected, polling job status...', { job_id: result.job_id });
+        setGenerationStatus('Starting image generation...');
+        setGenerationProgress(5);
         
         // Poll job status until completed
         const maxAttempts = 30;
@@ -152,6 +160,22 @@ export default function ImageInsertModal({
         
         while (attempt < maxAttempts) {
           attempt++;
+          
+          // Update progress based on attempt (with some randomness for realism)
+          const baseProgress = Math.min(10 + (attempt * 3), 90);
+          setGenerationProgress(baseProgress);
+          
+          // Update status message
+          if (attempt < 5) {
+            setGenerationStatus('Initializing image generation...');
+          } else if (attempt < 15) {
+            setGenerationStatus('Generating your image...');
+          } else if (attempt < 25) {
+            setGenerationStatus('Finalizing image details...');
+          } else {
+            setGenerationStatus('Almost done...');
+          }
+          
           await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between polls
           
           const statusResponse = await fetch(`/api/images/jobs/${result.job_id}`, {
@@ -169,9 +193,16 @@ export default function ImageInsertModal({
           const jobStatus = statusResult.status;
           const progress = statusResult.progress_percentage || 0;
           
+          // Use actual progress if available, otherwise use estimated
+          if (progress > 0) {
+            setGenerationProgress(progress);
+          }
+          
           logger.debug('Job status poll', { attempt, status: jobStatus, progress });
           
           if (jobStatus === 'completed') {
+            setGenerationProgress(100);
+            setGenerationStatus('Image generated successfully!');
             // Extract image from completed job
             if (statusResult.result?.images && statusResult.result.images.length > 0) {
               const imageData = statusResult.result.images[0];
@@ -201,7 +232,9 @@ export default function ImageInsertModal({
           throw new Error('Image generation timed out or did not return an image URL');
         }
         
-        onImageSelect(imageUrl);
+        onImageSelect(imageUrl, { alignment: imageAlignment, size: imageSize });
+        setGenerationProgress(0);
+        setGenerationStatus('');
         onClose();
         return;
       }
@@ -237,8 +270,9 @@ export default function ImageInsertModal({
         throw new Error('No image URL returned from generation. Please check the response structure.');
       }
 
-      onImageSelect(imageUrl);
-      
+      onImageSelect(imageUrl, { alignment: imageAlignment, size: imageSize });
+      setGenerationProgress(0);
+      setGenerationStatus('');
       onClose();
     } catch (error) {
       logger.error('Error generating image:', error);
@@ -249,9 +283,9 @@ export default function ImageInsertModal({
   }, [generatePrompt, onImageSelect, onClose]);
 
   const handleLibraryImageSelect = useCallback((imageUrl: string) => {
-    onImageSelect(imageUrl);
+    onImageSelect(imageUrl, { alignment: imageAlignment, size: imageSize });
     onClose();
-  }, [onImageSelect, onClose]);
+  }, [onImageSelect, onClose, imageAlignment, imageSize]);
 
   const filteredMedia = mediaAssets.filter(asset =>
     asset.file_name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -365,6 +399,41 @@ export default function ImageInsertModal({
                 />
               </div>
 
+              {/* Image Layout Options for Library */}
+              <div className="grid grid-cols-2 gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Image Size
+                  </label>
+                  <select
+                    value={imageSize}
+                    onChange={(e) => setImageSize(e.target.value as 'small' | 'medium' | 'large' | 'full')}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="small">Small (~300px)</option>
+                    <option value="medium">Medium (~600px)</option>
+                    <option value="large">Large (~900px)</option>
+                    <option value="full">Full Width</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Alignment
+                  </label>
+                  <select
+                    value={imageAlignment}
+                    onChange={(e) => setImageAlignment(e.target.value as 'left' | 'center' | 'right' | 'full')}
+                    disabled={imageSize === 'full'}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                    <option value="full">Full Width</option>
+                  </select>
+                </div>
+              </div>
+
               {loadingMedia ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -439,9 +508,21 @@ export default function ImageInsertModal({
                 )}
               </button>
               {generating && (
-                <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-                  This may take 10-30 seconds...
-                </p>
+                <div className="space-y-3">
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                    <div
+                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${generationProgress}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">{generationStatus}</span>
+                    <span className="text-gray-500 dark:text-gray-500 font-medium">{generationProgress}%</span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                    This usually takes 10-30 seconds...
+                  </p>
+                </div>
               )}
             </div>
           )}

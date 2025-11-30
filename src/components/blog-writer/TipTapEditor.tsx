@@ -160,10 +160,10 @@ export default function TipTapEditor({
         },
       }),
       Image.configure({
-        inline: true,
+        inline: false, // Changed to block-level for better layout control
         allowBase64: true,
         HTMLAttributes: {
-          class: 'max-w-full h-auto rounded-lg my-4',
+          class: 'max-w-full h-auto rounded-lg my-6',
         },
       }),
       Link.configure({
@@ -263,16 +263,56 @@ export default function TipTapEditor({
     setShowImageModal(true);
   }, [editor]);
 
-  const handleImageSelect = useCallback(async (imageUrl: string) => {
+  const handleImageSelect = useCallback(async (imageUrl: string, options?: { alignment?: 'left' | 'center' | 'right' | 'full'; size?: 'small' | 'medium' | 'large' | 'full' }) => {
     if (!editor) {
       logger.error('Editor not available for image insertion');
       return;
     }
     
     try {
-      editor.chain().focus().setImage({ src: imageUrl, alt: 'Uploaded image' }).run();
+      const alignment = options?.alignment || 'center';
+      const size = options?.size || 'large';
+      
+      // Build CSS classes based on alignment and size
+      let imageClasses = 'rounded-lg my-6';
+      
+      // Size classes
+      switch (size) {
+        case 'small':
+          imageClasses += ' max-w-xs mx-auto';
+          break;
+        case 'medium':
+          imageClasses += ' max-w-2xl mx-auto';
+          break;
+        case 'large':
+          imageClasses += ' max-w-4xl mx-auto';
+          break;
+        case 'full':
+          imageClasses += ' w-full';
+          break;
+      }
+      
+      // Alignment classes (only apply if not full-width)
+      if (size !== 'full') {
+        switch (alignment) {
+          case 'left':
+            imageClasses = imageClasses.replace('mx-auto', 'ml-0 mr-auto');
+            break;
+          case 'right':
+            imageClasses = imageClasses.replace('mx-auto', 'mr-0 ml-auto');
+            break;
+          case 'center':
+            // Already centered with mx-auto
+            break;
+        }
+      }
+      
+      // Insert image with wrapper div for better control
+      const imageHTML = `<div class="${imageClasses}"><img src="${imageUrl}" alt="Blog image" class="w-full h-auto" /></div>`;
+      
+      editor.chain().focus().insertContent(imageHTML).run();
       setShowImageModal(false);
-      logger.debug('Image inserted successfully', { imageUrl });
+      logger.debug('Image inserted successfully', { imageUrl, alignment, size });
     } catch (error) {
       logger.error('Error inserting image:', error);
       alert('Failed to insert image. Please try again.');
