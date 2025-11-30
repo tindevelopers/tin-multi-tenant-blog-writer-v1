@@ -505,10 +505,11 @@ export default function ImageInsertModal({
               {/* Image Options */}
               <div className="grid grid-cols-2 gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="image-size-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Image Size
                   </label>
                   <Select
+                    id="image-size-select"
                     options={[
                       { value: 'small', label: 'Small (~300px)' },
                       { value: 'medium', label: 'Medium (~600px)' },
@@ -520,10 +521,11 @@ export default function ImageInsertModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="image-alignment-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Alignment
                   </label>
                   <Select
+                    id="image-alignment-select"
                     options={[
                       { value: 'left', label: 'Left' },
                       { value: 'center', label: 'Center' },
