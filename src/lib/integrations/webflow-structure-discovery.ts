@@ -270,9 +270,17 @@ export async function discoverWebflowStructure(
       
       // Transform CMS items to interlinking format
       for (const item of allItems) {
-        const slug = item.fieldData?.slug || 
-                    item.fieldData?.name?.toLowerCase().replace(/\s+/g, '-') || 
-                    `item-${item.id}`;
+        // Safely extract slug - handle unknown types
+        let slug: string = `item-${item.id}`;
+        const slugField = item.fieldData?.slug;
+        if (typeof slugField === 'string' && slugField) {
+          slug = slugField;
+        } else {
+          const nameField = item.fieldData?.name;
+          if (typeof nameField === 'string' && nameField) {
+            slug = nameField.toLowerCase().replace(/\s+/g, '-');
+          }
+        }
         
         // Build URL - try to get site domain from siteId or use default pattern
         const url = `https://${siteId}.webflow.io/${slug}`;
@@ -314,11 +322,13 @@ export async function discoverWebflowStructure(
       continue;
     }
     
-    const slug = page.slug || page.displayName?.toLowerCase().replace(/\s+/g, '-') || `page-${page.id}`;
+    const slugValue = page.slug || page.displayName?.toLowerCase().replace(/\s+/g, '-') || `page-${page.id}`;
+    const slug: string = typeof slugValue === 'string' ? slugValue : `page-${page.id}`;
     const url = `https://${siteId}.webflow.io/${slug}`;
     
     // Extract keywords from page display name
-    const title = page.displayName || slug;
+    const titleValue = page.displayName;
+    const title: string = typeof titleValue === 'string' ? titleValue : slug;
     const keywords = extractKeywords(title);
     
     existingContent.push({
