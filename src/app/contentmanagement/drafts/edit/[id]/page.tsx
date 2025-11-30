@@ -1205,6 +1205,201 @@ export default function EditDraftPage() {
           </div>
         )}
 
+        {/* Images Section - Separate Display */}
+        {(formData.featuredImage || formData.thumbnailImage || contentImages.length > 0) && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <PhotoIcon className="w-5 h-5" />
+                  Generated Images
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  Images generated for this draft (Phase 2)
+                </p>
+              </div>
+              {phase2Complete && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded-full">
+                  <CheckCircleIcon className="w-3 h-3" />
+                  Phase 2 Complete
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Featured Image */}
+              {formData.featuredImage && (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Featured Image
+                  </label>
+                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+                    <img
+                      src={formData.featuredImage}
+                      alt={formData.featuredImageAlt || 'Featured image'}
+                      className="w-full h-auto max-h-64 object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        const parent = (e.target as HTMLImageElement).parentElement;
+                        if (parent) {
+                          parent.innerHTML = '<div class="p-8 text-center text-gray-400 dark:text-gray-500">Failed to load image</div>';
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        Image URL
+                      </label>
+                      <input
+                        type="url"
+                        value={formData.featuredImage}
+                        onChange={(e) => handleInputChange('featuredImage', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        placeholder="https://example.com/image.jpg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        Alt Text
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.featuredImageAlt}
+                        onChange={(e) => handleInputChange('featuredImageAlt', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        placeholder="Describe the featured image"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Thumbnail Image */}
+              {formData.thumbnailImage && (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Thumbnail Image
+                  </label>
+                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800 flex items-center justify-center">
+                    <img
+                      src={formData.thumbnailImage}
+                      alt={formData.thumbnailImageAlt || 'Thumbnail'}
+                      className="w-32 h-32 object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        const parent = (e.target as HTMLImageElement).parentElement;
+                        if (parent) {
+                          parent.innerHTML = '<div class="p-8 text-center text-gray-400 dark:text-gray-500">Failed to load image</div>';
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        Image URL
+                      </label>
+                      <input
+                        type="url"
+                        value={formData.thumbnailImage}
+                        onChange={(e) => handleInputChange('thumbnailImage', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        placeholder="https://example.com/thumbnail.jpg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                        Alt Text
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.thumbnailImageAlt}
+                        onChange={(e) => handleInputChange('thumbnailImageAlt', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        placeholder="Describe the thumbnail image"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Content Images */}
+            {contentImages.length > 0 && (
+              <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+                  Content Images ({contentImages.length})
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {contentImages.map((image, index) => (
+                    <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900/50">
+                      <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                        <img
+                          src={image.url}
+                          alt={image.alt || `Content image ${index + 1}`}
+                          className="w-full h-48 object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            const parent = (e.target as HTMLImageElement).parentElement;
+                            if (parent) {
+                              parent.innerHTML = '<div class="h-48 flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">Failed to load</div>';
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="p-3 space-y-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                            Image URL
+                          </label>
+                          <input
+                            type="url"
+                            value={image.url}
+                            onChange={(e) => {
+                              const updated = [...contentImages];
+                              updated[index] = { ...updated[index], url: e.target.value };
+                              setContentImages(updated);
+                            }}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                            placeholder="https://example.com/image.jpg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                            Alt Text
+                          </label>
+                          <input
+                            type="text"
+                            value={image.alt}
+                            onChange={(e) => {
+                              const updated = [...contentImages];
+                              updated[index] = { ...updated[index], alt: e.target.value };
+                              setContentImages(updated);
+                            }}
+                            className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                            placeholder={`Content image ${index + 1} description`}
+                          />
+                        </div>
+                        <button
+                          onClick={() => {
+                            const updated = contentImages.filter((_, i) => i !== index);
+                            setContentImages(updated);
+                          }}
+                          className="w-full mt-2 px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                        >
+                          Remove Image
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Webflow Publishing Fields */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
