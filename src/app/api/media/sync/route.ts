@@ -135,7 +135,8 @@ export async function POST(request: NextRequest) {
     };
 
     // Fetch resources directly from Cloudinary Admin API
-    const folder = `blog-images/${user.org_id}`;
+    // If syncFromRoot is true, sync all images. Otherwise, sync from org-specific folder
+    const folder = syncFromRoot ? undefined : `blog-images/${user.org_id}`;
     
     // Cloudinary Admin API supports Basic Auth (simpler and more reliable than signed URLs)
     const authString = Buffer.from(`${credentials.api_key}:${credentials.api_secret}`).toString('base64');
@@ -146,12 +147,15 @@ export async function POST(request: NextRequest) {
     const cloudinaryUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
     cloudinaryUrl.searchParams.append('type', 'upload'); // Required parameter
     cloudinaryUrl.searchParams.append('max_results', '500');
-    cloudinaryUrl.searchParams.append('prefix', folder);
+    if (folder) {
+      cloudinaryUrl.searchParams.append('prefix', folder);
+    }
     cloudinaryUrl.searchParams.append('resource_type', 'image');
     
     logger.debug('Fetching Cloudinary resources', {
       url: cloudinaryUrl.toString(),
-      folder,
+      folder: folder || 'root (all images)',
+      syncFromRoot,
       orgId: user.org_id,
       cloudName: credentials.cloud_name,
       usingBasicAuth: true,

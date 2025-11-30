@@ -158,7 +158,8 @@ export default function MediaPage() {
   const handleSyncCloudinary = async () => {
     setSyncing(true);
     try {
-      const response = await fetch('/api/media/sync', {
+      // Sync from root (all images) by default, user can change this if needed
+      const response = await fetch('/api/media/sync?root=true', {
         method: 'POST',
       });
 
