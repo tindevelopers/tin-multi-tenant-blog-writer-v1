@@ -511,16 +511,20 @@ export default function EditDraftPage() {
       const queueId = draftMetadata?.workflow_queue_id as string | undefined;
 
       if (!queueId) {
-        // Create a temporary queue entry for Phase 2
+        // Create a temporary queue entry for Phase 2 (minimal data)
         const queueResponse = await fetch('/api/workflow/multi-phase', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            topic: formData.title,
+            topic: formData.title || 'Untitled Blog Post',
             keywords: [],
             target_audience: 'general',
             tone: 'professional',
             word_count: 1500,
+            phase2Only: true, // Flag to create minimal queue entry
+            generateFeaturedImage: true,
+            generateContentImages: true,
+            imageStyle: 'photographic',
           }),
         });
 

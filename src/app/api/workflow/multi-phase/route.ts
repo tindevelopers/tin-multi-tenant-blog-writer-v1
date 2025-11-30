@@ -69,6 +69,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       collectionId,
       isDraft = true,
       customInstructions,
+      // Support for Phase 2-only queue creation (minimal data)
+      phase2Only = false,
     } = body;
 
     // Validate required fields
@@ -120,56 +122,93 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
 
     // Step 1: Create queue entry in blog_generation_queue (same as quick generation)
-    logger.info('📋 Creating queue entry for multi-phase workflow', { topic, orgId, userId });
+    logger.info('📋 Creating queue entry for multi-phase workflow', { topic, orgId, userId, phase2Only });
     
     try {
+      // Build metadata object - handle Phase 2-only case with minimal data
+      const metadata: Record<string, unknown> = {
+        workflow_type: phase2Only ? 'phase_2_only' : 'multi_phase',
+        async_mode: true,
+      };
+
+      // Only include full metadata if not Phase 2-only
+      if (!phase2Only) {
+        metadata.generate_featured_image = generateFeaturedImage;
+        metadata.generate_content_images = generateContentImages;
+        metadata.image_style = imageStyle;
+        metadata.optimize_for_seo = optimizeForSeo;
+        metadata.generate_structured_data = generateStructuredData;
+        metadata.crawl_website = crawlWebsite && !!webflowApiKey;
+        metadata.max_internal_links = maxInternalLinks;
+        metadata.max_external_links = maxExternalLinks;
+        metadata.include_cluster_links = includeClusterLinks;
+        metadata.target_platform = targetPlatform;
+        if (collectionId) metadata.collection_id = collectionId;
+        metadata.is_draft = isDraft;
+        if (webflowSiteId) metadata.webflow_site_id = webflowSiteId;
+      } else {
+        // Phase 2-only: minimal metadata
+        metadata.generate_featured_image = generateFeaturedImage;
+        metadata.generate_content_images = generateContentImages;
+        metadata.image_style = imageStyle || 'photographic';
+        metadata.is_draft = true;
+      }
+
       const { data: queueItem, error: queueError } = await supabase
         .from('blog_generation_queue')
         .insert({
           org_id: orgId,
           created_by: userId,
-          topic: topic,
+          topic: topic || 'Untitled Blog Post',
           keywords: keywordsArray,
-          target_audience: targetAudience,
-          tone: tone,
-          word_count: wordCount,
-          quality_level: qualityLevel,
-          custom_instructions: customInstructions,
-          template_type: 'multi_phase_workflow',
-          status: 'queued',
+          target_audience: targetAudience || 'general',
+          tone: tone || 'professional',
+          word_count: wordCount || 1500,
+          quality_level: qualityLevel || 'high',
+          custom_instructions: customInstructions || null,
+          template_type: phase2Only ? 'phase_2_images' : 'multi_phase_workflow',
+          status: phase2Only ? 'generating' : 'queued', // Phase 2-only starts immediately
           priority: 5, // Normal priority
-          metadata: {
-            workflow_type: 'multi_phase',
-            generate_featured_image: generateFeaturedImage,
-            generate_content_images: generateContentImages,
-            image_style: imageStyle,
-            optimize_for_seo: optimizeForSeo,
-            generate_structured_data: generateStructuredData,
-            crawl_website: crawlWebsite && !!webflowApiKey,
-            max_internal_links: maxInternalLinks,
-            max_external_links: maxExternalLinks,
-            include_cluster_links: includeClusterLinks,
-            target_platform: targetPlatform,
-            collection_id: collectionId,
-            is_draft: isDraft,
-            webflow_site_id: webflowSiteId,
-            async_mode: true, // Always async
-          },
+          metadata: metadata,
           queued_at: new Date().toISOString(),
         })
         .select('queue_id')
         .single();
 
       if (queueError || !queueItem) {
-        logger.error('Failed to create queue entry', { error: queueError });
+        logger.error('Failed to create queue entry', { 
+          error: queueError,
+          errorCode: queueError?.code,
+          errorDetails: queueError?.details,
+          errorHint: queueError?.hint,
+          orgId,
+          userId,
+        });
         throw new Error(`Failed to create queue entry: ${queueError?.message || 'Unknown error'}`);
       }
 
       queueId = queueItem.queue_id;
-      logger.info('✅ Queue entry created', { queueId });
+      logger.info('✅ Queue entry created', { queueId, phase2Only });
     } catch (error: any) {
-      logger.error('Queue creation failed', { error: error.message });
+      logger.error('Queue creation failed', { 
+        error: error.message,
+        stack: error.stack,
+        orgId,
+        userId,
+      });
       throw new Error(`Failed to create workflow queue entry: ${error.message}`);
+    }
+
+    // If Phase 2-only, return immediately with queue_id (no need to call Blog Writer API)
+    if (phase2Only) {
+      logger.info('✅ Phase 2-only queue entry created', { queueId });
+      return NextResponse.json({
+        success: true,
+        queue_id: queueId,
+        status: 'generating',
+        message: 'Queue entry created for Phase 2 image generation',
+        workflow_type: 'phase_2_only',
+      });
     }
 
     // Step 2: Call Blog Writer API with async_mode=true (ALWAYS async for multi-phase)
