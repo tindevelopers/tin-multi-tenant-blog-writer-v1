@@ -486,9 +486,23 @@ export default function MediaPage() {
   };
 
   const getFileType = (fileType: string): string => {
+    if (!fileType) return 'document';
+    
+    // Handle MIME types (image/png, video/mp4, etc.)
     if (fileType.startsWith('image/')) return 'image';
     if (fileType.startsWith('video/')) return 'video';
     if (fileType.startsWith('audio/')) return 'audio';
+    
+    // Handle format-only values (backward compatibility)
+    const formatLower = fileType.toLowerCase();
+    const imageFormats = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif'];
+    const videoFormats = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv'];
+    const audioFormats = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
+    
+    if (imageFormats.includes(formatLower)) return 'image';
+    if (videoFormats.includes(formatLower)) return 'video';
+    if (audioFormats.includes(formatLower)) return 'audio';
+    
     return 'document';
   };
 
