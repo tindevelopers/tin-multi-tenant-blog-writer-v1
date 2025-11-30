@@ -273,16 +273,34 @@ export async function saveMediaAsset(
         code: error.code,
         details: error.details,
         hint: error.hint,
+        orgId,
+        userId,
+        fileName,
+        insertData: {
+          ...insertData,
+          file_url: insertData.file_url.substring(0, 50) + '...',
+          metadata: insertData.metadata,
+        }
+      });
+      
+      // Check if it's an RLS policy issue
+      if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('policy')) {
+        logger.error('❌ RLS Policy violation - service role may not be configured correctly');
+      }
+      
+      return null;
+    }
+
+    if (!data || !data.asset_id) {
+      logger.error('❌ No asset_id returned from insert', {
+        orgId,
+        userId,
+        fileName,
         insertData: {
           ...insertData,
           file_url: insertData.file_url.substring(0, 50) + '...'
         }
       });
-      return null;
-    }
-
-    if (!data || !data.asset_id) {
-      logger.error('❌ No asset_id returned from insert');
       return null;
     }
 

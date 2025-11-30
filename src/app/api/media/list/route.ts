@@ -53,6 +53,15 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
+    logger.debug('Querying media assets', {
+      orgId: userProfile.org_id,
+      userId: user.id,
+      filterType,
+      searchTerm,
+      limit,
+      offset,
+    });
+
     // Apply filters
     if (filterType !== 'all') {
       if (filterType === 'image') {
@@ -71,12 +80,30 @@ export async function GET(request: NextRequest) {
     const { data: assets, error } = await query;
 
     if (error) {
-      logger.error('Error fetching media assets:', error);
+      logger.error('Error fetching media assets:', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        orgId: userProfile.org_id,
+        userId: user.id,
+      });
       return NextResponse.json(
         { error: 'Failed to fetch media assets', details: error.message },
         { status: 500 }
       );
     }
+
+    logger.debug('Media assets query result', {
+      orgId: userProfile.org_id,
+      count: assets?.length || 0,
+      assets: assets?.map(a => ({
+        asset_id: a.asset_id,
+        file_name: a.file_name,
+        file_type: a.file_type,
+        created_at: a.created_at,
+      })),
+    });
 
     // Get total count for stats
     let countQuery = supabase

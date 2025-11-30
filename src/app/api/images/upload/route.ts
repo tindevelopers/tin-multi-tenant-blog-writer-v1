@@ -191,6 +191,30 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    if (!assetId) {
+      logger.error('Failed to save media asset to database', {
+        orgId: user.org_id,
+        userId: user.id,
+        fileName: file.name,
+        publicId: uploadResult.public_id,
+      });
+      // Still return success for Cloudinary upload, but warn about DB save failure
+      return NextResponse.json({
+        url: uploadResult.secure_url || uploadResult.url,
+        public_id: uploadResult.public_id,
+        width: uploadResult.width,
+        height: uploadResult.height,
+        asset_id: null,
+        warning: 'Image uploaded to Cloudinary but failed to save to database. Please check logs.',
+      });
+    }
+
+    logger.debug('✅ Media asset saved successfully', {
+      assetId,
+      orgId: user.org_id,
+      fileName: file.name,
+    });
+
     return NextResponse.json({
       url: uploadResult.secure_url || uploadResult.url,
       public_id: uploadResult.public_id,
