@@ -48,27 +48,86 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Get Webflow integration FIRST (before checking site_id)
     // This allows us to use site_id from integration config if not provided
     // Check for active status, but also log what we find
-    const { data: integration, error: integrationError } = await supabase
-      .from('integrations')
-      .select('integration_id, config, metadata, status, name')
-      .eq('org_id', orgId)
-      .eq('type', 'webflow')
-      .eq('status', 'active')
-      .maybeSingle();
+    let integration: any = null;
+    let integrationError: any = null;
+    
+    try {
+      const result = await supabase
+        .from('integrations')
+        .select('integration_id, config, metadata, status, name')
+        .eq('org_id', orgId)
+        .eq('type', 'webflow')
+        .eq('status', 'active')
+        .maybeSingle();
+      
+      integration = result.data;
+      integrationError = result.error;
+    } catch (error: any) {
+      // Catch any unexpected errors (like schema cache issues)
+      logger.error('Unexpected error querying integrations table', {
+        orgId,
+        error: error.message,
+        stack: error.stack,
+      });
+      integrationError = error;
+    }
 
     if (integrationError) {
+      // Check if it's a schema cache issue
+      const isSchemaCacheError = integrationError.message?.includes('schema cache') || 
+                                 integrationError.message?.includes('Could not find the table');
+      
       logger.error('Error querying Webflow integration', {
         orgId,
         error: integrationError.message,
         code: integrationError.code,
+        isSchemaCacheError,
       });
-      return NextResponse.json(
-        { 
-          error: 'Failed to query Webflow integration',
-          details: integrationError.message 
-        },
-        { status: 500 }
-      );
+      
+      // If it's a schema cache error, try using service client as fallback
+      if (isSchemaCacheError) {
+        logger.warn('Schema cache error detected, trying service client fallback', { orgId });
+        try {
+          const { createServiceClient } = await import('@/lib/supabase/service');
+          const serviceClient = createServiceClient();
+          
+          const serviceResult = await serviceClient
+            .from('integrations')
+            .select('integration_id, config, metadata, status, name')
+            .eq('org_id', orgId)
+            .eq('type', 'webflow')
+            .eq('status', 'active')
+            .maybeSingle();
+          
+          if (!serviceResult.error && serviceResult.data) {
+            logger.info('Service client fallback succeeded', { orgId });
+            integration = serviceResult.data;
+            integrationError = null;
+          } else {
+            logger.error('Service client fallback also failed', {
+              error: serviceResult.error?.message,
+            });
+          }
+        } catch (fallbackError: any) {
+          logger.error('Service client fallback failed', {
+            error: fallbackError.message,
+          });
+        }
+      }
+      
+      // If still have error after fallback attempt
+      if (integrationError && !integration) {
+        return NextResponse.json(
+          { 
+            error: 'Failed to query Webflow integration',
+            details: integrationError.message,
+            hint: isSchemaCacheError 
+              ? 'Database schema cache issue. Please try again in a moment or contact support.'
+              : undefined,
+          },
+          { status: 500 }
+        );
+      }
     }
 
     if (!integration) {
