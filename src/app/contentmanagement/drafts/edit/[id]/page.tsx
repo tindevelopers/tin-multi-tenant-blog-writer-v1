@@ -13,7 +13,8 @@ import {
   PhotoIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  XMarkIcon
 } from "@heroicons/react/24/outline";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 import { extractBlogFields, generateSlug, calculateReadTime, validateBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
