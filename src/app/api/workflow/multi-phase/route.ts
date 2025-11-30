@@ -2,32 +2,33 @@
  * Multi-Phase Workflow API
  * 
  * Endpoints for managing the 5-phase blog creation workflow:
- * 1. Content Generation
+ * 1. Content Generation (via async Cloud Tasks queue)
  * 2. Image Generation
  * 3. Content Enhancement
  * 4. Advanced Interlinking
  * 5. Publishing Preparation
+ * 
+ * IMPORTANT: Multi-phase workflows ALWAYS run in async mode via Cloud Tasks queue,
+ * similar to quick generation. This ensures scalability and prevents timeouts.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/service';
-import { createMultiPhaseWorkflow, type WorkflowConfig, type WorkflowState } from '@/lib/workflow/multi-phase-workflow';
+import { createClient } from '@/lib/supabase/server';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 import { logger } from '@/utils/logger';
 
-// Store active workflows in memory (in production, use Redis or database)
-const activeWorkflows = new Map<string, {
-  workflow: ReturnType<typeof createMultiPhaseWorkflow>;
-  state: WorkflowState;
-  promise?: Promise<WorkflowState>;
-}>();
+const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
 
 /**
  * POST /api/workflow/multi-phase
- * Start a new multi-phase workflow
+ * Start a new multi-phase workflow (ALWAYS async via Cloud Tasks)
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  let queueId: string | null = null;
+  
   try {
-    const supabase = createServiceClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -35,15 +36,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Get user's organization
-    const { data: userOrg } = await supabase
-      .from('user_organizations')
+    const { data: userProfile } = await supabase
+      .from('users')
       .select('org_id')
       .eq('user_id', user.id)
       .single();
 
-    if (!userOrg) {
+    if (!userProfile?.org_id) {
       return NextResponse.json({ error: 'No organization found' }, { status: 400 });
     }
+
+    const orgId = userProfile.org_id;
+    const userId = user.id;
 
     const body = await request.json();
     const {
@@ -65,6 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       targetPlatform = 'webflow',
       collectionId,
       isDraft = true,
+      customInstructions,
     } = body;
 
     // Validate required fields
@@ -80,7 +85,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const { data: integration } = await supabase
         .from('integrations')
         .select('credentials, site_id')
-        .eq('org_id', userOrg.org_id)
+        .eq('org_id', orgId)
         .eq('platform', 'webflow')
         .eq('status', 'connected')
         .single();
@@ -91,114 +96,246 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Create workflow config
-    const config: WorkflowConfig = {
-      topic,
-      keywords: Array.isArray(keywords) ? keywords : [keywords],
-      targetAudience,
-      tone,
-      wordCount,
-      qualityLevel,
-      generateFeaturedImage,
-      generateContentImages,
-      imageStyle,
-      optimizeForSeo,
-      generateStructuredData,
-      crawlWebsite: crawlWebsite && !!webflowApiKey,
-      maxInternalLinks,
-      maxExternalLinks,
-      includeClusterLinks,
-      targetPlatform,
-      collectionId,
-      isDraft,
-      orgId: userOrg.org_id,
-      webflowApiKey,
-      webflowSiteId,
-    };
+    // Convert keywords to array format
+    const keywordsArray = Array.isArray(keywords) ? keywords : (keywords ? [keywords] : []);
 
-    // Create and start workflow
-    const workflow = createMultiPhaseWorkflow(config, (state) => {
-      // Update stored state on changes
-      const stored = activeWorkflows.get(state.id);
-      if (stored) {
-        stored.state = state;
-      }
-    });
-
-    const initialState = workflow.getState();
+    // Step 1: Create queue entry in blog_generation_queue (same as quick generation)
+    logger.info('📋 Creating queue entry for multi-phase workflow', { topic, orgId, userId });
     
-    // Store workflow
-    activeWorkflows.set(initialState.id, {
-      workflow,
-      state: initialState,
-    });
+    try {
+      const { data: queueItem, error: queueError } = await supabase
+        .from('blog_generation_queue')
+        .insert({
+          org_id: orgId,
+          created_by: userId,
+          topic: topic,
+          keywords: keywordsArray,
+          target_audience: targetAudience,
+          tone: tone,
+          word_count: wordCount,
+          quality_level: qualityLevel,
+          custom_instructions: customInstructions,
+          template_type: 'multi_phase_workflow',
+          status: 'queued',
+          priority: 5, // Normal priority
+          metadata: {
+            workflow_type: 'multi_phase',
+            generate_featured_image: generateFeaturedImage,
+            generate_content_images: generateContentImages,
+            image_style: imageStyle,
+            optimize_for_seo: optimizeForSeo,
+            generate_structured_data: generateStructuredData,
+            crawl_website: crawlWebsite && !!webflowApiKey,
+            max_internal_links: maxInternalLinks,
+            max_external_links: maxExternalLinks,
+            include_cluster_links: includeClusterLinks,
+            target_platform: targetPlatform,
+            collection_id: collectionId,
+            is_draft: isDraft,
+            webflow_site_id: webflowSiteId,
+            async_mode: true, // Always async
+          },
+          queued_at: new Date().toISOString(),
+        })
+        .select('queue_id')
+        .single();
 
-    // Start workflow execution in background
-    const executionPromise = workflow.execute().then((finalState) => {
-      // Store final state
-      const stored = activeWorkflows.get(initialState.id);
-      if (stored) {
-        stored.state = finalState;
+      if (queueError || !queueItem) {
+        logger.error('Failed to create queue entry', { error: queueError });
+        throw new Error(`Failed to create queue entry: ${queueError?.message || 'Unknown error'}`);
       }
-      
-      // Clean up after 1 hour
-      setTimeout(() => {
-        activeWorkflows.delete(initialState.id);
-      }, 60 * 60 * 1000);
 
-      return finalState;
-    }).catch((error) => {
-      logger.error('Workflow execution failed', {
-        workflowId: initialState.id,
-        error: error.message,
-      });
-      
-      const stored = activeWorkflows.get(initialState.id);
-      if (stored) {
-        stored.state = {
-          ...stored.state,
-          phase: 'failed',
-          error: error.message,
-        };
-      }
-      
-      throw error;
-    });
-
-    // Store the promise
-    const stored = activeWorkflows.get(initialState.id);
-    if (stored) {
-      stored.promise = executionPromise;
+      queueId = queueItem.queue_id;
+      logger.info('✅ Queue entry created', { queueId });
+    } catch (error: any) {
+      logger.error('Queue creation failed', { error: error.message });
+      throw new Error(`Failed to create workflow queue entry: ${error.message}`);
     }
 
-    logger.info('Multi-phase workflow started', {
-      workflowId: initialState.id,
+    // Step 2: Call Blog Writer API with async_mode=true (ALWAYS async for multi-phase)
+    logger.info('🚀 Starting Phase 1 (Content Generation) in async mode', {
+      queueId,
       topic,
-      keywordsCount: keywords.length,
+      endpoint: `${BLOG_WRITER_API_URL}/api/v1/blog/generate-enhanced?async_mode=true`,
     });
 
-    return NextResponse.json({
-      success: true,
-      workflowId: initialState.id,
-      state: initialState,
-      message: 'Workflow started successfully',
+    const apiUrl = `${BLOG_WRITER_API_URL}/api/v1/blog/generate-enhanced?async_mode=true`;
+    
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (API_KEY) {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
+    }
+
+    const requestPayload = {
+      topic,
+      keywords: keywordsArray,
+      target_audience: targetAudience,
+      tone: tone || 'professional',
+      word_count: wordCount,
+      quality_level: qualityLevel,
+      custom_instructions: customInstructions,
+      use_consensus_generation: true,
+      fallback_to_openai: true,
+      use_dataforseo_content_generation: true,
+      use_openai_fallback: true,
+    };
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(requestPayload),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('❌ Phase 1 API error', {
+        status: response.status,
+        error: errorText,
+        queueId,
+      });
+
+      // Update queue entry with error
+      if (queueId) {
+        await supabase
+          .from('blog_generation_queue')
+          .update({
+            status: 'failed',
+            generation_error: `Phase 1 API error ${response.status}: ${errorText.substring(0, 500)}`,
+            generation_completed_at: new Date().toISOString(),
+          })
+          .eq('queue_id', queueId);
+      }
+
+      throw new Error(`Content generation failed: ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    // Step 3: Handle async response (should always return job_id)
+    if (result.job_id) {
+      logger.info('✅ Async job created successfully', {
+        job_id: result.job_id,
+        queueId,
+      });
+
+      // Update queue entry with job_id
+      if (queueId) {
+        // Get current metadata first
+        const { data: currentQueue } = await supabase
+          .from('blog_generation_queue')
+          .select('metadata')
+          .eq('queue_id', queueId)
+          .single();
+
+        await supabase
+          .from('blog_generation_queue')
+          .update({
+            status: 'queued',
+            metadata: {
+              ...(currentQueue?.metadata || {}),
+              backend_job_id: result.job_id,
+              estimated_completion_time: result.estimated_completion_time || null,
+              async_mode: true,
+              workflow_type: 'multi_phase',
+            },
+            generation_started_at: new Date().toISOString(),
+          })
+          .eq('queue_id', queueId);
+      }
+
+      // Return immediately with queue_id and job_id (async mode)
+      return NextResponse.json({
+        success: true,
+        queue_id: queueId,
+        job_id: result.job_id,
+        status: 'queued',
+        message: 'Multi-phase workflow queued successfully. Processing will continue asynchronously.',
+        estimated_completion_time: result.estimated_completion_time,
+        workflow_type: 'multi_phase',
+      });
+    } else {
+      // If async mode failed but API returned success, log warning
+      logger.warn('⚠️ Async mode requested but no job_id returned', {
+        resultKeys: Object.keys(result),
+        queueId,
+      });
+
+      // Update queue to indicate async mode failed
+      if (queueId) {
+        // Get current metadata first
+        const { data: currentQueue } = await supabase
+          .from('blog_generation_queue')
+          .select('metadata')
+          .eq('queue_id', queueId)
+          .single();
+
+        await supabase
+          .from('blog_generation_queue')
+          .update({
+            status: 'generating',
+            metadata: {
+              ...(currentQueue?.metadata || {}),
+              async_mode_requested: true,
+              async_mode_failed: true,
+              fallback_to_sync: true,
+              error: result.error || result.error_message || 'Async mode not available',
+            },
+          })
+          .eq('queue_id', queueId);
+      }
+
+      // Still return queue_id so frontend can track it
+      return NextResponse.json({
+        success: true,
+        queue_id: queueId,
+        status: 'generating',
+        message: 'Workflow started but async mode unavailable. Processing synchronously.',
+        warning: 'Async mode not available, falling back to synchronous processing',
+      });
+    }
   } catch (error: any) {
-    logger.error('Failed to start workflow', { error: error.message });
+    logger.error('Failed to start multi-phase workflow', {
+      error: error.message,
+      queueId,
+    });
+
+    // Update queue entry with error if it exists
+    if (queueId) {
+      try {
+        const supabase = await createClient();
+        await supabase
+          .from('blog_generation_queue')
+          .update({
+            status: 'failed',
+            generation_error: error.message,
+            generation_completed_at: new Date().toISOString(),
+          })
+          .eq('queue_id', queueId);
+      } catch (updateError) {
+        logger.warn('Failed to update queue entry with error', { updateError });
+      }
+    }
+
     return NextResponse.json(
-      { error: error.message || 'Failed to start workflow' },
+      {
+        error: error.message || 'Failed to start multi-phase workflow',
+        queue_id: queueId, // Include queue_id even on error for tracking
+      },
       { status: 500 }
     );
   }
 }
 
 /**
- * GET /api/workflow/multi-phase?id=xxx
- * Get workflow status
+ * GET /api/workflow/multi-phase?id=xxx or ?queue_id=xxx
+ * Get workflow status from queue
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
-    const supabase = createServiceClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -206,34 +343,80 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const { searchParams } = new URL(request.url);
-    const workflowId = searchParams.get('id');
+    const queueId = searchParams.get('queue_id') || searchParams.get('id');
 
-    if (!workflowId) {
-      // Return list of active workflows for this user
-      const userWorkflows: WorkflowState[] = [];
-      activeWorkflows.forEach((stored) => {
-        userWorkflows.push(stored.state);
-      });
+    if (!queueId) {
+      // Return list of multi-phase workflows for this user from queue
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('org_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!userProfile?.org_id) {
+        return NextResponse.json({ error: 'No organization found' }, { status: 400 });
+      }
+
+      const { data: workflows, error } = await supabase
+        .from('blog_generation_queue')
+        .select('*')
+        .eq('org_id', userProfile.org_id)
+        .eq('metadata->>workflow_type', 'multi_phase')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        logger.error('Failed to fetch workflows', { error });
+        return NextResponse.json(
+          { error: 'Failed to fetch workflows' },
+          { status: 500 }
+        );
+      }
 
       return NextResponse.json({
-        workflows: userWorkflows,
-        count: userWorkflows.length,
+        workflows: workflows || [],
+        count: workflows?.length || 0,
       });
     }
 
-    // Get specific workflow
-    const stored = activeWorkflows.get(workflowId);
-    
-    if (!stored) {
+    // Get specific workflow from queue
+    const { data: queueItem, error } = await supabase
+      .from('blog_generation_queue')
+      .select('*')
+      .eq('queue_id', queueId)
+      .single();
+
+    if (error || !queueItem) {
       return NextResponse.json(
         { error: 'Workflow not found' },
         { status: 404 }
       );
     }
 
+    // Verify user has access to this workflow
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (userProfile?.org_id !== queueItem.org_id) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      state: stored.state,
+      queue_id: queueItem.queue_id,
+      status: queueItem.status,
+      topic: queueItem.topic,
+      metadata: queueItem.metadata,
+      created_at: queueItem.created_at,
+      generation_started_at: queueItem.generation_started_at,
+      generation_completed_at: queueItem.generation_completed_at,
+      generation_error: queueItem.generation_error,
     });
   } catch (error: any) {
     logger.error('Failed to get workflow status', { error: error.message });
