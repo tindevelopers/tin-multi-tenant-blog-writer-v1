@@ -43,12 +43,12 @@ export default function ImageInsertModal({
   const [searchTerm, setSearchTerm] = useState('');
   const [generatePrompt, setGeneratePrompt] = useState(excerpt);
 
-  // Load media assets when library tab is active
+  // Load media assets when library tab is active or search term changes
   useEffect(() => {
     if (isOpen && activeTab === 'library') {
       loadMediaAssets();
     }
-  }, [isOpen, activeTab]);
+  }, [isOpen, activeTab, searchTerm]);
 
   // Set generate prompt from excerpt when modal opens
   useEffect(() => {
@@ -60,47 +60,20 @@ export default function ImageInsertModal({
   const loadMediaAssets = async () => {
     setLoadingMedia(true);
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        logger.error('User not authenticated');
-        return;
+      // Use API endpoint for better compatibility and consistency
+      const params = new URLSearchParams({
+        type: 'image',
+        limit: '50',
+        search: searchTerm || '',
+      });
+
+      const response = await fetch(`/api/media/list?${params}`);
+      if (!response.ok) {
+        throw new Error('Failed to load media assets');
       }
 
-      // Get user's org_id
-      const { data: userProfile } = await supabase
-        .from('users')
-        .select('org_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!userProfile?.org_id) {
-        logger.error('User org_id not found');
-        return;
-      }
-
-      // Fetch media assets
-      let query = supabase
-        .from('media_assets')
-        .select('asset_id, file_name, file_url, file_type, created_at')
-        .eq('org_id', userProfile.org_id)
-        .eq('file_type', 'image')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (searchTerm) {
-        query = query.ilike('file_name', `%${searchTerm}%`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        logger.error('Error loading media assets:', error);
-        return;
-      }
-
-      setMediaAssets(data || []);
+      const result = await response.json();
+      setMediaAssets(result.data || []);
     } catch (error) {
       logger.error('Error loading media assets:', error);
     } finally {
