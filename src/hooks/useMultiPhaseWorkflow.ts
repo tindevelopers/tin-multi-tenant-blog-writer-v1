@@ -115,9 +115,11 @@ export interface PublishingResult extends WorkflowPhaseResult {
   };
 }
 
+export type WorkflowPhase = 'idle' | 'content_generation' | 'image_generation' | 'content_enhancement' | 'interlinking' | 'publishing_preparation' | 'completed' | 'failed';
+
 export interface WorkflowState {
   id: string;
-  phase: 'idle' | 'content_generation' | 'image_generation' | 'content_enhancement' | 'interlinking' | 'publishing_preparation' | 'completed' | 'failed';
+  phase: WorkflowPhase;
   progress: number;
   startedAt: string;
   updatedAt: string;
