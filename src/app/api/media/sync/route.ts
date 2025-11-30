@@ -50,30 +50,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch resources directly from Cloudinary API
+    // Fetch resources directly from Cloudinary Admin API
     const folder = `blog-images/${user.org_id}`;
     const crypto = await import('crypto');
     
-    // Create Cloudinary Admin API signature for listing resources
+    // Cloudinary Admin API requires signed requests
+    // Parameters must be sorted alphabetically (excluding api_key and signature)
     const timestamp = Math.round(new Date().getTime() / 1000);
-    const paramsToSign = `max_results=500&prefix=${folder}&resource_type=image&timestamp=${timestamp}`;
+    
+    const params: Record<string, string> = {
+      max_results: '500',
+      prefix: folder,
+      resource_type: 'image',
+      timestamp: timestamp.toString(),
+    };
+    
+    // Sort parameters alphabetically for signature
+    const sortedParamKeys = Object.keys(params).sort();
+    const sortedParamsString = sortedParamKeys
+      .map(key => `${key}=${params[key]}`)
+      .join('&');
+    
+    // Calculate SHA1 signature: sorted_params_string + api_secret
     const signature = crypto.createHash('sha1')
-      .update(paramsToSign + credentials.api_secret)
+      .update(sortedParamsString + credentials.api_secret)
       .digest('hex');
     
     // Build Cloudinary Admin API URL
     const cloudinaryUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
+    cloudinaryUrl.searchParams.append('api_key', credentials.api_key);
     cloudinaryUrl.searchParams.append('max_results', '500');
     cloudinaryUrl.searchParams.append('prefix', folder);
     cloudinaryUrl.searchParams.append('resource_type', 'image');
     cloudinaryUrl.searchParams.append('timestamp', timestamp.toString());
     cloudinaryUrl.searchParams.append('signature', signature);
-    cloudinaryUrl.searchParams.append('api_key', credentials.api_key);
     
     logger.debug('Fetching Cloudinary resources', {
-      url: cloudinaryUrl.toString().replace(credentials.api_key, '***'),
+      url: cloudinaryUrl.toString().replace(credentials.api_key, '***').replace(credentials.api_secret, '***'),
       folder,
       orgId: user.org_id,
+      cloudName: credentials.cloud_name,
+      signaturePrefix: signature.substring(0, 8) + '...',
+      sortedParams: sortedParamsString,
     });
 
     const syncResponse = await fetch(cloudinaryUrl.toString(), {
@@ -86,10 +104,28 @@ export async function POST(request: NextRequest) {
 
     if (!syncResponse.ok) {
       const errorText = await syncResponse.text();
+      const errorHeaders = Object.fromEntries(syncResponse.headers.entries());
+      
       logger.error('Cloudinary list API error:', {
         status: syncResponse.status,
+        statusText: syncResponse.statusText,
         error: errorText,
+        headers: errorHeaders,
+        cloudName: credentials.cloud_name,
+        folder,
+        url: cloudinaryUrl.toString().replace(credentials.api_key, '***').replace(credentials.api_secret, '***'),
       });
+      
+      // Provide more helpful error messages
+      if (syncResponse.status === 401) {
+        return NextResponse.json(
+          { 
+            error: 'Invalid Cloudinary credentials. Please verify your Cloud Name, API Key, and API Secret in Settings → Integrations → Cloudinary.',
+            details: errorText,
+          },
+          { status: 401 }
+        );
+      }
       
       return NextResponse.json(
         { error: `Failed to fetch Cloudinary resources: ${syncResponse.status} - ${errorText}` },

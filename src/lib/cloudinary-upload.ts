@@ -48,12 +48,26 @@ export async function getCloudinaryCredentials(orgId: string): Promise<Cloudinar
     }
 
     const cloudinary = settings.cloudinary as Record<string, unknown>;
-    const cloud_name = cloudinary.cloud_name as string;
-    const api_key = cloudinary.api_key as string;
-    const api_secret = cloudinary.api_secret as string;
+    const cloud_name = (cloudinary.cloud_name as string)?.trim();
+    const api_key = (cloudinary.api_key as string)?.trim();
+    const api_secret = (cloudinary.api_secret as string)?.trim();
 
     if (!cloud_name || !api_key || !api_secret) {
-      logger.warn(`Incomplete Cloudinary credentials for org ${orgId}`);
+      logger.warn(`Incomplete Cloudinary credentials for org ${orgId}`, {
+        hasCloudName: !!cloud_name,
+        hasApiKey: !!api_key,
+        hasApiSecret: !!api_secret,
+      });
+      return null;
+    }
+
+    // Validate credentials are not empty strings after trimming
+    if (cloud_name.length === 0 || api_key.length === 0 || api_secret.length === 0) {
+      logger.warn(`Empty Cloudinary credentials for org ${orgId}`, {
+        cloudNameLength: cloud_name.length,
+        apiKeyLength: api_key.length,
+        apiSecretLength: api_secret.length,
+      });
       return null;
     }
 
