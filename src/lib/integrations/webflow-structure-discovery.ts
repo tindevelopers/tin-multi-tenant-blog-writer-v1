@@ -322,8 +322,13 @@ export async function discoverWebflowStructure(
       continue;
     }
     
-    const slugValue = page.slug || page.displayName?.toLowerCase().replace(/\s+/g, '-') || `page-${page.id}`;
-    const slug: string = typeof slugValue === 'string' ? slugValue : `page-${page.id}`;
+    // Safely extract slug - handle potential non-string values
+    let slug: string = `page-${page.id}`;
+    if (typeof page.slug === 'string' && page.slug) {
+      slug = page.slug;
+    } else if (typeof page.displayName === 'string' && page.displayName) {
+      slug = page.displayName.toLowerCase().replace(/\s+/g, '-');
+    }
     const url = `https://${siteId}.webflow.io/${slug}`;
     
     // Extract keywords from page display name
