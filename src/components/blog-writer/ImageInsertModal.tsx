@@ -71,7 +71,7 @@ function MediaThumbnail({
             <img
               src={asset.file_url}
               alt={asset.file_name}
-              className={`w-full h-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+              className={`w-full h-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity relative z-0`}
               onError={(e) => {
                 setImageError(true);
                 setImageLoading(false);
@@ -98,15 +98,15 @@ function MediaThumbnail({
               loading="lazy"
               crossOrigin="anonymous"
             />
-            {/* Hover Overlay */}
-            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
-              <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
+            {/* Hover Overlay - Only visible on hover, transparent by default */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all duration-200 flex items-center justify-center pointer-events-none z-10">
+              <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium pointer-events-none transition-opacity duration-200">
                 Select
               </span>
             </div>
-            {/* File Name Overlay */}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-              <p className="text-white text-xs truncate font-medium">{asset.file_name}</p>
+            {/* File Name Overlay - Reduced opacity, only bottom portion */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent p-2 pointer-events-none z-10">
+              <p className="text-white text-xs truncate font-medium drop-shadow-lg">{asset.file_name}</p>
             </div>
           </>
         ) : (
