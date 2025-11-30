@@ -11,13 +11,16 @@ import {
   DocumentCheckIcon,
   PencilIcon,
   ChevronDownIcon,
-  ChevronUpIcon,
   CheckCircleIcon,
+  PhotoIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueueItem, type ProgressUpdate } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
+import { normalizeBlogContent } from "@/lib/content-sanitizer";
+import HeadingStructure from "@/components/blog-writer/HeadingStructure";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -30,7 +33,11 @@ export default function QueueItemDetailPage() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     status: true,
     metadata: false,
+    content: false,
   });
+  const [normalizedContent, setNormalizedContent] = useState<ReturnType<typeof normalizeBlogContent> | null>(null);
+  const [phase2Loading, setPhase2Loading] = useState(false);
+  const [phase3Loading, setPhase3Loading] = useState(false);
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -69,6 +76,24 @@ export default function QueueItemDetailPage() {
       }
     }
   }, [status, progress, stage, item, fetchQueueItem]);
+
+  // Normalize content when item changes
+  useEffect(() => {
+    if (item && item.status === "generated" && item.generated_content) {
+      try {
+        const normalized = normalizeBlogContent({
+          title: item.generated_title || item.topic,
+          content: item.generated_content,
+          excerpt: item.generation_metadata?.excerpt,
+          word_count: item.generation_metadata?.word_count,
+          ...item.generation_metadata,
+        });
+        setNormalizedContent(normalized);
+      } catch (error) {
+        logger.error("Error normalizing content", { error });
+      }
+    }
+  }, [item]);
 
 
   const handleCancel = async () => {
@@ -178,14 +203,17 @@ export default function QueueItemDetailPage() {
         return;
       }
       
+      // Use normalized content if available, otherwise fallback to raw
+      const contentToSave = normalizedContent?.sanitizedContent || item.generated_content;
+      
       // Create draft using save-content endpoint (which will auto-extract fields)
       const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: item.generated_content,
-          title: item.generated_title || item.topic,
-          excerpt: item.generation_metadata?.excerpt || '',
+          content: contentToSave,
+          title: normalizedContent?.title || item.generated_title || item.topic,
+          excerpt: normalizedContent?.excerpt || item.generation_metadata?.excerpt || '',
           queue_item_id: queueId,
         }),
       });
@@ -202,6 +230,78 @@ export default function QueueItemDetailPage() {
     } catch (err) {
       logger.error("Error creating draft:", err);
       alert("Failed to create draft. Please try again.");
+    }
+  };
+
+  const handlePhase2ImageGeneration = async () => {
+    if (!item) return;
+    
+    setPhase2Loading(true);
+    try {
+      const response = await fetch('/api/workflow/generate-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: item.topic,
+          content: normalizedContent?.sanitizedContent || item.generated_content,
+          title: normalizedContent?.title || item.generated_title || item.topic,
+          excerpt: normalizedContent?.excerpt || item.generation_metadata?.excerpt,
+          generate_featured_image: true,
+          generate_content_images: item.metadata?.generate_content_images || false,
+          image_style: item.metadata?.image_style || 'photographic',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate images');
+      }
+
+      const result = await response.json();
+      alert('✅ Phase 2 (Image Generation) started! Images will be generated and added to your content.');
+      
+      // Refresh the queue item to see updated status
+      await fetchQueueItem();
+    } catch (error) {
+      logger.error('Phase 2 error', { error });
+      alert(`Failed to start Phase 2: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setPhase2Loading(false);
+    }
+  };
+
+  const handlePhase3ContentEnhancement = async () => {
+    if (!item) return;
+    
+    setPhase3Loading(true);
+    try {
+      const response = await fetch('/api/workflow/enhance-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: normalizedContent?.sanitizedContent || item.generated_content,
+          title: normalizedContent?.title || item.generated_title || item.topic,
+          keywords: item.keywords || [],
+          generate_structured_data: item.metadata?.generate_structured_data !== false,
+          optimize_for_seo: item.metadata?.optimize_for_seo !== false,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to enhance content');
+      }
+
+      const result = await response.json();
+      alert('✅ Phase 3 (Content Enhancement) completed! Content has been enhanced with SEO optimization and structured data.');
+      
+      // Refresh the queue item to see updated content
+      await fetchQueueItem();
+    } catch (error) {
+      logger.error('Phase 3 error', { error });
+      alert(`Failed to start Phase 3: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setPhase3Loading(false);
     }
   };
 
@@ -274,6 +374,32 @@ export default function QueueItemDetailPage() {
             >
               <PencilIcon className="w-5 h-5" />
               Create & Edit Draft
+            </button>
+          )}
+
+          {/* Phase 2: Image Generation */}
+          {hasGeneratedContent && (
+            <button
+              type="button"
+              onClick={handlePhase2ImageGeneration}
+              disabled={phase2Loading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <PhotoIcon className="w-5 h-5" />
+              {phase2Loading ? 'Generating Images...' : 'Phase 2: Generate Images'}
+            </button>
+          )}
+
+          {/* Phase 3: Content Enhancement */}
+          {hasGeneratedContent && (
+            <button
+              type="button"
+              onClick={handlePhase3ContentEnhancement}
+              disabled={phase3Loading}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <SparklesIcon className="w-5 h-5" />
+              {phase3Loading ? 'Enhancing Content...' : 'Phase 3: Enhance & Add Schema'}
             </button>
           )}
           
@@ -478,6 +604,59 @@ export default function QueueItemDetailPage() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Content Preview Section */}
+      {hasGeneratedContent && normalizedContent && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleSection('content')}
+            className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          >
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Generated Content Preview
+            </h2>
+            {expandedSections.content ? (
+              <ChevronUpIcon className="w-5 h-5 text-gray-500" />
+            ) : (
+              <ChevronDownIcon className="w-5 h-5 text-gray-500" />
+            )}
+          </button>
+
+          {expandedSections.content && (
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 space-y-6">
+              {/* Heading Structure */}
+              {normalizedContent.headings.length > 0 && (
+                <HeadingStructure headings={normalizedContent.headings} />
+              )}
+
+              {/* Content Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <InfoItem label="Word Count" value={normalizedContent.wordCount.toLocaleString()} />
+                <InfoItem label="Headings" value={`${normalizedContent.headings.length} total`} />
+                <InfoItem 
+                  label="H1 Headings" 
+                  value={normalizedContent.headings.filter(h => h.level === 1).length.toString()} 
+                />
+                <InfoItem 
+                  label="H2 Headings" 
+                  value={normalizedContent.headings.filter(h => h.level === 2).length.toString()} 
+                />
+              </div>
+
+              {/* Sanitized Content Preview */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Content Preview (Sanitized)
+                </label>
+                <div 
+                  className="prose prose-lg dark:prose-invert max-w-none bg-gray-50 dark:bg-gray-900 rounded-lg p-6 max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-700"
+                  dangerouslySetInnerHTML={{ __html: normalizedContent.sanitizedContent }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
