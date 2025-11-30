@@ -89,24 +89,28 @@ async function fetchWebflowPages(
       `https://api.webflow.com/v2/sites/${siteId}/pages`,
       {
         headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Accept-Version': '1.0.0',
+          'authorization': `Bearer ${apiToken}`,
           'accept': 'application/json',
         }
       }
     );
     
     if (!pagesResponse.ok) {
+      const errorText = await pagesResponse.text();
       logger.warn('Failed to fetch Webflow pages', {
         status: pagesResponse.status,
         statusText: pagesResponse.statusText,
+        error: errorText,
+        siteId,
       });
       return [];
     }
     
     const data = await pagesResponse.json();
     // Webflow API v2 returns pages in a 'pages' array
-    return data.pages || data || [];
+    const pages = data.pages || data || [];
+    logger.debug('Fetched Webflow pages', { count: pages.length, siteId });
+    return pages;
   } catch (error: any) {
     logger.warn('Error fetching Webflow pages', { error: error.message });
     return [];
@@ -133,8 +137,7 @@ export async function discoverWebflowStructure(
       `https://api.webflow.com/v2/sites/${siteId}/collections`,
       {
         headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Accept-Version': '1.0.0',
+          'authorization': `Bearer ${apiToken}`,
           'accept': 'application/json',
         }
       }
@@ -143,10 +146,14 @@ export async function discoverWebflowStructure(
     if (collectionsResponse.ok) {
       const data = await collectionsResponse.json();
       collections = data.collections || data || [];
+      logger.debug('Fetched Webflow collections', { count: collections.length, siteId });
     } else {
+      const errorText = await collectionsResponse.text();
       logger.warn('Failed to fetch Webflow collections', {
         status: collectionsResponse.status,
         statusText: collectionsResponse.statusText,
+        error: errorText,
+        siteId,
       });
     }
   } catch (error: any) {
@@ -160,20 +167,29 @@ export async function discoverWebflowStructure(
         `https://api.webflow.com/v2/collections/${collection.id}/items`,
         {
           headers: {
-            'Authorization': `Bearer ${apiToken}`,
-            'Accept-Version': '1.0.0',
+            'authorization': `Bearer ${apiToken}`,
             'accept': 'application/json',
           }
         }
       );
       
       if (!itemsResponse.ok) {
-        logger.warn(`Failed to fetch items for collection ${collection.id}`);
+        const errorText = await itemsResponse.text();
+        logger.warn(`Failed to fetch items for collection ${collection.id}`, {
+          status: itemsResponse.status,
+          statusText: itemsResponse.statusText,
+          error: errorText,
+          collectionId: collection.id,
+        });
         continue;
       }
       
       const data = await itemsResponse.json();
       const items = data.items || [];
+      logger.debug(`Fetched items for collection ${collection.id}`, { 
+        collectionName: collection.name,
+        itemCount: items.length 
+      });
       
       // Transform CMS items to interlinking format
       for (const item of items) {
