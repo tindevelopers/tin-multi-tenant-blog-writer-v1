@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
     // Step 1.5: Insert hyperlinks if requested (before other enhancements)
     if (insert_hyperlinks) {
       try {
-        enhancedContent = await insertInternalLinks(enhancedContent, finalTitle, keywordArray);
+        enhancedContent = await insertInternalLinks(enhancedContent, finalTitle, keywords);
         logger.info('Hyperlinks inserted into content');
       } catch (linkError: any) {
         logger.warn('Hyperlink insertion failed, continuing without links', {
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
     // Step 3: Generate enhanced metadata with OpenAI
     // Extract clean text from HTML for metadata generation
     const plainTextContent = enhancedContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const enhancedMetadata = await generateEnhancedMetadata(plainTextContent, finalTitle, keywordArray);
+    const enhancedMetadata = await generateEnhancedMetadata(plainTextContent, finalTitle, keywords);
 
     // Step 4: Try backend enhancement for additional fields
     let backendFields: Record<string, any> = {};
@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
           content: enhancedContent,
           title: finalTitle,
           topic: topic || finalTitle,
-          keywords: keywordArray,
+          keywords: keywords,
           fields_to_enhance: ['slug', 'featured_image_alt'],
         }),
       });
@@ -270,7 +270,7 @@ export async function POST(request: NextRequest) {
         '@type': 'BlogPosting',
         headline: enhancedMetadata.seo_title,
         description: enhancedMetadata.meta_description,
-        keywords: keywordArray.join(', '),
+        keywords: keywords.join(', '),
         wordCount: analysis.word_count,
         articleBody: enhancedContent.replace(/<[^>]+>/g, '').substring(0, 500),
       };
