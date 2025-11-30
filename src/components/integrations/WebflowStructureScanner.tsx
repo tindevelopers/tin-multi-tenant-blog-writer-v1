@@ -93,7 +93,7 @@ export function WebflowStructureScanner({
           setScans(updatedScans);
           
           // Check if any scan is still scanning using the fetched data
-          const stillScanning = updatedScans.some(s => s.status === 'scanning' || s.status === 'pending');
+          const stillScanning = updatedScans.some((s: WebflowScan) => s.status === 'scanning' || s.status === 'pending');
           if (!stillScanning) {
             setScanning(false);
             clearInterval(interval);

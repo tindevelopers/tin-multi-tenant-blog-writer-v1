@@ -573,8 +573,17 @@ async function performScan(
   // Use service client for reliable database access
   const supabase = createServiceClient();
   
-  try {
-    logger.info('Starting Webflow structure scan', { scanId, siteId, orgId });
+  // Set a 5-minute timeout for the entire scan operation
+  const timeoutMs = 5 * 60 * 1000; // 5 minutes
+  const timeoutPromise = new Promise<void>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error('Scan timeout: Operation exceeded 5 minutes'));
+    }, timeoutMs);
+  });
+
+  const scanPromise = (async () => {
+    try {
+      logger.info('Starting Webflow structure scan', { scanId, siteId, orgId });
 
     // Update status to scanning (in case it wasn't already)
     await supabase
@@ -730,6 +739,54 @@ async function performScan(
     }
 
     // Re-throw to be caught by caller
+    throw error;
+    }
+  })();
+
+  // Race between scan and timeout
+  try {
+    await Promise.race([scanPromise, timeoutPromise]);
+  } catch (error: any) {
+    // If timeout occurred, mark scan as failed
+    if (error.message && (error.message.includes('timeout') || error.message.includes('Timeout') || error.message.includes('exceeded'))) {
+      logger.error('Scan timed out', { scanId, siteId, orgId, timeoutMs, error: error.message });
+      
+      try {
+        const { error: timeoutUpdateError } = await supabase
+          .from('webflow_structure_scans')
+          .update({
+            status: 'failed',
+            error_message: `Scan timed out after ${timeoutMs / 1000 / 60} minutes`,
+            error_details: {
+              timeout: true,
+              timeoutMs,
+              originalError: error.message,
+            },
+            scan_completed_at: new Date().toISOString(),
+          })
+          .eq('scan_id', scanId)
+          .eq('org_id', orgId);
+
+        if (timeoutUpdateError) {
+          logger.error('Failed to update scan record with timeout error', {
+            scanId,
+            updateError: timeoutUpdateError.message,
+          });
+        } else {
+          logger.info('Successfully marked timed-out scan as failed', { scanId });
+        }
+      } catch (updateError: any) {
+        logger.error('Exception while updating scan record with timeout', {
+          scanId,
+          updateError: updateError.message,
+        });
+      }
+      
+      // Don't re-throw timeout errors - they're handled
+      return;
+    }
+    
+    // Re-throw other errors (they're already handled in scanPromise catch block)
     throw error;
   }
 }
