@@ -160,39 +160,116 @@ export async function discoverWebflowStructure(
     logger.warn('Error fetching Webflow collections', { error: error.message });
   }
   
-  // 2. For each collection, fetch CMS items
+  // 2. For each collection, fetch CMS items (with pagination support)
   for (const collection of collections) {
     try {
-      const itemsResponse = await fetch(
-        `https://api.webflow.com/v2/collections/${collection.id}/items`,
-        {
-          headers: {
-            'authorization': `Bearer ${apiToken}`,
-            'accept': 'application/json',
-          }
-        }
-      );
+      let allItems: WebflowItem[] = [];
+      let offset = 0;
+      const limit = 100; // Webflow API v2 default limit
+      let hasMore = true;
       
-      if (!itemsResponse.ok) {
-        const errorText = await itemsResponse.text();
-        logger.warn(`Failed to fetch items for collection ${collection.id}`, {
-          status: itemsResponse.status,
-          statusText: itemsResponse.statusText,
-          error: errorText,
-          collectionId: collection.id,
+      // Fetch items with pagination
+      // Try without pagination first, then with pagination if needed
+      while (hasMore) {
+        // Build URL - try with pagination params, but Webflow API v2 might not need them
+        const url = offset === 0 
+          ? `https://api.webflow.com/v2/collections/${collection.id}/items`
+          : `https://api.webflow.com/v2/collections/${collection.id}/items?offset=${offset}&limit=${limit}`;
+        
+        const itemsResponse = await fetch(
+          url,
+          {
+            headers: {
+              'authorization': `Bearer ${apiToken}`,
+              'accept': 'application/json',
+            }
+          }
+        );
+        
+        if (!itemsResponse.ok) {
+          const errorText = await itemsResponse.text();
+          logger.warn(`Failed to fetch items for collection ${collection.id}`, {
+            status: itemsResponse.status,
+            statusText: itemsResponse.statusText,
+            error: errorText,
+            collectionId: collection.id,
+            collectionName: collection.name,
+            offset,
+          });
+          break; // Stop pagination on error
+        }
+        
+        const data = await itemsResponse.json();
+        
+        // Log full response structure for debugging (first batch only)
+        if (offset === 0) {
+          logger.info(`API response structure for collection ${collection.id}`, {
+            collectionName: collection.name,
+            responseType: Array.isArray(data) ? 'array' : typeof data,
+            responseKeys: Array.isArray(data) ? `array[${data.length}]` : Object.keys(data),
+            sampleResponse: JSON.stringify(data).substring(0, 500), // First 500 chars
+          });
+        }
+        
+        // Handle different response formats:
+        // - { items: [...] } (nested)
+        // - { data: { items: [...] } } (double nested)
+        // - [...] (direct array)
+        let items: WebflowItem[] = [];
+        if (Array.isArray(data)) {
+          items = data;
+        } else if (data.items && Array.isArray(data.items)) {
+          items = data.items;
+        } else if (data.data && Array.isArray(data.data)) {
+          items = data.data;
+        } else if (data.data && data.data.items && Array.isArray(data.data.items)) {
+          items = data.data.items;
+        } else {
+          // Log unexpected format
+          logger.warn(`Unexpected response format for collection ${collection.id}`, {
+            collectionName: collection.name,
+            responseKeys: Object.keys(data),
+            responseType: typeof data,
+          });
+        }
+        
+        logger.debug(`Fetched items batch for collection ${collection.id}`, { 
+          collectionName: collection.name,
+          batchSize: items.length,
+          offset,
+          responseKeys: Object.keys(data),
         });
-        continue;
+        
+        allItems = allItems.concat(items);
+        
+        // Check if there are more items to fetch
+        // Webflow API v2 might return pagination info in different formats
+        const total = data.total || data.pagination?.total || (data.data?.pagination?.total);
+        const currentCount = allItems.length;
+        
+        if (items.length < limit || (total && currentCount >= total)) {
+          hasMore = false;
+        } else {
+          offset += limit;
+        }
+        
+        // Safety limit to prevent infinite loops
+        if (offset > 10000) {
+          logger.warn(`Pagination limit reached for collection ${collection.id}`, {
+            collectionName: collection.name,
+            totalItems: allItems.length,
+          });
+          break;
+        }
       }
       
-      const data = await itemsResponse.json();
-      const items = data.items || [];
-      logger.debug(`Fetched items for collection ${collection.id}`, { 
+      logger.info(`Fetched all items for collection ${collection.id}`, { 
         collectionName: collection.name,
-        itemCount: items.length 
+        totalItemCount: allItems.length 
       });
       
       // Transform CMS items to interlinking format
-      for (const item of items) {
+      for (const item of allItems) {
         const slug = item.fieldData?.slug || 
                     item.fieldData?.name?.toLowerCase().replace(/\s+/g, '-') || 
                     `item-${item.id}`;
