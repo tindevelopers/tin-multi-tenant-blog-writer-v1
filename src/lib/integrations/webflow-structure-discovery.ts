@@ -84,6 +84,9 @@ async function fetchWebflowPages(
   apiToken: string,
   siteId: string
 ): Promise<WebflowPage[]> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  
   try {
     const pagesResponse = await fetch(
       `https://api.webflow.com/v2/sites/${siteId}/pages`,
@@ -91,9 +94,12 @@ async function fetchWebflowPages(
         headers: {
           'authorization': `Bearer ${apiToken}`,
           'accept': 'application/json',
-        }
+        },
+        signal: controller.signal,
       }
     );
+    
+    clearTimeout(timeoutId);
     
     if (!pagesResponse.ok) {
       const errorText = await pagesResponse.text();
@@ -112,7 +118,12 @@ async function fetchWebflowPages(
     logger.debug('Fetched Webflow pages', { count: pages.length, siteId });
     return pages;
   } catch (error: any) {
-    logger.warn('Error fetching Webflow pages', { error: error.message });
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      logger.error('Timeout fetching Webflow pages', { siteId, timeout: '30s' });
+      throw new Error('Timeout fetching Webflow pages: Request exceeded 30 seconds');
+    }
+    logger.warn('Error fetching Webflow pages', { error: error.message, siteId });
     return [];
   }
 }
@@ -132,21 +143,28 @@ export async function discoverWebflowStructure(
   
   // 1. Fetch CMS collections
   let collections: WebflowCollection[] = [];
+  const collectionsController = new AbortController();
+  const collectionsTimeoutId = setTimeout(() => collectionsController.abort(), 30000); // 30 second timeout
+  
   try {
+    logger.debug('Fetching Webflow collections', { siteId });
     const collectionsResponse = await fetch(
       `https://api.webflow.com/v2/sites/${siteId}/collections`,
       {
         headers: {
           'authorization': `Bearer ${apiToken}`,
           'accept': 'application/json',
-        }
+        },
+        signal: collectionsController.signal,
       }
     );
+    
+    clearTimeout(collectionsTimeoutId);
     
     if (collectionsResponse.ok) {
       const data = await collectionsResponse.json();
       collections = data.collections || data || [];
-      logger.debug('Fetched Webflow collections', { count: collections.length, siteId });
+      logger.info('Fetched Webflow collections', { count: collections.length, siteId });
     } else {
       const errorText = await collectionsResponse.text();
       logger.warn('Failed to fetch Webflow collections', {
@@ -157,12 +175,23 @@ export async function discoverWebflowStructure(
       });
     }
   } catch (error: any) {
-    logger.warn('Error fetching Webflow collections', { error: error.message });
+    clearTimeout(collectionsTimeoutId);
+    if (error.name === 'AbortError') {
+      logger.error('Timeout fetching Webflow collections', { siteId, timeout: '30s' });
+      throw new Error('Timeout fetching Webflow collections: Request exceeded 30 seconds');
+    }
+    logger.warn('Error fetching Webflow collections', { error: error.message, siteId });
   }
   
   // 2. For each collection, fetch CMS items (with pagination support)
   for (const collection of collections) {
     try {
+      logger.info(`Fetching items for collection: ${collection.name} (${collection.id})`, { 
+        collectionId: collection.id,
+        collectionName: collection.name,
+        siteId 
+      });
+      
       let allItems: WebflowItem[] = [];
       let offset = 0;
       const limit = 100; // Webflow API v2 default limit
@@ -176,15 +205,35 @@ export async function discoverWebflowStructure(
           ? `https://api.webflow.com/v2/collections/${collection.id}/items`
           : `https://api.webflow.com/v2/collections/${collection.id}/items?offset=${offset}&limit=${limit}`;
         
-        const itemsResponse = await fetch(
-          url,
-          {
-            headers: {
-              'authorization': `Bearer ${apiToken}`,
-              'accept': 'application/json',
+        const itemsController = new AbortController();
+        const itemsTimeoutId = setTimeout(() => itemsController.abort(), 30000); // 30 second timeout per request
+        
+        let itemsResponse: Response;
+        try {
+          itemsResponse = await fetch(
+            url,
+            {
+              headers: {
+                'authorization': `Bearer ${apiToken}`,
+                'accept': 'application/json',
+              },
+              signal: itemsController.signal,
             }
+          );
+          clearTimeout(itemsTimeoutId);
+        } catch (fetchError: any) {
+          clearTimeout(itemsTimeoutId);
+          if (fetchError.name === 'AbortError') {
+            logger.error(`Timeout fetching items for collection ${collection.id}`, { 
+              collectionId: collection.id,
+              collectionName: collection.name,
+              offset,
+              timeout: '30s'
+            });
+            throw new Error(`Timeout fetching items for collection ${collection.name}: Request exceeded 30 seconds`);
           }
-        );
+          throw fetchError;
+        }
         
         if (!itemsResponse.ok) {
           const errorText = await itemsResponse.text();

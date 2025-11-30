@@ -11,13 +11,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const supabase = createServiceClient();
     
-    // Get all recent scans ordered by completion time
+    // Get all scans ordered by completion time (increased limit to see more, including failed scans)
     const { data: scans, error } = await supabase
       .from('webflow_structure_scans')
       .select('*')
-      .order('scan_completed_at', { ascending: false })
       .order('scan_started_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
     if (error) {
       logger.error('Error querying scans', { error: error.message });
@@ -60,7 +59,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       scan_completed_at: scan.scan_completed_at,
       error_message: scan.error_message,
       // Include sample content items for completed scans
-      sample_content: scan.status === 'completed' && scan.existing_content && Array.isArray(scan.existing_content)
+      sample_content: scan.existing_content && Array.isArray(scan.existing_content) && scan.existing_content.length > 0
         ? scan.existing_content.slice(0, 10).map((item: any) => ({
             type: item.type,
             title: item.title,
@@ -68,6 +67,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             slug: item.slug,
           }))
         : [],
+      // Include full content count
+      full_content_count: scan.existing_content && Array.isArray(scan.existing_content) ? scan.existing_content.length : 0,
     }));
 
     const latestScan = scans[0];

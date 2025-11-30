@@ -332,7 +332,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // Check if it's a valid UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (uuidRegex.test(integrationId)) {
-        validIntegrationId = integrationId;
+        // Verify integration exists before using it
+        const serviceClient = createServiceClient();
+        const { data: verifyIntegration, error: verifyError } = await serviceClient
+          .from('integrations')
+          .select('integration_id')
+          .eq('integration_id', integrationId)
+          .eq('org_id', orgId)
+          .single();
+        
+        if (verifyError || !verifyIntegration) {
+          logger.warn('Integration ID not found in database, using null', {
+            integrationId,
+            orgId,
+            verifyError: verifyError?.message,
+          });
+          validIntegrationId = null;
+        } else {
+          validIntegrationId = integrationId;
+          logger.debug('Integration ID validated successfully', { integrationId, orgId });
+        }
       } else {
         logger.warn('Invalid integration_id format, using null', {
           integrationId,
@@ -585,8 +604,8 @@ async function performScan(
     try {
       logger.info('Starting Webflow structure scan', { scanId, siteId, orgId });
 
-    // Update status to scanning (in case it wasn't already)
-    await supabase
+      // Update status to scanning (in case it wasn't already)
+      await supabase
       .from('webflow_structure_scans')
       .update({
         status: 'scanning',
@@ -626,23 +645,25 @@ async function performScan(
       throw lastError || new Error('Failed to discover Webflow structure');
     }
 
-    // Calculate counts
-    const collectionsCount = structure.collections.length;
-    const staticPagesCount = structure.static_pages.length;
-    const cmsItemsCount = structure.existing_content.filter(c => c.type === 'cms').length;
-    const totalContentItems = structure.existing_content.length;
+      // Calculate counts
+      logger.debug('Calculating scan results', { scanId });
+      const collectionsCount = structure.collections.length;
+      const staticPagesCount = structure.static_pages.length;
+      const cmsItemsCount = structure.existing_content.filter(c => c.type === 'cms').length;
+      const totalContentItems = structure.existing_content.length;
 
-    logger.info('Webflow structure discovered', {
-      scanId,
-      siteId,
-      collections: collectionsCount,
-      staticPages: staticPagesCount,
-      cmsItems: cmsItemsCount,
-      totalContent: totalContentItems,
-    });
+      logger.info('Webflow structure discovered', {
+        scanId,
+        siteId,
+        collections: collectionsCount,
+        staticPages: staticPagesCount,
+        cmsItems: cmsItemsCount,
+        totalContent: totalContentItems,
+      });
 
-    // Update scan record with results (use service client for reliability)
-    const { error: updateError } = await supabase
+      // Update scan record with results (use service client for reliability)
+      logger.debug('Updating scan record with results', { scanId });
+      const { error: updateError } = await supabase
       .from('webflow_structure_scans')
       .update({
         status: 'completed',
@@ -659,34 +680,44 @@ async function performScan(
       .eq('scan_id', scanId)
       .eq('org_id', orgId);
 
-    if (updateError) {
-      // Retry database update once
-      logger.warn('Database update failed, retrying', {
-        scanId,
-        error: updateError.message,
-      });
-      
-      const { error: retryError } = await supabase
-        .from('webflow_structure_scans')
-        .update({
-          status: 'completed',
-          collections: structure.collections,
-          static_pages: structure.static_pages,
-          existing_content: structure.existing_content,
-          collections_count: collectionsCount,
-          static_pages_count: staticPagesCount,
-          cms_items_count: cmsItemsCount,
-          total_content_items: totalContentItems,
-          scan_completed_at: new Date().toISOString(),
-          next_scan_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        })
-        .eq('scan_id', scanId)
-        .eq('org_id', orgId);
+        if (updateError) {
+          // Retry database update once
+          logger.warn('Database update failed, retrying', {
+            scanId,
+            error: updateError.message,
+            errorCode: updateError.code,
+          });
+          
+          logger.debug('Retrying database update', { scanId });
+          const { error: retryError } = await supabase
+            .from('webflow_structure_scans')
+            .update({
+              status: 'completed',
+              collections: structure.collections,
+              static_pages: structure.static_pages,
+              existing_content: structure.existing_content,
+              collections_count: collectionsCount,
+              static_pages_count: staticPagesCount,
+              cms_items_count: cmsItemsCount,
+              total_content_items: totalContentItems,
+              scan_completed_at: new Date().toISOString(),
+              next_scan_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            })
+            .eq('scan_id', scanId)
+            .eq('org_id', orgId);
 
-      if (retryError) {
-        throw new Error(`Failed to update scan record after retry: ${retryError.message}`);
-      }
-    }
+          if (retryError) {
+            logger.error('Database update retry also failed', {
+              scanId,
+              error: retryError.message,
+              errorCode: retryError.code,
+            });
+            throw new Error(`Failed to update scan record after retry: ${retryError.message}`);
+          }
+          logger.info('Database update succeeded on retry', { scanId });
+        } else {
+          logger.debug('Database update succeeded', { scanId });
+        }
 
     logger.info('Webflow structure scan completed successfully', {
       scanId,
