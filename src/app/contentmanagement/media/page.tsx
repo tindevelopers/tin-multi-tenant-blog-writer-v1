@@ -750,27 +750,39 @@ export default function MediaPage() {
               >
                 <div className="aspect-square relative bg-gray-100 dark:bg-gray-700">
                   {fileType === "image" && file.file_url ? (
-                    <img
-                      src={file.file_url}
-                      alt={file.file_name}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        logger.error('Image failed to load:', {
-                          file_url: file.file_url,
-                          file_name: file.file_name,
-                          asset_id: file.asset_id,
-                        });
-                        // Replace with placeholder on error
-                        e.currentTarget.style.display = 'none';
-                        e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center');
-                      }}
-                      onLoad={() => {
-                        logger.debug('Image loaded successfully:', {
-                          file_url: file.file_url,
-                          file_name: file.file_name,
-                        });
-                      }}
-                    />
+                    <>
+                      <img
+                        src={file.file_url}
+                        alt={file.file_name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          logger.error('Image failed to load:', {
+                            file_url: file.file_url,
+                            file_name: file.file_name,
+                            asset_id: file.asset_id,
+                            file_type: file.file_type,
+                          });
+                          // Show error overlay
+                          const errorDiv = document.createElement('div');
+                          errorDiv.className = 'absolute inset-0 bg-red-100 dark:bg-red-900 flex items-center justify-center text-red-600 dark:text-red-300 text-xs p-2';
+                          errorDiv.textContent = 'Failed to load';
+                          e.currentTarget.parentElement?.appendChild(errorDiv);
+                          e.currentTarget.style.display = 'none';
+                        }}
+                        onLoad={() => {
+                          logger.debug('Image loaded successfully:', {
+                            file_url: file.file_url?.substring(0, 50) + '...',
+                            file_name: file.file_name,
+                          });
+                        }}
+                      />
+                      {/* Debug info - remove in production */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                          {file.file_url?.substring(0, 40)}...
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       {getFileTypeIcon(fileType)}
@@ -778,7 +790,10 @@ export default function MediaPage() {
                   )}
                   {fileType === "image" && !file.file_url && (
                     <div className="w-full h-full flex items-center justify-center text-red-500">
-                      <span className="text-xs">No URL</span>
+                      <div className="text-center">
+                        <span className="text-xs block">No URL</span>
+                        <span className="text-xs block text-gray-400">{file.file_type}</span>
+                      </div>
                     </div>
                   )}
                   
