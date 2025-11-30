@@ -49,6 +49,10 @@ export function WebflowStructureScanner({
       
       if (data.success && Array.isArray(data.scans)) {
         setScans(data.scans);
+        
+        // Check if there's an active scan and update scanning state accordingly
+        const hasActiveScan = data.scans.some(s => s.status === 'scanning' || s.status === 'pending');
+        setScanning(hasActiveScan);
       }
     } catch (err) {
       logger.error('Failed to fetch scans', { error: err });
@@ -65,21 +69,47 @@ export function WebflowStructureScanner({
   useEffect(() => {
     if (!scanning) return;
 
+    let pollCount = 0;
+    const maxPolls = 150; // 5 minutes max (150 * 2 seconds)
+    
     const interval = setInterval(async () => {
-      await fetchScans();
+      pollCount++;
       
-      // Check if any scan is still scanning
-      const stillScanning = scans.some(s => s.status === 'scanning' || s.status === 'pending');
-      if (!stillScanning) {
+      // Timeout after max polls
+      if (pollCount > maxPolls) {
+        logger.warn('Scan polling timeout reached', { siteId, pollCount });
         setScanning(false);
-        if (onScanComplete) {
-          onScanComplete();
+        setError('Scan is taking longer than expected. Please check the scan status manually.');
+        clearInterval(interval);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/integrations/webflow/scan-structure?site_id=${siteId}`);
+        const data = await response.json();
+        
+        if (data.success && Array.isArray(data.scans)) {
+          const updatedScans = data.scans;
+          setScans(updatedScans);
+          
+          // Check if any scan is still scanning using the fetched data
+          const stillScanning = updatedScans.some(s => s.status === 'scanning' || s.status === 'pending');
+          if (!stillScanning) {
+            setScanning(false);
+            clearInterval(interval);
+            if (onScanComplete) {
+              onScanComplete();
+            }
+          }
         }
+      } catch (err) {
+        logger.error('Failed to poll scan status', { error: err });
+        // Don't stop polling on error - might be transient
       }
     }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(interval);
-  }, [scanning, scans, onScanComplete]);
+  }, [scanning, siteId, onScanComplete]);
 
   const handleScan = async (rescan: boolean = false) => {
     setScanning(true);
