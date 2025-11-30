@@ -620,7 +620,7 @@ export default function EditDraftPage() {
                 </div>
               )}
               {phase3Complete && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
                   <CheckCircleIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                   <span className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">Phase 3: Enhanced Metadata</span>
                 </div>
