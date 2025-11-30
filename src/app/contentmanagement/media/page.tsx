@@ -749,15 +749,36 @@ export default function MediaPage() {
                 onClick={() => handleSelectMedia(file.asset_id)}
               >
                 <div className="aspect-square relative bg-gray-100 dark:bg-gray-700">
-                  {fileType === "image" ? (
+                  {fileType === "image" && file.file_url ? (
                     <img
                       src={file.file_url}
                       alt={file.file_name}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        logger.error('Image failed to load:', {
+                          file_url: file.file_url,
+                          file_name: file.file_name,
+                          asset_id: file.asset_id,
+                        });
+                        // Replace with placeholder on error
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+                      }}
+                      onLoad={() => {
+                        logger.debug('Image loaded successfully:', {
+                          file_url: file.file_url,
+                          file_name: file.file_name,
+                        });
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       {getFileTypeIcon(fileType)}
+                    </div>
+                  )}
+                  {fileType === "image" && !file.file_url && (
+                    <div className="w-full h-full flex items-center justify-center text-red-500">
+                      <span className="text-xs">No URL</span>
                     </div>
                   )}
                   
@@ -862,11 +883,19 @@ export default function MediaPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10">
-                            {fileType === "image" ? (
+                            {fileType === "image" && file.file_url ? (
                               <img
                                 src={file.file_url}
                                 alt={file.file_name}
                                 className="h-10 w-10 rounded-lg object-cover"
+                                onError={(e) => {
+                                  logger.error('Image failed to load in list view:', {
+                                    file_url: file.file_url,
+                                    file_name: file.file_name,
+                                    asset_id: file.asset_id,
+                                  });
+                                  e.currentTarget.style.display = 'none';
+                                }}
                               />
                             ) : (
                               <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${getFileTypeColor(fileType)}`}>
