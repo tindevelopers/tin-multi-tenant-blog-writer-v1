@@ -55,6 +55,7 @@ export default function MediaPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [testingCredentials, setTestingCredentials] = useState(false);
+  const [checkingRoot, setCheckingRoot] = useState(false);
   const [stats, setStats] = useState<MediaStats>({
     total: 0,
     images: 0,
@@ -92,6 +93,60 @@ export default function MediaPage() {
   useEffect(() => {
     loadMediaAssets();
   }, [loadMediaAssets]);
+
+  // Check Cloudinary root directory access
+  const handleCheckRoot = async () => {
+    setCheckingRoot(true);
+    try {
+      const response = await fetch('/api/integrations/cloudinary/check-root', {
+        method: 'GET',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        let message = `✅ Cloudinary Root Directory Access:\n\n`;
+        message += `Root Access: ${result.summary.rootAccess ? '✅ Yes' : '❌ No'}\n`;
+        message += `Total Resources Found: ${result.summary.totalResourcesFound}\n\n`;
+        
+        if (result.checks && result.checks.length > 0) {
+          message += `Location Checks:\n`;
+          result.checks.forEach((check: any) => {
+            message += `  • ${check.location}: ${check.success ? '✅' : '❌'}`;
+            if (check.resourceCount !== undefined) {
+              message += ` (${check.resourceCount} resources)`;
+            }
+            if (check.folders && check.folders.length > 0) {
+              message += `\n    Folders: ${check.folders.join(', ')}`;
+            }
+            if (check.error) {
+              message += ` - ${check.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        
+        alert(message);
+      } else {
+        let message = `❌ Root Directory Access Failed:\n\n`;
+        if (result.checks && result.checks.length > 0) {
+          result.checks.forEach((check: any) => {
+            message += `  • ${check.location}: ❌ Failed`;
+            if (check.error) {
+              message += ` - ${check.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        alert(message);
+      }
+    } catch (error) {
+      logger.error('Error checking Cloudinary root:', error);
+      alert(`Failed to check root directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setCheckingRoot(false);
+    }
+  };
 
   // Test Cloudinary credentials
   const handleTestCredentials = async () => {
@@ -369,6 +424,26 @@ export default function MediaPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleCheckRoot}
+              disabled={checkingRoot}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              title="Check Cloudinary root directory access"
+            >
+              {checkingRoot ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Checking...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <span>Check Root</span>
+                </>
+              )}
+            </button>
             <button
               onClick={handleTestCredentials}
               disabled={testingCredentials}
