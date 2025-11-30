@@ -14,6 +14,7 @@ import { logger } from '@/utils/logger';
 import type { Database } from '@/types/database';
 
 type BlogPostUpdate = Database['public']['Tables']['blog_posts']['Update'];
+type Json = Database['public']['Tables']['blog_posts']['Row']['seo_data'];
 
 export type WorkflowPhase = 'phase_1_content' | 'phase_2_images' | 'phase_3_enhancement' | 'completed';
 
@@ -330,7 +331,7 @@ export async function handlePhase3Completion(
         meta_title: enhancements.seo_title,
         meta_description: enhancements.meta_description,
         structured_data: enhancements.structured_data,
-      },
+      } as Json,
     };
 
     const { error: updateError } = await supabase
