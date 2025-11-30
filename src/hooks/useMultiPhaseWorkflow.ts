@@ -158,7 +158,7 @@ export function useMultiPhaseWorkflow() {
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Start the workflow
+  // Start the workflow (now always async via Cloud Tasks queue)
   const startWorkflow = useCallback(async (config: WorkflowConfig) => {
     if (!config.topic) {
       setError('Topic is required');
@@ -185,99 +185,122 @@ export function useMultiPhaseWorkflow() {
     setState(initialState);
 
     try {
-      // Phase 1: Content Generation
-      logger.info('Starting Phase 1: Content Generation');
-      const contentResult = await executePhase1(config, signal);
-      
-      if (signal.aborted) throw new Error('Workflow cancelled');
-      
-      setState(prev => ({
-        ...prev!,
-        phase: 'image_generation',
-        progress: 30,
-        updatedAt: new Date().toISOString(),
-        contentResult: { ...contentResult, status: 'completed' },
-      }));
-
-      // Phase 2: Image Generation
-      logger.info('Starting Phase 2: Image Generation');
-      const imageResult = await executePhase2(config, contentResult, signal);
-      
-      if (signal.aborted) throw new Error('Workflow cancelled');
-      
-      setState(prev => ({
-        ...prev!,
-        phase: 'content_enhancement',
-        progress: 50,
-        updatedAt: new Date().toISOString(),
-        imageResult: { ...imageResult, status: 'completed' },
-      }));
-
-      // Phase 3: Content Enhancement
-      // Validate that Phase 1 produced content
-      if (!contentResult.content || contentResult.content.trim().length === 0) {
-        throw new Error('Phase 1 did not produce any content. Cannot proceed to Phase 3.');
-      }
-      
-      if (!contentResult.title || contentResult.title.trim().length === 0) {
-        logger.warn('Phase 1 did not produce a title, using topic as fallback');
-        contentResult.title = config.topic || 'Untitled';
-      }
-      
-      logger.info('Starting Phase 3: Content Enhancement', {
-        hasContent: !!contentResult.content,
-        contentLength: contentResult.content?.length || 0,
-        hasTitle: !!contentResult.title,
+      // Call the async multi-phase endpoint (always uses Cloud Tasks queue)
+      logger.info('🚀 Starting multi-phase workflow via async endpoint');
+      const response = await fetch('/api/workflow/multi-phase', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: config.topic,
+          keywords: config.keywords,
+          targetAudience: config.targetAudience,
+          tone: config.tone,
+          wordCount: config.wordCount,
+          qualityLevel: config.qualityLevel,
+          customInstructions: config.customInstructions,
+          generateFeaturedImage: config.generateFeaturedImage,
+          generateContentImages: config.generateContentImages,
+          imageStyle: config.imageStyle,
+          optimizeForSeo: config.optimizeForSeo,
+          generateStructuredData: config.generateStructuredData,
+          crawlWebsite: config.crawlWebsite,
+          maxInternalLinks: config.maxInternalLinks,
+          maxExternalLinks: config.maxExternalLinks,
+          includeClusterLinks: config.includeClusterLinks,
+          targetPlatform: config.targetPlatform,
+          isDraft: config.isDraft,
+        }),
+        signal,
       });
-      const enhancementResult = await executePhase3(config, contentResult, signal);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || error.message || 'Failed to start workflow');
+      }
+
+      const result = await response.json();
       
-      if (signal.aborted) throw new Error('Workflow cancelled');
-      
-      setState(prev => ({
-        ...prev!,
-        phase: 'interlinking',
-        progress: 70,
+      if (!result.success) {
+        throw new Error(result.error || result.message || 'Workflow start failed');
+      }
+
+      // Workflow is now queued - update state with queue info
+      logger.info('✅ Multi-phase workflow queued', {
+        queue_id: result.queue_id,
+        job_id: result.job_id,
+      });
+
+      setState(prev => prev ? {
+        ...prev,
+        phase: 'content_generation',
+        progress: 10,
         updatedAt: new Date().toISOString(),
-        enhancementResult: { ...enhancementResult, status: 'completed' },
-      }));
+        contentResult: {
+          status: 'processing',
+          queueId: result.queue_id,
+          jobId: result.job_id,
+        },
+      } : null);
 
-      // Phase 4: Advanced Interlinking
-      logger.info('Starting Phase 4: Advanced Interlinking');
-      const interlinkingResult = await executePhase4(config, contentResult, signal);
-      
-      if (signal.aborted) throw new Error('Workflow cancelled');
-      
-      setState(prev => ({
-        ...prev!,
-        phase: 'publishing_preparation',
-        progress: 90,
-        updatedAt: new Date().toISOString(),
-        interlinkingResult: { ...interlinkingResult, status: 'completed' },
-      }));
+      // Start polling for status updates
+      const queueId = result.queue_id;
+      const pollInterval = setInterval(async () => {
+        if (signal.aborted) {
+          clearInterval(pollInterval);
+          return;
+        }
 
-      // Phase 5: Publishing Preparation
-      logger.info('Starting Phase 5: Publishing Preparation');
-      const publishingResult = await executePhase5(
-        config,
-        contentResult,
-        imageResult,
-        enhancementResult,
-        interlinkingResult,
-        signal
-      );
-      
-      if (signal.aborted) throw new Error('Workflow cancelled');
+        try {
+          const statusResponse = await fetch(`/api/workflow/multi-phase?queue_id=${queueId}`, {
+            signal,
+          });
 
-      // Complete
-      setState(prev => ({
-        ...prev!,
-        phase: 'completed',
-        progress: 100,
-        updatedAt: new Date().toISOString(),
-        publishingResult: { ...publishingResult, status: 'completed' },
-      }));
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json();
+            const queueStatus = statusData.status;
 
-      logger.info('Multi-phase workflow completed successfully');
+            // Update progress based on queue status
+            let phase: WorkflowPhase = 'content_generation';
+            let progress = 10;
+
+            if (queueStatus === 'generated' || queueStatus === 'completed') {
+              phase = 'completed';
+              progress = 100;
+            } else if (queueStatus === 'generating') {
+              phase = 'content_generation';
+              progress = 30;
+            } else if (queueStatus === 'failed') {
+              phase = 'failed';
+              progress = 0;
+            }
+
+            setState(prev => prev ? {
+              ...prev,
+              phase,
+              progress,
+              updatedAt: new Date().toISOString(),
+              error: statusData.generation_error || prev.error,
+            } : null);
+
+            // Stop polling if workflow is complete or failed
+            if (queueStatus === 'generated' || queueStatus === 'completed' || queueStatus === 'failed') {
+              clearInterval(pollInterval);
+              setIsRunning(false);
+            }
+          }
+        } catch (pollError) {
+          if (!signal.aborted) {
+            logger.warn('Polling error', { error: pollError });
+          }
+        }
+      }, 3000); // Poll every 3 seconds
+
+      // Clean up polling on abort
+      signal.addEventListener('abort', () => {
+        clearInterval(pollInterval);
+      });
+
+      return; // Exit early - workflow is async and will be polled for status
 
     } catch (err: any) {
       const errorMessage = err.message || 'Workflow failed';
