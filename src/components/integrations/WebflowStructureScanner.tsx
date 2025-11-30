@@ -51,7 +51,7 @@ export function WebflowStructureScanner({
         setScans(data.scans);
         
         // Check if there's an active scan and update scanning state accordingly
-        const hasActiveScan = data.scans.some(s => s.status === 'scanning' || s.status === 'pending');
+        const hasActiveScan = data.scans.some((s: WebflowScan) => s.status === 'scanning' || s.status === 'pending');
         setScanning(hasActiveScan);
       }
     } catch (err) {
