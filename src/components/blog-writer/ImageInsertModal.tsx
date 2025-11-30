@@ -68,7 +68,7 @@ function MediaThumbnail({
           <img
             src={asset.file_url}
             alt={asset.file_name}
-            className={`w-full h-32 object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+            className={`w-full h-32 object-cover bg-white dark:bg-gray-800 ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
             onError={() => {
               setImageError(true);
               setImageLoading(false);
