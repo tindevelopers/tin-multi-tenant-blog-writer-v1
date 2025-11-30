@@ -280,14 +280,17 @@ export async function discoverWebflowStructure(
         // Extract keywords from title and content
         // Handle unknown types from fieldData index signature
         const titleValue = item.fieldData?.name || item.fieldData?.title;
-        const title: string = typeof titleValue === 'string' ? titleValue : '';
+        const titleStr: string = typeof titleValue === 'string' ? titleValue : '';
         const contentValue = item.fieldData?.['post-body'] || item.fieldData?.content;
-        const content: string = typeof contentValue === 'string' ? contentValue : '';
-        const keywords = extractKeywords(title + ' ' + content);
+        const contentStr: string = typeof contentValue === 'string' ? contentValue : '';
+        const keywords = extractKeywords(titleStr + ' ' + contentStr);
+        
+        // Ensure title is always a string
+        const finalTitle: string = titleStr || slug;
         
         existingContent.push({
           id: item.id,
-          title: (title || slug) as string,
+          title: finalTitle,
           url: url,
           slug: slug,
           keywords: keywords,
