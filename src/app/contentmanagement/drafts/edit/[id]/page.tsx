@@ -440,6 +440,150 @@ export default function EditDraftPage() {
     }
   };
 
+  const handlePhase1ContentGeneration = async () => {
+    if (!formData.title) {
+      alert('Please enter a title before generating content.');
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const response = await fetch('/api/workflow/generate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: formData.title,
+          keywords: [],
+          target_audience: 'general',
+          tone: 'professional',
+          word_count: 1500,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Content generation failed');
+      }
+
+      const result = await response.json();
+      
+      // Normalize and update content
+      if (result.content || result.blog_post?.content) {
+        const { normalizeBlogContent } = await import('@/lib/content-sanitizer');
+        const normalized = normalizeBlogContent(result);
+        
+        setFormData(prev => ({
+          ...prev,
+          content: normalized.sanitizedContent || normalized.content,
+          excerpt: normalized.excerpt || prev.excerpt,
+        }));
+
+        // Update workflow phase
+        setWorkflowPhase('phase_1_content');
+        alert('Content generated successfully!');
+      }
+    } catch (error) {
+      logger.error('Phase 1 content generation failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate content. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const handlePhase3ContentEnhancement = async () => {
+    if (!formData.content) {
+      alert('Please add content before enhancing metadata.');
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const response = await fetch('/api/workflow/enhance-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: formData.content,
+          title: formData.title,
+          keywords: [],
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Content enhancement failed');
+      }
+
+      const result = await response.json();
+      
+      // Update enhanced fields
+      setFormData(prev => ({
+        ...prev,
+        seoTitle: result.enhanced_fields?.meta_title || prev.seoTitle,
+        metaDescription: result.enhanced_fields?.meta_description || prev.metaDescription,
+        excerpt: result.enhanced_fields?.excerpt || prev.excerpt,
+      }));
+
+      // Update workflow phase
+      setWorkflowPhase('phase_3_enhancement');
+      alert('Metadata enhanced successfully!');
+    } catch (error) {
+      logger.error('Phase 3 enhancement failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to enhance content. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  const handleGenerateThumbnail = async () => {
+    if (!formData.title) {
+      alert('Please enter a title before generating thumbnail.');
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const response = await fetch('/api/images/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Thumbnail image for blog post: ${formData.title}. Square format, professional, eye-catching thumbnail suitable for blog preview.`,
+          aspectRatio: '1:1',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Thumbnail generation failed');
+      }
+
+      const result = await response.json();
+      
+      // Extract image URL from response
+      let imageUrl = '';
+      if (result.images && result.images.length > 0) {
+        imageUrl = result.images[0].image_url || result.images[0].image_data || '';
+      } else if (result.image_url) {
+        imageUrl = result.image_url;
+      }
+
+      if (imageUrl) {
+        setFormData(prev => ({
+          ...prev,
+          thumbnailImage: imageUrl,
+          thumbnailImageAlt: prev.thumbnailImageAlt || `Thumbnail for ${formData.title}`,
+        }));
+        alert('Thumbnail generated successfully!');
+      } else {
+        throw new Error('No image URL returned');
+      }
+    } catch (error) {
+      logger.error('Thumbnail generation failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate thumbnail. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   const handleFieldConfigSave = (fieldData: BlogFieldData) => {
     // Update form data with configured fields
     setFormData(prev => ({
