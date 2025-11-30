@@ -4,6 +4,7 @@ import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 import { analyzeContent } from '@/lib/content-analysis-service';
 import { enhanceContentToRichHTML } from '@/lib/content-enhancer';
 import { LLMAnalysisService } from '@/lib/llm-analysis-service';
+import { handlePhase3Completion } from '@/lib/workflow-phase-manager';
 
 /**
  * Generate high-quality meta description and excerpt using LLM Service
@@ -227,10 +228,46 @@ export async function POST(request: NextRequest) {
       missing_keywords: analysis.missing_keywords,
     };
 
+    // Auto-update draft with enhancements if queue_id provided
+    const queueId = body.queue_id;
+    if (queueId) {
+      try {
+        const phaseResult = await handlePhase3Completion(queueId, {
+          seo_title: enhancedFields.meta_title,
+          meta_description: enhancedFields.meta_description,
+          excerpt: enhancedFields.excerpt,
+          slug: enhancedFields.slug,
+          structured_data: enhancedFields.structured_data,
+          seo_score: result.seo_score,
+          readability_score: result.readability_score,
+        });
+
+        if (phaseResult.success && phaseResult.post_id) {
+          logger.info('✅ Phase 3: Draft updated with enhancements', {
+            queue_id: queueId,
+            post_id: phaseResult.post_id,
+          });
+          (result as any).post_id = phaseResult.post_id;
+        } else {
+          logger.warn('⚠️ Phase 3: Draft update failed (non-critical)', {
+            queue_id: queueId,
+            error: phaseResult.error,
+          });
+        }
+      } catch (updateError: any) {
+        logger.warn('⚠️ Phase 3: Draft update error (non-critical)', {
+          queue_id: queueId,
+          error: updateError.message,
+        });
+        // Don't fail the entire request if draft update fails
+      }
+    }
+
     logger.info('Phase 3: Content enhancement completed', {
       seoScore: result.seo_score,
       readabilityScore: result.readability_score,
       hasEnhancedContent: enhancedContent !== content,
+      draftUpdated: !!result.post_id,
     });
 
     return NextResponse.json(result);

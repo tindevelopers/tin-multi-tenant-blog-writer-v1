@@ -243,13 +243,14 @@ export default function QueueItemDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          queue_id: queueId, // Pass queue_id for draft updates
           topic: item.topic,
           content: normalizedContent?.sanitizedContent || item.generated_content,
           title: normalizedContent?.title || item.generated_title || item.topic,
           excerpt: normalizedContent?.excerpt || item.generation_metadata?.excerpt,
-          generate_featured_image: true,
+          generate_featured: true,
           generate_content_images: item.metadata?.generate_content_images || false,
-          image_style: item.metadata?.image_style || 'photographic',
+          style: item.metadata?.image_style || 'photographic',
         }),
       });
 
@@ -259,6 +260,14 @@ export default function QueueItemDetailPage() {
       }
 
       const result = await response.json();
+      
+      // If draft was updated, redirect to edit screen
+      if (result.post_id) {
+        alert('✅ Phase 2 (Image Generation) completed! Draft updated with images. Redirecting to edit screen...');
+        router.push(`/contentmanagement/drafts/edit/${result.post_id}`);
+        return;
+      }
+      
       alert('✅ Phase 2 (Image Generation) started! Images will be generated and added to your content.');
       
       // Refresh the queue item to see updated status
@@ -280,11 +289,13 @@ export default function QueueItemDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          queue_id: queueId, // Pass queue_id for draft updates
           content: normalizedContent?.sanitizedContent || item.generated_content,
           title: normalizedContent?.title || item.generated_title || item.topic,
+          topic: item.topic,
           keywords: item.keywords || [],
           generate_structured_data: item.metadata?.generate_structured_data !== false,
-          optimize_for_seo: item.metadata?.optimize_for_seo !== false,
+          improve_formatting: true,
         }),
       });
 
@@ -294,6 +305,14 @@ export default function QueueItemDetailPage() {
       }
 
       const result = await response.json();
+      
+      // If draft was updated, redirect to edit screen
+      if (result.post_id) {
+        alert('✅ Phase 3 (Content Enhancement) completed! Draft updated with enhanced metadata. Redirecting to edit screen...');
+        router.push(`/contentmanagement/drafts/edit/${result.post_id}`);
+        return;
+      }
+      
       alert('✅ Phase 3 (Content Enhancement) completed! Content has been enhanced with SEO optimization and structured data.');
       
       // Refresh the queue item to see updated content
