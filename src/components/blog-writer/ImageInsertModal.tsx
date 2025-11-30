@@ -72,19 +72,31 @@ function MediaThumbnail({
               src={asset.file_url}
               alt={asset.file_name}
               className={`w-full h-full object-cover ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
-              onError={() => {
+              onError={(e) => {
                 setImageError(true);
                 setImageLoading(false);
-                logger.warn('Image failed to load', { 
+                logger.error('Image failed to load in ImageInsertModal', { 
                   file_url: asset.file_url?.substring(0, 100),
                   file_name: asset.file_name,
-                  asset_id: asset.asset_id 
+                  asset_id: asset.asset_id,
+                  full_url: asset.file_url,
                 });
+                // Show error overlay similar to media page
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'absolute inset-0 bg-red-100 dark:bg-red-900 flex items-center justify-center text-red-600 dark:text-red-300 text-xs p-2 z-20';
+                errorDiv.textContent = 'Failed to load';
+                e.currentTarget.parentElement?.appendChild(errorDiv);
+                e.currentTarget.style.display = 'none';
               }}
               onLoad={() => {
                 setImageLoading(false);
+                logger.debug('Image loaded successfully in ImageInsertModal', {
+                  file_url: asset.file_url?.substring(0, 50) + '...',
+                  file_name: asset.file_name,
+                });
               }}
               loading="lazy"
+              crossOrigin="anonymous"
             />
             {/* Hover Overlay */}
             <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center">
