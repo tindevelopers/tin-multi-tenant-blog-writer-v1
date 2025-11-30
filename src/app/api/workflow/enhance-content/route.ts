@@ -218,7 +218,16 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    const result = {
+    const result: {
+      enhanced_fields: Record<string, any>;
+      enhanced_content: string;
+      seo_score: number;
+      readability_score: number;
+      quality_score: number;
+      recommendations: string[];
+      missing_keywords: string[];
+      post_id?: string;
+    } = {
       enhanced_fields: enhancedFields,
       enhanced_content: enhancedContent,
       seo_score: analysis.seo_score,

@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
     const results: {
       featured_image?: { url: string; alt: string; width?: number; height?: number };
       content_images?: Array<{ url: string; alt: string }>;
+      post_id?: string;
     } = {};
 
     // Generate featured image
