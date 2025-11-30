@@ -81,17 +81,38 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     let webflowSiteId: string | undefined;
 
     if (crawlWebsite) {
-      const { data: integration } = await supabase
-        .from('integrations')
-        .select('credentials, site_id')
-        .eq('org_id', orgId)
-        .eq('platform', 'webflow')
-        .eq('status', 'connected')
-        .single();
+      try {
+        const { data: integration, error: integrationError } = await supabase
+          .from('integrations')
+          .select('config, metadata')
+          .eq('org_id', orgId)
+          .eq('type', 'webflow')
+          .eq('status', 'active')
+          .maybeSingle(); // Use maybeSingle() instead of single() to avoid error if not found
 
-      if (integration) {
-        webflowApiKey = integration.credentials?.api_key;
-        webflowSiteId = integration.site_id;
+        if (integrationError) {
+          logger.warn('Error fetching Webflow integration', { error: integrationError.message });
+        } else if (integration) {
+          const config = integration.config as any;
+          const metadata = integration.metadata as any;
+          
+          // Extract API key from config (could be api_key, apiToken, token, etc.)
+          webflowApiKey = config?.api_key || config?.apiToken || config?.token;
+          
+          // Extract site_id from config or metadata
+          webflowSiteId = config?.site_id || config?.siteId || metadata?.site_id;
+          
+          if (webflowApiKey && webflowSiteId) {
+            logger.debug('Webflow integration found', { hasApiKey: !!webflowApiKey, hasSiteId: !!webflowSiteId });
+          } else {
+            logger.debug('Webflow integration found but missing credentials', { hasApiKey: !!webflowApiKey, hasSiteId: !!webflowSiteId });
+          }
+        } else {
+          logger.debug('No Webflow integration found for organization', { orgId });
+        }
+      } catch (error: any) {
+        logger.warn('Error fetching Webflow integration (non-critical)', { error: error.message });
+        // Continue without Webflow integration - not critical for queue creation
       }
     }
 
