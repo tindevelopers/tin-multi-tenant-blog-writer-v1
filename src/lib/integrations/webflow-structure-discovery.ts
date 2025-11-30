@@ -287,7 +287,7 @@ export async function discoverWebflowStructure(
         
         existingContent.push({
           id: item.id,
-          title: title || slug,
+          title: (title || slug) as string,
           url: url,
           slug: slug,
           keywords: keywords,
