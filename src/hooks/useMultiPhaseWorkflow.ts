@@ -236,7 +236,7 @@ export function useMultiPhaseWorkflow() {
         progress: 10,
         updatedAt: new Date().toISOString(),
         contentResult: {
-          status: 'processing',
+          status: 'running',
           queueId: result.queue_id,
           jobId: result.job_id,
         },
