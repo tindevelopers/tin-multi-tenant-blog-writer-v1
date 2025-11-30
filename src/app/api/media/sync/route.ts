@@ -36,9 +36,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if user wants to sync from root (all images) or specific folder
+    const { searchParams } = new URL(request.url);
+    const syncFromRoot = searchParams.get('root') === 'true' || searchParams.get('all') === 'true';
+
     logger.debug('Starting Cloudinary sync', {
       userId: user.id,
       orgId: user.org_id,
+      syncFromRoot,
     });
 
     // Get Cloudinary credentials
