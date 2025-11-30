@@ -251,6 +251,7 @@ export async function handlePhase2Completion(
           workflow_phase: 'phase_2_images',
           featured_image_url: images.featured_image?.url,
           featured_image_alt: images.featured_image?.alt,
+          content_images: images.content_images || [],
         },
       })
       .eq('queue_id', queueId);

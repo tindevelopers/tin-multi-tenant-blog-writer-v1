@@ -38,11 +38,17 @@ export default function QueueItemDetailPage() {
     status: true,
     metadata: false,
     content: false,
+    images: true, // Show images section by default
   });
   const [normalizedContent, setNormalizedContent] = useState<ReturnType<typeof normalizeBlogContent> | null>(null);
   const [phase2Loading, setPhase2Loading] = useState(false);
   const [phase3Loading, setPhase3Loading] = useState(false);
   const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
+  const [draftImages, setDraftImages] = useState<{
+    featured_image?: string;
+    featured_image_alt?: string;
+    content_images?: Array<{ url: string; alt: string }>;
+  } | null>(null);
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -100,7 +106,7 @@ export default function QueueItemDetailPage() {
     }
   }, [item]);
 
-  // Fetch workflow phase
+  // Fetch workflow phase and draft images
   useEffect(() => {
     const fetchWorkflowPhase = async () => {
       if (queueId) {
@@ -112,8 +118,32 @@ export default function QueueItemDetailPage() {
         }
       }
     };
+    
+    const fetchDraftImages = async () => {
+      if (postId) {
+        try {
+          const response = await fetch(`/api/drafts/${postId}`);
+          if (response.ok) {
+            const result = await response.json();
+            const draft = result.data;
+            if (draft?.metadata) {
+              const metadata = draft.metadata as Record<string, unknown>;
+              setDraftImages({
+                featured_image: metadata.featured_image as string | undefined,
+                featured_image_alt: metadata.featured_image_alt as string | undefined,
+                content_images: metadata.content_images as Array<{ url: string; alt: string }> | undefined,
+              });
+            }
+          }
+        } catch (error) {
+          logger.error("Error fetching draft images", { error });
+        }
+      }
+    };
+    
     fetchWorkflowPhase();
-  }, [queueId, item]);
+    fetchDraftImages();
+  }, [queueId, item, postId]);
 
 
   const handleCancel = async () => {
@@ -280,17 +310,42 @@ export default function QueueItemDetailPage() {
 
       const result = await response.json();
       
-      // If draft was updated, redirect to edit screen
+      // Refresh workflow phase and queue item to see updated status
+      await fetchQueueItem();
+      
+      // Refresh workflow phase
+      const updatedPhase = await getWorkflowPhase(queueId);
+      setWorkflowPhase(updatedPhase);
+      
+      // Refresh draft images if post_id exists
       if (result.post_id) {
-        alert('✅ Phase 2 (Image Generation) completed! Draft updated with images. Redirecting to edit screen...');
-        router.push(`/contentmanagement/drafts/edit/${result.post_id}`);
+        try {
+          const draftResponse = await fetch(`/api/drafts/${result.post_id}`);
+          if (draftResponse.ok) {
+            const draftResult = await draftResponse.json();
+            const draft = draftResult.data;
+            if (draft?.metadata) {
+              const metadata = draft.metadata as Record<string, unknown>;
+              setDraftImages({
+                featured_image: metadata.featured_image as string | undefined,
+                featured_image_alt: metadata.featured_image_alt as string | undefined,
+                content_images: metadata.content_images as Array<{ url: string; alt: string }> | undefined,
+              });
+            }
+          }
+        } catch (error) {
+          logger.error("Error refreshing draft images", { error });
+        }
+        alert('✅ Phase 2 (Image Generation) completed! Images have been added to your draft. Check the Images section below.');
         return;
       }
       
-      alert('✅ Phase 2 (Image Generation) started! Images will be generated and added to your content.');
-      
-      // Refresh the queue item to see updated status
-      await fetchQueueItem();
+      // Show images if they were returned
+      if (result.featured_image || result.content_images?.length) {
+        alert('✅ Phase 2 (Image Generation) completed! Images generated successfully. Check the Images section below.');
+      } else {
+        alert('✅ Phase 2 (Image Generation) started! Images will be generated and added to your content.');
+      }
     } catch (error) {
       logger.error('Phase 2 error', { error });
       alert(`Failed to start Phase 2: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -325,17 +380,20 @@ export default function QueueItemDetailPage() {
 
       const result = await response.json();
       
-      // If draft was updated, redirect to edit screen
+      // Refresh workflow phase and queue item to see updated status
+      await fetchQueueItem();
+      
+      // Refresh workflow phase
+      const updatedPhase = await getWorkflowPhase(queueId);
+      setWorkflowPhase(updatedPhase);
+      
+      // If draft was updated, show success message
       if (result.post_id) {
-        alert('✅ Phase 3 (Content Enhancement) completed! Draft updated with enhanced metadata. Redirecting to edit screen...');
-        router.push(`/contentmanagement/drafts/edit/${result.post_id}`);
+        alert('✅ Phase 3 (Content Enhancement) completed! Draft updated with enhanced metadata. Check the Enhanced Metadata section below.');
         return;
       }
       
       alert('✅ Phase 3 (Content Enhancement) completed! Content has been enhanced with SEO optimization and structured data.');
-      
-      // Refresh the queue item to see updated content
-      await fetchQueueItem();
     } catch (error) {
       logger.error('Phase 3 error', { error });
       alert(`Failed to start Phase 3: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -579,6 +637,83 @@ export default function QueueItemDetailPage() {
         }}
         className="mb-6"
       />
+
+      {/* Generated Images Section */}
+      {(() => {
+        // Get images from queue metadata or draft metadata
+        const featuredImageUrl = item.metadata?.featured_image_url || item.metadata?.featured_image || draftImages?.featured_image;
+        const featuredImageAlt = item.metadata?.featured_image_alt || draftImages?.featured_image_alt;
+        const contentImages = item.metadata?.content_images || draftImages?.content_images;
+        const hasImages = featuredImageUrl || (contentImages && Array.isArray(contentImages) && contentImages.length > 0);
+        
+        if (!hasImages) return null;
+        
+        return (
+          <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden mb-6">
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <PhotoIcon className="w-5 h-5 text-purple-500" />
+                Generated Images
+              </h2>
+              
+              <div className="space-y-6">
+                {/* Featured Image */}
+                {featuredImageUrl && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Featured Image
+                    </label>
+                    <div className="relative w-full max-w-2xl aspect-video bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                      <img
+                        src={featuredImageUrl}
+                        alt={featuredImageAlt || 'Featured image'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          logger.error('Failed to load featured image', { url: featuredImageUrl });
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    {featuredImageAlt && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                        Alt text: {featuredImageAlt}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Content Images */}
+                {contentImages && Array.isArray(contentImages) && contentImages.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Content Images ({contentImages.length})
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {contentImages.map((img: any, idx: number) => {
+                        const imgUrl = typeof img === 'string' ? img : img.url;
+                        const imgAlt = typeof img === 'string' ? `Content image ${idx + 1}` : (img.alt || `Content image ${idx + 1}`);
+                        return (
+                          <div key={idx} className="relative aspect-video bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={imgUrl}
+                              alt={imgAlt}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                logger.error('Failed to load content image', { url: imgUrl, index: idx });
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Generation Details */}
       <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
