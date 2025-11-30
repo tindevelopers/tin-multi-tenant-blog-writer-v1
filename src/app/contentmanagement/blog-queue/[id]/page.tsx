@@ -11,6 +11,7 @@ import {
   DocumentCheckIcon,
   PencilIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
   CheckCircleIcon,
   PhotoIcon,
   SparklesIcon,
