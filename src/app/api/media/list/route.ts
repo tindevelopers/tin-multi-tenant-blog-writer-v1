@@ -101,9 +101,21 @@ export async function GET(request: NextRequest) {
         asset_id: a.asset_id,
         file_name: a.file_name,
         file_type: a.file_type,
+        file_url: a.file_url ? a.file_url.substring(0, 50) + '...' : 'MISSING',
+        has_file_url: !!a.file_url,
         created_at: a.created_at,
       })),
     });
+    
+    // Check for assets with missing file_url
+    const missingUrlCount = assets?.filter(a => !a.file_url).length || 0;
+    if (missingUrlCount > 0) {
+      logger.warn('Found media assets with missing file_url', {
+        count: missingUrlCount,
+        orgId: userProfile.org_id,
+        asset_ids: assets?.filter(a => !a.file_url).map(a => a.asset_id),
+      });
+    }
 
     // Get total count for stats
     let countQuery = supabase
