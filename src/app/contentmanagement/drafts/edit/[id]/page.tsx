@@ -90,6 +90,7 @@ export default function EditDraftPage() {
   const [showFieldConfig, setShowFieldConfig] = useState(false);
   const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
   const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
+  const [contentImages, setContentImages] = useState<Array<{ url: string; alt: string }>>([]);
 
   // Determine phase completion status
   const phase1Complete = workflowPhase && ['phase_1_content', 'phase_2_images', 'phase_3_enhancement', 'completed'].includes(workflowPhase);
@@ -119,6 +120,18 @@ export default function EditDraftPage() {
         word_count: metadata.word_count as number | undefined,
       });
 
+      // Extract images from metadata (Phase 2 stores them here)
+      const featuredImageFromMetadata = metadata.featured_image as string | undefined;
+      const featuredImageAltFromMetadata = metadata.featured_image_alt as string | undefined;
+      const contentImagesFromMetadata = metadata.content_images as Array<{ url: string; alt: string }> | undefined;
+
+      // Set content images for display
+      if (contentImagesFromMetadata && Array.isArray(contentImagesFromMetadata)) {
+        setContentImages(contentImagesFromMetadata);
+      } else {
+        setContentImages([]);
+      }
+
       setFormData({
         title: draft.title || '',
         content: draft.content || '',
@@ -127,8 +140,8 @@ export default function EditDraftPage() {
         slug: extractedFields.slug || '',
         seoTitle: extractedFields.seo_title || draft.title || '',
         metaDescription: extractedFields.meta_description || draft.excerpt || '',
-        featuredImage: extractedFields.featured_image || '',
-        featuredImageAlt: extractedFields.featured_image_alt || '',
+        featuredImage: featuredImageFromMetadata || extractedFields.featured_image || '',
+        featuredImageAlt: featuredImageAltFromMetadata || extractedFields.featured_image_alt || '',
         thumbnailImage: extractedFields.thumbnail_image || '',
         thumbnailImageAlt: extractedFields.thumbnail_image_alt || '',
         authorName: extractedFields.author_name || '',
@@ -997,7 +1010,54 @@ export default function EditDraftPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                 placeholder="Describe the featured image"
               />
+              {/* Featured Image Preview */}
+              {formData.featuredImage && (
+                <div className="mt-3">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Featured Image Preview:</p>
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                    <img
+                      src={formData.featuredImage}
+                      alt={formData.featuredImageAlt || 'Featured image'}
+                      className="w-full h-auto max-h-64 object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
+            {/* Content Images Section */}
+            {contentImages.length > 0 && (
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Content Images (Phase 2)
+                  <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded">
+                    <PhotoIcon className="w-3 h-3" />
+                    {contentImages.length} image{contentImages.length !== 1 ? 's' : ''}
+                  </span>
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
+                  {contentImages.map((image, index) => (
+                    <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                      <img
+                        src={image.url}
+                        alt={image.alt || `Content image ${index + 1}`}
+                        className="w-full h-48 object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                      <div className="p-2 bg-gray-50 dark:bg-gray-800">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 truncate" title={image.alt}>
+                          {image.alt || `Image ${index + 1}`}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Thumbnail Image URL
