@@ -563,25 +563,21 @@ export default function EditDraftPage() {
 
         const result = await response.json();
 
-        // Update form data with generated images
+        // Update form data with generated images IMMEDIATELY (before saving)
+        let updatedFormData = { ...formData };
+        
         if (result.header_image || result.featured_image) {
           const headerImage = result.header_image || result.featured_image;
-          setFormData(prev => ({
-            ...prev,
-            featuredImage: headerImage.url,
-            featuredImageAlt: headerImage.alt || `Header image for ${formData.title}`,
-          }));
+          updatedFormData.featuredImage = headerImage.url || '';
+          updatedFormData.featuredImageAlt = headerImage.alt || `Header image for ${formData.title}`;
         }
 
         if (result.thumbnail_image) {
-          setFormData(prev => ({
-            ...prev,
-            thumbnailImage: result.thumbnail_image.url,
-            thumbnailImageAlt: result.thumbnail_image.alt || `Thumbnail for ${formData.title}`,
-          }));
+          updatedFormData.thumbnailImage = result.thumbnail_image.url || '';
+          updatedFormData.thumbnailImageAlt = result.thumbnail_image.alt || `Thumbnail for ${formData.title}`;
         }
 
-        // Update content images state
+        // Update content images state IMMEDIATELY
         const updatedContentImages = result.content_images && result.content_images.length > 0
           ? result.content_images.map((img: { url: string; alt: string }) => ({
               url: img.url,
@@ -589,18 +585,40 @@ export default function EditDraftPage() {
             }))
           : contentImages;
         
+        // Update state immediately so images show up right away
+        setFormData(updatedFormData);
         setContentImages(updatedContentImages);
+        
+        logger.info('✅ Images set in form state', {
+          featuredImage: updatedFormData.featuredImage,
+          thumbnailImage: updatedFormData.thumbnailImage,
+          contentImagesCount: updatedContentImages.length,
+        });
 
         // Save images to draft immediately using updatePost
         try {
-          const updatedMetadata = buildMetadataPayload();
-          // Update metadata with new images
-          updatedMetadata.featured_image = result.header_image?.url || result.featured_image?.url || formData.featuredImage;
-          updatedMetadata.featured_image_alt = result.header_image?.alt || result.featured_image?.alt || formData.featuredImageAlt;
-          updatedMetadata.thumbnail_image = result.thumbnail_image?.url || formData.thumbnailImage;
-          updatedMetadata.thumbnail_image_alt = result.thumbnail_image?.alt || formData.thumbnailImageAlt;
-          updatedMetadata.content_images = updatedContentImages;
-          updatedMetadata.workflow_phase = 'phase_2_images';
+          // Build metadata with updated form data (use updatedFormData, not formData)
+          const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
+          const updatedMetadata: Record<string, unknown> = {
+            ...existingMetadata,
+            slug: updatedFormData.slug || generateSlug(updatedFormData.title || 'untitled'),
+            locale: updatedFormData.locale || 'en',
+            is_featured: updatedFormData.isFeatured,
+            read_time: contentStats.readTime,
+            word_count: contentStats.wordCount,
+            featured_image: updatedFormData.featuredImage,
+            featured_image_alt: updatedFormData.featuredImageAlt,
+            thumbnail_image: updatedFormData.thumbnailImage,
+            thumbnail_image_alt: updatedFormData.thumbnailImageAlt,
+            content_images: updatedContentImages,
+            workflow_phase: 'phase_2_images',
+          };
+
+          // Include other fields if they exist
+          if (updatedFormData.authorName) updatedMetadata.author_name = updatedFormData.authorName;
+          if (updatedFormData.authorImage) updatedMetadata.author_image = updatedFormData.authorImage;
+          if (updatedFormData.authorBio) updatedMetadata.author_bio = updatedFormData.authorBio;
+          if (updatedFormData.publishedAt) updatedMetadata.published_at = updatedFormData.publishedAt;
 
           const savedPost = await updatePost(draftId, {
             metadata: updatedMetadata,
@@ -612,16 +630,14 @@ export default function EditDraftPage() {
               hasThumbnail: !!updatedMetadata.thumbnail_image,
               contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
             });
-            // Reload draft to get updated images
-            if (refetch) {
-              await refetch();
-            }
+            // Don't refetch immediately - images are already in state, refetch might overwrite
+            // The images will persist on next page load
           } else {
             logger.warn('⚠️ Failed to save images to draft - updatePost returned null');
           }
         } catch (saveError) {
           logger.warn('Error saving images to draft', { error: saveError });
-          // Don't fail the entire operation if save fails
+          // Don't fail the entire operation if save fails - images are already in state
         }
 
         setWorkflowPhase('phase_2_images');
@@ -651,24 +667,21 @@ export default function EditDraftPage() {
 
         const result = await response.json();
 
-        // Update form data with generated images
+        // Update form data with generated images IMMEDIATELY (before saving)
+        let updatedFormData = { ...formData };
+        
         if (result.header_image || result.featured_image) {
           const headerImage = result.header_image || result.featured_image;
-          setFormData(prev => ({
-            ...prev,
-            featuredImage: headerImage.url,
-            featuredImageAlt: headerImage.alt || `Header image for ${formData.title}`,
-          }));
+          updatedFormData.featuredImage = headerImage.url || '';
+          updatedFormData.featuredImageAlt = headerImage.alt || `Header image for ${formData.title}`;
         }
 
         if (result.thumbnail_image) {
-          setFormData(prev => ({
-            ...prev,
-            thumbnailImage: result.thumbnail_image.url,
-            thumbnailImageAlt: result.thumbnail_image.alt || `Thumbnail for ${formData.title}`,
-          }));
+          updatedFormData.thumbnailImage = result.thumbnail_image.url || '';
+          updatedFormData.thumbnailImageAlt = result.thumbnail_image.alt || `Thumbnail for ${formData.title}`;
         }
 
+        // Update content images state IMMEDIATELY
         const updatedContentImages = result.content_images && result.content_images.length > 0
           ? result.content_images.map((img: { url: string; alt: string }) => ({
               url: img.url,
@@ -676,18 +689,40 @@ export default function EditDraftPage() {
             }))
           : contentImages;
         
+        // Update state immediately so images show up right away
+        setFormData(updatedFormData);
         setContentImages(updatedContentImages);
+        
+        logger.info('✅ Images set in form state', {
+          featuredImage: updatedFormData.featuredImage,
+          thumbnailImage: updatedFormData.thumbnailImage,
+          contentImagesCount: updatedContentImages.length,
+        });
 
         // Save images to draft immediately using updatePost
         try {
-          const updatedMetadata = buildMetadataPayload();
-          // Update metadata with new images
-          updatedMetadata.featured_image = result.header_image?.url || result.featured_image?.url || formData.featuredImage;
-          updatedMetadata.featured_image_alt = result.header_image?.alt || result.featured_image?.alt || formData.featuredImageAlt;
-          updatedMetadata.thumbnail_image = result.thumbnail_image?.url || formData.thumbnailImage;
-          updatedMetadata.thumbnail_image_alt = result.thumbnail_image?.alt || formData.thumbnailImageAlt;
-          updatedMetadata.content_images = updatedContentImages;
-          updatedMetadata.workflow_phase = 'phase_2_images';
+          // Build metadata with updated form data (use updatedFormData, not formData)
+          const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
+          const updatedMetadata: Record<string, unknown> = {
+            ...existingMetadata,
+            slug: updatedFormData.slug || generateSlug(updatedFormData.title || 'untitled'),
+            locale: updatedFormData.locale || 'en',
+            is_featured: updatedFormData.isFeatured,
+            read_time: contentStats.readTime,
+            word_count: contentStats.wordCount,
+            featured_image: updatedFormData.featuredImage,
+            featured_image_alt: updatedFormData.featuredImageAlt,
+            thumbnail_image: updatedFormData.thumbnailImage,
+            thumbnail_image_alt: updatedFormData.thumbnailImageAlt,
+            content_images: updatedContentImages,
+            workflow_phase: 'phase_2_images',
+          };
+
+          // Include other fields if they exist
+          if (updatedFormData.authorName) updatedMetadata.author_name = updatedFormData.authorName;
+          if (updatedFormData.authorImage) updatedMetadata.author_image = updatedFormData.authorImage;
+          if (updatedFormData.authorBio) updatedMetadata.author_bio = updatedFormData.authorBio;
+          if (updatedFormData.publishedAt) updatedMetadata.published_at = updatedFormData.publishedAt;
 
           const savedPost = await updatePost(draftId, {
             metadata: updatedMetadata,
@@ -699,16 +734,14 @@ export default function EditDraftPage() {
               hasThumbnail: !!updatedMetadata.thumbnail_image,
               contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
             });
-            // Reload draft to get updated images
-            if (refetch) {
-              await refetch();
-            }
+            // Don't refetch immediately - images are already in state, refetch might overwrite
+            // The images will persist on next page load
           } else {
             logger.warn('⚠️ Failed to save images to draft - updatePost returned null');
           }
         } catch (saveError) {
           logger.warn('Error saving images to draft', { error: saveError });
-          // Don't fail the entire operation if save fails
+          // Don't fail the entire operation if save fails - images are already in state
         }
 
         setWorkflowPhase('phase_2_images');
