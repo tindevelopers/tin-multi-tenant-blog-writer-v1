@@ -412,6 +412,61 @@ function NewDraftContent() {
     // router.push('/contentmanagement/drafts');
   };
 
+  const handleGenerateTestBlog = async () => {
+    setIsGenerating(true);
+    try {
+      const testTopic = formData.topic || "Test Blog Post";
+      
+      console.log('🧪 Generating test blog (100 words):', { topic: testTopic });
+      
+      const result = await blogWriterAPI.generateBlog({
+        topic: testTopic,
+        keywords: [],
+        target_audience: "general",
+        tone: "professional",
+        word_count: 100, // Test blog: exactly 100 words
+        template_type: formData.template_type || "expert_authority",
+        length: "short",
+        // Disable all advanced features for faster test generation
+        use_google_search: false,
+        use_fact_checking: false,
+        use_citations: false,
+        use_serp_optimization: false,
+        use_consensus_generation: false,
+        use_knowledge_graph: false,
+        use_semantic_keywords: false,
+        use_quality_scoring: false,
+        custom_instructions: "Generate a concise 100-word blog post. Keep it brief and focused.",
+      });
+
+      console.log('🧪 Test blog generated:', result);
+
+      // Handle async response
+      if (result && (result as any).queue_id) {
+        const capturedQueueId = (result as any).queue_id;
+        setQueueId(capturedQueueId);
+        
+        if (result.error || result.status === 'failed') {
+          setQueueStatus("failed");
+          console.warn('⚠️ Test blog generation failed:', capturedQueueId, result.error);
+        } else {
+          setQueueStatus("generating");
+          console.log('✅ Test blog generation queued:', capturedQueueId);
+        }
+        
+        setIsGenerating(false);
+      } else {
+        console.error('❌ No queue_id returned from test blog generation:', result);
+        setIsGenerating(false);
+        alert('Test blog generation failed to start. Please try again.');
+      }
+    } catch (error) {
+      console.error("Error generating test blog:", error);
+      setIsGenerating(false);
+      alert("Error generating test blog. Please check your connection and try again.");
+    }
+  };
+
   const handleGenerateContent = async () => {
     if (!formData.topic) {
       alert("Please enter a topic for your blog post");
@@ -1405,6 +1460,16 @@ function NewDraftContent() {
                   ⚙️ Configure Fields
                 </button>
               ) : null}
+              <button
+                onClick={handleGenerateTestBlog}
+                disabled={isGenerating}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg flex items-center justify-center gap-2 transition-colors text-sm font-medium"
+                title="Generate a quick 100-word test blog"
+              >
+                <BoltIcon className="w-4 h-4" />
+                {isGenerating ? "Generating..." : "Test Blog (100 words)"}
+              </button>
+              
               <button
                 onClick={handleGenerateContent}
                 disabled={isGenerating || !formData.topic}
