@@ -1,6 +1,7 @@
 /**
  * Content Sanitizer
  * Sanitizes HTML content using DOMPurify to prevent XSS attacks
+ * Also converts markdown to HTML when needed
  */
 
 import DOMPurify from 'isomorphic-dompurify';
@@ -15,11 +16,85 @@ export interface SanitizeOptions {
 }
 
 /**
+ * Convert markdown to HTML
+ * Handles common markdown patterns: headers, links, bold, italic, lists, etc.
+ */
+function markdownToHTML(markdown: string): string {
+  if (!markdown || typeof markdown !== 'string') {
+    return '';
+  }
+
+  let html = markdown;
+
+  // Convert headers (# Header -> <h1>Header</h1>)
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+  // Convert markdown links [text](/url) -> <a href="/url">text</a>
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+  // Convert bold **text** -> <strong>text</strong>
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // Convert italic *text* -> <em>text</em>
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+  // Convert line breaks (double newline -> paragraph)
+  html = html.split(/\n\n+/).map(para => {
+    const trimmed = para.trim();
+    if (!trimmed) return '';
+    // Don't wrap if already an HTML tag
+    if (trimmed.startsWith('<')) return trimmed;
+    return `<p>${trimmed}</p>`;
+  }).join('\n');
+
+  // Convert single line breaks to <br>
+  html = html.replace(/\n/g, '<br>');
+
+  // Clean up multiple <br> tags
+  html = html.replace(/(<br>\s*){3,}/g, '<br><br>');
+
+  // Remove markdown artifacts
+  html = html.replace(/!Content Marketing/g, 'Content Marketing');
+  html = html.replace(/f\. 2025/g, '2025');
+  html = html.replace(/Here's the enhanced version of the blog post\. addressing the specified tasks \. readability concerns:/g, '');
+
+  return html.trim();
+}
+
+/**
+ * Detect if content is markdown (contains markdown patterns)
+ */
+function isMarkdown(content: string): boolean {
+  if (!content || typeof content !== 'string') {
+    return false;
+  }
+
+  // Check for common markdown patterns
+  const markdownPatterns = [
+    /^#{1,6}\s+/m,           // Headers
+    /\[.*?\]\(.*?\)/,        // Links
+    /\*\*.*?\*\*/,           // Bold
+    /^\s*[-*+]\s+/m,         // Unordered lists
+    /^\s*\d+\.\s+/m,         // Ordered lists
+  ];
+
+  return markdownPatterns.some(pattern => pattern.test(content));
+}
+
+/**
  * Sanitize HTML content
  */
 export function sanitizeHTML(html: string, options: SanitizeOptions = {}): string {
   if (!html || typeof html !== 'string') {
     return '';
+  }
+
+  // Convert markdown to HTML if needed
+  let processedHTML = html;
+  if (isMarkdown(html) && !html.includes('<')) {
+    processedHTML = markdownToHTML(html);
   }
 
   const {
@@ -80,7 +155,7 @@ export function sanitizeHTML(html: string, options: SanitizeOptions = {}): strin
   };
 
   // Sanitize the HTML
-  const sanitized = DOMPurify.sanitize(html, config);
+  const sanitized = DOMPurify.sanitize(processedHTML, config);
 
   return sanitized;
 }
@@ -147,13 +222,29 @@ export function normalizeBlogContent(data: any): {
     '';
 
   // Extract excerpt
-  const excerpt = 
+  let excerpt = 
     data.excerpt || 
     data.summary || 
     data.blog_post?.excerpt || 
     data.blog_post?.meta_description || 
     data.meta_description || 
     '';
+
+  // Clean excerpt - remove markdown and HTML artifacts
+  if (excerpt) {
+    // Remove markdown links
+    excerpt = excerpt.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    // Remove markdown headers
+    excerpt = excerpt.replace(/^#{1,6}\s+/gm, '');
+    // Remove HTML tags
+    excerpt = excerpt.replace(/<[^>]+>/g, '');
+    // Remove common artifacts
+    excerpt = excerpt.replace(/Here's the enhanced version of the blog post\./g, '');
+    excerpt = excerpt.replace(/addressing the specified tasks \./g, '');
+    excerpt = excerpt.replace(/readability concerns:/g, '');
+    excerpt = excerpt.replace(/f\. 2025/g, '2025');
+    excerpt = excerpt.trim();
+  }
 
   // Extract word count
   const wordCount = 
@@ -162,7 +253,7 @@ export function normalizeBlogContent(data: any): {
     data.metadata?.word_count || 
     0;
 
-  // Sanitize content
+  // Sanitize content (will convert markdown to HTML if needed)
   const sanitizedContent = sanitizeHTML(rawContent, {
     allowImages: true,
     allowLinks: true,

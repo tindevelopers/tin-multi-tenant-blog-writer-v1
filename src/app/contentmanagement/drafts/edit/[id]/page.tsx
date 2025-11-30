@@ -404,10 +404,19 @@ export default function EditDraftPage() {
   const handleSaveInternal = async () => {
     try {
       setSaving(true);
-      const payload = {
+      
+      // Normalize content before saving
+      const { normalizeBlogContent } = await import('@/lib/content-sanitizer');
+      const normalized = normalizeBlogContent({
         title: formData.title,
         content: formData.content,
         excerpt: formData.excerpt,
+      });
+      
+      const payload = {
+        title: normalized.title,
+        content: normalized.sanitizedContent || normalized.content,
+        excerpt: normalized.excerpt,
         status: formData.status,
         metadata: buildMetadataPayload(),
         seo_data: buildSeoPayload(),
@@ -595,26 +604,52 @@ export default function EditDraftPage() {
         <div className="mb-6">
           <WorkflowStagesHorizontal currentPhase={workflowPhase} />
           
-          {/* Phase-specific indicators */}
-          <div className="mt-4 flex flex-wrap gap-3">
-            {phase1Complete && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                <CheckCircleIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
-                <span className="text-sm text-green-700 dark:text-green-300 font-medium">Phase 1: Content Generated</span>
-              </div>
-            )}
-            {phase2Complete && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
-                <CheckCircleIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span className="text-sm text-purple-700 dark:text-purple-300 font-medium">Phase 2: Images Added</span>
-              </div>
-            )}
-            {phase3Complete && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
-                <CheckCircleIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <span className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">Phase 3: Enhanced Metadata</span>
-              </div>
-            )}
+          {/* Phase-specific indicators and manual triggers */}
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-wrap gap-3">
+              {phase1Complete && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                  <CheckCircleIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <span className="text-sm text-green-700 dark:text-green-300 font-medium">Phase 1: Content Generated</span>
+                </div>
+              )}
+              {phase2Complete && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                  <CheckCircleIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span className="text-sm text-purple-700 dark:text-purple-300 font-medium">Phase 2: Images Added</span>
+                </div>
+              )}
+              {phase3Complete && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-lg">
+                  <CheckCircleIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <span className="text-sm text-indigo-700 dark:text-indigo-300 font-medium">Phase 3: Enhanced Metadata</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Manual Phase Triggers */}
+            <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+              {!phase1Complete && (
+                <button
+                  onClick={handlePhase1ContentGeneration}
+                  disabled={aiGenerating}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  <DocumentTextIcon className="w-4 h-4" />
+                  {aiGenerating ? 'Generating...' : 'Generate Content (Phase 1)'}
+                </button>
+              )}
+              {!phase3Complete && phase1Complete && (
+                <button
+                  onClick={handlePhase3ContentEnhancement}
+                  disabled={aiGenerating}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  <SparklesIcon className="w-4 h-4" />
+                  {aiGenerating ? 'Enhancing...' : 'Enhance Metadata (Phase 3)'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1060,7 +1095,17 @@ export default function EditDraftPage() {
             )}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Thumbnail Image URL
+                <span className="flex items-center gap-2">
+                  Thumbnail Image URL
+                  <button
+                    onClick={handleGenerateThumbnail}
+                    disabled={aiGenerating || !formData.title}
+                    className="ml-auto px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  >
+                    <SparklesIcon className="w-3 h-3" />
+                    {aiGenerating ? 'Generating...' : 'Generate Thumbnail'}
+                  </button>
+                </span>
               </label>
               <input
                 type="url"
@@ -1069,6 +1114,18 @@ export default function EditDraftPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                 placeholder="https://example.com/thumbnail.jpg"
               />
+              {formData.thumbnailImage && (
+                <div className="mt-2">
+                  <img
+                    src={formData.thumbnailImage}
+                    alt={formData.thumbnailImageAlt || 'Thumbnail'}
+                    className="w-32 h-32 object-cover rounded border border-gray-200 dark:border-gray-700"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
