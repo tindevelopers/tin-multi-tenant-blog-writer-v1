@@ -323,13 +323,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Create scan record (use service client for reliability)
+    // Service client bypasses RLS and uses service role key
     const serviceClient = createServiceClient();
+    
+    // Validate UUID format for integration_id if provided
+    let validIntegrationId: string | null = null;
+    if (integrationId) {
+      // Check if it's a valid UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(integrationId)) {
+        validIntegrationId = integrationId;
+      } else {
+        logger.warn('Invalid integration_id format, using null', {
+          integrationId,
+          orgId,
+        });
+      }
+    }
     
     const { data: scanRecord, error: scanError } = await serviceClient
       .from('webflow_structure_scans')
       .insert({
         org_id: orgId,
-        integration_id: integrationId || null, // Allow null if not available
+        integration_id: validIntegrationId,
         site_id: finalSiteId,
         scan_type: 'full',
         status: 'scanning',
