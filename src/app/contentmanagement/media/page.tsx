@@ -130,12 +130,34 @@ export default function MediaPage() {
       message += `User: ${result.user?.id}\n`;
       message += `Org ID: ${result.user?.orgId}\n\n`;
       message += `Assets in DB (Service Client): ${result.serviceClient?.count || 0}\n`;
-      message += `Assets Visible (User Client): ${result.userClient?.count || 0}\n\n`;
+      message += `  - With file_url: ${result.serviceClient?.withFileUrl || 0}\n`;
+      message += `  - Without file_url: ${result.serviceClient?.withoutFileUrl || 0}\n`;
+      message += `Assets Visible (User Client): ${result.userClient?.count || 0}\n`;
+      message += `  - With file_url: ${result.userClient?.withFileUrl || 0}\n`;
+      message += `  - Without file_url: ${result.userClient?.withoutFileUrl || 0}\n\n`;
 
       if (result.rlsIssue) {
         message += `⚠️ RLS ISSUE DETECTED!\n`;
         message += `Service client can see ${result.serviceClient?.count || 0} assets,\n`;
         message += `but user client can only see ${result.userClient?.count || 0} assets.\n\n`;
+      }
+
+      if (result.fileUrlIssue) {
+        message += `⚠️ FILE_URL ISSUE DETECTED!\n`;
+        message += `${result.userClient?.withoutFileUrl || 0} assets are missing file_url.\n\n`;
+        if (result.userClient?.missingUrls && result.userClient.missingUrls.length > 0) {
+          message += `Missing URLs:\n`;
+          result.userClient.missingUrls.slice(0, 3).forEach((asset: any, idx: number) => {
+            message += `${idx + 1}. ${asset.file_name} (${asset.file_type})\n`;
+            if (asset.metadata?.public_id) {
+              message += `   public_id: ${asset.metadata.public_id}\n`;
+            }
+            if (asset.metadata?.secure_url) {
+              message += `   secure_url in metadata: YES\n`;
+            }
+          });
+          message += `\n`;
+        }
       }
 
       if (result.userClient?.error) {
@@ -147,7 +169,9 @@ export default function MediaPage() {
       if (result.serviceClient?.data && result.serviceClient.data.length > 0) {
         message += `Recent Assets:\n`;
         result.serviceClient.data.slice(0, 5).forEach((asset: any, idx: number) => {
-          message += `${idx + 1}. ${asset.file_name} (${asset.file_type}) - ${asset.created_at}\n`;
+          message += `${idx + 1}. ${asset.file_name} (${asset.file_type})\n`;
+          message += `   file_url: ${asset.file_url ? asset.file_url.substring(0, 50) + '...' : 'MISSING'}\n`;
+          message += `   created: ${asset.created_at}\n`;
         });
       }
 
