@@ -88,6 +88,9 @@ export default function QueueItemDetailPage() {
     }
   }, [status, progress, stage, item, fetchQueueItem]);
 
+  // Get postId from item (needed for useEffect dependencies)
+  const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
+
   // Normalize content when item changes
   useEffect(() => {
     if (item && item.status === "generated" && item.generated_content) {
@@ -240,7 +243,6 @@ export default function QueueItemDetailPage() {
     }));
   };
 
-  const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
   const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
 
   const handleCreateDraft = async () => {
