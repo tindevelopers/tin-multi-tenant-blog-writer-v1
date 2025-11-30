@@ -111,10 +111,18 @@ export default function EditDraftPage() {
         setWorkflowPhase('phase_1_content');
       }
       
-      const extractedFields = extractBlogFields({
+      // Normalize existing content to clean up markdown artifacts
+      const { normalizeBlogContent } = require('@/lib/content-sanitizer');
+      const normalized = normalizeBlogContent({
         title: draft.title || '',
         content: draft.content || '',
-        excerpt: draft.excerpt || undefined,
+        excerpt: draft.excerpt || '',
+      });
+      
+      const extractedFields = extractBlogFields({
+        title: normalized.title,
+        content: normalized.content,
+        excerpt: normalized.excerpt,
         metadata,
         seo_data: seoData,
         word_count: metadata.word_count as number | undefined,
@@ -133,13 +141,13 @@ export default function EditDraftPage() {
       }
 
       setFormData({
-        title: draft.title || '',
-        content: draft.content || '',
-        excerpt: draft.excerpt || extractedFields.excerpt || '',
+        title: normalized.title,
+        content: normalized.sanitizedContent || normalized.content,
+        excerpt: normalized.excerpt || extractedFields.excerpt || '',
         status: draft.status || 'draft',
         slug: extractedFields.slug || '',
-        seoTitle: extractedFields.seo_title || draft.title || '',
-        metaDescription: extractedFields.meta_description || draft.excerpt || '',
+        seoTitle: extractedFields.seo_title || normalized.title || '',
+        metaDescription: extractedFields.meta_description || normalized.excerpt || '',
         featuredImage: featuredImageFromMetadata || extractedFields.featured_image || '',
         featuredImageAlt: featuredImageAltFromMetadata || extractedFields.featured_image_alt || '',
         thumbnailImage: extractedFields.thumbnail_image || '',
