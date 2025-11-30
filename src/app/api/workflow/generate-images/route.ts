@@ -30,8 +30,8 @@ function analyzeContentForImages(content: string, title: string): {
       // Extract text content after this heading until next heading
       const startPos = match.index + match[0].length;
       const nextHeadingMatch = content.substring(startPos).match(/<h[1-3][^>]*>/i);
-      const endPos = nextHeadingMatch 
-        ? startPos + nextHeadingMatch.index 
+      const endPos = nextHeadingMatch && nextHeadingMatch.index !== undefined
+        ? startPos + nextHeadingMatch.index
         : Math.min(startPos + 500, content.length);
       
       const sectionText = content.substring(startPos, endPos)

@@ -5,6 +5,13 @@ import { analyzeContent } from '@/lib/content-analysis-service';
 import { enhanceContentToRichHTML } from '@/lib/content-enhancer';
 import { LLMAnalysisService } from '@/lib/llm-analysis-service';
 import { handlePhase3Completion } from '@/lib/workflow-phase-manager';
+import { 
+  getWebflowIntegration, 
+  analyzeHyperlinkOpportunities, 
+  insertHyperlinksWithPolish 
+} from '@/lib/integrations/webflow-hyperlink-service';
+import { discoverWebflowStructure } from '@/lib/integrations/webflow-structure-discovery';
+import { createServiceClient } from '@/lib/supabase/service';
 
 /**
  * Generate high-quality meta description and excerpt using LLM Service
@@ -53,48 +60,80 @@ async function generateEnhancedMetadata(
 }
 
 /**
- * Insert internal hyperlinks into content based on website analysis
- * This is a placeholder - should integrate with website analysis service
+ * Insert internal hyperlinks into content based on Webflow site analysis
+ * Integrates with Webflow structure discovery to find relevant CMS and static pages
  */
 async function insertInternalLinks(
   content: string,
   title: string,
-  keywords: string[]
+  keywords: string[],
+  orgId?: string
 ): Promise<string> {
-  // TODO: Integrate with website analysis service to get relevant internal links
-  // For now, this is a placeholder that can be enhanced
-  
-  // Extract potential anchor text from content
-  const anchorTexts: string[] = [];
-  const headingRegex = /<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi;
-  let match;
-  
-  while ((match = headingRegex.exec(content)) !== null) {
-    const headingText = match[1].replace(/<[^>]+>/g, '').trim();
-    if (headingText && headingText.length > 5 && headingText.length < 50) {
-      anchorTexts.push(headingText);
+  try {
+    // Get Webflow integration if orgId provided
+    if (!orgId) {
+      logger.debug('No orgId provided, skipping hyperlink insertion');
+      return content;
     }
+    
+    const webflowConfig = await getWebflowIntegration(orgId);
+    
+    if (!webflowConfig) {
+      logger.debug('No Webflow integration found, skipping hyperlink insertion', { orgId });
+      return content;
+    }
+    
+    logger.info('Analyzing Webflow site structure for hyperlink opportunities', {
+      siteId: webflowConfig.siteId,
+      orgId,
+    });
+    
+    // Discover Webflow structure (CMS + static pages)
+    const { existing_content } = await discoverWebflowStructure(
+      webflowConfig.apiToken,
+      webflowConfig.siteId
+    );
+    
+    if (existing_content.length === 0) {
+      logger.debug('No Webflow content found for hyperlinking', { siteId: webflowConfig.siteId });
+      return content;
+    }
+    
+    // Analyze hyperlink opportunities
+    const suggestions = await analyzeHyperlinkOpportunities(
+      content,
+      title,
+      keywords,
+      existing_content
+    );
+    
+    if (suggestions.length === 0) {
+      logger.debug('No relevant hyperlink opportunities found');
+      return content;
+    }
+    
+    // Insert hyperlinks using polish function (with OpenAI fallback)
+    const contentWithLinks = await insertHyperlinksWithPolish(
+      content,
+      title,
+      keywords,
+      suggestions
+    );
+    
+    logger.info('✅ Hyperlinks inserted successfully', {
+      suggestionsCount: suggestions.length,
+      cmsLinks: suggestions.filter(s => s.type === 'cms').length,
+      staticLinks: suggestions.filter(s => s.type === 'static').length,
+    });
+    
+    return contentWithLinks;
+  } catch (error: any) {
+    logger.warn('Hyperlink insertion failed, continuing without links', {
+      error: error.message,
+      orgId,
+    });
+    return content; // Return original content on error
   }
-  
-  // Also extract keywords as potential anchor text
-  keywords.forEach(keyword => {
-    if (keyword.length > 3 && keyword.length < 30) {
-      anchorTexts.push(keyword);
-    }
-  });
-  
-  // For now, return content as-is (no actual links inserted)
-  // This should be replaced with actual website analysis integration
-  logger.info('Hyperlink insertion requested', {
-    anchorTextsFound: anchorTexts.length,
-    keywordsCount: keywords.length,
-  });
-  
-  // TODO: Call website analysis API to get relevant internal links
-  // TODO: Insert links into content at appropriate positions
-  // TODO: Ensure links are natural and contextually relevant
-  
-  return content; // Placeholder - return unchanged for now
 }
 
 /**
@@ -147,7 +186,29 @@ export async function POST(request: NextRequest) {
       generate_structured_data,
       improve_formatting = true,
       insert_hyperlinks = false, // NEW: Option to insert hyperlinks
+      org_id, // NEW: Organization ID for Webflow integration lookup
     } = body;
+    
+    // Get org_id from user if not provided
+    let orgId = org_id;
+    if (!orgId) {
+      try {
+        const supabase = createServiceClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: userProfile } = await supabase
+            .from('users')
+            .select('org_id')
+            .eq('user_id', user.id)
+            .single();
+          if (userProfile?.org_id) {
+            orgId = userProfile.org_id;
+          }
+        }
+      } catch (error: any) {
+        logger.debug('Could not fetch org_id from user', { error: error.message });
+      }
+    }
 
     // Validate required fields with better error messages
     if (!content || (typeof content === 'string' && content.trim().length === 0)) {
@@ -188,7 +249,7 @@ export async function POST(request: NextRequest) {
     // Step 1.5: Insert hyperlinks if requested (before other enhancements)
     if (insert_hyperlinks) {
       try {
-        enhancedContent = await insertInternalLinks(enhancedContent, finalTitle, keywords);
+        enhancedContent = await insertInternalLinks(enhancedContent, finalTitle, keywords, orgId);
         logger.info('Hyperlinks inserted into content');
       } catch (linkError: any) {
         logger.warn('Hyperlink insertion failed, continuing without links', {
