@@ -50,53 +50,114 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Helper function to sync resources to database
+    const syncResourcesToDatabase = async (resources: CloudinaryResource[]) => {
+      const supabase = createServiceClient();
+      let syncedCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      for (const resource of resources) {
+        try {
+          // Check if asset already exists by public_id
+          const { data: existing } = await supabase
+            .from('media_assets')
+            .select('asset_id')
+            .eq('org_id', user.org_id)
+            .eq('metadata->>public_id', resource.public_id)
+            .single();
+
+          if (existing) {
+            // Update existing asset
+            const { error: updateError } = await supabase
+              .from('media_assets')
+              .update({
+                file_url: resource.secure_url,
+                file_type: resource.format || 'image/png',
+                file_size: resource.bytes,
+                metadata: {
+                  public_id: resource.public_id,
+                  width: resource.width,
+                  height: resource.height,
+                  resource_type: resource.resource_type,
+                  folder: resource.folder,
+                  synced_at: new Date().toISOString(),
+                },
+              })
+              .eq('asset_id', existing.asset_id);
+
+            if (updateError) {
+              logger.error('Error updating media asset:', updateError);
+              skippedCount++;
+            } else {
+              updatedCount++;
+            }
+          } else {
+            // Insert new asset
+            const fileName = resource.public_id.split('/').pop() || resource.public_id;
+            const { error: insertError } = await supabase
+              .from('media_assets')
+              .insert({
+                org_id: user.org_id,
+                uploaded_by: user.id,
+                file_name: fileName,
+                file_url: resource.secure_url,
+                file_type: resource.format || 'image/png',
+                file_size: resource.bytes,
+                provider: 'cloudinary',
+                metadata: {
+                  public_id: resource.public_id,
+                  width: resource.width,
+                  height: resource.height,
+                  resource_type: resource.resource_type,
+                  folder: resource.folder,
+                  synced_at: new Date().toISOString(),
+                },
+              });
+
+            if (insertError) {
+              logger.error('Error inserting media asset:', insertError);
+              skippedCount++;
+            } else {
+              syncedCount++;
+            }
+          }
+        } catch (error) {
+          logger.error('Error processing resource:', {
+            error,
+            public_id: resource.public_id,
+          });
+          skippedCount++;
+        }
+      }
+
+      return { syncedCount, updatedCount, skippedCount };
+    };
+
     // Fetch resources directly from Cloudinary Admin API
     const folder = `blog-images/${user.org_id}`;
-    const crypto = await import('crypto');
     
-    // Cloudinary Admin API requires signed requests
-    // Parameters must be sorted alphabetically (excluding api_key and signature)
-    const timestamp = Math.round(new Date().getTime() / 1000);
-    
-    const params: Record<string, string> = {
-      max_results: '500',
-      prefix: folder,
-      resource_type: 'image',
-      timestamp: timestamp.toString(),
-    };
-    
-    // Sort parameters alphabetically for signature
-    const sortedParamKeys = Object.keys(params).sort();
-    const sortedParamsString = sortedParamKeys
-      .map(key => `${key}=${params[key]}`)
-      .join('&');
-    
-    // Calculate SHA1 signature: sorted_params_string + api_secret
-    const signature = crypto.createHash('sha1')
-      .update(sortedParamsString + credentials.api_secret)
-      .digest('hex');
+    // Cloudinary Admin API supports Basic Auth (simpler and more reliable than signed URLs)
+    const authString = Buffer.from(`${credentials.api_key}:${credentials.api_secret}`).toString('base64');
     
     // Build Cloudinary Admin API URL
     const cloudinaryUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
-    cloudinaryUrl.searchParams.append('api_key', credentials.api_key);
     cloudinaryUrl.searchParams.append('max_results', '500');
     cloudinaryUrl.searchParams.append('prefix', folder);
     cloudinaryUrl.searchParams.append('resource_type', 'image');
-    cloudinaryUrl.searchParams.append('timestamp', timestamp.toString());
-    cloudinaryUrl.searchParams.append('signature', signature);
     
     logger.debug('Fetching Cloudinary resources', {
-      url: cloudinaryUrl.toString().replace(credentials.api_key, '***').replace(credentials.api_secret, '***'),
+      url: cloudinaryUrl.toString(),
       folder,
       orgId: user.org_id,
       cloudName: credentials.cloud_name,
-      signaturePrefix: signature.substring(0, 8) + '...',
-      sortedParams: sortedParamsString,
+      usingBasicAuth: true,
     });
 
     const syncResponse = await fetch(cloudinaryUrl.toString(), {
       method: 'GET',
       headers: {
+        'Authorization': `Basic ${authString}`,
         'Content-Type': 'application/json',
       },
       signal: AbortSignal.timeout(120000), // 2 minute timeout
@@ -104,27 +165,108 @@ export async function POST(request: NextRequest) {
 
     if (!syncResponse.ok) {
       const errorText = await syncResponse.text();
+      let errorJson: any = null;
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use as-is
+      }
+      
       const errorHeaders = Object.fromEntries(syncResponse.headers.entries());
       
       logger.error('Cloudinary list API error:', {
         status: syncResponse.status,
         statusText: syncResponse.statusText,
         error: errorText,
+        errorJson,
         headers: errorHeaders,
         cloudName: credentials.cloud_name,
         folder,
-        url: cloudinaryUrl.toString().replace(credentials.api_key, '***').replace(credentials.api_secret, '***'),
+        url: cloudinaryUrl.toString(),
+        authMethod: 'Basic Auth',
       });
       
-      // Provide more helpful error messages
+      // If Basic Auth fails with 401, try signed URL method as fallback
       if (syncResponse.status === 401) {
-        return NextResponse.json(
-          { 
-            error: 'Invalid Cloudinary credentials. Please verify your Cloud Name, API Key, and API Secret in Settings → Integrations → Cloudinary.',
-            details: errorText,
+        logger.info('Basic Auth failed, trying signed URL method as fallback');
+        
+        // Try signed URL method
+        const crypto = await import('crypto');
+        const timestamp = Math.round(new Date().getTime() / 1000);
+        
+        const params: Record<string, string> = {
+          max_results: '500',
+          prefix: folder,
+          resource_type: 'image',
+          timestamp: timestamp.toString(),
+        };
+        
+        // Sort parameters alphabetically for signature
+        const sortedParamKeys = Object.keys(params).sort();
+        const sortedParamsString = sortedParamKeys
+          .map(key => `${key}=${encodeURIComponent(params[key])}`)
+          .join('&');
+        
+        // Calculate SHA1 signature: sorted_params_string + api_secret
+        const signature = crypto.createHash('sha1')
+          .update(sortedParamsString + credentials.api_secret)
+          .digest('hex');
+        
+        // Build signed URL
+        const signedUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
+        signedUrl.searchParams.append('api_key', credentials.api_key);
+        signedUrl.searchParams.append('max_results', '500');
+        signedUrl.searchParams.append('prefix', folder);
+        signedUrl.searchParams.append('resource_type', 'image');
+        signedUrl.searchParams.append('timestamp', timestamp.toString());
+        signedUrl.searchParams.append('signature', signature);
+        
+        logger.debug('Retrying with signed URL', {
+          url: signedUrl.toString().replace(credentials.api_key, '***'),
+          signaturePrefix: signature.substring(0, 8) + '...',
+        });
+        
+        const retryResponse = await fetch(signedUrl.toString(), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
           },
-          { status: 401 }
-        );
+          signal: AbortSignal.timeout(120000),
+        });
+        
+        if (retryResponse.ok) {
+          // Signed URL worked, continue with this response
+          const cloudinaryData = await retryResponse.json();
+          const resources: CloudinaryResource[] = cloudinaryData.resources || [];
+          
+          logger.info('Signed URL method succeeded', {
+            resourceCount: resources.length,
+          });
+          
+          // Sync resources to database
+          const { syncedCount, updatedCount, skippedCount } = await syncResourcesToDatabase(resources);
+
+          return NextResponse.json({
+            success: true,
+            synced: syncedCount,
+            updated: updatedCount,
+            skipped: skippedCount,
+            total: resources.length,
+            message: `Synced ${syncedCount} new assets, updated ${updatedCount} existing assets (using signed URL fallback)`,
+          });
+        } else {
+          // Both methods failed
+          const retryErrorText = await retryResponse.text();
+          return NextResponse.json(
+            { 
+              error: 'Invalid Cloudinary credentials. Both Basic Auth and Signed URL methods failed.',
+              details: errorText,
+              retryDetails: retryErrorText,
+              suggestion: 'Please verify your Cloud Name, API Key, and API Secret in Settings → Integrations → Cloudinary.',
+            },
+            { status: 401 }
+          );
+        }
       }
       
       return NextResponse.json(
@@ -141,85 +283,8 @@ export async function POST(request: NextRequest) {
       orgId: user.org_id,
     });
 
-    // Sync with database
-    const supabase = createServiceClient();
-    let syncedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-
-    for (const resource of resources) {
-      try {
-        // Check if asset already exists by public_id
-        const { data: existing } = await supabase
-          .from('media_assets')
-          .select('asset_id')
-          .eq('org_id', user.org_id)
-          .eq('metadata->>public_id', resource.public_id)
-          .single();
-
-        if (existing) {
-          // Update existing asset
-          const { error: updateError } = await supabase
-            .from('media_assets')
-            .update({
-              file_url: resource.secure_url,
-              file_type: resource.format || 'image/png',
-              file_size: resource.bytes,
-              metadata: {
-                public_id: resource.public_id,
-                width: resource.width,
-                height: resource.height,
-                resource_type: resource.resource_type,
-                folder: resource.folder,
-                synced_at: new Date().toISOString(),
-              },
-            })
-            .eq('asset_id', existing.asset_id);
-
-          if (updateError) {
-            logger.error('Error updating media asset:', updateError);
-            skippedCount++;
-          } else {
-            updatedCount++;
-          }
-        } else {
-          // Insert new asset
-          const fileName = resource.public_id.split('/').pop() || resource.public_id;
-          const { error: insertError } = await supabase
-            .from('media_assets')
-            .insert({
-              org_id: user.org_id,
-              uploaded_by: user.id,
-              file_name: fileName,
-              file_url: resource.secure_url,
-              file_type: resource.format || 'image/png',
-              file_size: resource.bytes,
-              provider: 'cloudinary',
-              metadata: {
-                public_id: resource.public_id,
-                width: resource.width,
-                height: resource.height,
-                resource_type: resource.resource_type,
-                folder: resource.folder,
-                synced_at: new Date().toISOString(),
-              },
-            });
-
-          if (insertError) {
-            logger.error('Error inserting media asset:', insertError);
-            skippedCount++;
-          } else {
-            syncedCount++;
-          }
-        }
-      } catch (error) {
-        logger.error('Error processing resource:', {
-          error,
-          public_id: resource.public_id,
-        });
-        skippedCount++;
-      }
-    }
+    // Sync with database using helper function
+    const { syncedCount, updatedCount, skippedCount } = await syncResourcesToDatabase(resources);
 
     logger.debug('Cloudinary sync completed', {
       synced: syncedCount,
