@@ -561,26 +561,24 @@ export default function QueueItemDetailPage() {
         )}
       </div>
 
-      {/* Workflow Phase Manager - Show for multi-phase workflows or if content is generated */}
-      {(item.metadata?.workflow_type === 'multi_phase' || hasGeneratedContent) && (
-        <WorkflowPhaseManager
-          queueId={queueId}
-          currentPhase={workflowPhase}
-          postId={postId || null}
-          onPhaseComplete={(phase, postId) => {
-            logger.info('Phase completed', { phase, postId });
-            router.push(`/contentmanagement/drafts/edit/${postId}`);
-          }}
-          onResumePhase={(phase) => {
-            if (phase === 'phase_2_images') {
-              handlePhase2ImageGeneration();
-            } else if (phase === 'phase_3_enhancement') {
-              handlePhase3ContentEnhancement();
-            }
-          }}
-          className="mb-6"
-        />
-      )}
+      {/* Workflow Phase Manager - Always visible for testing */}
+      <WorkflowPhaseManager
+        queueId={queueId}
+        currentPhase={workflowPhase}
+        postId={postId || null}
+        onPhaseComplete={(phase, postId) => {
+          logger.info('Phase completed', { phase, postId });
+          router.push(`/contentmanagement/drafts/edit/${postId}`);
+        }}
+        onResumePhase={(phase) => {
+          if (phase === 'phase_2_images') {
+            handlePhase2ImageGeneration();
+          } else if (phase === 'phase_3_enhancement') {
+            handlePhase3ContentEnhancement();
+          }
+        }}
+        className="mb-6"
+      />
 
       {/* Generation Details */}
       <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
