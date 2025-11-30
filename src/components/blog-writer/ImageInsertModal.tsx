@@ -177,16 +177,35 @@ export default function ImageInsertModal({
       const result = await response.json();
       const assets = result.data || [];
       
+      // Log detailed info about each asset
       logger.debug('Loaded media assets', {
         count: assets.length,
+        total_from_api: result.stats?.total || 0,
         assets: assets.map((a: MediaAsset) => ({
           asset_id: a.asset_id,
           file_name: a.file_name,
+          file_type: a.file_type,
           has_url: !!a.file_url,
-          url_preview: a.file_url ? a.file_url.substring(0, 80) : 'MISSING',
+          url_preview: a.file_url ? a.file_url.substring(0, 100) : 'MISSING',
           url_valid: a.file_url ? (a.file_url.startsWith('http://') || a.file_url.startsWith('https://') || a.file_url.startsWith('data:')) : false,
+          url_length: a.file_url?.length || 0,
         })),
       });
+      
+      // Check for assets with invalid URLs
+      const invalidUrls = assets.filter((a: MediaAsset) => 
+        a.file_url && !(a.file_url.startsWith('http://') || a.file_url.startsWith('https://') || a.file_url.startsWith('data:'))
+      );
+      if (invalidUrls.length > 0) {
+        logger.warn('Found assets with invalid URL format', {
+          count: invalidUrls.length,
+          assets: invalidUrls.map((a: MediaAsset) => ({
+            asset_id: a.asset_id,
+            file_name: a.file_name,
+            file_url: a.file_url,
+          })),
+        });
+      }
       
       setMediaAssets(assets);
     } catch (error) {
