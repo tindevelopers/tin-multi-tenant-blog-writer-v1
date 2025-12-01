@@ -144,7 +144,7 @@ async function handleUpdate(
      */
     
     // Start with existing connection config to preserve credentials
-    const existingConfig = (existing.config || existing.connection || {}) as Record<string, unknown>;
+    const existingConfig = (existing.config || {}) as Record<string, unknown>;
     
     // Support both 'connection' and 'config' for backward compatibility
     const newConnectionConfig = connection || config;
