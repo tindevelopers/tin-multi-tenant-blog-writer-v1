@@ -76,11 +76,11 @@ const WEBFLOW_REQUIREMENTS: ProviderRequirements = {
       type: 'password',
       required: true,
       description: 'Your Webflow API key from Account Settings → Integrations → API Access',
-      placeholder: 'wf_xxxxxxxxxxxxxxxx',
+      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
       validation: {
-        pattern: '^wf_[A-Za-z0-9]{32,}$',
-        minLength: 35,
-        maxLength: 50,
+        // Webflow API v2 tokens can be UUIDs or longer bearer tokens
+        minLength: 32,
+        maxLength: 256,
       },
     },
     {
@@ -91,9 +91,8 @@ const WEBFLOW_REQUIREMENTS: ProviderRequirements = {
       description: 'The Collection ID of your Webflow CMS collection where blog posts will be published',
       placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxx',
       validation: {
-        pattern: '^[A-Za-z0-9]{24}$',
-        minLength: 24,
-        maxLength: 24,
+        minLength: 20,
+        maxLength: 32,
       },
     },
   ],

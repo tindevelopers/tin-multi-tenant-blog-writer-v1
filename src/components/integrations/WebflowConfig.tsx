@@ -63,7 +63,27 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         const result = await response.json();
         if (result.success && result.data) {
           const integration = result.data;
-          setConnectionStatus(integration.status === 'active' ? 'connected' : 'disconnected');
+          
+          // Check if integration has valid config (API key and collection ID)
+          const config = integration.config as Record<string, unknown> | undefined;
+          const hasApiKey = config?.api_key && typeof config.api_key === 'string' && config.api_key.length > 0;
+          const hasCollectionId = config?.collection_id && typeof config.collection_id === 'string' && config.collection_id.length > 0;
+          
+          // If integration is active and has required config, consider it connected
+          // Also check health_status if available
+          if (integration.status === 'active' && hasApiKey && hasCollectionId) {
+            // If health_status is healthy, definitely connected
+            if (integration.health_status === 'healthy') {
+              setConnectionStatus('connected');
+            } else if (integration.health_status === 'error') {
+              setConnectionStatus('disconnected');
+            } else {
+              // If status is active but health unknown, assume connected (API might be working)
+              setConnectionStatus('connected');
+            }
+          } else {
+            setConnectionStatus('disconnected');
+          }
           
           // Extract config values
           if (integration.config) {
@@ -263,9 +283,22 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         
         setSuccess(data.data?.message || 'Connection test successful!');
         setConnectionStatus('connected');
+        
+        // Refresh integration to get updated health status
+        if (integrationId) {
+          loadIntegration();
+        }
       } else {
-        setError(data.error || data.data?.error || 'Connection test failed');
-        setConnectionStatus('disconnected');
+        // Only show error if it's a real failure, not just a warning
+        const errorMsg = data.error || data.data?.error || 'Connection test failed';
+        setError(errorMsg);
+        // Don't automatically set to disconnected - might be a temporary issue
+        // Only set disconnected if it's a clear authentication/configuration error
+        if (errorMsg.toLowerCase().includes('unauthorized') || 
+            errorMsg.toLowerCase().includes('invalid') ||
+            errorMsg.toLowerCase().includes('not found')) {
+          setConnectionStatus('disconnected');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to test connection');
@@ -575,8 +608,8 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         </div>
       )}
 
-      {/* Field Mapping Section */}
-      {integrationId && collectionId && connectionStatus === 'connected' && (
+      {/* Field Mapping Section - Show if integration exists and collection ID is set */}
+      {integrationId && collectionId && (
         <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
           <WebflowFieldMapping 
             integrationId={integrationId} 
