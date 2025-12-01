@@ -194,10 +194,12 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
           ? (getData.data.config || getData.data.connection || {})
           : {};
         
-        // Merge configs
+        // Merge configs - preserve field_mappings and other existing config
         const mergedConfig = {
           ...currentConfig,
           ...connection,
+          // Explicitly preserve field_mappings if they exist
+          ...(currentConfig.field_mappings && { field_mappings: currentConfig.field_mappings }),
         };
 
         // Update existing integration

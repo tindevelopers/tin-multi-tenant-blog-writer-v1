@@ -109,18 +109,7 @@ async function handleUpdate(
       metadata
     } = body;
 
-    // Support both 'connection' and 'config' for backward compatibility
-    let connectionConfig = connection || config;
-
-    // If field_mappings are provided, merge them into connection config
-    if (field_mappings !== undefined) {
-      connectionConfig = {
-        ...(connectionConfig || {}),
-        field_mappings: field_mappings,
-      } as ConnectionConfig;
-    }
-
-    // Get integration using new database adapter
+    // Get integration using new database adapter FIRST to preserve existing credentials
     const dbAdapter = new EnvironmentIntegrationsDB();
     
     // Verify integration exists and belongs to user's org
@@ -140,14 +129,61 @@ async function handleUpdate(
       }, { status: 403 });
     }
 
-    // Determine connection_method from connection if provided
-    const connectionMethod = connection_method || (connectionConfig?.access_token ? 'oauth' : (connectionConfig ? 'api_key' : undefined));
+    /**
+     * CREDENTIAL PERSISTENCE STRATEGY:
+     * 
+     * This endpoint supports a two-stage integration setup:
+     * 1. Stage 1: Save credentials (API key, site_id, collection_id, etc.) - encrypted in DB
+     * 2. Stage 2: Configure field mappings - credentials must persist
+     * 
+     * To ensure credentials persist when updating field_mappings:
+     * - Always fetch existing integration FIRST (line 116)
+     * - Start with existing config (includes encrypted credentials)
+     * - Merge new updates into existing config
+     * - Field mappings update only adds/updates field_mappings, preserving all credentials
+     */
+    
+    // Start with existing connection config to preserve credentials
+    const existingConfig = (existing.config || existing.connection || {}) as Record<string, unknown>;
+    
+    // Support both 'connection' and 'config' for backward compatibility
+    const newConnectionConfig = connection || config;
+    
+    // Merge new connection config into existing (preserves credentials)
+    // This ensures that when updating credentials, field_mappings are preserved
+    // And when updating field_mappings, credentials are preserved
+    let mergedConfig: ConnectionConfig = {
+      ...existingConfig,
+      ...(newConnectionConfig || {}),
+    } as ConnectionConfig;
 
-    // Update integration
+    // If field_mappings are provided, merge them into the merged config (preserves credentials)
+    // This is Stage 2 of the integration setup - field mapping configuration
+    if (field_mappings !== undefined) {
+      mergedConfig = {
+        ...mergedConfig,
+        field_mappings: field_mappings,
+      } as ConnectionConfig;
+      
+      logger.debug('Updating field mappings (Stage 2)', {
+        integrationId: id,
+        mappingCount: field_mappings.length,
+        preservedCredentials: {
+          hasApiKey: !!mergedConfig.api_key,
+          hasCollectionId: !!mergedConfig.collection_id,
+          hasSiteId: !!mergedConfig.site_id,
+        }
+      });
+    }
+
+    // Determine connection_method from connection if provided
+    const connectionMethod = connection_method || (mergedConfig?.access_token ? 'oauth' : (mergedConfig ? 'api_key' : existing.connection_method));
+
+    // Update integration with merged config (credentials preserved)
     const integration = await dbAdapter.updateIntegration(
       id,
       {
-        connection: connectionConfig as ConnectionConfig,
+        connection: mergedConfig,
         connection_method: connectionMethod,
         status: status,
         ...(metadata && { metadata }),
