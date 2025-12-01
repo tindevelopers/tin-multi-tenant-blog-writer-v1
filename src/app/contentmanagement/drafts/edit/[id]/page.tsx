@@ -48,6 +48,53 @@ type DraftFormState = {
 
 const stripHtml = (html: string) => html.replace(/<[^>]*>/g, " ");
 
+// ImageWithFallback component for better error handling
+function ImageWithFallback({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  if (error || !src) {
+    return (
+      <div className={`flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 p-4 ${className}`}>
+        <PhotoIcon className="w-8 h-8 mb-2" />
+        <span className="text-xs">Image failed to load</span>
+        {src && (
+          <a 
+            href={src} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="text-xs text-blue-500 hover:underline mt-1 break-all max-w-full px-2"
+          >
+            Open URL →
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-400 border-t-transparent"></div>
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        className={`${className} ${loading ? 'opacity-0' : 'opacity-100'} transition-opacity`}
+        onError={() => {
+          setError(true);
+          setLoading(false);
+          logger.error('Image failed to load', { src: src.substring(0, 100), alt });
+        }}
+        onLoad={() => setLoading(false)}
+        crossOrigin="anonymous"
+      />
+    </>
+  );
+}
+
 export default function EditDraftPage() {
   const router = useRouter();
   const params = useParams();
@@ -219,6 +266,39 @@ export default function EditDraftPage() {
       ...existingMetadata,
       ...metadataPayload,
     };
+  };
+
+  // Insert an image into the TipTap content
+  const handleInsertImageIntoContent = (imageUrl: string, altText: string, position: 'top' | 'bottom' | 'cursor' = 'bottom') => {
+    if (!imageUrl) {
+      alert('No image URL to insert');
+      return;
+    }
+    
+    // Create the image HTML - styled for blog posts
+    const imageHTML = `<figure class="my-8"><img src="${imageUrl}" alt="${altText}" class="w-full h-auto rounded-lg" /><figcaption class="text-center text-sm text-gray-500 mt-2">${altText}</figcaption></figure>`;
+    
+    let newContent = formData.content || '';
+    
+    if (position === 'top') {
+      // Insert at the beginning of content
+      newContent = imageHTML + newContent;
+    } else {
+      // Insert at the end of content
+      newContent = newContent + imageHTML;
+    }
+    
+    // Update the content
+    handleInputChange('content', newContent);
+    
+    logger.info('Image inserted into content', { 
+      imageUrl: imageUrl.substring(0, 50) + '...', 
+      altText, 
+      position 
+    });
+    
+    // Show confirmation
+    alert(`✅ Image inserted at ${position} of content. Don't forget to save!`);
   };
 
   const handleAutoGenerateFields = async () => {
@@ -1345,7 +1425,7 @@ export default function EditDraftPage() {
                   Generated Images
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Images generated for this draft (Phase 2)
+                  Images generated for this draft (Phase 2). Click &quot;Insert into Content&quot; to add to the blog body.
                 </p>
               </div>
               {phase2Complete && (
@@ -1360,21 +1440,24 @@ export default function EditDraftPage() {
               {/* Featured Image */}
               {formData.featuredImage && (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Featured Image
-                  </label>
-                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
-                    <img
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Featured Image
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleInsertImageIntoContent(formData.featuredImage, formData.featuredImageAlt || 'Featured image')}
+                      className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                      title="Insert this image at the top of the content"
+                    >
+                      Insert into Content
+                    </button>
+                  </div>
+                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 relative min-h-[100px]">
+                    <ImageWithFallback
                       src={formData.featuredImage}
                       alt={formData.featuredImageAlt || 'Featured image'}
                       className="w-full h-auto max-h-64 object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        const parent = (e.target as HTMLImageElement).parentElement;
-                        if (parent) {
-                          parent.innerHTML = '<div class="p-8 text-center text-gray-400 dark:text-gray-500">Failed to load image</div>';
-                        }
-                      }}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1386,7 +1469,7 @@ export default function EditDraftPage() {
                         type="url"
                         value={formData.featuredImage}
                         onChange={(e) => handleInputChange('featuredImage', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-mono"
                         placeholder="https://example.com/image.jpg"
                       />
                     </div>
@@ -1410,20 +1493,13 @@ export default function EditDraftPage() {
               {formData.thumbnailImage && (
                 <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Thumbnail Image
+                    Thumbnail Image (Card Preview)
                   </label>
-                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800 flex items-center justify-center">
-                    <img
+                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center relative min-h-[100px]">
+                    <ImageWithFallback
                       src={formData.thumbnailImage}
                       alt={formData.thumbnailImageAlt || 'Thumbnail'}
                       className="w-32 h-32 object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        const parent = (e.target as HTMLImageElement).parentElement;
-                        if (parent) {
-                          parent.innerHTML = '<div class="p-8 text-center text-gray-400 dark:text-gray-500">Failed to load image</div>';
-                        }
-                      }}
                     />
                   </div>
                   <div className="space-y-2">
@@ -1459,27 +1535,43 @@ export default function EditDraftPage() {
             {/* Content Images */}
             {contentImages.length > 0 && (
               <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
-                  Content Images ({contentImages.length})
-                </label>
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Content Images ({contentImages.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Insert all content images at once
+                      contentImages.forEach((img, idx) => {
+                        setTimeout(() => {
+                          handleInsertImageIntoContent(img.url, img.alt || `Content image ${idx + 1}`);
+                        }, idx * 100); // Stagger insertions
+                      });
+                    }}
+                    className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                  >
+                    Insert All into Content
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {contentImages.map((image, index) => (
                     <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900/50">
-                      <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                        <img
+                      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 relative min-h-[120px]">
+                        <ImageWithFallback
                           src={image.url}
                           alt={image.alt || `Content image ${index + 1}`}
                           className="w-full h-48 object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                            const parent = (e.target as HTMLImageElement).parentElement;
-                            if (parent) {
-                              parent.innerHTML = '<div class="h-48 flex items-center justify-center text-gray-400 dark:text-gray-500 text-xs">Failed to load</div>';
-                            }
-                          }}
                         />
                       </div>
                       <div className="p-3 space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => handleInsertImageIntoContent(image.url, image.alt || `Content image ${index + 1}`)}
+                          className="w-full text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors mb-2"
+                        >
+                          Insert into Content
+                        </button>
                         <div>
                           <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                             Image URL
@@ -1492,7 +1584,7 @@ export default function EditDraftPage() {
                               updated[index] = { ...updated[index], url: e.target.value };
                               setContentImages(updated);
                             }}
-                            className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                            className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-mono"
                             placeholder="https://example.com/image.jpg"
                           />
                         </div>
