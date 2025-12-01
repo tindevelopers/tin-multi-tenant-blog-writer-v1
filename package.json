@@ -49,6 +49,9 @@
   "scripts": {
     "test:webflow-scan": "tsx scripts/test-webflow-scan.ts",
     "test:webflow-scan-api": "tsx scripts/test-webflow-scan-api.ts",
+    "test:multi-content-type": "tsx scripts/test-multi-content-type.ts",
+    "test:multi-content-type-api": "tsx scripts/test-multi-content-type-api.ts",
+    "check-env": "./scripts/setup-test-env.sh",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -114,8 +117,10 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "dotenv": "^17.2.3",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.5.4",
+    "tsx": "^4.21.0",
     "typescript": "^5.0.0"
   },
   "optionalDependencies": {
