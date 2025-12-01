@@ -582,32 +582,26 @@ export default function PublishingPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-900">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Content
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Platform
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Published At
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                  Published
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Platform URL / ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Sync Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Mode
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider sticky right-0 bg-gray-50 dark:bg-gray-900 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.1)]">
                   Actions
                 </th>
               </tr>
@@ -720,64 +714,52 @@ function PublishingRow({
 
   return (
     <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-      <td className="px-6 py-4 whitespace-nowrap">
-        <p className="text-sm font-medium text-gray-900 dark:text-white">
-          {contentTitle}
-        </p>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <div className="flex items-center gap-2">
-          <PlatformIcon className="w-5 h-5 text-gray-400" />
-          <span className="text-sm text-gray-900 dark:text-white capitalize">
-            {publishing.platform}
-          </span>
-        </div>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <PlatformStatusBadge status={publishing.status} />
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <ClockIcon className="w-4 h-4" />
-          {formatDate(publishing.published_at || publishing.scheduled_at)}
-        </div>
-      </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <div className="flex flex-col gap-1">
-          {publishing.platform_url ? (
+      {/* Content */}
+      <td className="px-4 py-3 whitespace-nowrap">
+        <div className="flex flex-col">
+          <p className="text-sm font-medium text-gray-900 dark:text-white truncate max-w-[200px]" title={contentTitle}>
+            {contentTitle}
+          </p>
+          {publishing.platform_url && (
             <a
               href={publishing.platform_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 font-medium"
+              className="text-xs text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300"
             >
               View Live →
             </a>
-          ) : (
-            <span className="text-sm text-gray-400">—</span>
-          )}
-          {publishing.platform_post_id && (
-            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
-              ID: {publishing.platform_post_id.substring(0, 8)}...
-            </span>
           )}
         </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap">
-        <SyncStatusBadge 
-          syncStatus={(publishing as any).sync_status} 
-          isDraft={(publishing as any).is_draft}
-          platformDraftStatus={(publishing as any).platform_draft_status}
-          lastSyncedAt={(publishing as any).last_synced_at}
-        />
+      {/* Platform */}
+      <td className="px-3 py-3 whitespace-nowrap">
+        <div className="flex items-center gap-1">
+          <PlatformIcon className="w-4 h-4 text-gray-400" />
+          <span className="text-xs text-gray-700 dark:text-gray-300 capitalize">
+            {publishing.platform}
+          </span>
+        </div>
       </td>
-      <td className="px-6 py-4 whitespace-nowrap">
+      {/* Status */}
+      <td className="px-3 py-3 whitespace-nowrap">
+        <PlatformStatusBadge status={publishing.status} />
+      </td>
+      {/* Published At */}
+      <td className="px-3 py-3 whitespace-nowrap">
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {formatDate(publishing.published_at || publishing.scheduled_at)}
+        </span>
+      </td>
+      {/* Mode */}
+      <td className="px-3 py-3 whitespace-nowrap">
         <DraftModeBadge 
           isDraft={(publishing as any).is_draft}
           platformDraftStatus={(publishing as any).platform_draft_status}
         />
       </td>
-      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+      {/* Actions - Sticky */}
+      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium sticky right-0 bg-white dark:bg-gray-800 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.1)]">
         <div className="flex items-center justify-end gap-1 flex-wrap">
           {/* Processing indicator */}
           {isProcessing && (
