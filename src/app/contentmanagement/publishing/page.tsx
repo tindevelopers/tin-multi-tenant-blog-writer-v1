@@ -317,7 +317,7 @@ export default function PublishingPage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Publishing Dashboard
           </h1>
-          {/* Webflow CMS Management - Sync, Unpublish, Republish, Delete */}
+          {/* v2.0 - Webflow CMS Management: Sync, Unpublish, Republish, Delete */}
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Manage content publishing across platforms
           </p>
