@@ -68,7 +68,7 @@ const VALID_PLATFORM_TRANSITIONS: Record<PlatformStatus, PlatformStatus[]> = {
   publishing: ['published', 'failed'],
   published: ['unpublished'],
   failed: ['publishing', 'cancelled'], // Can retry
-  unpublished: [],
+  unpublished: ['published', 'pending'], // Can republish or be deleted (reset to pending)
   cancelled: [] // Terminal state - no transitions
 };
 

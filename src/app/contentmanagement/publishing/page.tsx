@@ -12,6 +12,11 @@ import {
   ShoppingBagIcon,
   DocumentTextIcon,
   EyeIcon,
+  PauseCircleIcon,
+  PlayCircleIcon,
+  TrashIcon,
+  PencilSquareIcon,
+  ArrowUpTrayIcon,
 } from "@heroicons/react/24/outline";
 import { BlogPlatformPublishing } from "@/types/blog-queue";
 import type { Database } from "@/types/database";
@@ -34,6 +39,7 @@ export default function PublishingPage() {
   const [readyLoading, setReadyLoading] = useState(true);
   const [platformSelections, setPlatformSelections] = useState<Record<string, "webflow" | "wordpress" | "shopify">>({});
   const [publishingPostId, setPublishingPostId] = useState<string | null>(null);
+  const [actionInProgress, setActionInProgress] = useState<string | null>(null); // publishingId of item being processed
   const [filters, setFilters] = useState<PublishingFilters>({
     platform: "all",
     status: "all",
@@ -92,6 +98,7 @@ export default function PublishingPage() {
   const stats = {
     pending: publishing.filter((p) => p.status === "pending").length,
     published: publishing.filter((p) => p.status === "published").length,
+    unpublished: publishing.filter((p) => p.status === "unpublished").length,
     failed: publishing.filter((p) => p.status === "failed").length,
     scheduled: publishing.filter((p) => p.status === "scheduled").length,
     ready: readyPosts.length,
@@ -197,6 +204,111 @@ export default function PublishingPage() {
     }
   };
 
+  // Handler: Unpublish from platform (set to draft)
+  const handleUnpublish = async (publishingId: string) => {
+    if (!confirm("Are you sure you want to unpublish this blog? It will be set to draft on Webflow and hidden from the live site.")) {
+      return;
+    }
+    try {
+      setActionInProgress(publishingId);
+      const response = await fetch(`/api/blog-publishing/${publishingId}/unpublish`, {
+        method: "POST",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || result.error || "Failed to unpublish");
+      }
+      alert("✅ Blog unpublished successfully! It's now a draft on Webflow.");
+      await fetchPublishing();
+    } catch (err) {
+      console.error("Error unpublishing:", err);
+      alert(`❌ Error: ${err instanceof Error ? err.message : "Failed to unpublish"}`);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // Handler: Update/Sync changes to platform
+  const handleUpdate = async (publishingId: string) => {
+    try {
+      setActionInProgress(publishingId);
+      const response = await fetch(`/api/blog-publishing/${publishingId}/update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publish_after_update: true,
+          enhance_fields: true,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || result.error || "Failed to update");
+      }
+      alert("✅ Blog updated successfully on Webflow!\n\nChanges are now live.");
+      await fetchPublishing();
+    } catch (err) {
+      console.error("Error updating:", err);
+      alert(`❌ Error: ${err instanceof Error ? err.message : "Failed to update"}`);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // Handler: Republish (make draft live again)
+  const handleRepublish = async (publishingId: string) => {
+    try {
+      setActionInProgress(publishingId);
+      const response = await fetch(`/api/blog-publishing/${publishingId}/republish`, {
+        method: "POST",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || result.error || "Failed to republish");
+      }
+      alert("✅ Blog republished successfully! It's now live on Webflow.");
+      await fetchPublishing();
+    } catch (err) {
+      console.error("Error republishing:", err);
+      alert(`❌ Error: ${err instanceof Error ? err.message : "Failed to republish"}`);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
+  // Handler: Delete from platform
+  const handleDeleteFromPlatform = async (publishingId: string, keepRecord: boolean = true) => {
+    const confirmMsg = keepRecord
+      ? "Are you sure you want to DELETE this blog from Webflow?\n\nThis will remove it from your Webflow site. The publishing record will be kept so you can republish later."
+      : "Are you sure you want to PERMANENTLY DELETE this blog from Webflow and remove the publishing record?\n\nThis cannot be undone.";
+    
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+    
+    try {
+      setActionInProgress(publishingId);
+      const response = await fetch(`/api/blog-publishing/${publishingId}/delete-from-platform`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publish_site_after: true,
+          delete_local_record: !keepRecord,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || result.error || "Failed to delete");
+      }
+      alert("✅ Blog deleted from Webflow successfully!");
+      await fetchPublishing();
+    } catch (err) {
+      console.error("Error deleting:", err);
+      alert(`❌ Error: ${err instanceof Error ? err.message : "Failed to delete"}`);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -212,7 +324,7 @@ export default function PublishingPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <StatCard
           label="Pending"
           value={stats.pending}
@@ -224,6 +336,12 @@ export default function PublishingPage() {
           value={stats.published}
           color="green"
           icon="✅"
+        />
+        <StatCard
+          label="Unpublished"
+          value={stats.unpublished}
+          color="orange"
+          icon="📄"
         />
         <StatCard
           label="Failed"
@@ -240,7 +358,7 @@ export default function PublishingPage() {
         <StatCard
           label="Ready"
           value={stats.ready}
-          color="teal"
+          color="purple"
           icon="📝"
         />
       </div>
@@ -433,6 +551,7 @@ export default function PublishingPage() {
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
                 <option value="published">Published</option>
+                <option value="unpublished">Unpublished</option>
                 <option value="failed">Failed</option>
                 <option value="scheduled">Scheduled</option>
                 <option value="cancelled">Cancelled</option>
@@ -498,6 +617,7 @@ export default function PublishingPage() {
                   key={pub.publishing_id}
                   publishing={pub}
                   platformIcons={platformIcons}
+                  actionInProgress={actionInProgress}
                   onRetry={async () => {
                     const response = await fetch(`/api/blog-publishing/${pub.publishing_id}/retry`, {
                       method: "POST",
@@ -506,6 +626,10 @@ export default function PublishingPage() {
                       fetchPublishing();
                     }
                   }}
+                  onUnpublish={() => handleUnpublish(pub.publishing_id)}
+                  onUpdate={() => handleUpdate(pub.publishing_id)}
+                  onRepublish={() => handleRepublish(pub.publishing_id)}
+                  onDeleteFromPlatform={(keepRecord) => handleDeleteFromPlatform(pub.publishing_id, keepRecord)}
                 />
               ))}
             </tbody>
@@ -532,6 +656,8 @@ function StatCard({
     green: "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200",
     red: "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200",
     blue: "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200",
+    orange: "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200",
+    purple: "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200",
   };
 
   return (
@@ -552,14 +678,28 @@ function StatCard({
 function PublishingRow({
   publishing,
   platformIcons,
+  actionInProgress,
   onRetry,
+  onUnpublish,
+  onUpdate,
+  onRepublish,
+  onDeleteFromPlatform,
 }: {
   publishing: BlogPlatformPublishing;
   platformIcons: Record<string, any>;
+  actionInProgress: string | null;
   onRetry: () => void;
+  onUnpublish: () => void;
+  onUpdate: () => void;
+  onRepublish: () => void;
+  onDeleteFromPlatform: (keepRecord: boolean) => void;
 }) {
+  const [showDeleteMenu, setShowDeleteMenu] = useState(false);
   const statusMeta = getPlatformStatusMetadata(publishing.status);
   const PlatformIcon = platformIcons[publishing.platform] || GlobeAltIcon;
+  const isProcessing = actionInProgress === publishing.publishing_id;
+  const hasPlatformItem = !!publishing.platform_post_id;
+  const isWebflow = publishing.platform === "webflow";
 
   const contentTitle =
     publishing.post?.title ||
@@ -637,20 +777,120 @@ function PublishingRow({
         />
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1 flex-wrap">
+          {/* Processing indicator */}
+          {isProcessing && (
+            <span className="text-xs text-gray-500 dark:text-gray-400 animate-pulse mr-2">
+              Processing...
+            </span>
+          )}
+
+          {/* Retry button - for failed items */}
           {publishing.status === "failed" && (
             <button
               onClick={onRetry}
-              className="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors"
-              title="Retry publishing with enhanced fields"
+              disabled={isProcessing}
+              className="text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-900/20 transition-colors disabled:opacity-50"
+              title="Retry publishing"
             >
               <ArrowPathIcon className="w-4 h-4" />
               Retry
             </button>
           )}
-          {publishing.status === "published" && publishing.platform === "webflow" && (
-            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1" title="Enhanced fields were optimized using OpenAI">
-              ✨ Enhanced
+
+          {/* Update/Sync button - for published or unpublished items with platform ID */}
+          {hasPlatformItem && isWebflow && ["published", "unpublished"].includes(publishing.status) && (
+            <button
+              onClick={onUpdate}
+              disabled={isProcessing}
+              className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50"
+              title="Sync local changes to Webflow"
+            >
+              <ArrowUpTrayIcon className="w-4 h-4" />
+              Sync
+            </button>
+          )}
+
+          {/* Unpublish button - for published items */}
+          {publishing.status === "published" && hasPlatformItem && isWebflow && (
+            <button
+              onClick={onUnpublish}
+              disabled={isProcessing}
+              className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors disabled:opacity-50"
+              title="Set to draft on Webflow (hide from live site)"
+            >
+              <PauseCircleIcon className="w-4 h-4" />
+              Unpublish
+            </button>
+          )}
+
+          {/* Republish button - for unpublished items */}
+          {publishing.status === "unpublished" && hasPlatformItem && isWebflow && (
+            <button
+              onClick={onRepublish}
+              disabled={isProcessing}
+              className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors disabled:opacity-50"
+              title="Republish to Webflow (make live again)"
+            >
+              <PlayCircleIcon className="w-4 h-4" />
+              Republish
+            </button>
+          )}
+
+          {/* Delete dropdown - for items with platform ID */}
+          {hasPlatformItem && isWebflow && (
+            <div className="relative">
+              <button
+                onClick={() => setShowDeleteMenu(!showDeleteMenu)}
+                disabled={isProcessing}
+                className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+                title="Delete from Webflow"
+              >
+                <TrashIcon className="w-4 h-4" />
+              </button>
+              {showDeleteMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowDeleteMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setShowDeleteMenu(false);
+                          onDeleteFromPlatform(true);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      >
+                        <div className="font-medium">Delete from Webflow</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Keep record (can republish)
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowDeleteMenu(false);
+                          onDeleteFromPlatform(false);
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <div className="font-medium">Delete Permanently</div>
+                        <div className="text-xs text-red-500 dark:text-red-400">
+                          Remove from Webflow & delete record
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Enhanced badge */}
+          {publishing.status === "published" && isWebflow && (
+            <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1 ml-1" title="Enhanced fields were optimized using OpenAI">
+              ✨
             </span>
           )}
         </div>
