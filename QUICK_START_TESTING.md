@@ -83,7 +83,7 @@ fetch('/api/integrations/315d5877-c934-4bd5-b088-83708e313d1d/sites', {
   window.testProfileId = data.data.profile_id;
   
   // 4. TEST: Add field mappings
-  return fetch(`/api/integrations/315d5877-c934-4bd5-b088-83708e313d1d/content-types/${data.data.profile_id}/fields`, {
+  return fetch(`/api/integrations/315d5877-c934-4bd5-b088-83708e313d1d/content-types/${data.data.id}/fields`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
