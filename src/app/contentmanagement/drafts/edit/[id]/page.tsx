@@ -887,12 +887,15 @@ export default function EditDraftPage() {
 
     setAiGenerating(true);
     try {
-      const response = await fetch('/api/images/generate', {
+      // Use the new generate-and-upload endpoint that handles Cloudinary upload and media library
+      const response = await fetch('/api/images/generate-and-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `Thumbnail image for blog post: ${formData.title}. Square format, professional, eye-catching thumbnail suitable for blog preview.`,
+          prompt: `Professional thumbnail image for blog post: "${formData.title}". Square format, eye-catching, clean design suitable for blog preview cards and social sharing.`,
           aspectRatio: '1:1',
+          imageType: 'thumbnail',
+          title: formData.title,
         }),
       });
 
@@ -904,152 +907,25 @@ export default function EditDraftPage() {
       const result = await response.json();
       
       logger.debug('Thumbnail generation response', {
-        resultKeys: Object.keys(result),
-        hasSuccess: 'success' in result,
-        hasImages: 'images' in result,
-        imagesLength: result.images?.length,
-        hasImageUrl: 'image_url' in result,
-        hasJobId: 'job_id' in result,
-        status: result.status,
-        fullResult: JSON.stringify(result).substring(0, 500), // First 500 chars for debugging
+        success: result.success,
+        url: result.url?.substring(0, 100),
+        assetId: result.asset_id,
       });
-      
-      // Handle async job response (status: 'queued')
-      if (result.job_id && (result.status === 'queued' || result.status === 'processing')) {
-        logger.info('Thumbnail generation queued, polling for completion', {
-          job_id: result.job_id,
-          estimated_completion_time: result.estimated_completion_time,
-        });
-        
-        // Poll for job completion
-        const maxAttempts = 30; // 30 attempts * 2 seconds = 60 seconds max
-        let attempt = 0;
-        let imageUrl = '';
-        
-        while (attempt < maxAttempts) {
-          attempt++;
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds between polls
-          
-          try {
-            const statusResponse = await fetch(`/api/images/jobs/${result.job_id}`, {
-              method: 'GET',
-              headers: { 'Content-Type': 'application/json' },
-            });
-            
-            if (!statusResponse.ok) {
-              logger.warn(`Job status check failed (attempt ${attempt})`, { status: statusResponse.status });
-              continue;
-            }
-            
-            const statusResult = await statusResponse.json();
-            logger.debug('Job status poll', { attempt, status: statusResult.status, progress: statusResult.progress_percentage });
-            
-            if (statusResult.status === 'completed') {
-              // Extract image URL from completed job
-              if (statusResult.result?.images && statusResult.result.images.length > 0) {
-                const image = statusResult.result.images[0];
-                imageUrl = image.image_url || image.url || image.secure_url || '';
-              } else if (statusResult.result?.image_url) {
-                imageUrl = statusResult.result.image_url;
-              } else if (statusResult.image_url) {
-                imageUrl = statusResult.image_url;
-              }
-              
-              if (imageUrl) {
-                break; // Found URL, exit polling loop
-              }
-            } else if (statusResult.status === 'failed') {
-              throw new Error(statusResult.error_message || statusResult.error || 'Image generation failed');
-            }
-          } catch (pollError) {
-            logger.warn(`Error polling job status (attempt ${attempt})`, { error: pollError });
-            // Continue polling unless it's a critical error
-          }
-        }
-        
-        if (!imageUrl) {
-          throw new Error('Thumbnail generation timed out. The job may still be processing. Please try again in a moment.');
-        }
-        
-        // Set the thumbnail image URL
-        setFormData(prev => ({
-          ...prev,
-          thumbnailImage: imageUrl,
-          thumbnailImageAlt: prev.thumbnailImageAlt || `Thumbnail for ${formData.title}`,
-        }));
-        logger.info('✅ Thumbnail generated and set successfully (async)', {
-          imageUrl: imageUrl.substring(0, 100),
-          title: formData.title,
-          attempts: attempt,
-        });
-        alert('Thumbnail generated successfully!');
-        return;
-      }
-      
-      // Handle synchronous response - extract image URL from response
-      let imageUrl = '';
-      
-      // Format 1: { success: true, images: [{ image_url: '...' }] }
-      if (result.success && result.images && Array.isArray(result.images) && result.images.length > 0) {
-        const image = result.images[0];
-        imageUrl = image.image_url || image.url || image.secure_url || image.image_data || '';
-        logger.debug('Extracted URL from result.images[0]', { imageUrl: imageUrl.substring(0, 100) });
-      }
-      // Format 2: { images: [{ image_url: '...' }] } (without success field)
-      else if (result.images && Array.isArray(result.images) && result.images.length > 0) {
-        const image = result.images[0];
-        imageUrl = image.image_url || image.url || image.secure_url || image.image_data || '';
-        logger.debug('Extracted URL from result.images[0] (no success field)', { imageUrl: imageUrl.substring(0, 100) });
-      }
-      // Format 3: { image_url: '...' } (direct URL)
-      else if (result.image_url) {
-        imageUrl = result.image_url;
-        logger.debug('Extracted URL from result.image_url', { imageUrl: imageUrl.substring(0, 100) });
-      }
-      // Format 4: { url: '...' } (alternative field name)
-      else if (result.url) {
-        imageUrl = result.url;
-        logger.debug('Extracted URL from result.url', { imageUrl: imageUrl.substring(0, 100) });
-      }
-      // Format 5: { image: { url: '...' } } (nested)
-      else if (result.image?.url || result.image?.image_url) {
-        imageUrl = result.image.url || result.image.image_url;
-        logger.debug('Extracted URL from result.image', { imageUrl: imageUrl.substring(0, 100) });
-      }
-      // Format 6: { data: { image_url: '...' } } (nested data)
-      else if (result.data?.image_url || result.data?.url) {
-        imageUrl = result.data.image_url || result.data.url;
-        logger.debug('Extracted URL from result.data', { imageUrl: imageUrl.substring(0, 100) });
-      }
-      // Format 7: Base64 data URL
-      else if (result.image_data) {
-        const format = result.format || 'png';
-        if (result.image_data.startsWith('data:image/')) {
-          imageUrl = result.image_data;
-        } else {
-          imageUrl = `data:image/${format};base64,${result.image_data}`;
-        }
-        logger.debug('Extracted base64 image data', { format, hasData: !!result.image_data });
-      }
 
-      if (imageUrl) {
+      if (result.success && result.url) {
         setFormData(prev => ({
           ...prev,
-          thumbnailImage: imageUrl,
+          thumbnailImage: result.url,
           thumbnailImageAlt: prev.thumbnailImageAlt || `Thumbnail for ${formData.title}`,
         }));
-        logger.info('✅ Thumbnail generated and set successfully', {
-          imageUrl: imageUrl.substring(0, 100),
-          title: formData.title,
+        logger.info('✅ Thumbnail generated, uploaded to Cloudinary, and saved to media library', {
+          url: result.url.substring(0, 100),
+          assetId: result.asset_id,
+          publicId: result.public_id,
         });
-        alert('Thumbnail generated successfully!');
+        alert('✅ Thumbnail generated and saved to Media Library!');
       } else {
-        logger.error('❌ No image URL found in response', {
-          resultKeys: Object.keys(result),
-          resultType: typeof result,
-          resultString: JSON.stringify(result).substring(0, 500),
-        });
-        throw new Error(`No image URL returned. Response format: ${JSON.stringify(result).substring(0, 200)}`);
+        throw new Error('No image URL returned from generation');
       }
     } catch (error) {
       logger.error('Thumbnail generation failed:', error);
