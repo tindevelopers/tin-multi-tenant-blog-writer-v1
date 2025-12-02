@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { MENU_NEW_CONTROL_ITEMS, NEW_BADGE_STORAGE_KEY } from "@/utils/sidebarNewBadgeUtils";
 
 export default function SystemSettingsPage() {
   const router = useRouter();
@@ -28,13 +29,15 @@ export default function SystemSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [userRole, setUserRole] = useState<string>("");
   const [activeTab, setActiveTab] = useState("general");
+  const [newBadgeOverrides, setNewBadgeOverrides] = useState<Record<string, boolean>>({});
 
   const tabs = [
     { id: "general", label: "General", icon: "⚙️" },
     { id: "security", label: "Security", icon: "🔒" },
     { id: "integrations", label: "Integrations", icon: "🔌" },
     { id: "performance", label: "Performance", icon: "⚡" },
-    { id: "backup", label: "Backup", icon: "💾" }
+    { id: "backup", label: "Backup", icon: "💾" },
+    { id: "navigation", label: "Navigation Labels", icon: "🧭" }
   ];
 
   useEffect(() => {
@@ -56,6 +59,13 @@ export default function SystemSettingsPage() {
       }
     });
 
+    try {
+      const storedOverrides = localStorage.getItem(NEW_BADGE_STORAGE_KEY);
+      setNewBadgeOverrides(storedOverrides ? JSON.parse(storedOverrides) : {});
+    } catch (error) {
+      console.warn("Failed to load navigation badge overrides", error);
+    }
+
     // Mock loading settings
     setTimeout(() => {
       setLoading(false);
@@ -76,6 +86,20 @@ export default function SystemSettingsPage() {
       setSaving(false);
       alert("Settings saved successfully!");
     }, 2000);
+  };
+
+  const handleNewBadgeVisibility = (key: string, shouldDisplay: boolean) => {
+    setNewBadgeOverrides(prev => {
+      const next = { ...prev };
+      if (shouldDisplay) {
+        delete next[key];
+      } else {
+        next[key] = true;
+      }
+      localStorage.setItem(NEW_BADGE_STORAGE_KEY, JSON.stringify(next));
+      window.dispatchEvent(new Event("sidebar-new-badge-overrides-updated"));
+      return next;
+    });
   };
 
   const canManageSettings = ["system_admin", "super_admin"].includes(userRole);
@@ -479,6 +503,37 @@ export default function SystemSettingsPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "navigation" && (
+              <div className="space-y-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Navigation "NEW" Badges</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Toggle which menu items should continue displaying the NEW badge. This control is available to system admins only.
+                </p>
+                <div className="space-y-4">
+                  {MENU_NEW_CONTROL_ITEMS.map(item => {
+                    const isBadgeDisabled = !!newBadgeOverrides[item.key];
+                    return (
+                      <div key={item.key} className="flex items-center justify-between border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{item.label}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{item.group}</p>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={!isBadgeDisabled}
+                            onChange={(e) => handleNewBadgeVisibility(item.key, e.target.checked)}
+                            className="h-4 w-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500"
+                          />
+                          <span>Display NEW badge</span>
+                        </label>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

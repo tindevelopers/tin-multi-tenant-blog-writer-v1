@@ -5,6 +5,12 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import { createClient } from "@/lib/supabase/client";
+import { 
+  DEFAULT_RELEASE_DATE, 
+  NEW_BADGE_DURATION_DAYS, 
+  NEW_BADGE_STORAGE_KEY, 
+  getMenuItemKey 
+} from "@/utils/sidebarNewBadgeUtils";
 import {
   ChevronDownIcon,
   HorizontaLDots,
@@ -36,24 +42,33 @@ type NavItem = {
   name: string;
   icon: React.ReactNode;
   path?: string;
-  new?: boolean;
+  releaseDate?: string;
   subItems?: { 
     name: string; 
     path?: string; 
     pro?: boolean; 
-    new?: boolean;
+    releaseDate?: string;
     isAccordionHeader?: boolean;
     icon?: React.ReactNode;
     subItems?: { 
       name: string; 
       path?: string; 
       pro?: boolean; 
-      new?: boolean; 
+      releaseDate?: string; 
       icon?: React.ReactNode;
       isAccordionHeader?: boolean;
-      subItems?: { name: string; path: string; pro?: boolean; new?: boolean; icon?: React.ReactNode }[];
+      subItems?: { name: string; path: string; pro?: boolean; releaseDate?: string; icon?: React.ReactNode }[];
     }[];
   }[];
+};
+
+const shouldShowNewBadge = (releaseDate?: string) => {
+  if (!releaseDate) return false;
+  const parsedDate = new Date(releaseDate);
+  if (Number.isNaN(parsedDate.getTime())) return false;
+  const now = new Date();
+  const diffInMs = now.getTime() - parsedDate.getTime();
+  return diffInMs <= NEW_BADGE_DURATION_DAYS * 24 * 60 * 60 * 1000;
 };
 
 // Blog Writer specific navigation items
@@ -61,56 +76,57 @@ const blogWriterItems: NavItem[] = [
   {
     name: "Blog Writer",
     icon: <span className="w-5 h-5 flex items-center justify-center text-xs font-bold bg-blue-500 text-white rounded">B</span>,
-    new: true,
+    releaseDate: DEFAULT_RELEASE_DATE,
     subItems: [
       { 
         name: "Dashboard", 
         path: "/admin",
-        icon: <LayoutDashboard className="w-4 h-4" />
+        icon: <LayoutDashboard className="w-4 h-4" />,
+        releaseDate: DEFAULT_RELEASE_DATE,
       },
       { 
         name: "SEO Tools", 
         icon: <Target className="w-4 h-4" />,
         pro: true,
-        new: true,
+        releaseDate: DEFAULT_RELEASE_DATE,
         isAccordionHeader: true,
         subItems: [
-          { name: "Keyword Research", path: "/seo", icon: <Search className="w-4 h-4" />, new: true },
-          { name: "Keyword Results", path: "/seo?tab=keyword-results", icon: <TrendingUp className="w-4 h-4" />, new: true },
-          { name: "Saved Searches", path: "/seo/saved-searches", icon: <History className="w-4 h-4" />, new: true },
-          { name: "Content Clusters", path: "/seo/content-clusters", icon: <Layers2 className="w-4 h-4" />, new: true },
+          { name: "Keyword Research", path: "/seo", icon: <Search className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Keyword Results", path: "/seo?tab=keyword-results", icon: <TrendingUp className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Saved Searches", path: "/seo/saved-searches", icon: <History className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Content Clusters", path: "/seo/content-clusters", icon: <Layers2 className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
         ]
       },
       { 
         name: "Content Management", 
         icon: <FileText className="w-4 h-4" />,
         isAccordionHeader: true,
-        new: true,
+        releaseDate: DEFAULT_RELEASE_DATE,
         subItems: [
-          { name: "Drafts", path: "/contentmanagement/drafts", icon: <FolderOpen className="w-4 h-4" />, new: true },
-          { name: "Content Ideas", path: "/contentmanagement/content-ideas", icon: <Target className="w-4 h-4" />, new: true },
-          { name: "Templates", path: "/contentmanagement/templates", icon: <FileText className="w-4 h-4" />, new: true },
-          { name: "Publishing", path: "/contentmanagement/publishing", icon: <Globe className="w-4 h-4" />, new: true },
-          { name: "Blog Queue", path: "/contentmanagement/blog-queue", icon: <FileClock className="w-4 h-4" />, new: true },
+          { name: "Drafts", path: "/contentmanagement/drafts", icon: <FolderOpen className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Content Ideas", path: "/contentmanagement/content-ideas", icon: <Target className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Templates", path: "/contentmanagement/templates", icon: <FileText className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Publishing", path: "/contentmanagement/publishing", icon: <Globe className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Blog Queue", path: "/contentmanagement/blog-queue", icon: <FileClock className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
         ]
       },
       { 
         name: "Team & Collaboration", 
         icon: <Users className="w-4 h-4" />,
         isAccordionHeader: true,
-        new: true,
+        releaseDate: DEFAULT_RELEASE_DATE,
         subItems: [
-          { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, new: true },
-          { name: "Media", path: "/contentmanagement/media", icon: <ImageIcon className="w-4 h-4" />, new: true },
+          { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Media", path: "/contentmanagement/media", icon: <ImageIcon className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
         ]
       },
       { 
         name: "Settings", 
         icon: <Settings className="w-4 h-4" />,
         isAccordionHeader: true,
-        new: true,
+        releaseDate: DEFAULT_RELEASE_DATE,
         subItems: [
-          { name: "Content Prompts", path: "/admin/settings/content-prompts", icon: <Target className="w-4 h-4" />, new: true },
+          { name: "Content Prompts", path: "/admin/settings/content-prompts", icon: <Target className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
         ]
       },
       { 
@@ -131,14 +147,14 @@ const adminPanelItems: NavItem[] = [
   {
     name: "Admin Panel",
     icon: <span className="w-5 h-5 flex items-center justify-center text-xs font-bold bg-purple-600 text-white rounded">A</span>,
-    new: true,
+    releaseDate: DEFAULT_RELEASE_DATE,
     subItems: [
-      { name: "Admin Dashboard", path: "/admin/panel", icon: <LayoutDashboard className="w-4 h-4" /> },
-      { name: "User Management", path: "/admin/panel/users", icon: <Users className="w-4 h-4" /> },
-      { name: "Organizations", path: "/admin/panel/organizations", icon: <Building2 className="w-4 h-4" /> },
-      { name: "Integrations", path: "/admin/panel/integrations", icon: <Plug className="w-4 h-4" /> },
-      { name: "Usage Logs", path: "/admin/panel/usage-logs", icon: <FileClock className="w-4 h-4" /> },
-      { name: "System Settings", path: "/admin/panel/system-settings", icon: <Settings className="w-4 h-4" /> },
+      { name: "Admin Dashboard", path: "/admin/panel", icon: <LayoutDashboard className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+      { name: "User Management", path: "/admin/panel/users", icon: <Users className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+      { name: "Organizations", path: "/admin/panel/organizations", icon: <Building2 className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+      { name: "Integrations", path: "/admin/panel/integrations", icon: <Plug className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+      { name: "Usage Logs", path: "/admin/panel/usage-logs", icon: <FileClock className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+      { name: "System Settings", path: "/admin/panel/system-settings", icon: <Settings className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
     ],
   },
 ];
@@ -152,6 +168,7 @@ const AppSidebar: React.FC = () => {
   const [openSubmenus, setOpenSubmenus] = useState<Set<string>>(new Set(['templates-0']));
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [newBadgeOverrides, setNewBadgeOverrides] = useState<Record<string, boolean>>({});
 
   // Load persisted state from localStorage, default Blog Writer menu to open
   useEffect(() => {
@@ -191,6 +208,35 @@ const AppSidebar: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('sidebar-open-nested-submenus', JSON.stringify(Array.from(openNestedSubmenus)));
   }, [openNestedSubmenus]);
+
+  useEffect(() => {
+    const loadOverrides = () => {
+      try {
+        const stored = localStorage.getItem(NEW_BADGE_STORAGE_KEY);
+        setNewBadgeOverrides(stored ? JSON.parse(stored) : {});
+      } catch (error) {
+        console.warn('Failed to load sidebar new badge overrides:', error);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      loadOverrides();
+      const handleStorage = (event: StorageEvent) => {
+        if (event.key === NEW_BADGE_STORAGE_KEY) {
+          loadOverrides();
+        }
+      };
+      const handleCustomUpdate = () => loadOverrides();
+
+      window.addEventListener('storage', handleStorage);
+      window.addEventListener('sidebar-new-badge-overrides-updated', handleCustomUpdate);
+
+      return () => {
+        window.removeEventListener('storage', handleStorage);
+        window.removeEventListener('sidebar-new-badge-overrides-updated', handleCustomUpdate);
+      };
+    }
+  }, []);
 
   // Check if user is admin on mount
   useEffect(() => {
@@ -347,6 +393,8 @@ const AppSidebar: React.FC = () => {
         {navItems.map((nav, index) => {
           const submenuKey = `${menuType}-${index}`;
           const isSubmenuOpen = openSubmenus.has(submenuKey);
+          const navKey = getMenuItemKey(nav.path, nav.name);
+          const navIsNew = !newBadgeOverrides[navKey] && shouldShowNewBadge(nav.releaseDate);
           
           return (
             <li key={nav.name}>
@@ -382,7 +430,7 @@ const AppSidebar: React.FC = () => {
                   >
                     {nav.name}
                   </span>
-                  {nav.new && (
+                  {navIsNew && (
                     <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                       NEW
                     </span>
@@ -425,7 +473,7 @@ const AppSidebar: React.FC = () => {
                   >
                     {nav.name}
                   </span>
-                  {nav.new && (
+                  {navIsNew && (
                     <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                       NEW
                     </span>
@@ -442,6 +490,8 @@ const AppSidebar: React.FC = () => {
                     {nav.subItems.map((subItem, subIndex) => {
                       const nestedSubmenuKey = `${menuType}-${index}-${subIndex}`;
                       const isNestedSubmenuOpen = openNestedSubmenus.has(nestedSubmenuKey);
+                      const subItemKey = getMenuItemKey(subItem.path, subItem.name);
+                      const subItemIsNew = !newBadgeOverrides[subItemKey] && shouldShowNewBadge(subItem.releaseDate);
                       
                       return (
                         <li key={subItem.name}>
@@ -469,7 +519,7 @@ const AppSidebar: React.FC = () => {
                                   <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
                                     {subItem.name}
                                   </span>
-                                  {subItem.new && (
+                                  {subItemIsNew && (
                                     <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                       NEW
                                     </span>
@@ -488,7 +538,10 @@ const AppSidebar: React.FC = () => {
                                   }`}
                                 >
                                   <ul className="ml-4 mt-1 space-y-1">
-                                    {subItem.subItems.map((nestedItem) => (
+                                    {subItem.subItems.map((nestedItem) => {
+                                      const nestedKey = getMenuItemKey(nestedItem.path, nestedItem.name);
+                                      const nestedIsNew = !newBadgeOverrides[nestedKey] && shouldShowNewBadge(nestedItem.releaseDate);
+                                      return (
                                       <li key={nestedItem.name}>
                                         <Link
                                           href={nestedItem.path || "#"}
@@ -512,7 +565,7 @@ const AppSidebar: React.FC = () => {
                                             <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
                                               {nestedItem.name}
                                             </span>
-                                            {nestedItem.new && (
+                                            {nestedIsNew && (
                                               <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                                 NEW
                                               </span>
@@ -525,7 +578,7 @@ const AppSidebar: React.FC = () => {
                                           </span>
                                         </Link>
                                       </li>
-                                    ))}
+                                    )})}
                                   </ul>
                                 </div>
                               )}
@@ -553,7 +606,7 @@ const AppSidebar: React.FC = () => {
                                 <span className={!isExpanded && !isHovered ? "lg:hidden" : ""}>
                                   {subItem.name}
                                 </span>
-                                {subItem.new && (
+                                {subItemIsNew && (
                                   <span className={`bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded-full dark:bg-green-900 dark:text-green-300 ${!isExpanded && !isHovered ? "lg:hidden" : ""}`}>
                                     NEW
                                   </span>

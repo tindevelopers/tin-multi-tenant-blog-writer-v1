@@ -24,6 +24,7 @@ import {
 import { useEnhancedContentClusters } from '@/hooks/useEnhancedContentClusters';
 import type { BlogResearchResults } from '@/lib/keyword-research';
 import type { ClusterGenerationRequest } from '@/lib/enhanced-content-clusters';
+import type { EnhancedContentCluster } from '@/lib/enhanced-content-clusters';
 
 interface EnhancedContentClustersPanelProps {
   researchResults?: BlogResearchResults | null;
@@ -161,6 +162,57 @@ function EnhancedContentClustersPanel({
     };
     return (colors as any)[potential] || 'text-gray-600 dark:text-gray-400';
   };
+
+  const formatDateTime = useCallback((dateString?: string | null) => {
+    if (!dateString) return null;
+    try {
+      return new Date(dateString).toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+    } catch (error) {
+      logger.warn('Failed to format date', { dateString, error });
+      return null;
+    }
+  }, []);
+
+  const computeAuthorityScore = useCallback((cluster: EnhancedContentCluster) => {
+    if (cluster.authority_score && cluster.authority_score > 0) {
+      return cluster.authority_score;
+    }
+
+    const keywordCluster = cluster.keyword_clusters?.[0];
+    if (!keywordCluster || !cluster.research_data) {
+      return null;
+    }
+
+    const avgCompetition = keywordCluster.avg_competition ?? 0.5;
+    const clusterScore = keywordCluster.cluster_score ?? 0.5;
+    const keywordCount = keywordCluster.keywords?.length ?? 0;
+
+    const score1 = clusterScore * 0.4;
+    const score2 = (1 - Math.min(avgCompetition, 1)) * 0.4;
+    const score3 = Math.min(keywordCount / 20, 1) * 0.2;
+
+    const totalScore = Math.max(0, Math.min(1, score1 + score2 + score3));
+    return Math.round(totalScore * 10);
+  }, []);
+
+  const renderTimestamps = useCallback((cluster: EnhancedContentCluster) => {
+    const created = formatDateTime(cluster.created_at);
+    const updated = formatDateTime(cluster.updated_at);
+
+    if (!created && !updated) {
+      return null;
+    }
+
+    return (
+      <div className="text-right text-xs text-gray-500 dark:text-gray-400 space-y-1">
+        {created && <p>Created: {created}</p>}
+        {updated && <p>Updated: {updated}</p>}
+      </div>
+    );
+  }, [formatDateTime]);
 
   if (loading && !clusters.length) {
     return (
@@ -345,9 +397,12 @@ function EnhancedContentClustersPanel({
                     Pillar: <span className="font-medium">{cluster.pillar_keyword}</span>
                   </p>
                 </div>
-                <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTrafficColor(cluster.estimated_traffic_potential)} bg-opacity-20`}>
-                  {cluster.estimated_traffic_potential}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getTrafficColor(cluster.estimated_traffic_potential)} bg-opacity-20`}>
+                    {cluster.estimated_traffic_potential}
+                  </span>
+                  {renderTimestamps(cluster)}
+                </div>
               </div>
 
               <div className="grid grid-cols-3 gap-4 mb-4">
@@ -373,7 +428,13 @@ function EnhancedContentClustersPanel({
 
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Authority: {cluster.authority_score !== null && cluster.authority_score !== undefined ? cluster.authority_score : 'N/A'}/10
+                  Authority:{' '}
+                  {(() => {
+                    const authorityScore = computeAuthorityScore(cluster);
+                    return authorityScore !== null && authorityScore !== undefined
+                      ? `${authorityScore}/10`
+                      : 'N/A';
+                  })()}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -434,7 +495,12 @@ function EnhancedContentClustersPanel({
                   <div className="flex items-center gap-4 text-sm">
                     <div className="text-center">
                       <div className="text-lg font-bold text-gray-900 dark:text-white">
-                        {selectedCluster.authority_score}
+                        {(() => {
+                          const authorityScore = computeAuthorityScore(selectedCluster);
+                          return authorityScore !== null && authorityScore !== undefined
+                            ? authorityScore
+                            : 'N/A';
+                        })()}
                       </div>
                       <div className="text-xs text-gray-600 dark:text-gray-400">Authority</div>
                     </div>
@@ -445,6 +511,7 @@ function EnhancedContentClustersPanel({
                       <div className="text-xs text-gray-600 dark:text-gray-400">Traffic</div>
                     </div>
                   </div>
+                  {renderTimestamps(selectedCluster)}
                   {selectedCluster.id && (
                     <button
                       onClick={() => handleDeleteCluster(selectedCluster.id, selectedCluster.cluster_name)}
