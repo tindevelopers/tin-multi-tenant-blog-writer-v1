@@ -18,7 +18,8 @@ import {
   Eye,
   ArrowRight,
   Sparkles,
-  Zap
+  Zap,
+  Trash2
 } from 'lucide-react';
 import { useEnhancedContentClusters } from '@/hooks/useEnhancedContentClusters';
 import type { BlogResearchResults } from '@/lib/keyword-research';
@@ -54,6 +55,7 @@ function EnhancedContentClustersPanel({
     saveEnhancedClusters,
     loadUserClusters,
     loadClusterArticles,
+    deleteCluster,
     selectArticle,
     updateArticle,
     reset
@@ -63,6 +65,7 @@ function EnhancedContentClustersPanel({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [showClusterDetails, setShowClusterDetails] = useState(false);
+  const [deletingClusterId, setDeletingClusterId] = useState<string | null>(null);
 
   useEffect(() => {
     loadUserClusters();
@@ -84,6 +87,33 @@ function EnhancedContentClustersPanel({
 
     await generateClustersFromResearch(request);
   }, [researchResults, targetAudience, industry, generateClustersFromResearch]);
+
+  const handleDeleteCluster = useCallback(async (clusterId?: string, clusterName?: string) => {
+    if (!clusterId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete the "${clusterName?.replace(/\s+Content Hub/gi, '') || 'selected'}" cluster? This will remove all associated articles.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingClusterId(clusterId);
+      const result = await deleteCluster(clusterId);
+
+      if (!result.success) {
+        logger.error('Failed to delete content cluster', { clusterId, error: result.error });
+      } else if (selectedClusterId === clusterId) {
+        setSelectedClusterId(null);
+      }
+    } finally {
+      setDeletingClusterId(null);
+    }
+  }, [deleteCluster, selectedClusterId]);
 
   const handleSaveClusters = async () => {
     const result = await saveEnhancedClusters();
@@ -345,16 +375,28 @@ function EnhancedContentClustersPanel({
                 <div className="text-sm text-gray-600 dark:text-gray-400">
                   Authority: {cluster.authority_score !== null && cluster.authority_score !== undefined ? cluster.authority_score : 'N/A'}/10
                 </div>
-                <button
-                  onClick={() => {
-                    setSelectedClusterId(cluster.id || null);
-                    if (cluster.id) loadClusterArticles(cluster.id);
-                  }}
-                  className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
-                >
-                  View Articles
-                  <ArrowRight className="h-3 w-3" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedClusterId(cluster.id || null);
+                      if (cluster.id) loadClusterArticles(cluster.id);
+                    }}
+                    className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
+                  >
+                    View Articles
+                    <ArrowRight className="h-3 w-3" />
+                  </button>
+                  {cluster.id && (
+                    <button
+                      onClick={() => handleDeleteCluster(cluster.id, cluster.cluster_name)}
+                      disabled={deletingClusterId === cluster.id}
+                      className="inline-flex items-center gap-2 px-3 py-1 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {deletingClusterId === cluster.id ? 'Deleting...' : 'Delete'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -374,7 +416,7 @@ function EnhancedContentClustersPanel({
               Back to Clusters
             </button>
             <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between mb-4 gap-4">
                 <div className="flex-1">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                     {selectedCluster.cluster_name.replace(/\s+Content Hub/gi, '').replace(/\s*\([\d-]+\)\s*$/, '')}
@@ -388,19 +430,31 @@ function EnhancedContentClustersPanel({
                     </p>
                   )}
                 </div>
-                <div className="flex items-center gap-4 text-sm">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-gray-900 dark:text-white">
-                      {selectedCluster.authority_score}
+                <div className="flex flex-col items-end gap-3">
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-gray-900 dark:text-white">
+                        {selectedCluster.authority_score}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">Authority</div>
                     </div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Authority</div>
-                  </div>
-                  <div className="text-center">
-                    <div className={`text-lg font-bold ${getTrafficColor(selectedCluster.estimated_traffic_potential)}`}>
-                      {selectedCluster.estimated_traffic_potential}
+                    <div className="text-center">
+                      <div className={`text-lg font-bold ${getTrafficColor(selectedCluster.estimated_traffic_potential)}`}>
+                        {selectedCluster.estimated_traffic_potential}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">Traffic</div>
                     </div>
-                    <div className="text-xs text-gray-600 dark:text-gray-400">Traffic</div>
                   </div>
+                  {selectedCluster.id && (
+                    <button
+                      onClick={() => handleDeleteCluster(selectedCluster.id, selectedCluster.cluster_name)}
+                      disabled={deletingClusterId === selectedCluster.id}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {deletingClusterId === selectedCluster.id ? 'Deleting...' : 'Delete Cluster'}
+                    </button>
+                  )}
                 </div>
               </div>
 

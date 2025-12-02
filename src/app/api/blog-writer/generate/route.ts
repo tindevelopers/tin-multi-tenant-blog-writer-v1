@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import cloudRunHealth from '@/lib/cloud-run-health';
 import { type GeneratedImage } from '@/lib/image-generation';
 import { enhanceContentToRichHTML, extractSections, cleanExcerpt } from '@/lib/content-enhancer';
-import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
+import { getDefaultCustomInstructions, getQualityFeaturesForLevel, buildEnhancedBlogRequestPayload } from '@/lib/blog-generation-utils';
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
@@ -687,42 +687,28 @@ export async function POST(request: NextRequest) {
     }
     
     // Build request payload for enhanced endpoint (v1.3.6)
-    // Map template_type to blog_type, or use 'custom' as default
-    // Valid blog_type values: custom, brand, top_10, product_review, how_to, comparison, guide,
-    // tutorial, listicle, case_study, news, opinion, interview, faq, checklist, tips, definition,
-    // benefits, problem_solution, trend_analysis, statistics, resource_list, timeline, myth_busting,
-    // best_practices, getting_started, advanced, troubleshooting
-    const blogType = template_type && [
-      'custom', 'brand', 'top_10', 'product_review', 'how_to', 'comparison', 'guide',
-      'tutorial', 'listicle', 'case_study', 'news', 'opinion', 'interview', 'faq', 'checklist', 'tips',
-      'definition', 'benefits', 'problem_solution', 'trend_analysis', 'statistics', 'resource_list',
-      'timeline', 'myth_busting', 'best_practices', 'getting_started', 'advanced', 'troubleshooting'
-    ].includes(template_type) ? template_type : 'custom';
-    
-    const requestPayload: Record<string, unknown> = {
-      blog_type: blogType,
-      topic,
-      keywords: keywordsArray,
-      target_audience: target_audience || brandVoice?.target_audience || 'general',
-      tone: (tone || brandVoice?.tone || 'professional') as 'professional' | 'casual' | 'academic' | 'conversational' | 'instructional',
-      length: length ? convertLengthToAPI(length) : convertLengthToAPI(mapWordCountToLength(word_count || contentPreset?.word_count || 1000)),
-      format: 'html' as 'markdown' | 'html' | 'json',
-      // ALWAYS use DataForSEO as primary content generation provider
-      use_dataforseo_content_generation: true, // Force DataForSEO as primary
-      // OpenAI will be used as fallback for missing mandatory fields after DataForSEO response
-      use_openai_fallback: true, // Enable OpenAI fallback for missing fields
-    };
+    const resolvedCustomInstructions =
+      custom_instructions || defaultCustomInstructions || undefined;
 
-    // Add custom instructions (use provided or default for premium)
     if (custom_instructions) {
-      requestPayload.custom_instructions = custom_instructions;
       logger.debug('📝 Using provided custom instructions');
     } else if (defaultCustomInstructions) {
-      requestPayload.custom_instructions = defaultCustomInstructions;
       logger.debug('📝 Using default premium custom instructions');
     }
 
-    // Note: template_type is now mapped to blog_type above, no need to set separately
+    const requestPayload: Record<string, unknown> = buildEnhancedBlogRequestPayload({
+      topic,
+      keywords: keywordsArray,
+      targetAudience: target_audience || brandVoice?.target_audience || 'general',
+      tone: tone || brandVoice?.tone || 'professional',
+      wordCount: word_count || contentPreset?.word_count || 1500,
+      qualityLevel: quality_level || contentPreset?.quality_level || 'medium',
+      customInstructions: resolvedCustomInstructions,
+      templateType: template_type || undefined,
+      length: length || undefined,
+      includeFAQ: include_faq_section,
+      location,
+    });
 
     // Add quality features (enable automatically for premium, or use provided values)
     const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
@@ -765,16 +751,6 @@ export async function POST(request: NextRequest) {
     requestPayload.include_faq = include_faq_section !== undefined ? include_faq_section : false;
     requestPayload.include_toc = false; // Default to false
     
-    // Add word_count_target if word_count is provided
-    if (word_count) {
-      requestPayload.word_count_target = word_count;
-    }
-    
-    // Add location if provided (for location-based content)
-    if (location) {
-      requestPayload.location = location;
-    }
-    
     // v1.3.4: Abstraction blog type is not currently used in this implementation
     // If needed in the future, add logic to determine when blogType should be 'abstraction'
     // Abstraction blogs support content_strategy and quality_target fields
@@ -786,8 +762,8 @@ export async function POST(request: NextRequest) {
       keywords: requestPayload.keywords,
       target_audience: requestPayload.target_audience,
       tone: requestPayload.tone,
-      word_count: requestPayload.word_count,
-      quality_level: requestPayload.quality_level,
+      word_count_target: requestPayload.word_count_target,
+      quality_level: quality_level || contentPreset?.quality_level || 'medium',
       endpoint: endpoint,
       has_custom_instructions: !!requestPayload.custom_instructions,
       has_enhanced_insights: !!requestPayload.enhanced_keyword_insights,

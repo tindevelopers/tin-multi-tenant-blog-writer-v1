@@ -38,7 +38,7 @@ export default function ViewDraftPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copyButtonText, setCopyButtonText] = useState('Copy HTML');
   
-  const { post: draft, loading, error } = useBlogPost(draftId);
+  const { post: draft, loading, error, refetch } = useBlogPost(draftId);
   const { deletePost } = useBlogPostMutations();
 
   // Extract and compute metadata
@@ -487,11 +487,14 @@ export default function ViewDraftPage() {
           {activeTab === 'metadata' && (
             <div className="space-y-6">
               {contentMetadata && (
-                <>
-                  <ImageGallery contentMetadata={contentMetadata} />
-                  <LinkValidationPanel contentMetadata={contentMetadata} />
-                </>
+                <ImageGallery contentMetadata={contentMetadata} />
               )}
+              
+              <LinkValidationPanel
+                contentMetadata={contentMetadata}
+                onRefresh={refetch}
+                lastUpdated={draft.updated_at || draft.created_at}
+              />
               
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">

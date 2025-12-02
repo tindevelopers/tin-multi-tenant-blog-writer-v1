@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+import { buildEnhancedBlogRequestPayload } from '@/lib/blog-generation-utils';
 import cloudRunHealth from '@/lib/cloud-run-health';
 
 /**
@@ -103,22 +104,26 @@ export async function POST(request: NextRequest) {
       keywordsCount: keywords?.length || 0
     });
 
+    const requestPayload = buildEnhancedBlogRequestPayload({
+      topic,
+      keywords,
+      targetAudience: target_audience,
+      tone: tone || 'professional',
+      wordCount: word_count || 1500,
+      qualityLevel: quality_level || 'high',
+      customInstructions: custom_instructions,
+      featureOverrides: {
+        use_consensus_generation: true,
+      },
+      extraFields: {
+        fallback_to_openai: true,
+      },
+    });
+
     const response = await fetch(`${apiUrl}/api/v1/blog/generate-enhanced`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({
-        topic,
-        keywords: keywords || [],
-        target_audience: target_audience || undefined,
-        tone: tone || 'professional',
-        word_count: word_count || 1500,
-        quality_level: quality_level || 'high',
-        custom_instructions: custom_instructions || undefined,
-        use_consensus_generation: true,
-        fallback_to_openai: true,
-        use_dataforseo_content_generation: true,
-        use_openai_fallback: true,
-      }),
+      body: JSON.stringify(requestPayload),
     });
 
     // Read response body once

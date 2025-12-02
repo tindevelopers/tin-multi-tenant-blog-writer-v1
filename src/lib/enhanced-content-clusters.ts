@@ -1475,6 +1475,48 @@ export class EnhancedContentClustersService {
   }
 
   /**
+   * Delete a saved enhanced content cluster (and cascade its articles)
+   */
+  async deleteEnhancedCluster(
+    clusterId: string,
+    userId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const supabase = createClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      if (user.id !== userId) {
+        return { success: false, error: 'User ID mismatch' };
+      }
+
+      const { error } = await supabase
+        .from('content_clusters')
+        .delete()
+        .eq('id', clusterId)
+        .eq('user_id', userId);
+
+      if (error) {
+        logger.error('Failed to delete enhanced cluster', { clusterId, error });
+        return { success: false, error: error.message || 'Failed to delete cluster' };
+      }
+
+      // cluster_content_ideas rows cascade via FK
+      logger.debug('✅ Deleted enhanced cluster', { clusterId });
+      return { success: true };
+    } catch (error) {
+      logger.error('Error deleting enhanced cluster', { clusterId, error });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete cluster',
+      };
+    }
+  }
+
+  /**
    * Estimate traffic potential based on search volume
    */
   private estimateTraffic(searchVolume: number): 'low' | 'medium' | 'high' {

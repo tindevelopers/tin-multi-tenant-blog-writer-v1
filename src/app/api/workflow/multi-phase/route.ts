@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+import { buildEnhancedBlogRequestPayload } from '@/lib/blog-generation-utils';
 import { logger } from '@/utils/logger';
 
 const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
@@ -228,19 +229,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       headers['Authorization'] = `Bearer ${API_KEY}`;
     }
 
-    const requestPayload = {
+    const requestPayload = buildEnhancedBlogRequestPayload({
       topic,
       keywords: keywordsArray,
-      target_audience: targetAudience,
+      targetAudience,
       tone: tone || 'professional',
-      word_count: wordCount,
-      quality_level: qualityLevel,
-      custom_instructions: customInstructions,
-      use_consensus_generation: true,
-      fallback_to_openai: true,
-      use_dataforseo_content_generation: true,
-      use_openai_fallback: true,
-    };
+      wordCount,
+      qualityLevel,
+      customInstructions,
+      featureOverrides: {
+        use_consensus_generation: true,
+      },
+      extraFields: {
+        fallback_to_openai: true,
+      },
+    });
 
     const response = await fetch(apiUrl, {
       method: 'POST',

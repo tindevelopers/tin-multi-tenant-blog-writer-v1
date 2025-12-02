@@ -21,6 +21,15 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 
+const WORD_COUNT_OPTIONS = [
+  { value: 100, label: 'Test (~100 words)' },
+  { value: 300, label: 'Very Short (~300 words)' },
+  { value: 800, label: 'Short (~800 words)' },
+  { value: 1500, label: 'Medium (~1500 words)' },
+  { value: 2500, label: 'Long (~2500 words)' },
+  { value: 4000, label: 'Very Long (~4000 words)' },
+];
+
 interface Phase {
   id: string;
   name: string;
@@ -288,10 +297,11 @@ export function MultiPhaseWorkflowPanel({
                 onChange={(e) => updateConfig({ wordCount: parseInt(e.target.value) })}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
               >
-                <option value={800}>Short (~800 words)</option>
-                <option value={1500}>Medium (~1500 words)</option>
-                <option value={2500}>Long (~2500 words)</option>
-                <option value={4000}>Very Long (~4000 words)</option>
+                {WORD_COUNT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
 
