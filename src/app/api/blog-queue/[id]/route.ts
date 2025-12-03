@@ -42,18 +42,31 @@ export async function GET(
       );
     }
 
+    // Use simpler query without explicit FK names to avoid constraint name mismatches
     const { data: queueItem, error } = await supabase
       .from('blog_generation_queue')
       .select(`
         *,
-        created_by_user:users!blog_generation_queue_created_by_fkey(user_id, email, full_name),
         post:blog_posts(post_id, title, status, content, excerpt),
-        approvals:blog_approvals(*, requested_by_user:users!blog_approvals_requested_by_fkey(user_id, email, full_name), reviewed_by_user:users!blog_approvals_reviewed_by_fkey(user_id, email, full_name)),
+        approvals:blog_approvals(*),
         publishing:blog_platform_publishing(*)
       `)
       .eq('queue_id', id)
       .eq('org_id', userProfile.org_id)
       .single();
+
+    // Fetch created_by user separately to avoid FK constraint issues
+    if (queueItem && queueItem.created_by) {
+      const { data: createdByUser } = await supabase
+        .from('users')
+        .select('user_id, email, full_name')
+        .eq('user_id', queueItem.created_by)
+        .single();
+      
+      if (createdByUser) {
+        (queueItem as any).created_by_user = createdByUser;
+      }
+    }
 
     if (error) {
       if (error.code === 'PGRST116') {
@@ -459,11 +472,21 @@ export async function PATCH(
       .from('blog_generation_queue')
       .update(updates)
       .eq('queue_id', id)
-      .select(`
-        *,
-        created_by_user:users!blog_generation_queue_created_by_fkey(user_id, email, full_name)
-      `)
+      .select('*')
       .single();
+
+    // Fetch created_by user separately
+    if (updatedItem && updatedItem.created_by) {
+      const { data: createdByUser } = await supabase
+        .from('users')
+        .select('user_id, email, full_name')
+        .eq('user_id', updatedItem.created_by)
+        .single();
+      
+      if (createdByUser) {
+        (updatedItem as any).created_by_user = createdByUser;
+      }
+    }
 
     if (updateError) {
       logger.error('Error updating queue item:', updateError);
