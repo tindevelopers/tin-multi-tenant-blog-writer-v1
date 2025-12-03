@@ -168,14 +168,97 @@ export async function handlePhase1Completion(
 }
 
 /**
+ * Insert content images inline after their corresponding section headings
+ * Uses position (which corresponds to heading order) to place images
+ */
+function insertContentImagesInline(
+  content: string,
+  contentImages: Array<{ url: string; alt: string; position?: number }>
+): string {
+  if (!contentImages || contentImages.length === 0) return content;
+
+  // Find all h2 and h3 headings with their positions
+  const headingRegex = /<(h[2-3])[^>]*>[\s\S]*?<\/\1>/gi;
+  const headings: Array<{ match: string; index: number; endIndex: number }> = [];
+  let match;
+
+  while ((match = headingRegex.exec(content)) !== null) {
+    headings.push({
+      match: match[0],
+      index: match.index,
+      endIndex: match.index + match[0].length,
+    });
+  }
+
+  if (headings.length === 0) {
+    // No headings found - append images at the end of content
+    logger.info('No headings found, appending images at end of content');
+    let result = content;
+    for (const image of contentImages) {
+      result += `
+<figure class="content-image my-8">
+  <img src="${image.url}" alt="${image.alt || 'Content image'}" class="w-full h-auto rounded-lg" />
+  <figcaption class="text-sm text-gray-500 mt-2 text-center">${image.alt || ''}</figcaption>
+</figure>
+`;
+    }
+    return result;
+  }
+
+  // Sort images by position
+  const sortedImages = [...contentImages].sort((a, b) => (a.position || 0) - (b.position || 0));
+
+  // Build new content with images inserted after corresponding headings
+  let result = content;
+  let offset = 0; // Track offset as we insert content
+
+  for (let i = 0; i < sortedImages.length; i++) {
+    const image = sortedImages[i];
+    const position = image.position !== undefined ? image.position : i;
+    
+    // Find the heading to insert after (use position or distribute evenly)
+    const headingIndex = Math.min(position, headings.length - 1);
+    const heading = headings[headingIndex];
+    
+    if (!heading) continue;
+
+    // Find the end of the first paragraph after this heading
+    const afterHeading = result.substring(heading.endIndex + offset);
+    const firstParagraphEnd = afterHeading.match(/<\/p>/i);
+    
+    let insertPosition: number;
+    if (firstParagraphEnd && firstParagraphEnd.index !== undefined) {
+      // Insert after the first paragraph following the heading
+      insertPosition = heading.endIndex + offset + firstParagraphEnd.index + 4; // +4 for </p>
+    } else {
+      // Insert directly after the heading
+      insertPosition = heading.endIndex + offset;
+    }
+
+    const imageHtml = `
+<figure class="content-image my-8">
+  <img src="${image.url}" alt="${image.alt || 'Content image'}" class="w-full h-auto rounded-lg" />
+  <figcaption class="text-sm text-gray-500 mt-2 text-center">${image.alt || ''}</figcaption>
+</figure>
+`;
+
+    result = result.slice(0, insertPosition) + imageHtml + result.slice(insertPosition);
+    offset += imageHtml.length;
+  }
+
+  return result;
+}
+
+/**
  * Update draft after Phase 2 (Image Generation) completes
+ * Inserts featured image at top and content images inline after headings
  */
 export async function handlePhase2Completion(
   queueId: string,
   images: {
     featured_image?: { url: string; alt: string };
-    header_image?: { url: string; alt: string }; // NEW: Header image
-    thumbnail_image?: { url: string; alt: string }; // NEW: Thumbnail image
+    header_image?: { url: string; alt: string }; // Header image for Webflow
+    thumbnail_image?: { url: string; alt: string }; // Thumbnail image for listings
     content_images?: Array<{ url: string; alt: string; position?: number }>;
   }
 ): Promise<PhaseCompletionResult> {
@@ -197,8 +280,43 @@ export async function handlePhase2Completion(
       throw new Error('Draft not found. Phase 1 must complete first.');
     }
 
-    // Update draft with images (organized for Webflow)
+    // Get current content
+    const { data: currentPost } = await supabase
+      .from('blog_posts')
+      .select('content')
+      .eq('post_id', queueItem.post_id)
+      .single();
+
+    let updatedContent = currentPost?.content || '';
+
+    // 1. Insert featured image at top if not already present
+    if (images.featured_image?.url || images.header_image?.url) {
+      const featuredUrl = images.header_image?.url || images.featured_image?.url;
+      const featuredAlt = images.header_image?.alt || images.featured_image?.alt || '';
+      
+      const hasFeaturedImage = /<figure[^>]*class="[^"]*featured[^"]*"/i.test(updatedContent);
+      
+      if (!hasFeaturedImage && featuredUrl) {
+        const featuredImageHtml = `<figure class="featured-image mb-8">
+  <img src="${featuredUrl}" alt="${featuredAlt}" class="w-full h-auto rounded-lg" />
+</figure>
+`;
+        updatedContent = featuredImageHtml + updatedContent;
+        logger.info('Featured image inserted at top of content');
+      }
+    }
+
+    // 2. Insert content images inline after their corresponding headings
+    if (images.content_images && images.content_images.length > 0) {
+      updatedContent = insertContentImagesInline(updatedContent, images.content_images);
+      logger.info('Content images inserted inline', {
+        count: images.content_images.length,
+      });
+    }
+
+    // Update draft with images in both content and metadata
     const updateData: BlogPostUpdate = {
+      content: updatedContent,
       updated_at: new Date().toISOString(),
       metadata: {
         ...(queueItem.generation_metadata || {}),
@@ -213,35 +331,12 @@ export async function handlePhase2Completion(
         // Thumbnail image (for Webflow thumbnail)
         thumbnail_image: images.thumbnail_image?.url || null,
         thumbnail_image_alt: images.thumbnail_image?.alt || null,
-        // Content images (for body placement)
+        // Content images (keep reference in metadata too)
         content_images: images.content_images || [],
+        // Flag to indicate images were inserted inline
+        images_inserted_inline: true,
       },
     };
-
-    // Update featured image in content if provided
-    if (images.featured_image?.url) {
-      // Get current content
-      const { data: currentPost } = await supabase
-        .from('blog_posts')
-        .select('content')
-        .eq('post_id', queueItem.post_id)
-        .single();
-
-      if (currentPost?.content) {
-        // Check if featured image already exists in content
-        const hasFeaturedImage = /<figure[^>]*class="[^"]*featured[^"]*"/i.test(currentPost.content);
-        
-        if (!hasFeaturedImage) {
-          // Prepend featured image to content
-          const featuredImageHtml = `
-<figure class="featured-image">
-  <img src="${images.featured_image.url}" alt="${images.featured_image.alt || ''}" />
-</figure>
-`;
-          updateData.content = featuredImageHtml + currentPost.content;
-        }
-      }
-    }
 
     const { error: updateError } = await supabase
       .from('blog_posts')
@@ -259,18 +354,22 @@ export async function handlePhase2Completion(
         metadata: {
           ...(queueItem.generation_metadata || {}),
           workflow_phase: 'phase_2_images',
-          featured_image_url: images.featured_image?.url,
-          featured_image_alt: images.featured_image?.alt,
+          featured_image_url: images.featured_image?.url || images.header_image?.url,
+          featured_image_alt: images.featured_image?.alt || images.header_image?.alt,
+          thumbnail_image_url: images.thumbnail_image?.url,
           content_images: images.content_images || [],
+          images_inserted_inline: true,
         },
       })
       .eq('queue_id', queueId);
 
-    logger.info('✅ Phase 2: Draft updated with images', {
+    logger.info('✅ Phase 2: Draft updated with inline images', {
       queueId,
       post_id: queueItem.post_id,
-      hasFeaturedImage: !!images.featured_image,
+      hasFeaturedImage: !!(images.featured_image || images.header_image),
+      hasThumbnail: !!images.thumbnail_image,
       contentImagesCount: images.content_images?.length || 0,
+      imagesInsertedInline: true,
     });
 
     return {

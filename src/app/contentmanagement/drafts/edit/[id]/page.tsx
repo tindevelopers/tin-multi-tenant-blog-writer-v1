@@ -781,18 +781,30 @@ export default function EditDraftPage() {
               hasThumbnail: !!updatedMetadata.thumbnail_image,
               contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
             });
-            // Don't refetch immediately - images are already in state, refetch might overwrite
-            // The images will persist on next page load
           } else {
             logger.warn('⚠️ Failed to save images to draft - updatePost returned null');
           }
         } catch (saveError) {
           logger.warn('Error saving images to draft', { error: saveError });
-          // Don't fail the entire operation if save fails - images are already in state
+        }
+
+        // Reload content from server to get updated HTML with inline images
+        try {
+          const refreshResponse = await fetch(`/api/drafts/${draftId}`);
+          if (refreshResponse.ok) {
+            const refreshResult = await refreshResponse.json();
+            const refreshedDraft = refreshResult.data;
+            if (refreshedDraft?.content && refreshedDraft.content !== formData.content) {
+              setFormData(prev => ({ ...prev, content: refreshedDraft.content }));
+              logger.info('✅ Content refreshed with inline images');
+            }
+          }
+        } catch (refreshError) {
+          logger.warn('Could not refresh content', { error: refreshError });
         }
 
         setWorkflowPhase('phase_2_images');
-        alert('✅ Phase 2: Images generated successfully! Header, thumbnail, and content images have been added.');
+        alert('✅ Phase 2: Images generated and inserted into content! Check the editor to see your images.');
       } else {
         // Use existing queue_id
         const response = await fetch('/api/workflow/generate-images', {
@@ -885,18 +897,30 @@ export default function EditDraftPage() {
               hasThumbnail: !!updatedMetadata.thumbnail_image,
               contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
             });
-            // Don't refetch immediately - images are already in state, refetch might overwrite
-            // The images will persist on next page load
           } else {
             logger.warn('⚠️ Failed to save images to draft - updatePost returned null');
           }
         } catch (saveError) {
           logger.warn('Error saving images to draft', { error: saveError });
-          // Don't fail the entire operation if save fails - images are already in state
+        }
+
+        // Reload content from server to get updated HTML with inline images
+        try {
+          const refreshResponse = await fetch(`/api/drafts/${draftId}`);
+          if (refreshResponse.ok) {
+            const refreshResult = await refreshResponse.json();
+            const refreshedDraft = refreshResult.data;
+            if (refreshedDraft?.content && refreshedDraft.content !== formData.content) {
+              setFormData(prev => ({ ...prev, content: refreshedDraft.content }));
+              logger.info('✅ Content refreshed with inline images');
+            }
+          }
+        } catch (refreshError) {
+          logger.warn('Could not refresh content', { error: refreshError });
         }
 
         setWorkflowPhase('phase_2_images');
-        alert('✅ Phase 2: Images generated successfully!');
+        alert('✅ Phase 2: Images generated and inserted into content! Check the editor to see your images.');
       }
     } catch (error) {
       logger.error('Phase 2 image generation failed:', error);
