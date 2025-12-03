@@ -14,7 +14,9 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   InformationCircleIcon,
-  XMarkIcon
+  XMarkIcon,
+  DocumentCheckIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import TipTapEditor from "@/components/blog-writer/TipTapEditor";
 import { extractBlogFields, generateSlug, calculateReadTime, validateBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
@@ -105,6 +107,7 @@ export default function EditDraftPage() {
   
   const [saving, setSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [approvalLoading, setApprovalLoading] = useState(false);
   const [llmSuggestions, setLlmSuggestions] = useState<{
     missingFields: string[];
     recommendations: string[];
@@ -529,6 +532,74 @@ export default function EditDraftPage() {
       setSaving(false);
       setShowFieldConfig(false);
       setPendingSaveAction(null);
+    }
+  };
+
+  const handleRequestApproval = async () => {
+    // Get queue_id from draft metadata
+    const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+    const queueId = draftMetadata?.workflow_queue_id as string | undefined;
+    
+    if (!queueId) {
+      alert('No associated queue item found. This draft may have been created manually.');
+      return;
+    }
+    
+    setApprovalLoading(true);
+    try {
+      const response = await fetch("/api/blog-approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          queue_id: queueId,
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to request approval");
+      }
+      alert("✅ Approval requested successfully! The content is now pending review.");
+    } catch (err) {
+      console.error("Error requesting approval:", err);
+      alert(err instanceof Error ? err.message : "Failed to request approval");
+    } finally {
+      setApprovalLoading(false);
+    }
+  };
+
+  const handleRegenerateBlog = async () => {
+    // Get queue item data from draft metadata
+    const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+    
+    if (!confirm(`Are you sure you want to regenerate "${formData.title}"? This will create a new queue item.`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/blog-writer/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: formData.title || 'Blog Post',
+          keywords: draftMetadata?.keywords || [],
+          target_audience: draftMetadata?.target_audience || 'general',
+          tone: draftMetadata?.tone || 'professional',
+          word_count: contentStats.wordCount || 1500,
+        }),
+      });
+      
+      if (!response.ok) throw new Error("Failed to regenerate");
+      
+      const result = await response.json();
+      if (result.queue_id) {
+        router.push(`/contentmanagement/blog-queue/${result.queue_id}`);
+      } else {
+        alert("Blog regeneration started! Check the Blog Queue for progress.");
+        router.push('/contentmanagement/blog-queue');
+      }
+    } catch (err) {
+      console.error("Error regenerating blog:", err);
+      alert("Failed to regenerate blog. Please try again.");
     }
   };
 
@@ -1082,10 +1153,33 @@ export default function EditDraftPage() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
+            {/* Request Approval - for review workflow */}
+            <button
+              onClick={handleRequestApproval}
+              disabled={approvalLoading || !formData.content}
+              className="flex items-center px-3 py-2 border border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              title="Submit for review and approval"
+            >
+              <DocumentCheckIcon className="w-4 h-4 mr-1.5" />
+              {approvalLoading ? 'Requesting...' : 'Request Approval'}
+            </button>
+            
+            {/* Regenerate - creates new queue item */}
+            <button
+              onClick={handleRegenerateBlog}
+              disabled={!formData.title}
+              className="flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              title="Create a new generation with updated settings"
+            >
+              <ArrowPathIcon className="w-4 h-4 mr-1.5" />
+              Regenerate
+            </button>
+            
+            {/* Save Draft - Primary */}
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               <CheckIcon className="w-4 h-4 mr-2" />
               {saving ? 'Saving...' : 'Save Draft'}

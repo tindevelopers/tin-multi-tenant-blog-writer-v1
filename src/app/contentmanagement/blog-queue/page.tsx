@@ -847,70 +847,59 @@ function QueueItemRow({
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        <div className="flex items-center justify-end gap-2 flex-wrap">
-          {/* View Queue Details */}
+        <div className="flex items-center justify-end gap-2">
+          {/* PRIMARY: Continue in Editor - Most prominent for generated items */}
+          {hasGeneratedContent && (
+            <button
+              onClick={() => {
+                if (postId) {
+                  router.push(`/contentmanagement/drafts/edit/${postId}`);
+                } else {
+                  onView?.();
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+              title={postId ? "Continue editing in Draft Editor" : "Create draft and continue"}
+            >
+              <PencilIcon className="w-4 h-4" />
+              {postId ? "Continue" : "Start Editing"}
+            </button>
+          )}
+          
+          {/* View Details - secondary for generated, primary for others */}
           <button
             onClick={onView}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition-colors"
-            title="View Queue Details"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded transition-colors ${
+              hasGeneratedContent 
+                ? "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                : "text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20"
+            }`}
+            title="View generation details and progress"
           >
             <EyeIcon className="w-4 h-4" />
             <span className="text-xs">Details</span>
           </button>
           
-          {/* View in Editor / Create Draft - show when blog is generated */}
-          {hasGeneratedContent && (
-            <button
-              onClick={() => {
-                if (postId) {
-                  // Draft exists - go directly to editor
-                  router.push(`/contentmanagement/drafts/edit/${postId}`);
-                } else {
-                  // No draft yet - go to detail page to create one
-                  onView?.();
-                }
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
-              title={postId ? "Edit in Drafts" : "Create & Edit Draft"}
-            >
-              <PencilIcon className="w-4 h-4" />
-              <span className="text-xs">{postId ? "Edit" : "Create Draft"}</span>
-            </button>
-          )}
-          
-          {/* Regenerate - show when blog is generated */}
-          {item.status === "generated" && (
-            <button
-              onClick={() => onRegenerate?.()}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
-              title="Regenerate Blog"
-            >
-              <ArrowPathIcon className="w-4 h-4" />
-              <span className="text-xs">Regenerate</span>
-            </button>
-          )}
-          
-          {/* Retry - show when failed */}
+          {/* Retry - For failed items */}
           {item.status === "failed" && (
             <button
               onClick={onRetry}
               className="flex items-center gap-1.5 px-2.5 py-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
-              title="Retry"
+              title="Retry generation"
             >
               <ArrowPathIcon className="w-4 h-4" />
               <span className="text-xs">Retry</span>
             </button>
           )}
           
-          {/* Cancel - show when not published or cancelled */}
-          {!["published", "cancelled"].includes(item.status) && (
+          {/* Cancel - Less prominent */}
+          {!["published", "cancelled", "generated"].includes(item.status) && (
             <button
               onClick={onCancel}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-              title="Cancel"
+              className="flex items-center gap-1 px-2 py-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded transition-colors"
+              title="Cancel generation"
             >
               <XMarkIcon className="w-4 h-4" />
-              <span className="text-xs">Cancel</span>
             </button>
           )}
         </div>

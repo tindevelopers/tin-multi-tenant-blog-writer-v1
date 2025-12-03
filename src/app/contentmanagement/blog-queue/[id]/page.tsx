@@ -8,13 +8,12 @@ import {
   XCircleIcon,
   ArrowPathIcon,
   XMarkIcon,
-  DocumentCheckIcon,
   PencilIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   CheckCircleIcon,
   PhotoIcon,
-  SparklesIcon,
+  ArrowRightIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueueItem, type ProgressUpdate } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
@@ -22,9 +21,6 @@ import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
 import { normalizeBlogContent } from "@/lib/content-sanitizer";
 import HeadingStructure from "@/components/blog-writer/HeadingStructure";
-import WorkflowPhaseManager from "@/components/workflow/WorkflowPhaseManager";
-import { getWorkflowPhase } from "@/lib/workflow-phase-manager";
-import type { WorkflowPhase } from "@/lib/workflow-phase-manager";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -41,9 +37,6 @@ export default function QueueItemDetailPage() {
     images: true, // Show images section by default
   });
   const [normalizedContent, setNormalizedContent] = useState<ReturnType<typeof normalizeBlogContent> | null>(null);
-  const [phase2Loading, setPhase2Loading] = useState(false);
-  const [phase3Loading, setPhase3Loading] = useState(false);
-  const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
   const [draftImages, setDraftImages] = useState<{
     featured_image?: string;
     featured_image_alt?: string;
@@ -109,19 +102,8 @@ export default function QueueItemDetailPage() {
     }
   }, [item]);
 
-  // Fetch workflow phase and draft images
+  // Fetch draft images for preview
   useEffect(() => {
-    const fetchWorkflowPhase = async () => {
-      if (queueId) {
-        try {
-          const phase = await getWorkflowPhase(queueId);
-          setWorkflowPhase(phase);
-        } catch (error) {
-          logger.error("Error fetching workflow phase", { error });
-        }
-      }
-    };
-    
     const fetchDraftImages = async () => {
       if (postId) {
         try {
@@ -144,9 +126,8 @@ export default function QueueItemDetailPage() {
       }
     };
     
-    fetchWorkflowPhase();
     fetchDraftImages();
-  }, [queueId, item, postId]);
+  }, [postId]);
 
 
   const handleCancel = async () => {
@@ -174,27 +155,6 @@ export default function QueueItemDetailPage() {
     } catch (err) {
       console.error("Error retrying:", err);
       alert("Failed to retry queue item");
-    }
-  };
-
-  const handleRequestApproval = async () => {
-    try {
-      const response = await fetch("/api/blog-approvals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          queue_id: queueId,
-        }),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to request approval");
-      }
-      await fetchQueueItem();
-      alert("Approval requested successfully");
-    } catch (err) {
-      console.error("Error requesting approval:", err);
-      alert(err instanceof Error ? err.message : "Failed to request approval");
     }
   };
 
@@ -285,125 +245,6 @@ export default function QueueItemDetailPage() {
     }
   };
 
-  const handlePhase2ImageGeneration = async () => {
-    if (!item) return;
-    
-    setPhase2Loading(true);
-    try {
-      const response = await fetch('/api/workflow/generate-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          queue_id: queueId, // Pass queue_id for draft updates
-          topic: item.topic,
-          content: normalizedContent?.sanitizedContent || item.generated_content,
-          title: normalizedContent?.title || item.generated_title || item.topic,
-          excerpt: normalizedContent?.excerpt || item.generation_metadata?.excerpt,
-          generate_featured: true,
-          generate_content_images: item.metadata?.generate_content_images || false,
-          style: item.metadata?.image_style || 'photographic',
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate images');
-      }
-
-      const result = await response.json();
-      
-      // Refresh workflow phase and queue item to see updated status
-      await fetchQueueItem();
-      
-      // Refresh workflow phase
-      const updatedPhase = await getWorkflowPhase(queueId);
-      setWorkflowPhase(updatedPhase);
-      
-      // Refresh draft images if post_id exists
-      if (result.post_id) {
-        try {
-          const draftResponse = await fetch(`/api/drafts/${result.post_id}`);
-          if (draftResponse.ok) {
-            const draftResult = await draftResponse.json();
-            const draft = draftResult.data;
-            if (draft?.metadata) {
-              const metadata = draft.metadata as Record<string, unknown>;
-              setDraftImages({
-                featured_image: metadata.featured_image as string | undefined,
-                featured_image_alt: metadata.featured_image_alt as string | undefined,
-                content_images: metadata.content_images as Array<{ url: string; alt: string }> | undefined,
-              });
-            }
-          }
-        } catch (error) {
-          logger.error("Error refreshing draft images", { error });
-        }
-        alert('✅ Phase 2 (Image Generation) completed! Images have been added to your draft. Check the Images section below.');
-        return;
-      }
-      
-      // Show images if they were returned
-      if (result.featured_image || result.content_images?.length) {
-        alert('✅ Phase 2 (Image Generation) completed! Images generated successfully. Check the Images section below.');
-      } else {
-        alert('✅ Phase 2 (Image Generation) started! Images will be generated and added to your content.');
-      }
-    } catch (error) {
-      logger.error('Phase 2 error', { error });
-      alert(`Failed to start Phase 2: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setPhase2Loading(false);
-    }
-  };
-
-  const handlePhase3ContentEnhancement = async () => {
-    if (!item) return;
-    
-    setPhase3Loading(true);
-    try {
-      const response = await fetch('/api/workflow/enhance-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          queue_id: queueId, // Pass queue_id for draft updates
-          content: normalizedContent?.sanitizedContent || item.generated_content,
-          title: normalizedContent?.title || item.generated_title || item.topic,
-          topic: item.topic,
-          keywords: item.keywords || [],
-          generate_structured_data: item.metadata?.generate_structured_data !== false,
-          improve_formatting: true,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to enhance content');
-      }
-
-      const result = await response.json();
-      
-      // Refresh workflow phase and queue item to see updated status
-      await fetchQueueItem();
-      
-      // Refresh workflow phase
-      const updatedPhase = await getWorkflowPhase(queueId);
-      setWorkflowPhase(updatedPhase);
-      
-      // If draft was updated, show success message
-      if (result.post_id) {
-        alert('✅ Phase 3 (Content Enhancement) completed! Draft updated with enhanced metadata. Check the Enhanced Metadata section below.');
-        return;
-      }
-      
-      alert('✅ Phase 3 (Content Enhancement) completed! Content has been enhanced with SEO optimization and structured data.');
-    } catch (error) {
-      logger.error('Phase 3 error', { error });
-      alert(`Failed to start Phase 3: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setPhase3Loading(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="p-6">
@@ -451,104 +292,70 @@ export default function QueueItemDetailPage() {
           </div>
         </div>
         
-        {/* Action Buttons - completely rebuilt */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Primary Action: Edit in Drafts */}
+        {/* Action Buttons - Simplified: Monitor page focuses on status, Editor is for actions */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* PRIMARY CTA: Continue in Editor - Large and prominent */}
           {hasGeneratedContent && postId && (
             <a
               href={`/contentmanagement/drafts/edit/${postId}`}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium no-underline"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl no-underline"
             >
-              <PencilIcon className="w-5 h-5" />
-              Edit in Drafts
+              Continue in Editor
+              <ArrowRightIcon className="w-5 h-5" />
             </a>
           )}
           
-          {/* Primary Action: Create & Edit Draft */}
+          {/* PRIMARY CTA: Create Draft & Continue - Large and prominent */}
           {hasGeneratedContent && !postId && (
             <button
               type="button"
               onClick={handleCreateDraft}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl"
             >
-              <PencilIcon className="w-5 h-5" />
-              Create & Edit Draft
-            </button>
-          )}
-
-          {/* Phase 2: Image Generation */}
-          {hasGeneratedContent && (
-            <button
-              type="button"
-              onClick={handlePhase2ImageGeneration}
-              disabled={phase2Loading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <PhotoIcon className="w-5 h-5" />
-              {phase2Loading ? 'Generating Images...' : 'Phase 2: Generate Images'}
-            </button>
-          )}
-
-          {/* Phase 3: Content Enhancement */}
-          {hasGeneratedContent && (
-            <button
-              type="button"
-              onClick={handlePhase3ContentEnhancement}
-              disabled={phase3Loading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <SparklesIcon className="w-5 h-5" />
-              {phase3Loading ? 'Enhancing Content...' : 'Phase 3: Enhance & Add Schema'}
+              Continue in Editor
+              <ArrowRightIcon className="w-5 h-5" />
             </button>
           )}
           
-          {/* Regenerate */}
-          {item.status === "generated" && (
-            <button
-              type="button"
-              onClick={handleRegenerate}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors font-medium"
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-              Regenerate
-            </button>
-          )}
-          
-          {/* Request Approval */}
-          {item.status === "generated" && (
-            <button
-              type="button"
-              onClick={handleRequestApproval}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
-            >
-              <DocumentCheckIcon className="w-5 h-5" />
-              Request Approval
-            </button>
-          )}
-          
-          {/* Retry */}
-          {item.status === "failed" && (
-            <button
-              type="button"
-              onClick={handleRetry}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-              Retry
-            </button>
-          )}
-          
-          {/* Cancel */}
-          {!["published", "cancelled"].includes(item.status) && (
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
-            >
-              <XMarkIcon className="w-5 h-5" />
-              Cancel
-            </button>
-          )}
+          {/* Secondary Actions */}
+          <div className="flex items-center gap-2">
+            {/* Regenerate - Creates new queue item */}
+            {item.status === "generated" && (
+              <button
+                type="button"
+                onClick={handleRegenerate}
+                className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm"
+                title="Create a new generation with the same settings"
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Regenerate
+              </button>
+            )}
+            
+            {/* Retry - For failed items */}
+            {item.status === "failed" && (
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+            
+            {/* Cancel */}
+            {!["published", "cancelled"].includes(item.status) && (
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="inline-flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors text-sm"
+              >
+                <XMarkIcon className="w-4 h-4" />
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -620,25 +427,6 @@ export default function QueueItemDetailPage() {
         </div>
         )}
       </div>
-
-      {/* Workflow Phase Manager - Always visible for testing */}
-      <WorkflowPhaseManager
-        queueId={queueId}
-        currentPhase={workflowPhase}
-        postId={postId || null}
-        onPhaseComplete={(phase, postId) => {
-          logger.info('Phase completed', { phase, postId });
-          router.push(`/contentmanagement/drafts/edit/${postId}`);
-        }}
-        onResumePhase={(phase) => {
-          if (phase === 'phase_2_images') {
-            handlePhase2ImageGeneration();
-          } else if (phase === 'phase_3_enhancement') {
-            handlePhase3ContentEnhancement();
-          }
-        }}
-        className="mb-6"
-      />
 
       {/* Generated Images Section */}
       {(() => {
@@ -779,9 +567,18 @@ export default function QueueItemDetailPage() {
       {/* Success Message - shown when draft is created */}
       {hasGeneratedContent && postId && (
         <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <p className="text-sm text-green-800 dark:text-green-200">
-            ✅ Draft created successfully. All fields have been auto-populated from the generated content.
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-green-800 dark:text-green-200">
+              ✅ Content generated! Continue in the Editor to add images, enhance SEO, and prepare for publishing.
+            </p>
+            <a
+              href={`/contentmanagement/drafts/edit/${postId}`}
+              className="ml-4 inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium no-underline whitespace-nowrap"
+            >
+              Open Editor
+              <ArrowRightIcon className="w-4 h-4" />
+            </a>
+          </div>
         </div>
       )}
 
