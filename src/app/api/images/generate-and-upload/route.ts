@@ -204,13 +204,20 @@ async function uploadAndSaveToMediaLibrary(
   imageType: string,
   title: string
 ): Promise<NextResponse> {
-  logger.debug('📤 Step 2: Uploading to Cloudinary...');
+  logger.debug('📤 Step 2: Attempting Cloudinary upload...');
   
   const timestamp = Date.now();
   const fileName = `${imageType}_${timestamp}.png`;
+  
+  // Determine the image URL to return (Cloudinary URL or original)
+  let finalUrl = imageUrl;
+  let publicId: string | undefined;
+  let width: number | undefined;
+  let height: number | undefined;
+  let assetId: string | null = null;
 
   try {
-    // Upload using Blog Writer API (which handles Cloudinary upload)
+    // Attempt Upload using Blog Writer API (which handles Cloudinary upload)
     const uploadResult = await uploadViaBlogWriterAPI(
       imageUrl,
       imageData ? (imageData.startsWith('data:') ? imageData : `data:image/png;base64,${imageData}`) : null,
@@ -220,56 +227,58 @@ async function uploadAndSaveToMediaLibrary(
       `${imageType} for ${title || 'blog post'}`
     );
 
-    if (!uploadResult) {
-      logger.error('❌ Cloudinary upload failed');
-      return NextResponse.json(
-        { error: 'Failed to upload image to Cloudinary' },
-        { status: 500 }
+    if (uploadResult) {
+      logger.debug('✅ Uploaded to Cloudinary', {
+        publicId: uploadResult.public_id,
+        url: uploadResult.secure_url?.substring(0, 50),
+      });
+      
+      finalUrl = uploadResult.secure_url || uploadResult.url || imageUrl;
+      publicId = uploadResult.public_id;
+      width = uploadResult.width;
+      height = uploadResult.height;
+
+      // Step 3: Save to media library
+      logger.debug('💾 Step 3: Saving to media library...');
+      assetId = await saveMediaAsset(
+        orgId,
+        userId,
+        uploadResult,
+        fileName,
+        {
+          source: 'ai_generated',
+          image_type: imageType,
+          title: title,
+          generated_at: new Date().toISOString(),
+        }
       );
-    }
 
-    logger.debug('✅ Uploaded to Cloudinary', {
-      publicId: uploadResult.public_id,
-      url: uploadResult.secure_url?.substring(0, 50),
-    });
-
-    // Step 3: Save to media library
-    logger.debug('💾 Step 3: Saving to media library...');
-    const assetId = await saveMediaAsset(
-      orgId,
-      userId,
-      uploadResult,
-      fileName,
-      {
-        source: 'ai_generated',
-        image_type: imageType,
-        title: title,
-        generated_at: new Date().toISOString(),
+      if (assetId) {
+        logger.debug('✅ Saved to media library', { assetId });
+      } else {
+        logger.warn('⚠️ Failed to save to media library, but Cloudinary upload succeeded');
       }
-    );
-
-    if (assetId) {
-      logger.debug('✅ Saved to media library', { assetId });
     } else {
-      logger.warn('⚠️ Failed to save to media library, but Cloudinary upload succeeded');
+      // Cloudinary upload failed - log warning but continue with original URL
+      logger.warn('⚠️ Cloudinary upload failed, returning original image URL as fallback');
     }
-
-    return NextResponse.json({
-      success: true,
-      url: uploadResult.secure_url || uploadResult.url,
-      public_id: uploadResult.public_id,
-      width: uploadResult.width,
-      height: uploadResult.height,
-      asset_id: assetId,
-      image_type: imageType,
-    });
-
   } catch (uploadError) {
-    logger.error('❌ Error in upload process', { error: uploadError });
-    return NextResponse.json(
-      { error: uploadError instanceof Error ? uploadError.message : 'Upload failed' },
-      { status: 500 }
-    );
+    // Cloudinary upload error - log warning but continue with original URL
+    logger.warn('⚠️ Cloudinary upload error (non-critical), returning original image URL', { 
+      error: uploadError instanceof Error ? uploadError.message : 'Unknown error'
+    });
   }
+
+  // Return success with either Cloudinary URL or original URL as fallback
+  return NextResponse.json({
+    success: true,
+    url: finalUrl,
+    public_id: publicId,
+    width: width,
+    height: height,
+    asset_id: assetId,
+    image_type: imageType,
+    cloudinary_uploaded: !!publicId, // Indicate if Cloudinary upload succeeded
+  });
 }
 
