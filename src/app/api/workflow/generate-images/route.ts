@@ -2,11 +2,125 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 import { handlePhase2Completion } from '@/lib/workflow-phase-manager';
+import { getCloudinaryCredentials } from '@/lib/cloudinary-upload';
+import * as crypto from 'crypto';
 
 /**
- * Helper to upload base64 image data to Cloudinary via Blog Writer API
+ * Helper to upload base64 image data directly to tenant's Cloudinary account
+ * This uses the organization's own Cloudinary credentials (Option 3: Per-tenant accounts)
  */
-async function uploadToCloudinary(
+async function uploadToTenantCloudinary(
+  base64Data: string,
+  filename: string,
+  folder: string,
+  altText: string,
+  orgId: string
+): Promise<{ url: string; publicId: string } | null> {
+  try {
+    // Get tenant's Cloudinary credentials
+    const credentials = await getCloudinaryCredentials(orgId);
+    
+    if (!credentials) {
+      logger.warn(`No Cloudinary credentials found for org ${orgId}, falling back to Blog Writer API`);
+      return uploadToCloudinaryViaAPI(base64Data, filename, folder, altText);
+    }
+
+    logger.info('📤 Uploading to tenant Cloudinary account', {
+      cloudName: credentials.cloud_name,
+      folder,
+      orgId,
+    });
+
+    // Strip data URI prefix if present
+    let rawBase64 = base64Data;
+    if (rawBase64.startsWith('data:')) {
+      rawBase64 = rawBase64.split(',')[1] || rawBase64;
+    }
+
+    // Create signature for signed upload
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    const publicId = `${folder}/${filename.replace(/\.[^/.]+$/, '')}`;
+    
+    // Parameters to sign (must be in alphabetical order)
+    const paramsToSign = `folder=${folder}&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
+    const signature = crypto.createHash('sha1')
+      .update(paramsToSign + credentials.api_secret)
+      .digest('hex');
+
+    // Build form data for Cloudinary upload
+    const dataUri = `data:image/png;base64,${rawBase64}`;
+    const boundary = `----WebKitFormBoundary${crypto.randomBytes(16).toString('hex')}`;
+    const formDataParts: string[] = [];
+
+    const appendField = (name: string, value: string) => {
+      formDataParts.push(`--${boundary}\r\n`);
+      formDataParts.push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+      formDataParts.push(`${value}\r\n`);
+    };
+
+    appendField('api_key', credentials.api_key);
+    appendField('timestamp', timestamp.toString());
+    appendField('signature', signature);
+    appendField('public_id', publicId);
+    appendField('folder', folder);
+    appendField('overwrite', 'true');
+    appendField('file', dataUri);
+    
+    // Add context metadata for alt text
+    if (altText) {
+      appendField('context', `alt=${altText}|caption=${altText}`);
+    }
+    
+    formDataParts.push(`--${boundary}--\r\n`);
+
+    const formDataBody = Buffer.from(formDataParts.join(''), 'utf-8');
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${credentials.cloud_name}/image/upload`;
+
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': formDataBody.length.toString(),
+      },
+      body: formDataBody,
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Tenant Cloudinary upload failed', { 
+        status: response.status, 
+        error: errorText.substring(0, 200),
+        cloudName: credentials.cloud_name,
+      });
+      // Fallback to Blog Writer API
+      return uploadToCloudinaryViaAPI(base64Data, filename, folder, altText);
+    }
+
+    const result = await response.json();
+    
+    logger.info('✅ Image uploaded to tenant Cloudinary', { 
+      publicId: result.public_id,
+      url: result.secure_url?.substring(0, 80),
+      cloudName: credentials.cloud_name,
+    });
+
+    return { 
+      url: result.secure_url || result.url, 
+      publicId: result.public_id 
+    };
+  } catch (error) {
+    logger.error('Tenant Cloudinary upload error', { error, orgId });
+    // Fallback to Blog Writer API
+    return uploadToCloudinaryViaAPI(base64Data, filename, folder, altText);
+  }
+}
+
+/**
+ * Fallback: Upload to shared Cloudinary via Blog Writer API
+ * Used when tenant doesn't have their own Cloudinary credentials
+ */
+async function uploadToCloudinaryViaAPI(
   base64Data: string,
   filename: string,
   folder: string,
@@ -37,7 +151,7 @@ async function uploadToCloudinary(
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.warn('Cloudinary upload failed', { status: response.status, error: errorText.substring(0, 200) });
+      logger.warn('Cloudinary upload via API failed', { status: response.status, error: errorText.substring(0, 200) });
       return null;
     }
 
@@ -46,12 +160,12 @@ async function uploadToCloudinary(
     const publicId = result.result?.id || result.public_id;
     
     if (uploadedUrl) {
-      logger.info('✅ Image uploaded to Cloudinary', { url: uploadedUrl.substring(0, 80) });
+      logger.info('✅ Image uploaded to Cloudinary via API (fallback)', { url: uploadedUrl.substring(0, 80) });
       return { url: uploadedUrl, publicId };
     }
     return null;
   } catch (error) {
-    logger.error('Cloudinary upload error', { error });
+    logger.error('Cloudinary upload via API error', { error });
     return null;
   }
 }
@@ -101,7 +215,7 @@ async function pollForJobCompletion(
 }
 
 /**
- * Generate image via Blog Writer API (async job) and upload to Cloudinary
+ * Generate image via Blog Writer API (async job) and upload to tenant's Cloudinary
  */
 async function generateAndUploadImage(
   prompt: string,
@@ -114,6 +228,7 @@ async function generateAndUploadImage(
     folder: string;
     filename: string;
     altText: string;
+    orgId?: string; // Optional: Pass org_id to use tenant's own Cloudinary account
   }
 ): Promise<{ url: string; alt: string; width: number; height: number } | null> {
   const apiUrl = BLOG_WRITER_API_URL;
@@ -167,15 +282,23 @@ async function generateAndUploadImage(
       return null;
     }
 
-    // Step 3: Upload to Cloudinary
+    // Step 3: Upload to tenant's Cloudinary (uses their own account if configured)
     if (imageData.image_data) {
-      // We have base64 data - upload to Cloudinary
-      const cloudinaryResult = await uploadToCloudinary(
-        imageData.image_data,
-        options.filename,
-        options.folder,
-        options.altText
-      );
+      // We have base64 data - upload to tenant's Cloudinary
+      const cloudinaryResult = options.orgId
+        ? await uploadToTenantCloudinary(
+            imageData.image_data,
+            options.filename,
+            options.folder,
+            options.altText,
+            options.orgId
+          )
+        : await uploadToCloudinaryViaAPI(
+            imageData.image_data,
+            options.filename,
+            options.folder,
+            options.altText
+          );
       
       if (cloudinaryResult) {
         return {
@@ -197,19 +320,28 @@ async function generateAndUploadImage(
         };
       }
     } else if (imageData.image_url) {
-      // No base64 data, fetch the URL and upload to Cloudinary
+      // No base64 data, fetch the URL and upload to tenant's Cloudinary
       try {
         const imageResponse = await fetch(imageData.image_url);
         if (imageResponse.ok) {
           const arrayBuffer = await imageResponse.arrayBuffer();
           const base64 = Buffer.from(arrayBuffer).toString('base64');
           
-          const cloudinaryResult = await uploadToCloudinary(
-            base64,
-            options.filename,
-            options.folder,
-            options.altText
-          );
+          // Upload to tenant's Cloudinary (or fallback to API)
+          const cloudinaryResult = options.orgId
+            ? await uploadToTenantCloudinary(
+                base64,
+                options.filename,
+                options.folder,
+                options.altText,
+                options.orgId
+              )
+            : await uploadToCloudinaryViaAPI(
+                base64,
+                options.filename,
+                options.folder,
+                options.altText
+              );
           
           if (cloudinaryResult) {
             return {
@@ -391,6 +523,7 @@ export async function POST(request: NextRequest) {
           folder: `${cloudinaryBasePath}/headers`, // Tenant-isolated folder
           filename: `header_${timestamp}.png`,
           altText: `Header image for ${title || topic}`,
+          orgId: org_id, // Use tenant's own Cloudinary account
         });
 
         if (headerImage) {
@@ -424,6 +557,7 @@ export async function POST(request: NextRequest) {
           folder: `${cloudinaryBasePath}/thumbnails`, // Tenant-isolated folder
           filename: `thumbnail_${timestamp}.png`,
           altText: `Thumbnail for ${title || topic}`,
+          orgId: org_id, // Use tenant's own Cloudinary account
         });
 
         if (thumbnailImage) {
@@ -463,6 +597,7 @@ export async function POST(request: NextRequest) {
             folder: `${cloudinaryBasePath}/content`, // Tenant-isolated folder
             filename: `content_${section.position}_${timestamp}.png`,
             altText: `Image for ${section.heading}`,
+            orgId: org_id, // Use tenant's own Cloudinary account
           });
 
           if (contentImage) {
