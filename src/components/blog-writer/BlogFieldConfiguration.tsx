@@ -60,10 +60,10 @@ export default function BlogFieldConfiguration({
         <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Blog Field Configuration
+              Edit Draft Details
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Configure all fields before creating your blog post
+              Review and update your blog post fields before saving
             </p>
           </div>
           <button
@@ -367,7 +367,7 @@ export default function BlogFieldConfiguration({
             disabled={!validation.isValid}
             className="px-4 py-2 text-sm font-medium text-white bg-brand-500 rounded-lg hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Save Configuration
+            Save Draft
           </button>
         </div>
       </div>
