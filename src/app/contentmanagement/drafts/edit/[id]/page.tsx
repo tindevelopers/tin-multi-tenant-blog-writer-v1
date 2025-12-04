@@ -938,13 +938,32 @@ export default function EditDraftPage() {
 
     setAiGenerating(true);
     try {
+      // Extract keywords and org_id from draft metadata
+      const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+      const queueId = draftMetadata?.workflow_queue_id as string | undefined;
+      const keywords = (draftMetadata?.keywords as string[]) || [];
+      const orgId = (draft as any)?.org_id as string | undefined;
+
+      logger.info('Phase 3: Starting content enhancement', {
+        hasQueueId: !!queueId,
+        hasOrgId: !!orgId,
+        keywordsCount: keywords.length,
+        contentLength: formData.content.length,
+      });
+
       const response = await fetch('/api/workflow/enhance-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: formData.content,
           title: formData.title,
-          keywords: [],
+          topic: formData.title,
+          keywords: keywords,
+          generate_structured_data: true,
+          improve_formatting: true,
+          insert_hyperlinks: true, // Enable internal link insertion
+          org_id: orgId, // Pass org_id for Webflow integration lookup
+          queue_id: queueId, // Pass queue_id to update the draft automatically
         }),
       });
 
@@ -955,17 +974,32 @@ export default function EditDraftPage() {
 
       const result = await response.json();
       
-      // Update enhanced fields
+      logger.info('Phase 3: Enhancement completed', {
+        hasEnhancedContent: !!result.enhanced_content,
+        hasEnhancedFields: !!result.enhanced_fields,
+        seoScore: result.seo_score,
+        contentLengthAfter: result.enhanced_content?.length,
+      });
+      
+      // Update enhanced fields INCLUDING the enhanced content with internal links
       setFormData(prev => ({
         ...prev,
+        // Update content with the enhanced version (includes internal links)
+        content: result.enhanced_content || prev.content,
+        // Update SEO fields
         seoTitle: result.enhanced_fields?.meta_title || prev.seoTitle,
         metaDescription: result.enhanced_fields?.meta_description || prev.metaDescription,
         excerpt: result.enhanced_fields?.excerpt || prev.excerpt,
+        slug: result.enhanced_fields?.slug || prev.slug,
       }));
 
       // Update workflow phase
       setWorkflowPhase('phase_3_enhancement');
-      alert('Metadata enhanced successfully!');
+      
+      // Refetch to ensure all changes are synced
+      await refetch();
+      
+      alert('Content enhanced with internal links and metadata!');
     } catch (error) {
       logger.error('Phase 3 enhancement failed:', error);
       alert(error instanceof Error ? error.message : 'Failed to enhance content. Please try again.');
