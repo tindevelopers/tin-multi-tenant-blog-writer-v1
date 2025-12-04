@@ -309,13 +309,14 @@ export async function POST(request: NextRequest) {
       topic,
       keywords,
       title,
-      content, // NEW: Read blog content
+      content, // Read blog content for analysis
       excerpt,
       generate_featured = true,
       generate_content_images = true,
-      generate_thumbnail = true, // NEW: Generate thumbnail
+      generate_thumbnail = true, // Generate thumbnail
       style,
       queue_id, // Required for draft updates
+      org_id, // CRITICAL: Organization ID for tenant isolation in Cloudinary
     } = body;
 
     if (!queue_id) {
@@ -324,6 +325,18 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Build tenant-isolated folder path for Cloudinary
+    // Format: org_{org_id}/blog-images/{queue_id}/ - ensures complete data isolation per tenant
+    const cloudinaryBasePath = org_id 
+      ? `org_${org_id}/blog-images/${queue_id}`
+      : `blog-images/${queue_id}`; // Fallback if no org_id (legacy support)
+
+    logger.info('Phase 2: Cloudinary folder path configured', {
+      cloudinaryBasePath,
+      hasOrgId: !!org_id,
+      org_id: org_id || 'not provided',
+    });
 
     // Analyze content if provided
     let contentAnalysis: ReturnType<typeof analyzeContentForImages> | null = null;
@@ -339,6 +352,7 @@ export async function POST(request: NextRequest) {
       topic, 
       style, 
       queue_id,
+      org_id: org_id || 'not provided',
       hasContent: !!content,
       willGenerateThumbnail: generate_thumbnail,
     });
@@ -349,7 +363,13 @@ export async function POST(request: NextRequest) {
       thumbnail_image?: { url: string; alt: string; width?: number; height?: number }; // Thumbnail image
       content_images?: Array<{ url: string; alt: string; position?: number; width?: number; height?: number }>;
       post_id?: string;
+      org_id?: string; // Return org_id for confirmation
     } = {};
+
+    // Store org_id in results for tracking
+    if (org_id) {
+      results.org_id = org_id;
+    }
 
     const keywordText = keywords?.length > 0 
       ? ` featuring ${keywords.slice(0, 3).join(', ')}` 
@@ -368,7 +388,7 @@ export async function POST(request: NextRequest) {
           aspectRatio: '16:9',
           quality: 'high',
           style: style || 'photographic',
-          folder: `blog-images/${queue_id}/headers`,
+          folder: `${cloudinaryBasePath}/headers`, // Tenant-isolated folder
           filename: `header_${timestamp}.png`,
           altText: `Header image for ${title || topic}`,
         });
@@ -401,7 +421,7 @@ export async function POST(request: NextRequest) {
           aspectRatio: '1:1',
           quality: 'standard',
           style: style || 'photographic',
-          folder: `blog-images/${queue_id}/thumbnails`,
+          folder: `${cloudinaryBasePath}/thumbnails`, // Tenant-isolated folder
           filename: `thumbnail_${timestamp}.png`,
           altText: `Thumbnail for ${title || topic}`,
         });
@@ -440,7 +460,7 @@ export async function POST(request: NextRequest) {
             aspectRatio: '16:9',
             quality: 'standard',
             style: style || 'photographic',
-            folder: `blog-images/${queue_id}/content`,
+            folder: `${cloudinaryBasePath}/content`, // Tenant-isolated folder
             filename: `content_${section.position}_${timestamp}.png`,
             altText: `Image for ${section.heading}`,
           });

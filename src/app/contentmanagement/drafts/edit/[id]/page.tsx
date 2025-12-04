@@ -690,12 +690,14 @@ export default function EditDraftPage() {
         const queueResult = await queueResponse.json();
         const tempQueueId = queueResult.queue_id;
 
-        // Now generate images
+        // Now generate images - include org_id for tenant isolation in Cloudinary
+        const orgId = (draft as Record<string, unknown>)?.org_id as string | undefined;
         const response = await fetch('/api/workflow/generate-images', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             queue_id: tempQueueId,
+            org_id: orgId, // CRITICAL: Pass org_id for tenant isolation in Cloudinary
             topic: formData.title,
             title: formData.title,
             content: formData.content, // Pass content for analysis
@@ -806,12 +808,14 @@ export default function EditDraftPage() {
         setWorkflowPhase('phase_2_images');
         alert('✅ Phase 2: Images generated and inserted into content! Check the editor to see your images.');
       } else {
-        // Use existing queue_id
+        // Use existing queue_id - include org_id for tenant isolation in Cloudinary
+        const existingOrgId = (draft as Record<string, unknown>)?.org_id as string | undefined;
         const response = await fetch('/api/workflow/generate-images', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             queue_id: queueId,
+            org_id: existingOrgId, // CRITICAL: Pass org_id for tenant isolation in Cloudinary
             topic: formData.title,
             title: formData.title,
             content: formData.content,
