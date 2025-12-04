@@ -659,6 +659,7 @@ async function performScan(
         staticPages: staticPagesCount,
         cmsItems: cmsItemsCount,
         totalContent: totalContentItems,
+        publishedDomain: structure.published_domain,
       });
 
       // Update scan record with results (use service client for reliability)
@@ -670,6 +671,7 @@ async function performScan(
         collections: structure.collections,
         static_pages: structure.static_pages,
         existing_content: structure.existing_content,
+        published_domain: structure.published_domain,
         collections_count: collectionsCount,
         static_pages_count: staticPagesCount,
         cms_items_count: cmsItemsCount,
@@ -696,6 +698,7 @@ async function performScan(
               collections: structure.collections,
               static_pages: structure.static_pages,
               existing_content: structure.existing_content,
+              published_domain: structure.published_domain,
               collections_count: collectionsCount,
               static_pages_count: staticPagesCount,
               cms_items_count: cmsItemsCount,

@@ -6,6 +6,7 @@
  */
 
 import { logger } from '@/utils/logger';
+import { getWebflowPublishedDomain } from './webflow-api';
 
 interface WebflowCollection {
   id: string;
@@ -133,13 +134,29 @@ async function fetchWebflowPages(
  */
 export async function discoverWebflowStructure(
   apiToken: string,
-  siteId: string
+  siteId: string,
+  customDomain?: string // Optional: user-configured custom domain
 ): Promise<{
   collections: WebflowCollection[];
   static_pages: WebflowPage[];
   existing_content: ExistingContent[];
+  published_domain: string;
 }> {
   const existingContent: ExistingContent[] = [];
+  
+  // Get the published domain for URL construction
+  let publishedDomain = customDomain;
+  if (!publishedDomain) {
+    publishedDomain = await getWebflowPublishedDomain(apiToken, siteId);
+  }
+  // Fallback to staging domain if all else fails
+  if (!publishedDomain) {
+    publishedDomain = `https://${siteId}.webflow.io`;
+  }
+  // Ensure no trailing slash
+  publishedDomain = publishedDomain.replace(/\/$/, '');
+  
+  logger.info('Using published domain for URLs', { publishedDomain, siteId });
   
   // 1. Fetch CMS collections
   let collections: WebflowCollection[] = [];
@@ -331,8 +348,8 @@ export async function discoverWebflowStructure(
           }
         }
         
-        // Build URL - try to get site domain from siteId or use default pattern
-        const url = `https://${siteId}.webflow.io/${slug}`;
+        // Build URL using the published domain
+        const url = `${publishedDomain}/${slug}`;
         
         // Extract keywords from title and content
         // Handle unknown types from fieldData index signature
@@ -378,7 +395,8 @@ export async function discoverWebflowStructure(
     } else if (typeof page.displayName === 'string' && page.displayName) {
       slug = page.displayName.toLowerCase().replace(/\s+/g, '-');
     }
-    const url = `https://${siteId}.webflow.io/${slug}`;
+    // Build URL using the published domain
+    const url = `${publishedDomain}/${slug}`;
     
     // Extract keywords from page display name
     const titleValue = page.displayName;
@@ -402,12 +420,14 @@ export async function discoverWebflowStructure(
     totalContentItems: existingContent.length,
     cmsItems: existingContent.filter(c => c.type === 'cms').length,
     staticItems: existingContent.filter(c => c.type === 'static').length,
+    publishedDomain,
   });
   
   return {
     collections: collections,
     static_pages: staticPages,
-    existing_content: existingContent
+    existing_content: existingContent,
+    published_domain: publishedDomain,
   };
 }
 

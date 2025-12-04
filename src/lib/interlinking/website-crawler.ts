@@ -6,7 +6,7 @@
  */
 
 import { logger } from '@/utils/logger';
-import { getWebflowSites, getWebflowCollections, getWebflowCollectionById, type WebflowCollection } from '@/lib/integrations/webflow-api';
+import { getWebflowSites, getWebflowCollections, getWebflowCollectionById, getWebflowPublishedDomain, type WebflowCollection } from '@/lib/integrations/webflow-api';
 
 export interface CrawledPage {
   id: string;
@@ -45,10 +45,31 @@ export interface CrawledContent {
 export class WebsiteCrawlerService {
   private apiKey: string;
   private siteId?: string;
+  private customDomain?: string;
+  private publishedDomain?: string;
 
-  constructor(apiKey: string, siteId?: string) {
+  constructor(apiKey: string, siteId?: string, customDomain?: string) {
     this.apiKey = apiKey;
     this.siteId = siteId;
+    this.customDomain = customDomain;
+  }
+
+  /**
+   * Get the published domain for URL construction
+   */
+  private async getPublishedDomain(siteId: string): Promise<string> {
+    if (this.publishedDomain) {
+      return this.publishedDomain;
+    }
+    
+    if (this.customDomain) {
+      this.publishedDomain = this.customDomain.replace(/\/$/, '');
+      return this.publishedDomain;
+    }
+    
+    const domain = await getWebflowPublishedDomain(this.apiKey, siteId);
+    this.publishedDomain = domain || `https://${siteId}.webflow.io`;
+    return this.publishedDomain;
   }
 
   /**
@@ -61,7 +82,9 @@ export class WebsiteCrawlerService {
     }
 
     try {
-      logger.debug('Starting CMS collection crawl', { siteId: targetSiteId });
+      // Get the published domain first
+      const publishedDomain = await this.getPublishedDomain(targetSiteId);
+      logger.debug('Starting CMS collection crawl', { siteId: targetSiteId, publishedDomain });
 
       // Get all collections
       const collections = await getWebflowCollections(this.apiKey, targetSiteId);
@@ -72,7 +95,7 @@ export class WebsiteCrawlerService {
       // Crawl each collection
       for (const collection of collections) {
         try {
-          const pages = await this.crawlCollection(collection);
+          const pages = await this.crawlCollection(collection, publishedDomain);
           crawledPages.push(...pages);
         } catch (error: any) {
           logger.warn(`Failed to crawl collection ${collection.displayName}`, {
@@ -94,9 +117,9 @@ export class WebsiteCrawlerService {
   /**
    * Crawl a specific collection
    */
-  private async crawlCollection(collection: WebflowCollection): Promise<CrawledPage[]> {
+  private async crawlCollection(collection: WebflowCollection, publishedDomain: string): Promise<CrawledPage[]> {
     try {
-      logger.debug(`Crawling collection: ${collection.displayName}`, { collectionId: collection.id });
+      logger.debug(`Crawling collection: ${collection.displayName}`, { collectionId: collection.id, publishedDomain });
 
       // Fetch items from collection
       const itemsResponse = await fetch(
@@ -124,7 +147,7 @@ export class WebsiteCrawlerService {
 
       for (const item of items) {
         try {
-          const page = this.parseCMSItem(item, collection);
+          const page = this.parseCMSItem(item, collection, publishedDomain);
           if (page) {
             pages.push(page);
           }
@@ -144,7 +167,7 @@ export class WebsiteCrawlerService {
   /**
    * Parse a CMS item into a CrawledPage
    */
-  private parseCMSItem(item: any, collection: WebflowCollection): CrawledPage | null {
+  private parseCMSItem(item: any, collection: WebflowCollection, publishedDomain: string): CrawledPage | null {
     try {
       const fieldData = item.fieldData || {};
       
@@ -160,8 +183,9 @@ export class WebsiteCrawlerService {
       const tags = Array.isArray(fieldData.tags) ? fieldData.tags : [];
       const categories = Array.isArray(fieldData.categories) ? fieldData.categories : [];
 
-      // Build URL (Webflow pattern: https://site-slug.webflow.io/collection-slug/item-slug)
-      const url = slug ? `/${collection.slug}/${slug}` : `/${collection.slug}/${item.id}`;
+      // Build URL using published domain (e.g., https://www.example.com/blog/post-slug)
+      const itemSlug = slug || item.id;
+      const url = `${publishedDomain}/${collection.slug}/${itemSlug}`;
 
       // Extract text content for analysis
       const textContent = this.extractTextFromHTML(content);
