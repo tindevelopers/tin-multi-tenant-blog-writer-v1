@@ -1480,6 +1480,26 @@ export default function EditDraftPage() {
             excerpt={formData.excerpt || ''}
             editable={true}
             className="mt-2"
+            generatedImages={[
+              // Featured/Header image
+              ...(formData.featuredImage ? [{
+                url: formData.featuredImage,
+                alt: formData.featuredImageAlt || 'Featured image',
+                type: 'header' as const
+              }] : []),
+              // Thumbnail image
+              ...(formData.thumbnailImage ? [{
+                url: formData.thumbnailImage,
+                alt: formData.thumbnailImageAlt || 'Thumbnail',
+                type: 'thumbnail' as const
+              }] : []),
+              // Content images from Phase 2
+              ...contentImages.map((img, idx) => ({
+                url: img.url,
+                alt: img.alt || `Content image ${idx + 1}`,
+                type: 'content' as const
+              }))
+            ]}
           />
         </div>
 

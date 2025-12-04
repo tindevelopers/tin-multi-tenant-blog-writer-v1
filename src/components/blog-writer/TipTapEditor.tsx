@@ -39,6 +39,12 @@ import { useState, useCallback, useEffect } from 'react';
 import { logger } from '@/utils/logger';
 import ImageInsertModal from './ImageInsertModal';
 
+interface GeneratedImage {
+  url: string;
+  alt?: string;
+  type?: 'header' | 'thumbnail' | 'content';
+}
+
 interface TipTapEditorProps {
   content: string;
   onChange: (content: string) => void;
@@ -48,6 +54,7 @@ interface TipTapEditorProps {
   className?: string;
   excerpt?: string; // For AI image generation
   showPreview?: boolean; // Show live preview panel
+  generatedImages?: GeneratedImage[]; // Images generated for this blog post (Phase 2)
 }
 
 // HTML paste cleaner function
@@ -107,7 +114,8 @@ export default function TipTapEditor({
   editable = true,
   className = '',
   excerpt = '',
-  showPreview: initialShowPreview = false
+  showPreview: initialShowPreview = false,
+  generatedImages = []
 }: TipTapEditorProps) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -709,6 +717,7 @@ export default function TipTapEditor({
         onClose={() => setShowImageModal(false)}
         onImageSelect={handleImageSelect}
         excerpt={excerpt}
+        generatedImages={generatedImages}
       />
     </div>
   );

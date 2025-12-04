@@ -22,14 +22,22 @@ interface MediaAsset {
   created_at: string;
 }
 
+interface GeneratedImage {
+  url: string;
+  alt?: string;
+  type?: 'header' | 'thumbnail' | 'content';
+}
+
 interface ImageInsertModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImageSelect: (imageUrl: string, options?: { alignment?: 'left' | 'center' | 'right' | 'full'; size?: 'small' | 'medium' | 'large' | 'full' }) => void;
   excerpt?: string;
+  /** Images generated specifically for this blog post (Phase 2) */
+  generatedImages?: GeneratedImage[];
 }
 
-type TabType = 'upload' | 'library' | 'generate';
+type TabType = 'upload' | 'library' | 'generate' | 'generated';
 
 /**
  * Media Thumbnail Component using TailAdmin card styling
@@ -132,9 +140,11 @@ export default function ImageInsertModal({
   isOpen,
   onClose,
   onImageSelect,
-  excerpt = ''
+  excerpt = '',
+  generatedImages = []
 }: ImageInsertModalProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('upload');
+  // Default to 'generated' tab if there are generated images, otherwise 'upload'
+  const [activeTab, setActiveTab] = useState<TabType>(generatedImages.length > 0 ? 'generated' : 'upload');
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
@@ -152,6 +162,13 @@ export default function ImageInsertModal({
       loadMediaAssets();
     }
   }, [isOpen, activeTab, searchTerm]);
+
+  // Switch to generated tab if images are available when modal opens
+  useEffect(() => {
+    if (isOpen && generatedImages.length > 0) {
+      setActiveTab('generated');
+    }
+  }, [isOpen, generatedImages.length]);
 
   // Set generate prompt from excerpt when modal opens
   useEffect(() => {
@@ -469,6 +486,28 @@ export default function ImageInsertModal({
               <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
             )}
           </button>
+          {/* Generated Images Tab - Only show if there are generated images */}
+          {generatedImages.length > 0 && (
+            <button
+              onClick={() => setActiveTab('generated')}
+              className={`flex-1 px-6 py-4 text-sm font-medium transition-colors relative ${
+                activeTab === 'generated'
+                  ? 'text-brand-600 dark:text-brand-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <PhotoIcon className="w-5 h-5" />
+                <span>Blog Images</span>
+                <span className="ml-1 px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 rounded-full">
+                  {generatedImages.length}
+                </span>
+              </div>
+              {activeTab === 'generated' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-600 dark:bg-brand-400" />
+              )}
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -636,6 +675,121 @@ export default function ImageInsertModal({
                 )}
               </div>
             </Card>
+          )}
+
+          {/* Generated Images Tab - Images generated for this specific blog post */}
+          {activeTab === 'generated' && (
+            <div className="space-y-4">
+              {/* Image Options */}
+              <div className="grid grid-cols-2 gap-4 pb-4 border-b border-gray-200 dark:border-gray-700">
+                <div>
+                  <label htmlFor="generated-image-size-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Image Size
+                  </label>
+                  <Select
+                    id="generated-image-size-select"
+                    options={[
+                      { value: 'small', label: 'Small (~300px)' },
+                      { value: 'medium', label: 'Medium (~600px)' },
+                      { value: 'large', label: 'Large (~900px)' },
+                      { value: 'full', label: 'Full Width' },
+                    ]}
+                    defaultValue={imageSize}
+                    onChange={(value) => setImageSize(value as typeof imageSize)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="generated-image-alignment-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Alignment
+                  </label>
+                  <Select
+                    id="generated-image-alignment-select"
+                    options={[
+                      { value: 'left', label: 'Left' },
+                      { value: 'center', label: 'Center' },
+                      { value: 'right', label: 'Right' },
+                      { value: 'full', label: 'Full Width' },
+                    ]}
+                    defaultValue={imageAlignment}
+                    onChange={(value) => setImageAlignment(value as typeof imageAlignment)}
+                  />
+                </div>
+              </div>
+
+              {/* Info Banner */}
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <p className="text-sm text-green-800 dark:text-green-300">
+                  <strong>Tip:</strong> These images were generated specifically for this blog post during Phase 2. 
+                  Click any image to insert it at your cursor position in the editor.
+                </p>
+              </div>
+
+              {/* Generated Images Grid */}
+              {generatedImages.length === 0 ? (
+                <Card>
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    No images have been generated for this blog post yet.
+                    <br />
+                    <span className="text-sm">Use the &quot;Generate Images&quot; button in the Images Section to create them.</span>
+                  </div>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {generatedImages.map((image, index) => (
+                    <div
+                      key={`generated-${index}`}
+                      onClick={() => {
+                        if (image.url) {
+                          onImageSelect(image.url, { alignment: imageAlignment, size: imageSize });
+                          onClose();
+                        }
+                      }}
+                      className="group relative rounded-xl border overflow-hidden cursor-pointer transition-all border-gray-200 dark:border-gray-700 hover:border-brand-500 hover:shadow-lg dark:hover:border-brand-500 bg-white dark:bg-gray-800"
+                    >
+                      {/* Image Type Badge */}
+                      {image.type && (
+                        <div className="absolute top-2 left-2 z-20">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            image.type === 'header' 
+                              ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
+                              : image.type === 'thumbnail'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+                              : 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+                          }`}>
+                            {image.type === 'header' ? 'Header' : image.type === 'thumbnail' ? 'Thumbnail' : 'Content'}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Image Container */}
+                      <div className="aspect-video relative bg-gray-100 dark:bg-gray-700 overflow-hidden">
+                        <img
+                          src={image.url}
+                          alt={image.alt || `Generated image ${index + 1}`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        {/* Hover Overlay */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all duration-200 flex items-center justify-center">
+                          <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium transition-opacity duration-200">
+                            Insert at Cursor
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Alt Text */}
+                      {image.alt && (
+                        <div className="p-2 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
+                          <p className="text-xs text-gray-600 dark:text-gray-400 truncate" title={image.alt}>
+                            {image.alt}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
