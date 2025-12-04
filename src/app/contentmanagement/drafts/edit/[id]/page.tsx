@@ -141,6 +141,19 @@ export default function EditDraftPage() {
   const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
   const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
   const [contentImages, setContentImages] = useState<Array<{ url: string; alt: string }>>([]);
+  const [linkAnalysis, setLinkAnalysis] = useState<{
+    currentLinks: number;
+    availableOpportunities: number;
+    analyzing: boolean;
+    lastAnalyzed: string | null;
+    insertedLinks: Array<{ anchor: string; url: string; type: string }>;
+  }>({
+    currentLinks: 0,
+    availableOpportunities: 0,
+    analyzing: false,
+    lastAnalyzed: null,
+    insertedLinks: [],
+  });
 
   // Determine phase completion status
   const phase1Complete = workflowPhase && ['phase_1_content', 'phase_2_images', 'phase_3_enhancement', 'completed'].includes(workflowPhase);
@@ -1091,6 +1104,107 @@ export default function EditDraftPage() {
     }
   };
 
+  // Handler for inserting internal links only (without full Phase 3 enhancement)
+  const handleInsertInternalLinks = async () => {
+    if (!formData.content) {
+      alert('Please add content before inserting links.');
+      return;
+    }
+
+    setLinkAnalysis(prev => ({ ...prev, analyzing: true }));
+    
+    try {
+      const orgId = (draft as any)?.org_id as string | undefined;
+      const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+      const keywords = (draftMetadata?.keywords as string[]) || [];
+
+      logger.info('Inserting internal links', {
+        hasOrgId: !!orgId,
+        keywordsCount: keywords.length,
+        contentLength: formData.content.length,
+      });
+
+      // Count current links
+      const currentLinkCount = (formData.content.match(/<a\s/gi) || []).length;
+
+      const response = await fetch('/api/workflow/enhance-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: formData.content,
+          title: formData.title,
+          topic: formData.title,
+          keywords: keywords.length > 0 ? keywords : [''],
+          generate_structured_data: false,
+          improve_formatting: false, // Don't reformat, just insert links
+          insert_hyperlinks: true,
+          org_id: orgId,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Link insertion failed');
+      }
+
+      const result = await response.json();
+      
+      // Count new links
+      const newLinkCount = (result.enhanced_content?.match(/<a\s/gi) || []).length;
+      const linksInserted = newLinkCount - currentLinkCount;
+
+      // Extract inserted links for display
+      const linkRegex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+      const insertedLinks: Array<{ anchor: string; url: string; type: string }> = [];
+      let match;
+      while ((match = linkRegex.exec(result.enhanced_content || '')) !== null) {
+        const url = match[1];
+        const anchor = match[2].replace(/<[^>]+>/g, '').trim();
+        if (url.includes('webflow.io') || url.includes('.')) {
+          insertedLinks.push({
+            anchor: anchor.substring(0, 50),
+            url,
+            type: url.includes('webflow.io') ? 'CMS' : 'Static',
+          });
+        }
+      }
+
+      // Update content with links
+      if (result.enhanced_content) {
+        setFormData(prev => ({
+          ...prev,
+          content: result.enhanced_content,
+        }));
+      }
+
+      setLinkAnalysis({
+        currentLinks: newLinkCount,
+        availableOpportunities: 0,
+        analyzing: false,
+        lastAnalyzed: new Date().toISOString(),
+        insertedLinks: insertedLinks.slice(0, 10), // Show up to 10 links
+      });
+
+      if (linksInserted > 0) {
+        alert(`✅ Inserted ${linksInserted} internal links! Don't forget to save your draft.`);
+      } else {
+        alert('No new link opportunities found. Your content may already have good internal linking.');
+      }
+    } catch (error) {
+      logger.error('Link insertion failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to insert links. Please try again.');
+      setLinkAnalysis(prev => ({ ...prev, analyzing: false }));
+    }
+  };
+
+  // Count current links in content
+  useEffect(() => {
+    if (formData.content) {
+      const linkCount = (formData.content.match(/<a\s/gi) || []).length;
+      setLinkAnalysis(prev => ({ ...prev, currentLinks: linkCount }));
+    }
+  }, [formData.content]);
+
   const handleGenerateThumbnail = async () => {
     if (!formData.title) {
       alert('Please enter a title before generating thumbnail.');
@@ -1795,6 +1909,114 @@ export default function EditDraftPage() {
               <span>
                 <strong>Tip:</strong> Click &quot;Generate All Images&quot; to create header, thumbnail, and content images. They&apos;ll be automatically inserted into your post!
               </span>
+            </div>
+          )}
+        </div>
+
+        {/* Internal Links Section */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <ArrowsRightLeftIcon className="w-5 h-5 text-blue-600" />
+                Internal Links
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Automatically insert internal links to your Webflow CMS content and static pages.
+              </p>
+            </div>
+            <button
+              onClick={handleInsertInternalLinks}
+              disabled={linkAnalysis.analyzing || !formData.content}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            >
+              {linkAnalysis.analyzing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <ArrowsRightLeftIcon className="w-4 h-4" />
+                  Insert Internal Links
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Link Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{linkAnalysis.currentLinks}</div>
+              <div className="text-xs text-blue-700 dark:text-blue-300">Current Links</div>
+            </div>
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{linkAnalysis.insertedLinks.length}</div>
+              <div className="text-xs text-green-700 dark:text-green-300">Links Inserted</div>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                {linkAnalysis.insertedLinks.filter(l => l.type === 'CMS').length}
+              </div>
+              <div className="text-xs text-purple-700 dark:text-purple-300">CMS Links</div>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+              <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                {linkAnalysis.insertedLinks.filter(l => l.type === 'Static').length}
+              </div>
+              <div className="text-xs text-amber-700 dark:text-amber-300">Static Links</div>
+            </div>
+          </div>
+
+          {/* Inserted Links Preview */}
+          {linkAnalysis.insertedLinks.length > 0 && (
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 dark:bg-gray-900/50 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Recently Inserted Links</h3>
+              </div>
+              <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-48 overflow-y-auto">
+                {linkAnalysis.insertedLinks.map((link, idx) => (
+                  <div key={idx} className="px-4 py-2 flex items-center justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-900/30">
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white truncate block">
+                        &quot;{link.anchor}&quot;
+                      </span>
+                      <a 
+                        href={link.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block"
+                      >
+                        {link.url.length > 60 ? link.url.substring(0, 60) + '...' : link.url}
+                      </a>
+                    </div>
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                      link.type === 'CMS' 
+                        ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    }`}>
+                      {link.type}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Help text */}
+          {linkAnalysis.currentLinks === 0 && !linkAnalysis.analyzing && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/20 px-3 py-2 rounded-lg">
+              <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+              <span>
+                <strong>Tip:</strong> Internal links help with SEO and keep readers engaged. Click &quot;Insert Internal Links&quot; to automatically find and add relevant links from your Webflow site.
+              </span>
+            </div>
+          )}
+
+          {linkAnalysis.lastAnalyzed && (
+            <div className="mt-3 text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+              <CheckCircleIcon className="w-3 h-3 text-green-500" />
+              Last analyzed: {new Date(linkAnalysis.lastAnalyzed).toLocaleString()}
             </div>
           )}
         </div>
