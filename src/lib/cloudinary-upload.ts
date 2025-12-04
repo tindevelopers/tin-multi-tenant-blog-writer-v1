@@ -93,10 +93,15 @@ export async function uploadViaBlogWriterAPI(
     const API_BASE_URL = BLOG_WRITER_API_URL;
     const API_KEY = process.env.BLOG_WRITER_API_KEY;
 
-    // Prepare image data
+    // Prepare image data - Backend expects RAW base64 (without data URI prefix)
     let imageBase64: string | null = null;
     if (imageData) {
-      imageBase64 = imageData;
+      // Strip data URI prefix if present - backend expects raw base64
+      if (imageData.startsWith('data:')) {
+        imageBase64 = imageData.split(',')[1] || imageData;
+      } else {
+        imageBase64 = imageData;
+      }
     } else if (imageUrl) {
       // Fetch and convert to base64 (server-side)
       const response = await fetch(imageUrl);
@@ -105,9 +110,8 @@ export async function uploadViaBlogWriterAPI(
       }
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      // Detect content type from response or default to png
-      const contentType = response.headers.get('content-type') || 'image/png';
-      imageBase64 = `data:${contentType};base64,${buffer.toString('base64')}`;
+      // Return raw base64 without data URI prefix - backend expects raw base64
+      imageBase64 = buffer.toString('base64');
     } else {
       throw new Error('No image data or URL provided');
     }
