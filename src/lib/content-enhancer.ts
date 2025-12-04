@@ -21,6 +21,10 @@ export function cleanExcerpt(excerpt: string): string {
   
   let cleaned = excerpt;
   
+  // STEP 1: Remove keyword/topic prefix at start (often raw keyword repeated)
+  // Pattern: lowercase words at start followed by uppercase or content start
+  cleaned = cleaned.replace(/^[a-z][a-z\s]{2,40}(?=[A-Z])/i, '');
+  
   // Remove common artifacts that appear in excerpts (order matters - most specific first)
   cleaned = cleaned.replace(/Here's the enhanced version of the blog post.*?:/gi, '');
   cleaned = cleaned.replace(/Here's the enhanced version.*?:/gi, '');
@@ -36,16 +40,46 @@ export function cleanExcerpt(excerpt: string): string {
   // Remove topic/keyword prefix if it's just repeated (e.g., "best ai voice agents Here's...")
   cleaned = cleaned.replace(/^([a-z\s]{5,50})\s+(Here's|Here is|Best|Top|Discover|Learn)/i, '$2');
   
-  // Clean up broken punctuation
+  // STEP 2: Fix broken/truncated words
+  // Fix "f." appearing as truncation of "for" or other words
+  cleaned = cleaned.replace(/\bf\.\s*$/i, '');
+  cleaned = cleaned.replace(/\bf\.\s+/gi, 'for ');
+  // Fix other common truncations (single letter followed by period)
+  cleaned = cleaned.replace(/\s+[a-z]\.\s*$/i, '.');
+  cleaned = cleaned.replace(/\s+[a-z]\.\s+/gi, ' ');
+  
+  // STEP 3: Clean up broken punctuation
   cleaned = cleaned.replace(/\s+\.\s+/g, '. ');
   cleaned = cleaned.replace(/\s+,\s+/g, ', ');
+  cleaned = cleaned.replace(/\.\s*\./g, '.'); // Double periods
+  cleaned = cleaned.replace(/,\s*,/g, ','); // Double commas
   
   // Remove markdown artifacts
   cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]*\)/g, '$1');
   cleaned = cleaned.replace(/!\[?[^\]]*\]?/g, '');
   
+  // Remove HTML artifacts that may have leaked in
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  cleaned = cleaned.replace(/["']\s*class=["'][^"']*["']/gi, '');
+  
   // Trim and clean whitespace
   cleaned = cleaned.trim().replace(/\s{2,}/g, ' ');
+  
+  // STEP 4: Ensure excerpt ends with proper sentence
+  // If it ends without proper punctuation, try to find last complete sentence
+  if (!/[.!?]$/.test(cleaned)) {
+    const lastSentenceEnd = Math.max(
+      cleaned.lastIndexOf('. '),
+      cleaned.lastIndexOf('! '),
+      cleaned.lastIndexOf('? ')
+    );
+    if (lastSentenceEnd > cleaned.length * 0.5) {
+      cleaned = cleaned.substring(0, lastSentenceEnd + 1);
+    } else {
+      // Just add ellipsis if no good break point
+      cleaned = cleaned.replace(/[,;:\s]+$/, '') + '...';
+    }
+  }
   
   // If excerpt is too short or still contains artifacts, return empty to force regeneration
   if (cleaned.length < 50 || cleaned.includes("enhanced version") || cleaned.includes("addressing")) {
@@ -121,6 +155,18 @@ export function enhanceContentToRichHTML(
  */
 function cleanAIArtifacts(content: string): string {
   let cleaned = content;
+  
+  // FIRST: Clean broken HTML artifacts (malformed img tags, exposed attributes)
+  // Pattern: Text followed by exposed HTML attributes like `" class="w-full h-auto...">`
+  cleaned = cleaned.replace(/["']\s*class=["'][^"']*["']\s*>/gi, '');
+  cleaned = cleaned.replace(/["']\s*style=["'][^"']*["']\s*>/gi, '');
+  // Fix broken img tags that expose alt text and attributes as text
+  cleaned = cleaned.replace(/[^<]*["']\s*(?:class|style|alt|src|width|height)=["'][^"']*["'][^>]*>/gi, '');
+  // Clean up orphaned HTML attribute fragments
+  cleaned = cleaned.replace(/\s+class=["'][^"']*["']/gi, '');
+  cleaned = cleaned.replace(/\s+style=["'][^"']*["']/gi, '');
+  // Remove malformed closing angle brackets
+  cleaned = cleaned.replace(/^[^<]*>/gm, '');
   
   // Remove common AI generation artifacts (more aggressive patterns)
   cleaned = cleaned.replace(/Here's an enhanced version of.*?:/gi, '');
