@@ -225,14 +225,32 @@ async function improveContentStructure(
     });
 
     // Check if content has proper heading structure
-    const hasH1 = /<h1[^>]*>/i.test(enhanced);
-    const hasH2 = /<h2[^>]*>/i.test(enhanced);
+    const h1Count = (enhanced.match(/<h1[^>]*>/gi) || []).length;
+    const h2Count = (enhanced.match(/<h2[^>]*>/gi) || []).length;
+    const h3Count = (enhanced.match(/<h3[^>]*>/gi) || []).length;
     
-    // If missing proper heading structure, rely on local enhancer
-    // The enhanced cleanAIArtifacts and markdownToHTML should handle most cases
-    if (!hasH1 || !hasH2) {
-      logger.debug('Content missing proper headings, relying on local enhancer improvements');
-      // The local enhancer has been improved to handle these cases
+    logger.info('Content heading structure analysis', {
+      h1Count,
+      h2Count,
+      h3Count,
+      hasProperStructure: h1Count >= 1 && h2Count >= 3,
+      recommendation: h2Count < 3 ? 'Consider adding more H2 sections for better SEO' : 'Good heading structure',
+    });
+    
+    // If still missing proper heading structure after enhancement, add title as H1
+    if (h1Count === 0 && title) {
+      logger.debug('Adding title as H1 heading');
+      enhanced = `<h1 class="blog-heading blog-heading-1">${title}</h1>\n${enhanced}`;
+    }
+    
+    // Log warning if heading structure is weak for SEO
+    if (h2Count < 2) {
+      logger.warn('Content has weak heading structure for SEO', {
+        h1Count,
+        h2Count,
+        h3Count,
+        suggestion: 'Blog posts should have at least 1 H1 (title), 3-5 H2 (main sections), and relevant H3 (subsections)',
+      });
     }
 
     return enhanced;

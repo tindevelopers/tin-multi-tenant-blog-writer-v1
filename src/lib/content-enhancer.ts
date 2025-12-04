@@ -73,10 +73,16 @@ export function enhanceContentToRichHTML(
   let html = content || '';
 
   // Step 1: Detect content format
+  // Check for HTML tags
   const isHTML = html.includes('<') && html.includes('>');
-  const isMarkdown = !isHTML && (html.includes('#') || html.includes('*') || html.includes('`'));
+  // Check for markdown syntax (headers, bold, code, links, lists)
+  const hasMarkdownHeaders = /^#{1,6}\s+/m.test(html);
+  const hasMarkdownFormatting = /\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[.*?\]\(.*?\)|^[-*+]\s+/m.test(html);
+  const isMarkdown = hasMarkdownHeaders || hasMarkdownFormatting;
 
   // Step 2: Convert markdown to HTML if needed
+  // IMPORTANT: Process markdown even if HTML is present (mixed content case)
+  // This handles cases where backend returns HTML paragraphs but markdown headers
   if (isMarkdown) {
     html = markdownToHTML(html);
   } else if (!isHTML) {
@@ -178,10 +184,25 @@ function cleanAIArtifacts(content: string): string {
 
 /**
  * Convert markdown to HTML
+ * Handles both pure markdown and mixed HTML+markdown content
  */
 function markdownToHTML(markdown: string): string {
   // First clean AI artifacts
   let html = cleanAIArtifacts(markdown);
+
+  // PRE-PROCESSING: Extract markdown headers from inside HTML tags (mixed content fix)
+  // Handle cases like: <p># Title</p> or <p>## Section</p>
+  html = html.replace(/<p[^>]*>\s*(#{1,6})\s+([^<]+)<\/p>/gi, (match, hashes, content) => {
+    const level = hashes.length;
+    return `<h${level}>${content.trim()}</h${level}>`;
+  });
+  
+  // Also handle markdown headers that appear after HTML elements on their own line
+  // e.g., "</p>\n# Title" or "</p>\n\n## Section"
+  html = html.replace(/(<\/[^>]+>)\s*\n+(#{1,6})\s+(.+?)(?=\n|$)/gi, (match, closingTag, hashes, content) => {
+    const level = hashes.length;
+    return `${closingTag}\n<h${level}>${content.trim()}</h${level}>`;
+  });
 
   // Headers (must be at start of line) - process longer patterns first
   html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
@@ -190,6 +211,14 @@ function markdownToHTML(markdown: string): string {
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  
+  // Handle inline markdown headers that weren't caught (after other elements)
+  html = html.replace(/>\s*#{6}\s+([^<]+)/gi, '><h6>$1</h6>');
+  html = html.replace(/>\s*#{5}\s+([^<]+)/gi, '><h5>$1</h5>');
+  html = html.replace(/>\s*#{4}\s+([^<]+)/gi, '><h4>$1</h4>');
+  html = html.replace(/>\s*#{3}\s+([^<]+)/gi, '><h3>$1</h3>');
+  html = html.replace(/>\s*#{2}\s+([^<]+)/gi, '><h2>$1</h2>');
+  html = html.replace(/>\s*#\s+([^<]+)/gi, '><h1>$1</h1>');
   
   // Ensure we have exactly ONE H1 (the title)
   // If multiple H1s exist, convert extras to H2
@@ -294,7 +323,67 @@ function markdownToHTML(markdown: string): string {
     processedLines.push(`<p>${currentParagraph.join(' ')}</p>`);
   }
 
-  return processedLines.join('\n');
+  // Validate and improve heading structure for SEO
+  let result = processedLines.join('\n');
+  result = validateAndImproveHeadings(result);
+  
+  return result;
+}
+
+/**
+ * Validate and improve heading structure for SEO
+ * Ensures proper H1/H2/H3 hierarchy with SEO-friendly keyword opportunities
+ */
+function validateAndImproveHeadings(html: string): string {
+  let enhanced = html;
+  
+  // Count existing headings
+  const h1Count = (enhanced.match(/<h1[^>]*>/gi) || []).length;
+  const h2Count = (enhanced.match(/<h2[^>]*>/gi) || []).length;
+  const h3Count = (enhanced.match(/<h3[^>]*>/gi) || []).length;
+  
+  // Log warning if heading structure is weak
+  if (h1Count === 0 && h2Count === 0) {
+    console.warn('[content-enhancer] No headings detected in content. Attempting to auto-detect section headers.');
+    
+    // Try to detect potential section headers from content patterns
+    // Pattern 1: Short bold paragraphs that could be headers (under 100 chars, all bold)
+    enhanced = enhanced.replace(/<p[^>]*>\s*<strong>([^<]{10,80})<\/strong>\s*<\/p>/gi, (match, content) => {
+      // Don't convert if it looks like a sentence (has period at end)
+      if (content.trim().endsWith('.') || content.trim().endsWith('?')) {
+        return match;
+      }
+      return `<h2>${content.trim()}</h2>`;
+    });
+    
+    // Pattern 2: Short paragraphs followed by lists (likely section headers)
+    enhanced = enhanced.replace(/<p[^>]*>([^<]{10,60})<\/p>\s*(<ul|<ol)/gi, (match, content, listTag) => {
+      // Only convert if it doesn't have sentence-ending punctuation
+      if (content.trim().match(/[.?!]$/)) {
+        return match;
+      }
+      return `<h3>${content.trim()}</h3>\n${listTag}`;
+    });
+    
+    // Pattern 3: Capitalized short lines (potential headers)
+    enhanced = enhanced.replace(/<p[^>]*>([A-Z][^<.!?]{8,50})<\/p>/g, (match, content) => {
+      // Check if mostly uppercase words (title case)
+      const words = content.trim().split(/\s+/);
+      const capitalizedWords = words.filter((w: string) => /^[A-Z]/.test(w)).length;
+      if (capitalizedWords >= words.length * 0.6 && words.length >= 2 && words.length <= 8) {
+        return `<h2>${content.trim()}</h2>`;
+      }
+      return match;
+    });
+  }
+  
+  // Ensure we have at least some H2s for SEO (minimum 3 recommended)
+  const updatedH2Count = (enhanced.match(/<h2[^>]*>/gi) || []).length;
+  if (updatedH2Count < 3) {
+    console.warn(`[content-enhancer] Only ${updatedH2Count} H2 headings found. SEO best practice recommends at least 3-4 H2 sections.`);
+  }
+  
+  return enhanced;
 }
 
 /**
