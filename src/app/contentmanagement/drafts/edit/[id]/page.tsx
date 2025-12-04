@@ -304,6 +304,57 @@ export default function EditDraftPage() {
     alert(`✅ Image inserted at ${position} of content. Don't forget to save!`);
   };
 
+  // Auto-insert all images into content after Phase 2 generation
+  const autoInsertImagesIntoContent = (
+    content: string,
+    headerImage: { url: string; alt: string } | null,
+    contentImagesArray: Array<{ url: string; alt: string }>
+  ): string => {
+    let modifiedContent = content || '';
+    
+    // Insert header image at the top (after first h1 or at start)
+    if (headerImage?.url) {
+      const headerImageHTML = `<figure class="featured-image my-8"><img src="${headerImage.url}" alt="${headerImage.alt || 'Featured image'}" class="w-full h-auto rounded-lg shadow-lg" /><figcaption class="text-center text-sm text-gray-500 mt-2">${headerImage.alt || ''}</figcaption></figure>`;
+      
+      const h1Match = modifiedContent.match(/<h1[^>]*>.*?<\/h1>/i);
+      if (h1Match && h1Match.index !== undefined) {
+        const insertPos = (h1Match.index || 0) + h1Match[0].length;
+        modifiedContent = modifiedContent.slice(0, insertPos) + headerImageHTML + modifiedContent.slice(insertPos);
+      } else {
+        modifiedContent = headerImageHTML + modifiedContent;
+      }
+      logger.info('✅ Header image auto-inserted at top of content');
+    }
+    
+    // Insert content images after H2/H3 headings (distributed evenly)
+    if (contentImagesArray.length > 0) {
+      const h2Matches = [...modifiedContent.matchAll(/<h2[^>]*>.*?<\/h2>/gi)];
+      const h3Matches = [...modifiedContent.matchAll(/<h3[^>]*>.*?<\/h3>/gi)];
+      const allHeadings = [...h2Matches, ...h3Matches].sort((a, b) => (a.index || 0) - (b.index || 0));
+      
+      let imagesInserted = 0;
+      const headingsPerImage = Math.max(1, Math.floor(allHeadings.length / contentImagesArray.length));
+      
+      // Work backwards to preserve indices
+      for (let i = allHeadings.length - 1; i >= 0 && imagesInserted < contentImagesArray.length; i--) {
+        if ((allHeadings.length - 1 - i) % headingsPerImage === 0) {
+          const heading = allHeadings[i];
+          const imageIdx = contentImagesArray.length - 1 - imagesInserted;
+          const img = contentImagesArray[imageIdx];
+          if (img && heading.index !== undefined) {
+            const imageHTML = `<figure class="content-image my-6"><img src="${img.url}" alt="${img.alt || 'Content image'}" class="w-full h-auto rounded-lg" /><figcaption class="text-center text-sm text-gray-500 mt-2">${img.alt || ''}</figcaption></figure>`;
+            const insertPos = heading.index + heading[0].length;
+            modifiedContent = modifiedContent.slice(0, insertPos) + imageHTML + modifiedContent.slice(insertPos);
+            imagesInserted++;
+          }
+        }
+      }
+      logger.info(`✅ ${imagesInserted} content images auto-inserted after headings`);
+    }
+    
+    return modifiedContent;
+  };
+
   const handleAutoGenerateFields = async () => {
     if (!formData.content) {
       alert('Add content before generating fields.');
@@ -738,17 +789,30 @@ export default function EditDraftPage() {
             }))
           : contentImages;
         
+        // ═══════════════════════════════════════════════════════════════════════════
+        // AUTO-INSERT IMAGES INTO CONTENT (Path 1: new tempQueueId)
+        // Header goes at top, content images distributed after headings
+        // ═══════════════════════════════════════════════════════════════════════════
+        const headerImageData = updatedFormData.featuredImage 
+          ? { url: updatedFormData.featuredImage, alt: updatedFormData.featuredImageAlt || 'Featured image' }
+          : null;
+        updatedFormData.content = autoInsertImagesIntoContent(
+          updatedFormData.content || '',
+          headerImageData,
+          updatedContentImages
+        );
+        
         // Update state immediately so images show up right away
         setFormData(updatedFormData);
         setContentImages(updatedContentImages);
         
-        logger.info('✅ Images set in form state', {
+        logger.info('✅ Images set in form state with auto-inserted images', {
           featuredImage: updatedFormData.featuredImage,
           thumbnailImage: updatedFormData.thumbnailImage,
           contentImagesCount: updatedContentImages.length,
         });
 
-        // Save images to draft immediately using updatePost
+        // Save images AND updated content to draft immediately using updatePost
         try {
           // Build metadata with updated form data (use updatedFormData, not formData)
           const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
@@ -774,11 +838,12 @@ export default function EditDraftPage() {
           if (updatedFormData.publishedAt) updatedMetadata.published_at = updatedFormData.publishedAt;
 
           const savedPost = await updatePost(draftId, {
+            content: updatedFormData.content, // Save content with auto-inserted images
             metadata: updatedMetadata,
           });
 
           if (savedPost) {
-            logger.info('✅ Images saved to draft successfully', {
+            logger.info('✅ Images and content saved to draft successfully', {
               hasFeaturedImage: !!updatedMetadata.featured_image,
               hasThumbnail: !!updatedMetadata.thumbnail_image,
               contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
@@ -856,17 +921,30 @@ export default function EditDraftPage() {
             }))
           : contentImages;
         
+        // ═══════════════════════════════════════════════════════════════════════════
+        // AUTO-INSERT IMAGES INTO CONTENT (Path 2: existing queueId)
+        // Header goes at top, content images distributed after headings
+        // ═══════════════════════════════════════════════════════════════════════════
+        const headerImageData2 = updatedFormData.featuredImage 
+          ? { url: updatedFormData.featuredImage, alt: updatedFormData.featuredImageAlt || 'Featured image' }
+          : null;
+        updatedFormData.content = autoInsertImagesIntoContent(
+          updatedFormData.content || '',
+          headerImageData2,
+          updatedContentImages
+        );
+        
         // Update state immediately so images show up right away
         setFormData(updatedFormData);
         setContentImages(updatedContentImages);
         
-        logger.info('✅ Images set in form state', {
+        logger.info('✅ Images set in form state with auto-inserted images', {
           featuredImage: updatedFormData.featuredImage,
           thumbnailImage: updatedFormData.thumbnailImage,
           contentImagesCount: updatedContentImages.length,
         });
 
-        // Save images to draft immediately using updatePost
+        // Save images AND updated content to draft immediately using updatePost
         try {
           // Build metadata with updated form data (use updatedFormData, not formData)
           const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
@@ -892,11 +970,12 @@ export default function EditDraftPage() {
           if (updatedFormData.publishedAt) updatedMetadata.published_at = updatedFormData.publishedAt;
 
           const savedPost = await updatePost(draftId, {
+            content: updatedFormData.content, // Save content with auto-inserted images
             metadata: updatedMetadata,
           });
 
           if (savedPost) {
-            logger.info('✅ Images saved to draft successfully', {
+            logger.info('✅ Images and content saved to draft successfully', {
               hasFeaturedImage: !!updatedMetadata.featured_image,
               hasThumbnail: !!updatedMetadata.thumbnail_image,
               contentImagesCount: Array.isArray(updatedMetadata.content_images) ? updatedMetadata.content_images.length : 0,
@@ -1447,212 +1526,258 @@ export default function EditDraftPage() {
           </div>
         )}
 
-        {/* Images Section - Separate Display */}
-        {(formData.featuredImage || formData.thumbnailImage || contentImages.length > 0) && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                  <PhotoIcon className="w-5 h-5" />
-                  Generated Images
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  Images generated for this draft (Phase 2). Click &quot;Insert into Content&quot; to add to the blog body.
-                </p>
-              </div>
+        {/* ═══════════════════════════════════════════════════════════════════════════
+            BLOG IMAGES SECTION - Always visible with intuitive layout
+            This section manages all images: Header (16:9), Thumbnail (1:1), and Content Images
+        ═══════════════════════════════════════════════════════════════════════════ */}
+        <div className="bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 rounded-xl shadow-sm border border-purple-200 dark:border-gray-700 p-6 mb-6">
+          {/* Section Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <PhotoIcon className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                Blog Images
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Header, thumbnail, and content images for your blog post. Images are auto-inserted when generated.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
               {phase2Complete && (
-                <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 rounded-full">
+                <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded-full">
                   <CheckCircleIcon className="w-3 h-3" />
-                  Phase 2 Complete
+                  Images Generated
                 </span>
+              )}
+              {!phase2Complete && phase1Complete && (
+                <button
+                  onClick={handlePhase2ImageGeneration}
+                  disabled={aiGenerating}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 dark:bg-purple-500 text-white rounded-lg hover:bg-purple-700 dark:hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
+                >
+                  {aiGenerating ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <SparklesIcon className="w-4 h-4" />
+                  )}
+                  {aiGenerating ? 'Generating...' : 'Generate All Images'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Image Cards Grid - 3 columns */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            {/* ═══ HEADER IMAGE (16:9) ═══ */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900/50 shadow-sm">
+              <div className="bg-gradient-to-r from-purple-500 to-blue-500 px-4 py-2">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-white/80" />
+                  Header Image
+                  <span className="text-xs text-white/70">(16:9)</span>
+                </h3>
+              </div>
+              {formData.featuredImage ? (
+                <>
+                  <div className="aspect-video bg-gray-100 dark:bg-gray-800 relative">
+                    <ImageWithFallback
+                      src={formData.featuredImage}
+                      alt={formData.featuredImageAlt || 'Header image'}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleInsertImageIntoContent(formData.featuredImage, formData.featuredImageAlt || 'Header image', 'top')}
+                        className="px-2 py-1 bg-blue-600/90 hover:bg-blue-700 text-white text-xs rounded shadow-sm backdrop-blur-sm"
+                        title="Insert at top of content"
+                      >
+                        Insert
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    <input
+                      type="url"
+                      value={formData.featuredImage}
+                      onChange={(e) => handleInputChange('featuredImage', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:text-white font-mono"
+                      placeholder="Image URL"
+                    />
+                    <input
+                      type="text"
+                      value={formData.featuredImageAlt}
+                      onChange={(e) => handleInputChange('featuredImageAlt', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:text-white"
+                      placeholder="Alt text for accessibility"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="aspect-video bg-gray-50 dark:bg-gray-800/50 flex flex-col items-center justify-center p-4">
+                  <PhotoIcon className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-2" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center mb-3">
+                    Used as hero image in blog header
+                  </p>
+                  {phase1Complete && !aiGenerating && (
+                    <button
+                      onClick={handlePhase2ImageGeneration}
+                      className="text-xs px-3 py-1.5 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 rounded-lg transition-colors"
+                    >
+                      Generate
+                    </button>
+                  )}
+                </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Featured Image */}
-              {formData.featuredImage && (
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Featured Image
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => handleInsertImageIntoContent(formData.featuredImage, formData.featuredImageAlt || 'Featured image')}
-                      className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                      title="Insert this image at the top of the content"
-                    >
-                      Insert into Content
-                    </button>
-                  </div>
-                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 relative min-h-[100px]">
-                    <ImageWithFallback
-                      src={formData.featuredImage}
-                      alt={formData.featuredImageAlt || 'Featured image'}
-                      className="w-full h-auto max-h-64 object-cover"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Image URL
-                      </label>
-                      <input
-                        type="url"
-                        value={formData.featuredImage}
-                        onChange={(e) => handleInputChange('featuredImage', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-mono"
-                        placeholder="https://example.com/image.jpg"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Alt Text
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.featuredImageAlt}
-                        onChange={(e) => handleInputChange('featuredImageAlt', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                        placeholder="Describe the featured image"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Thumbnail Image */}
-              {formData.thumbnailImage && (
-                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900/50">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Thumbnail Image (Card Preview)
-                  </label>
-                  <div className="mb-3 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center relative min-h-[100px]">
+            {/* ═══ THUMBNAIL IMAGE (1:1) ═══ */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900/50 shadow-sm">
+              <div className="bg-gradient-to-r from-green-500 to-teal-500 px-4 py-2">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-white/80" />
+                  Thumbnail
+                  <span className="text-xs text-white/70">(1:1)</span>
+                </h3>
+              </div>
+              {formData.thumbnailImage ? (
+                <>
+                  <div className="aspect-square bg-gray-100 dark:bg-gray-800 relative flex items-center justify-center">
                     <ImageWithFallback
                       src={formData.thumbnailImage}
                       alt={formData.thumbnailImageAlt || 'Thumbnail'}
-                      className="w-32 h-32 object-cover"
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute bottom-2 left-2 text-xs bg-black/50 text-white px-2 py-0.5 rounded backdrop-blur-sm">
+                      Card preview
+                    </span>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    <input
+                      type="url"
+                      value={formData.thumbnailImage}
+                      onChange={(e) => handleInputChange('thumbnailImage', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded focus:ring-2 focus:ring-green-500 dark:bg-gray-800 dark:text-white font-mono"
+                      placeholder="Thumbnail URL"
+                    />
+                    <input
+                      type="text"
+                      value={formData.thumbnailImageAlt}
+                      onChange={(e) => handleInputChange('thumbnailImageAlt', e.target.value)}
+                      className="w-full px-2 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded focus:ring-2 focus:ring-green-500 dark:bg-gray-800 dark:text-white"
+                      placeholder="Alt text"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Image URL
-                      </label>
-                      <input
-                        type="url"
-                        value={formData.thumbnailImage}
-                        onChange={(e) => handleInputChange('thumbnailImage', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                        placeholder="https://example.com/thumbnail.jpg"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                        Alt Text
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.thumbnailImageAlt}
-                        onChange={(e) => handleInputChange('thumbnailImageAlt', e.target.value)}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                        placeholder="Describe the thumbnail image"
-                      />
-                    </div>
-                  </div>
+                </>
+              ) : (
+                <div className="aspect-square bg-gray-50 dark:bg-gray-800/50 flex flex-col items-center justify-center p-4">
+                  <PhotoIcon className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-2" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center mb-3">
+                    Square image for blog cards
+                  </p>
+                  {phase1Complete && !aiGenerating && (
+                    <button
+                      onClick={handlePhase2ImageGeneration}
+                      className="text-xs px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300 rounded-lg transition-colors"
+                    >
+                      Generate
+                    </button>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Content Images */}
-            {contentImages.length > 0 && (
-              <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Content Images ({contentImages.length})
-                  </label>
+            {/* ═══ CONTENT IMAGES ═══ */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-900/50 shadow-sm">
+              <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-white/80" />
+                  Content Images
+                  <span className="text-xs text-white/70">({contentImages.length})</span>
+                </h3>
+                {contentImages.length > 0 && (
                   <button
                     type="button"
                     onClick={() => {
-                      // Insert all content images at once
                       contentImages.forEach((img, idx) => {
                         setTimeout(() => {
                           handleInsertImageIntoContent(img.url, img.alt || `Content image ${idx + 1}`);
-                        }, idx * 100); // Stagger insertions
+                        }, idx * 100);
                       });
                     }}
-                    className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                    className="text-xs px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded transition-colors"
                   >
-                    Insert All into Content
+                    Insert All
                   </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {contentImages.map((image, index) => (
-                    <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-900/50">
-                      <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-700 relative min-h-[120px]">
-                        <ImageWithFallback
-                          src={image.url}
-                          alt={image.alt || `Content image ${index + 1}`}
-                          className="w-full h-48 object-cover"
-                        />
-                      </div>
-                      <div className="p-3 space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => handleInsertImageIntoContent(image.url, image.alt || `Content image ${index + 1}`)}
-                          className="w-full text-xs px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors mb-2"
-                        >
-                          Insert into Content
-                        </button>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                            Image URL
-                          </label>
-                          <input
-                            type="url"
-                            value={image.url}
-                            onChange={(e) => {
-                              const updated = [...contentImages];
-                              updated[index] = { ...updated[index], url: e.target.value };
-                              setContentImages(updated);
-                            }}
-                            className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white font-mono"
-                            placeholder="https://example.com/image.jpg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                            Alt Text
-                          </label>
-                          <input
-                            type="text"
-                            value={image.alt}
-                            onChange={(e) => {
-                              const updated = [...contentImages];
-                              updated[index] = { ...updated[index], alt: e.target.value };
-                              setContentImages(updated);
-                            }}
-                            className="w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                            placeholder={`Content image ${index + 1} description`}
-                          />
-                        </div>
-                        <button
-                          onClick={() => {
-                            const updated = contentImages.filter((_, i) => i !== index);
-                            setContentImages(updated);
-                          }}
-                          className="w-full mt-2 px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                        >
-                          Remove Image
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                )}
               </div>
-            )}
+              {contentImages.length > 0 ? (
+                <div className="p-3">
+                  <div className="grid grid-cols-2 gap-2 max-h-[250px] overflow-y-auto">
+                    {contentImages.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded overflow-hidden">
+                          <ImageWithFallback
+                            src={image.url}
+                            alt={image.alt || `Content ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleInsertImageIntoContent(image.url, image.alt || `Content image ${index + 1}`)}
+                            className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                          >
+                            Insert
+                          </button>
+                          <button
+                            onClick={() => {
+                              const updated = contentImages.filter((_, i) => i !== index);
+                              setContentImages(updated);
+                            }}
+                            className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <span className="absolute bottom-1 left-1 text-[10px] bg-black/60 text-white px-1 rounded">
+                          {index + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-[200px] bg-gray-50 dark:bg-gray-800/50 flex flex-col items-center justify-center p-4">
+                  <PhotoIcon className="w-10 h-10 text-gray-300 dark:text-gray-600 mb-2" />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center mb-3">
+                    Images for blog sections
+                  </p>
+                  {phase1Complete && !aiGenerating && (
+                    <button
+                      onClick={handlePhase2ImageGeneration}
+                      className="text-xs px-3 py-1.5 bg-orange-100 hover:bg-orange-200 dark:bg-orange-900/30 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300 rounded-lg transition-colors"
+                    >
+                      Generate
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+
+          {/* Helpful tip */}
+          {!phase2Complete && phase1Complete && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/20 px-3 py-2 rounded-lg">
+              <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+              <span>
+                <strong>Tip:</strong> Click &quot;Generate All Images&quot; to create header, thumbnail, and content images. They&apos;ll be automatically inserted into your post!
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* Webflow Publishing Fields */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
