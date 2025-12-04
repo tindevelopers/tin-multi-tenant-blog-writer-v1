@@ -147,7 +147,8 @@ export async function discoverWebflowStructure(
   // Get the published domain for URL construction
   let publishedDomain = customDomain;
   if (!publishedDomain) {
-    publishedDomain = await getWebflowPublishedDomain(apiToken, siteId);
+    const fetchedDomain = await getWebflowPublishedDomain(apiToken, siteId);
+    publishedDomain = fetchedDomain || undefined;
   }
   // Fallback to staging domain if all else fails
   if (!publishedDomain) {
