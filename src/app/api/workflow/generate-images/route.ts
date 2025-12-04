@@ -39,10 +39,24 @@ async function uploadToTenantCloudinary(
 
     // Create signature for signed upload
     const timestamp = Math.round(new Date().getTime() / 1000);
-    const publicId = `${folder}/${filename.replace(/\.[^/.]+$/, '')}`;
+    const publicId = `${filename.replace(/\.[^/.]+$/, '')}`; // Don't include folder in public_id
     
-    // Parameters to sign (must be in alphabetical order)
-    const paramsToSign = `folder=${folder}&overwrite=true&public_id=${publicId}&timestamp=${timestamp}`;
+    // Build params object - ALL params must be signed (alphabetical order)
+    const params: Record<string, string> = {
+      folder: folder,
+      overwrite: 'true',
+      public_id: publicId,
+      timestamp: timestamp.toString(),
+    };
+    
+    // Add context if altText provided - MUST be in signature
+    if (altText) {
+      params.context = `alt=${altText}|caption=${altText}`;
+    }
+    
+    // Create signature from sorted params
+    const sortedKeys = Object.keys(params).sort();
+    const paramsToSign = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
     const signature = crypto.createHash('sha1')
       .update(paramsToSign + credentials.api_secret)
       .digest('hex');
@@ -59,17 +73,15 @@ async function uploadToTenantCloudinary(
     };
 
     appendField('api_key', credentials.api_key);
-    appendField('timestamp', timestamp.toString());
+    appendField('timestamp', params.timestamp);
     appendField('signature', signature);
-    appendField('public_id', publicId);
-    appendField('folder', folder);
-    appendField('overwrite', 'true');
-    appendField('file', dataUri);
-    
-    // Add context metadata for alt text
-    if (altText) {
-      appendField('context', `alt=${altText}|caption=${altText}`);
+    appendField('public_id', params.public_id);
+    appendField('folder', params.folder);
+    appendField('overwrite', params.overwrite);
+    if (params.context) {
+      appendField('context', params.context);
     }
+    appendField('file', dataUri);
     
     formDataParts.push(`--${boundary}--\r\n`);
 
