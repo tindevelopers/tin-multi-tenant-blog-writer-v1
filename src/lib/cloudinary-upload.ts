@@ -1,11 +1,17 @@
 /**
  * Cloudinary Upload Utility
  * Handles uploading images to Cloudinary using organization-specific credentials
+ * 
+ * MULTI-TENANT ARCHITECTURE:
+ * - Each organization has their own Cloudinary account (stored in organizations.settings.cloudinary)
+ * - Images are uploaded directly to tenant's Cloudinary using their credentials
+ * - Fallback to Blog Writer API's shared Cloudinary if tenant has no credentials
  */
 
 import { createServiceClient } from '@/lib/supabase/service';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
+import * as crypto from 'crypto';
 
 interface CloudinaryCredentials {
   cloud_name: string;
@@ -79,7 +85,144 @@ export async function getCloudinaryCredentials(orgId: string): Promise<Cloudinar
 }
 
 /**
- * Upload image using Cloudinary API via Blog Writer API
+ * Upload image directly to tenant's Cloudinary account
+ * Uses the organization's own credentials for complete data isolation
+ * 
+ * @param base64Data - Raw base64 image data (with or without data URI prefix)
+ * @param orgId - Organization ID to fetch credentials
+ * @param folder - Cloudinary folder path (e.g., "blog-images/queue_123/headers")
+ * @param filename - Image filename (e.g., "header_1234567890.png")
+ * @param altText - Optional alt text for the image
+ * @returns CloudinaryUploadResult or null if upload fails
+ */
+export async function uploadToTenantCloudinary(
+  base64Data: string,
+  orgId: string,
+  folder: string,
+  filename: string,
+  altText?: string | null
+): Promise<CloudinaryUploadResult | null> {
+  try {
+    // Get tenant's Cloudinary credentials
+    const credentials = await getCloudinaryCredentials(orgId);
+    
+    if (!credentials) {
+      logger.warn(`No Cloudinary credentials for org ${orgId}, cannot upload directly`);
+      return null;
+    }
+
+    logger.info('📤 Uploading to tenant Cloudinary', {
+      cloudName: credentials.cloud_name,
+      folder,
+      filename,
+      orgId,
+    });
+
+    // Strip data URI prefix if present
+    let rawBase64 = base64Data;
+    if (rawBase64.startsWith('data:')) {
+      rawBase64 = rawBase64.split(',')[1] || rawBase64;
+    }
+
+    // Create signature for signed upload
+    const timestamp = Math.round(Date.now() / 1000);
+    const publicId = filename.replace(/\.[^/.]+$/, ''); // Remove file extension
+    
+    // Build params object - ALL params must be signed (alphabetical order)
+    const params: Record<string, string> = {
+      folder: folder,
+      overwrite: 'true',
+      public_id: publicId,
+      timestamp: timestamp.toString(),
+    };
+    
+    // Add context if altText provided - MUST be in signature
+    if (altText) {
+      params.context = `alt=${altText}|caption=${altText}`;
+    }
+    
+    // Create signature from sorted params
+    const sortedKeys = Object.keys(params).sort();
+    const paramsToSign = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
+    const signature = crypto.createHash('sha1')
+      .update(paramsToSign + credentials.api_secret)
+      .digest('hex');
+
+    // Build form data for Cloudinary upload
+    const dataUri = `data:image/png;base64,${rawBase64}`;
+    const boundary = `----CloudinaryUpload${crypto.randomBytes(16).toString('hex')}`;
+    const formDataParts: string[] = [];
+
+    const appendField = (name: string, value: string) => {
+      formDataParts.push(`--${boundary}\r\n`);
+      formDataParts.push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+      formDataParts.push(`${value}\r\n`);
+    };
+
+    appendField('api_key', credentials.api_key);
+    appendField('timestamp', params.timestamp);
+    appendField('signature', signature);
+    appendField('public_id', params.public_id);
+    appendField('folder', params.folder);
+    appendField('overwrite', params.overwrite);
+    if (params.context) {
+      appendField('context', params.context);
+    }
+    appendField('file', dataUri);
+    
+    formDataParts.push(`--${boundary}--\r\n`);
+
+    const formDataBody = Buffer.from(formDataParts.join(''), 'utf-8');
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${credentials.cloud_name}/image/upload`;
+
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': formDataBody.length.toString(),
+      },
+      body: formDataBody,
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Tenant Cloudinary upload failed', { 
+        status: response.status, 
+        error: errorText.substring(0, 300),
+        cloudName: credentials.cloud_name,
+        folder,
+      });
+      return null;
+    }
+
+    const result = await response.json();
+    
+    logger.info('✅ Image uploaded to tenant Cloudinary', { 
+      publicId: result.public_id,
+      url: result.secure_url?.substring(0, 80),
+      cloudName: credentials.cloud_name,
+    });
+
+    return {
+      public_id: result.public_id,
+      secure_url: result.secure_url || result.url,
+      url: result.url,
+      width: result.width,
+      height: result.height,
+      format: result.format,
+      bytes: result.bytes,
+      resource_type: result.resource_type || 'image',
+    };
+  } catch (error) {
+    logger.error('Error uploading to tenant Cloudinary:', error);
+    return null;
+  }
+}
+
+/**
+ * Upload image using Cloudinary API via Blog Writer API (FALLBACK)
+ * Used when tenant doesn't have their own Cloudinary credentials configured
  */
 export async function uploadViaBlogWriterAPI(
   imageUrl: string,

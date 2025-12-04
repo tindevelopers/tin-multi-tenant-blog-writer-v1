@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 import { handlePhase2Completion } from '@/lib/workflow-phase-manager';
-import { getCloudinaryCredentials } from '@/lib/cloudinary-upload';
-import * as crypto from 'crypto';
+import { uploadToTenantCloudinary as uploadToTenantCloudinaryUtil } from '@/lib/cloudinary-upload';
 
 /**
- * Helper to upload base64 image data directly to tenant's Cloudinary account
- * This uses the organization's own Cloudinary credentials (Option 3: Per-tenant accounts)
+ * Wrapper for tenant Cloudinary upload with fallback to Blog Writer API
+ * Uses the shared utility from cloudinary-upload.ts
  */
 async function uploadToTenantCloudinary(
   base64Data: string,
@@ -16,116 +15,19 @@ async function uploadToTenantCloudinary(
   altText: string,
   orgId: string
 ): Promise<{ url: string; publicId: string } | null> {
-  try {
-    // Get tenant's Cloudinary credentials
-    const credentials = await getCloudinaryCredentials(orgId);
-    
-    if (!credentials) {
-      logger.warn(`No Cloudinary credentials found for org ${orgId}, falling back to Blog Writer API`);
-      return uploadToCloudinaryViaAPI(base64Data, filename, folder, altText);
-    }
-
-    logger.info('📤 Uploading to tenant Cloudinary account', {
-      cloudName: credentials.cloud_name,
-      folder,
-      orgId,
-    });
-
-    // Strip data URI prefix if present
-    let rawBase64 = base64Data;
-    if (rawBase64.startsWith('data:')) {
-      rawBase64 = rawBase64.split(',')[1] || rawBase64;
-    }
-
-    // Create signature for signed upload
-    const timestamp = Math.round(new Date().getTime() / 1000);
-    const publicId = `${filename.replace(/\.[^/.]+$/, '')}`; // Don't include folder in public_id
-    
-    // Build params object - ALL params must be signed (alphabetical order)
-    const params: Record<string, string> = {
-      folder: folder,
-      overwrite: 'true',
-      public_id: publicId,
-      timestamp: timestamp.toString(),
-    };
-    
-    // Add context if altText provided - MUST be in signature
-    if (altText) {
-      params.context = `alt=${altText}|caption=${altText}`;
-    }
-    
-    // Create signature from sorted params
-    const sortedKeys = Object.keys(params).sort();
-    const paramsToSign = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
-    const signature = crypto.createHash('sha1')
-      .update(paramsToSign + credentials.api_secret)
-      .digest('hex');
-
-    // Build form data for Cloudinary upload
-    const dataUri = `data:image/png;base64,${rawBase64}`;
-    const boundary = `----WebKitFormBoundary${crypto.randomBytes(16).toString('hex')}`;
-    const formDataParts: string[] = [];
-
-    const appendField = (name: string, value: string) => {
-      formDataParts.push(`--${boundary}\r\n`);
-      formDataParts.push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
-      formDataParts.push(`${value}\r\n`);
-    };
-
-    appendField('api_key', credentials.api_key);
-    appendField('timestamp', params.timestamp);
-    appendField('signature', signature);
-    appendField('public_id', params.public_id);
-    appendField('folder', params.folder);
-    appendField('overwrite', params.overwrite);
-    if (params.context) {
-      appendField('context', params.context);
-    }
-    appendField('file', dataUri);
-    
-    formDataParts.push(`--${boundary}--\r\n`);
-
-    const formDataBody = Buffer.from(formDataParts.join(''), 'utf-8');
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${credentials.cloud_name}/image/upload`;
-
-    const response = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        'Content-Length': formDataBody.length.toString(),
-      },
-      body: formDataBody,
-      signal: AbortSignal.timeout(60000),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error('Tenant Cloudinary upload failed', { 
-        status: response.status, 
-        error: errorText.substring(0, 200),
-        cloudName: credentials.cloud_name,
-      });
-      // Fallback to Blog Writer API
-      return uploadToCloudinaryViaAPI(base64Data, filename, folder, altText);
-    }
-
-    const result = await response.json();
-    
-    logger.info('✅ Image uploaded to tenant Cloudinary', { 
+  // Try direct upload to tenant's Cloudinary first
+  const result = await uploadToTenantCloudinaryUtil(base64Data, orgId, folder, filename, altText);
+  
+  if (result) {
+    return {
+      url: result.secure_url,
       publicId: result.public_id,
-      url: result.secure_url?.substring(0, 80),
-      cloudName: credentials.cloud_name,
-    });
-
-    return { 
-      url: result.secure_url || result.url, 
-      publicId: result.public_id 
     };
-  } catch (error) {
-    logger.error('Tenant Cloudinary upload error', { error, orgId });
-    // Fallback to Blog Writer API
-    return uploadToCloudinaryViaAPI(base64Data, filename, folder, altText);
   }
+  
+  // Fallback to Blog Writer API if tenant upload fails
+  logger.warn(`Tenant Cloudinary upload failed for org ${orgId}, falling back to Blog Writer API`);
+  return uploadToCloudinaryViaAPI(base64Data, filename, folder, altText);
 }
 
 /**
