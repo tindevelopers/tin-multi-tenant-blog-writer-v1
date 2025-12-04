@@ -155,6 +155,18 @@ export default function EditDraftPage() {
     insertedLinks: [],
   });
 
+  // Authors state
+  const [authors, setAuthors] = useState<Array<{
+    id: string;
+    name: string;
+    email?: string;
+    bio?: string;
+    image_url?: string;
+    role?: string;
+  }>>([]);
+  const [selectedAuthorId, setSelectedAuthorId] = useState<string | null>(null);
+  const [authorsLoading, setAuthorsLoading] = useState(false);
+
   // Determine phase completion status
   const phase1Complete = workflowPhase && ['phase_1_content', 'phase_2_images', 'phase_3_enhancement', 'completed'].includes(workflowPhase);
   const phase2Complete = workflowPhase && ['phase_2_images', 'phase_3_enhancement', 'completed'].includes(workflowPhase);
@@ -256,6 +268,59 @@ export default function EditDraftPage() {
     });
     setFieldValidation(validation);
   }, [formData, contentStats.wordCount, contentStats.readTime]);
+
+  // Fetch authors on mount
+  useEffect(() => {
+    async function fetchAuthors() {
+      setAuthorsLoading(true);
+      try {
+        const response = await fetch('/api/authors');
+        if (response.ok) {
+          const data = await response.json();
+          setAuthors(data.authors || []);
+          
+          // If we have a current author name, try to find matching author
+          if (formData.authorName && data.authors) {
+            const matchingAuthor = data.authors.find(
+              (a: { name: string }) => a.name.toLowerCase() === formData.authorName.toLowerCase()
+            );
+            if (matchingAuthor) {
+              setSelectedAuthorId(matchingAuthor.id);
+            }
+          } else if (data.defaultAuthorId) {
+            setSelectedAuthorId(data.defaultAuthorId);
+          }
+        }
+      } catch (error) {
+        logger.error('Failed to fetch authors:', error);
+      } finally {
+        setAuthorsLoading(false);
+      }
+    }
+    fetchAuthors();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle author selection
+  const handleAuthorSelect = (authorId: string) => {
+    setSelectedAuthorId(authorId);
+    const author = authors.find(a => a.id === authorId);
+    if (author) {
+      setFormData(prev => ({
+        ...prev,
+        authorName: author.name,
+        authorImage: author.image_url || '',
+        authorBio: author.bio || '',
+      }));
+    } else if (authorId === 'custom') {
+      // Clear fields for custom entry
+      setFormData(prev => ({
+        ...prev,
+        authorName: '',
+        authorImage: '',
+        authorBio: '',
+      }));
+    }
+  };
 
   const buildMetadataPayload = () => {
     const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
@@ -2388,7 +2453,7 @@ export default function EditDraftPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 <span className="flex items-center gap-2">
-                  Author Name
+                  Author
                   {fieldValidation?.missingRecommended.includes('author_name') && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 rounded">
                       <ExclamationTriangleIcon className="w-3 h-3" />
@@ -2403,13 +2468,57 @@ export default function EditDraftPage() {
                   )}
                 </span>
               </label>
-              <input
-                type="text"
-                value={formData.authorName}
-                onChange={(e) => handleInputChange('authorName', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                placeholder="e.g., Jane Smith"
-              />
+              {authorsLoading ? (
+                <div className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-500">
+                  Loading authors...
+                </div>
+              ) : (
+                <select
+                  value={selectedAuthorId || 'custom'}
+                  onChange={(e) => handleAuthorSelect(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select an author...</option>
+                  {authors.map((author) => (
+                    <option key={author.id} value={author.id}>
+                      {author.name} {author.role ? `(${author.role})` : ''}
+                    </option>
+                  ))}
+                  <option value="custom">+ Enter custom author</option>
+                </select>
+              )}
+              {/* Show custom input if "custom" is selected */}
+              {selectedAuthorId === 'custom' && (
+                <input
+                  type="text"
+                  value={formData.authorName}
+                  onChange={(e) => handleInputChange('authorName', e.target.value)}
+                  className="w-full px-3 py-2 mt-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  placeholder="Enter author name"
+                />
+              )}
+              {/* Show selected author preview */}
+              {selectedAuthorId && selectedAuthorId !== 'custom' && formData.authorName && (
+                <div className="mt-2 flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  {formData.authorImage && (
+                    <img
+                      src={formData.authorImage}
+                      alt={formData.authorName}
+                      className="w-10 h-10 rounded-full object-cover"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {formData.authorName}
+                    </p>
+                    {formData.authorBio && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {formData.authorBio}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
