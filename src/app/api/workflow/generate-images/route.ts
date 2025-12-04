@@ -4,6 +4,243 @@ import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 import { handlePhase2Completion } from '@/lib/workflow-phase-manager';
 
 /**
+ * Helper to upload base64 image data to Cloudinary via Blog Writer API
+ */
+async function uploadToCloudinary(
+  base64Data: string,
+  filename: string,
+  folder: string,
+  altText: string
+): Promise<{ url: string; publicId: string } | null> {
+  try {
+    const apiUrl = BLOG_WRITER_API_URL;
+    
+    // Strip data URI prefix if present - backend expects raw base64
+    let rawBase64 = base64Data;
+    if (rawBase64.startsWith('data:')) {
+      rawBase64 = rawBase64.split(',')[1] || rawBase64;
+    }
+    
+    const response = await fetch(`${apiUrl}/api/v1/media/upload/cloudinary`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.BLOG_WRITER_API_KEY || ''}`,
+      },
+      body: JSON.stringify({
+        media_data: rawBase64,
+        filename,
+        folder,
+        alt_text: altText,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.warn('Cloudinary upload failed', { status: response.status, error: errorText.substring(0, 200) });
+      return null;
+    }
+
+    const result = await response.json();
+    const uploadedUrl = result.result?.url || result.secure_url || result.url;
+    const publicId = result.result?.id || result.public_id;
+    
+    if (uploadedUrl) {
+      logger.info('✅ Image uploaded to Cloudinary', { url: uploadedUrl.substring(0, 80) });
+      return { url: uploadedUrl, publicId };
+    }
+    return null;
+  } catch (error) {
+    logger.error('Cloudinary upload error', { error });
+    return null;
+  }
+}
+
+/**
+ * Helper to poll for async job completion and get base64 image data
+ */
+async function pollForJobCompletion(
+  jobId: string,
+  maxAttempts = 30,
+  intervalMs = 2000
+): Promise<{ image_data?: string; image_url?: string; width?: number; height?: number } | null> {
+  const apiUrl = BLOG_WRITER_API_URL;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+    
+    const statusResponse = await fetch(`${apiUrl}/api/v1/images/jobs/${jobId}`, {
+      headers: {
+        'Authorization': `Bearer ${process.env.BLOG_WRITER_API_KEY || ''}`,
+      },
+    });
+    
+    if (!statusResponse.ok) {
+      logger.debug(`Job poll attempt ${attempt}: Status check failed (${statusResponse.status})`);
+      continue;
+    }
+    
+    const statusResult = await statusResponse.json();
+    logger.debug(`Job poll attempt ${attempt}: Status = ${statusResult.status}`);
+    
+    if (statusResult.status === 'completed') {
+      // Extract image data from various response formats
+      const images = statusResult.result?.images;
+      if (images && images.length > 0) {
+        return images[0];
+      }
+      return statusResult.result || statusResult;
+    } else if (statusResult.status === 'failed') {
+      logger.error('Image generation job failed', { error: statusResult.error_message });
+      return null;
+    }
+  }
+  
+  logger.error('Image generation job timed out');
+  return null;
+}
+
+/**
+ * Generate image via Blog Writer API (async job) and upload to Cloudinary
+ */
+async function generateAndUploadImage(
+  prompt: string,
+  options: {
+    width: number;
+    height: number;
+    aspectRatio: string;
+    quality: string;
+    style?: string;
+    folder: string;
+    filename: string;
+    altText: string;
+  }
+): Promise<{ url: string; alt: string; width: number; height: number } | null> {
+  const apiUrl = BLOG_WRITER_API_URL;
+  
+  try {
+    // Step 1: Submit async image generation job
+    logger.info('Submitting image generation job', { prompt: prompt.substring(0, 50) });
+    
+    const generateResponse = await fetch(`${apiUrl}/api/v1/images/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.BLOG_WRITER_API_KEY || ''}`,
+      },
+      body: JSON.stringify({
+        prompt,
+        provider: 'stability_ai',
+        style: options.style || 'photographic',
+        aspect_ratio: options.aspectRatio,
+        quality: options.quality,
+        width: options.width,
+        height: options.height,
+        negative_prompt: 'blurry, low quality, watermark, text overlay, logo',
+      }),
+    });
+
+    if (!generateResponse.ok) {
+      const errorText = await generateResponse.text();
+      logger.error('Image generation request failed', { status: generateResponse.status, error: errorText.substring(0, 200) });
+      return null;
+    }
+
+    const generateResult = await generateResponse.json();
+    
+    // Step 2: Handle async job or sync response
+    let imageData: { image_data?: string; image_url?: string; width?: number; height?: number } | null = null;
+    
+    if (generateResult.job_id) {
+      // Async job - poll for completion
+      logger.info('Image job queued, polling for completion', { jobId: generateResult.job_id });
+      imageData = await pollForJobCompletion(generateResult.job_id);
+    } else if (generateResult.images?.[0]) {
+      // Sync response
+      imageData = generateResult.images[0];
+    } else if (generateResult.image_data || generateResult.image_url) {
+      imageData = generateResult;
+    }
+
+    if (!imageData) {
+      logger.error('No image data returned from generation');
+      return null;
+    }
+
+    // Step 3: Upload to Cloudinary
+    if (imageData.image_data) {
+      // We have base64 data - upload to Cloudinary
+      const cloudinaryResult = await uploadToCloudinary(
+        imageData.image_data,
+        options.filename,
+        options.folder,
+        options.altText
+      );
+      
+      if (cloudinaryResult) {
+        return {
+          url: cloudinaryResult.url,
+          alt: options.altText,
+          width: imageData.width || options.width,
+          height: imageData.height || options.height,
+        };
+      }
+      
+      // Fallback to image_url if Cloudinary upload fails
+      if (imageData.image_url) {
+        logger.warn('Cloudinary upload failed, using temporary URL');
+        return {
+          url: imageData.image_url,
+          alt: options.altText,
+          width: imageData.width || options.width,
+          height: imageData.height || options.height,
+        };
+      }
+    } else if (imageData.image_url) {
+      // No base64 data, fetch the URL and upload to Cloudinary
+      try {
+        const imageResponse = await fetch(imageData.image_url);
+        if (imageResponse.ok) {
+          const arrayBuffer = await imageResponse.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          
+          const cloudinaryResult = await uploadToCloudinary(
+            base64,
+            options.filename,
+            options.folder,
+            options.altText
+          );
+          
+          if (cloudinaryResult) {
+            return {
+              url: cloudinaryResult.url,
+              alt: options.altText,
+              width: imageData.width || options.width,
+              height: imageData.height || options.height,
+            };
+          }
+        }
+      } catch (fetchError) {
+        logger.warn('Failed to fetch image URL for Cloudinary upload', { error: fetchError });
+      }
+      
+      // Fallback to temporary URL
+      return {
+        url: imageData.image_url,
+        alt: options.altText,
+        width: imageData.width || options.width,
+        height: imageData.height || options.height,
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    logger.error('Image generation and upload error', { error });
+    return null;
+  }
+}
+
+/**
  * POST /api/workflow/generate-images
  * 
  * Phase 2: Generate featured and content images
@@ -108,110 +345,81 @@ export async function POST(request: NextRequest) {
 
     const results: {
       featured_image?: { url: string; alt: string; width?: number; height?: number };
-      header_image?: { url: string; alt: string; width?: number; height?: number }; // NEW: Header image
-      thumbnail_image?: { url: string; alt: string; width?: number; height?: number }; // NEW: Thumbnail
-      content_images?: Array<{ url: string; alt: string; position?: number }>;
+      header_image?: { url: string; alt: string; width?: number; height?: number }; // Header image for Webflow
+      thumbnail_image?: { url: string; alt: string; width?: number; height?: number }; // Thumbnail image
+      content_images?: Array<{ url: string; alt: string; position?: number; width?: number; height?: number }>;
       post_id?: string;
     } = {};
 
-    const apiUrl = BLOG_WRITER_API_URL;
     const keywordText = keywords?.length > 0 
       ? ` featuring ${keywords.slice(0, 3).join(', ')}` 
       : '';
 
-    // Generate Header/Hero Image (16:9, 1920x1080) - for Webflow header
+    // Generate Header/Hero Image (16:9, 1920x1080) - for Webflow header + upload to Cloudinary
     if (generate_featured) {
       try {
         const headerPrompt = contentAnalysis?.headerPrompt || 
           `Professional blog post header image: ${title || topic}${keywordText}, high quality, modern design, clean background, hero image`;
         
-        const response = await fetch(`${apiUrl}/api/v1/images/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.BLOG_WRITER_API_KEY || ''}`,
-          },
-          body: JSON.stringify({
-            prompt: headerPrompt,
-            provider: 'stability_ai',
-            style: style || 'photographic',
-            aspect_ratio: '16:9',
-            quality: 'high',
-            width: 1920,
-            height: 1080,
-            negative_prompt: 'blurry, low quality, watermark, text overlay, logo',
-          }),
+        const timestamp = Date.now();
+        const headerImage = await generateAndUploadImage(headerPrompt, {
+          width: 1920,
+          height: 1080,
+          aspectRatio: '16:9',
+          quality: 'high',
+          style: style || 'photographic',
+          folder: `blog-images/${queue_id}/headers`,
+          filename: `header_${timestamp}.png`,
+          altText: `Header image for ${title || topic}`,
         });
 
-        if (response.ok) {
-          const imageData = await response.json();
-          if (imageData.success && imageData.images?.length > 0) {
-            const image = imageData.images[0];
-            results.header_image = {
-              url: image.image_url || '',
-              alt: `Header image for ${title || topic}`,
-              width: image.width || 1920,
-              height: image.height || 1080,
-            };
-            // Also set as featured_image for backward compatibility
-            results.featured_image = results.header_image;
-            logger.info('Header image generated successfully');
-          }
+        if (headerImage) {
+          results.header_image = headerImage;
+          // Also set as featured_image for backward compatibility
+          results.featured_image = headerImage;
+          logger.info('✅ Header image generated and uploaded to Cloudinary');
         } else {
           logger.warn('Header image generation failed, continuing without image');
         }
-      } catch (imgError: any) {
-        logger.warn('Header image generation error', { error: imgError.message });
+      } catch (imgError: unknown) {
+        const errorMessage = imgError instanceof Error ? imgError.message : String(imgError);
+        logger.warn('Header image generation error', { error: errorMessage });
         // Continue without header image
       }
     }
 
-    // Generate Thumbnail Image (1:1, 400x400) - for Webflow thumbnail
+    // Generate Thumbnail Image (1:1, 400x400) - for Webflow thumbnail + upload to Cloudinary
     if (generate_thumbnail) {
       try {
         const thumbnailPrompt = contentAnalysis?.thumbnailPrompt || 
           `Square thumbnail image for blog post: ${title || topic}${keywordText}, modern, clean, professional, 1:1 aspect ratio`;
         
-        const response = await fetch(`${apiUrl}/api/v1/images/generate`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.BLOG_WRITER_API_KEY || ''}`,
-          },
-          body: JSON.stringify({
-            prompt: thumbnailPrompt,
-            provider: 'stability_ai',
-            style: style || 'photographic',
-            aspect_ratio: '1:1',
-            quality: 'standard',
-            width: 400,
-            height: 400,
-            negative_prompt: 'blurry, low quality, watermark, text overlay, logo',
-          }),
+        const timestamp = Date.now();
+        const thumbnailImage = await generateAndUploadImage(thumbnailPrompt, {
+          width: 400,
+          height: 400,
+          aspectRatio: '1:1',
+          quality: 'standard',
+          style: style || 'photographic',
+          folder: `blog-images/${queue_id}/thumbnails`,
+          filename: `thumbnail_${timestamp}.png`,
+          altText: `Thumbnail for ${title || topic}`,
         });
 
-        if (response.ok) {
-          const imageData = await response.json();
-          if (imageData.success && imageData.images?.length > 0) {
-            const image = imageData.images[0];
-            results.thumbnail_image = {
-              url: image.image_url || '',
-              alt: `Thumbnail for ${title || topic}`,
-              width: image.width || 400,
-              height: image.height || 400,
-            };
-            logger.info('Thumbnail image generated successfully');
-          }
+        if (thumbnailImage) {
+          results.thumbnail_image = thumbnailImage;
+          logger.info('✅ Thumbnail image generated and uploaded to Cloudinary');
         } else {
           logger.warn('Thumbnail image generation failed, continuing without thumbnail');
         }
-      } catch (imgError: any) {
-        logger.warn('Thumbnail image generation error', { error: imgError.message });
+      } catch (imgError: unknown) {
+        const errorMessage = imgError instanceof Error ? imgError.message : String(imgError);
+        logger.warn('Thumbnail image generation error', { error: errorMessage });
         // Continue without thumbnail
       }
     }
 
-    // Generate Content Images - contextual to blog sections
+    // Generate Content Images - contextual to blog sections + upload to Cloudinary
     if (generate_content_images && contentAnalysis) {
       results.content_images = [];
       const sectionsToImage = contentAnalysis.sections.slice(0, contentAnalysis.imageCount);
@@ -220,45 +428,35 @@ export async function POST(request: NextRequest) {
         sectionCount: sectionsToImage.length,
       });
 
-      // Generate images for each section
+      // Generate images for each section (in sequence to avoid rate limits)
       for (const section of sectionsToImage) {
         try {
           const sectionPrompt = `Blog post image illustrating: ${section.heading}. ${section.text.substring(0, 200)}, professional, relevant to content`;
           
-          const response = await fetch(`${apiUrl}/api/v1/images/generate`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.BLOG_WRITER_API_KEY || ''}`,
-            },
-            body: JSON.stringify({
-              prompt: sectionPrompt,
-              provider: 'stability_ai',
-              style: style || 'photographic',
-              aspect_ratio: '16:9',
-              quality: 'standard',
-              width: 1200,
-              height: 675,
-              negative_prompt: 'blurry, low quality, watermark, text overlay, logo',
-            }),
+          const timestamp = Date.now();
+          const contentImage = await generateAndUploadImage(sectionPrompt, {
+            width: 1200,
+            height: 675,
+            aspectRatio: '16:9',
+            quality: 'standard',
+            style: style || 'photographic',
+            folder: `blog-images/${queue_id}/content`,
+            filename: `content_${section.position}_${timestamp}.png`,
+            altText: `Image for ${section.heading}`,
           });
 
-          if (response.ok) {
-            const imageData = await response.json();
-            if (imageData.success && imageData.images?.length > 0) {
-              const image = imageData.images[0];
-              results.content_images.push({
-                url: image.image_url || '',
-                alt: `Image for ${section.heading}`,
-                position: section.position,
-              });
-              logger.info('Content image generated', { section: section.heading });
-            }
+          if (contentImage) {
+            results.content_images.push({
+              ...contentImage,
+              position: section.position,
+            });
+            logger.info('✅ Content image generated and uploaded to Cloudinary', { section: section.heading });
           }
-        } catch (imgError: any) {
+        } catch (imgError: unknown) {
+          const errorMessage = imgError instanceof Error ? imgError.message : String(imgError);
           logger.warn('Content image generation error for section', {
             section: section.heading,
-            error: imgError.message,
+            error: errorMessage,
           });
           // Continue with other sections
         }
