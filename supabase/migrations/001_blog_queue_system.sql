@@ -2,6 +2,9 @@
 -- Description: Adds queue management, approval workflow, and multi-platform publishing tracking
 -- Date: 2025-01-16
 
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- ============================================
 -- 1. Blog Generation Queue Table
 -- ============================================
