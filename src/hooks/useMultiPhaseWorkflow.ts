@@ -28,6 +28,8 @@ export interface WorkflowConfig {
   // Content Enhancement
   optimizeForSeo?: boolean;
   generateStructuredData?: boolean;
+  insertHyperlinks?: boolean; // Enable internal link insertion during enhancement
+  deepInterlinking?: boolean; // Phase 2: Enable lazy-loading for deeper analysis
 
   // Interlinking
   crawlWebsite?: boolean;
@@ -40,6 +42,9 @@ export interface WorkflowConfig {
   // Publishing
   targetPlatform?: 'webflow' | 'wordpress' | 'shopify';
   isDraft?: boolean;
+  
+  // Organization context
+  orgId?: string; // Organization ID for Webflow integration lookup
 }
 
 export interface WorkflowPhaseResult {
@@ -446,6 +451,9 @@ async function executePhase3(
     return { status: 'completed' };
   }
 
+  // Enhanced interlinking options
+  // - insertHyperlinks: Enable internal link insertion (uses InterlinkingEngine)
+  // - deepInterlinking: Phase 2 - Fetch full content for top candidates
   const response = await fetch('/api/workflow/enhance-content', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -455,6 +463,9 @@ async function executePhase3(
       topic: config.topic,
       keywords: config.keywords,
       generate_structured_data: config.generateStructuredData,
+      insert_hyperlinks: config.insertHyperlinks ?? true, // Default to enabled
+      deep_interlinking: config.deepInterlinking ?? false, // Phase 2 off by default
+      org_id: config.orgId, // Organization ID for Webflow integration lookup
     }),
     signal,
   });

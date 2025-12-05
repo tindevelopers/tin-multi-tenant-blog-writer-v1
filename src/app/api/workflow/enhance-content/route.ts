@@ -7,11 +7,11 @@ import { LLMAnalysisService } from '@/lib/llm-analysis-service';
 import { handlePhase3Completion } from '@/lib/workflow-phase-manager';
 import { 
   getWebflowIntegration, 
-  analyzeHyperlinkOpportunities, 
   insertHyperlinksWithPolish 
 } from '@/lib/integrations/webflow-hyperlink-service';
 import { discoverWebflowStructure } from '@/lib/integrations/webflow-structure-discovery';
 import { createServiceClient } from '@/lib/supabase/service';
+import { analyzeInterlinkingEnhanced } from '@/lib/interlinking/enhanced-interlinking-service';
 
 /**
  * Generate high-quality meta description and excerpt using LLM Service
@@ -61,14 +61,19 @@ async function generateEnhancedMetadata(
 
 /**
  * Insert internal hyperlinks into content based on Webflow site analysis
- * Uses stored Webflow structure scans for efficient hyperlink insertion
+ * 
+ * Uses the enhanced InterlinkingEngine for sophisticated analysis:
+ * - Phase 1: Better relevance scoring using keyword/topic overlap, authority scoring
+ * - Phase 2 (optional): Lazy-loads full content for top candidates
+ * 
  * Falls back to on-the-fly discovery if no scan exists
  */
 async function insertInternalLinks(
   content: string,
   title: string,
   keywords: string[],
-  orgId?: string
+  orgId?: string,
+  enablePhase2?: boolean // Enable Phase 2 lazy-loading for deeper analysis
 ): Promise<string> {
   try {
     // Get Webflow integration if orgId provided
@@ -84,9 +89,10 @@ async function insertInternalLinks(
       return content;
     }
     
-    logger.info('Analyzing Webflow site structure for hyperlink opportunities', {
+    logger.info('Starting enhanced interlinking analysis', {
       siteId: webflowConfig.siteId,
       orgId,
+      enablePhase2: enablePhase2 || false,
     });
     
     // Try to get existing content from stored scan first
@@ -191,16 +197,26 @@ async function insertInternalLinks(
       return content;
     }
     
-    // Analyze hyperlink opportunities
-    const suggestions = await analyzeHyperlinkOpportunities(
+    // Use the enhanced InterlinkingEngine for sophisticated analysis
+    // Phase 1: Better relevance scoring using stored data
+    // Phase 2 (optional): Lazy-load full content for top candidates
+    const suggestions = await analyzeInterlinkingEnhanced(
       content,
       title,
       keywords,
-      existing_content
+      existing_content,
+      {
+        maxLinks: 5,
+        minRelevanceScore: 0.3,
+        enableLazyLoading: enablePhase2 || false,
+        lazyLoadTopN: 10,
+        webflowApiToken: enablePhase2 ? webflowConfig.apiToken : undefined,
+        webflowSiteId: enablePhase2 ? webflowConfig.siteId : undefined,
+      }
     );
     
     if (suggestions.length === 0) {
-      logger.debug('No relevant hyperlink opportunities found');
+      logger.debug('No relevant hyperlink opportunities found (enhanced analysis)');
       return content;
     }
     
@@ -212,10 +228,11 @@ async function insertInternalLinks(
       suggestions
     );
     
-    logger.info('✅ Hyperlinks inserted successfully', {
+    logger.info('✅ Enhanced hyperlinks inserted successfully', {
       suggestionsCount: suggestions.length,
       cmsLinks: suggestions.filter(s => s.type === 'cms').length,
       staticLinks: suggestions.filter(s => s.type === 'static').length,
+      phase2Enabled: enablePhase2 || false,
     });
     
     return contentWithLinks;
@@ -320,8 +337,9 @@ export async function POST(request: NextRequest) {
       keywords = [],
       generate_structured_data,
       improve_formatting = true,
-      insert_hyperlinks = false, // NEW: Option to insert hyperlinks
-      org_id, // NEW: Organization ID for Webflow integration lookup
+      insert_hyperlinks = false, // Option to insert hyperlinks
+      deep_interlinking = false, // Phase 2: Enable lazy-loading for deeper analysis
+      org_id, // Organization ID for Webflow integration lookup
     } = body;
     
     // Get org_id from user if not provided
@@ -382,10 +400,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 1.5: Insert hyperlinks if requested (before other enhancements)
+    // Uses enhanced InterlinkingEngine for better relevance scoring
+    // Phase 2 (deep_interlinking) optionally fetches full content for top candidates
     if (insert_hyperlinks) {
       try {
-        enhancedContent = await insertInternalLinks(enhancedContent, finalTitle, keywords, orgId);
-        logger.info('Hyperlinks inserted into content');
+        enhancedContent = await insertInternalLinks(
+          enhancedContent, 
+          finalTitle, 
+          keywords, 
+          orgId,
+          deep_interlinking // Enable Phase 2 lazy-loading if requested
+        );
+        logger.info('Enhanced hyperlinks inserted into content', {
+          phase2Enabled: deep_interlinking,
+        });
       } catch (linkError: any) {
         logger.warn('Hyperlink insertion failed, continuing without links', {
           error: linkError.message,

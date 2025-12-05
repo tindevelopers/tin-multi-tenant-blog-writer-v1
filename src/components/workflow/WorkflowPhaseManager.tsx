@@ -136,6 +136,9 @@ export default function WorkflowPhaseManager({
             onPhaseComplete(phase, result.post_id);
           }
         } else if (phase === 'phase_3_enhancement') {
+          // Phase 3: Content Enhancement with Enhanced Interlinking
+          // - Uses InterlinkingEngine for sophisticated link analysis
+          // - org_id will be auto-detected from authenticated user
           const response = await fetch('/api/workflow/enhance-content', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -143,6 +146,8 @@ export default function WorkflowPhaseManager({
               queue_id: queueId,
               generate_structured_data: true,
               improve_formatting: true,
+              insert_hyperlinks: true, // Enable enhanced interlinking
+              deep_interlinking: false, // Phase 2 lazy-loading (off by default for speed)
             }),
           });
 
