@@ -141,6 +141,16 @@ export default function EditDraftPage() {
   const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
   const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
   const [contentImages, setContentImages] = useState<Array<{ url: string; alt: string }>>([]);
+  const [reviewStatus, setReviewStatus] = useState<{
+    status: 'none' | 'pending' | 'approved' | 'rejected' | 'changes_requested';
+    reviewedBy?: string;
+    reviewedAt?: string;
+    comments?: string;
+    loading: boolean;
+  }>({
+    status: 'none',
+    loading: false,
+  });
   const [linkAnalysis, setLinkAnalysis] = useState<{
     currentLinks: number;
     availableOpportunities: number;
@@ -664,6 +674,38 @@ export default function EditDraftPage() {
     }
   };
 
+  // Fetch review status on load
+  useEffect(() => {
+    const fetchReviewStatus = async () => {
+      if (!draftId) return;
+      
+      setReviewStatus(prev => ({ ...prev, loading: true }));
+      try {
+        const response = await fetch(`/api/blog-approvals?post_id=${draftId}&limit=1`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.items && data.items.length > 0) {
+            const approval = data.items[0];
+            setReviewStatus({
+              status: approval.status || 'pending',
+              reviewedBy: approval.reviewed_by_user?.full_name || approval.reviewed_by_user?.email,
+              reviewedAt: approval.reviewed_at,
+              comments: approval.review_notes,
+              loading: false,
+            });
+          } else {
+            setReviewStatus({ status: 'none', loading: false });
+          }
+        }
+      } catch (error) {
+        logger.warn('Failed to fetch review status', { error });
+        setReviewStatus({ status: 'none', loading: false });
+      }
+    };
+
+    fetchReviewStatus();
+  }, [draftId]);
+
   const handleRequestApproval = async () => {
     // Get queue_id from draft metadata
     const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
@@ -687,6 +729,13 @@ export default function EditDraftPage() {
         const error = await response.json();
         throw new Error(error.error || "Failed to request approval");
       }
+      
+      // Update review status to pending
+      setReviewStatus({
+        status: 'pending',
+        loading: false,
+      });
+      
       alert("✅ Approval requested successfully! The content is now pending review.");
     } catch (err) {
       console.error("Error requesting approval:", err);
@@ -1169,6 +1218,89 @@ export default function EditDraftPage() {
     }
   };
 
+  // Handler for polishing existing content (Phase 2 edit mode)
+  const handlePolishContent = async (operations: string[] = ['full_polish']) => {
+    if (!formData.content) {
+      alert('Please add content before polishing.');
+      return;
+    }
+
+    setAiGenerating(true);
+    try {
+      const orgId = (draft as any)?.org_id as string | undefined;
+      const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+      const keywords = (draftMetadata?.keywords as string[]) || [];
+
+      logger.info('Starting content polish', {
+        operations,
+        hasOrgId: !!orgId,
+        keywordsCount: keywords.length,
+        contentLength: formData.content.length,
+      });
+
+      const response = await fetch('/api/workflow/polish-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: formData.content,
+          title: formData.title,
+          keywords,
+          operations,
+          org_id: orgId,
+          max_internal_links: 5,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Content polish failed');
+      }
+
+      const result = await response.json();
+      
+      logger.info('Content polish completed', {
+        changesMade: result.changes_made?.length || 0,
+        internalLinksAdded: result.improvements?.internal_links_added || 0,
+        suggestionsCount: result.suggestions?.length || 0,
+      });
+
+      // Update content with polished version
+      if (result.polished_content) {
+        setFormData(prev => ({
+          ...prev,
+          content: result.polished_content,
+        }));
+      }
+
+      // Update link analysis state
+      if (result.improvements?.internal_links_added > 0) {
+        setLinkAnalysis(prev => ({
+          ...prev,
+          currentLinks: prev.currentLinks + result.improvements.internal_links_added,
+          lastAnalyzed: new Date().toISOString(),
+        }));
+      }
+
+      // Build success message
+      const changes = result.changes_made || [];
+      const suggestions = result.suggestions || [];
+      let message = 'Content polished successfully!';
+      if (changes.length > 0) {
+        message += `\n\nChanges made:\n• ${changes.slice(0, 3).join('\n• ')}`;
+      }
+      if (suggestions.length > 0) {
+        message += `\n\nSuggestions:\n• ${suggestions.slice(0, 3).join('\n• ')}`;
+      }
+      alert(message);
+
+    } catch (error) {
+      logger.error('Content polish failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to polish content. Please try again.');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
   // Handler for inserting internal links only (without full Phase 3 enhancement)
   const handleInsertInternalLinks = async () => {
     if (!formData.content) {
@@ -1473,16 +1605,45 @@ export default function EditDraftPage() {
             </p>
           </div>
           <div className="flex items-center space-x-3">
+            {/* Review Status Indicator */}
+            {reviewStatus.status !== 'none' && !reviewStatus.loading && (
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                reviewStatus.status === 'approved' 
+                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800'
+                  : reviewStatus.status === 'rejected'
+                  ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-800'
+                  : reviewStatus.status === 'changes_requested'
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                  : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+              }`}>
+                {reviewStatus.status === 'approved' && <CheckCircleIcon className="w-4 h-4" />}
+                {reviewStatus.status === 'rejected' && <XMarkIcon className="w-4 h-4" />}
+                {reviewStatus.status === 'changes_requested' && <ExclamationTriangleIcon className="w-4 h-4" />}
+                {reviewStatus.status === 'pending' && <ArrowPathIcon className="w-4 h-4 animate-spin" />}
+                <span>
+                  {reviewStatus.status === 'approved' && 'Approved'}
+                  {reviewStatus.status === 'rejected' && 'Rejected'}
+                  {reviewStatus.status === 'changes_requested' && 'Changes Requested'}
+                  {reviewStatus.status === 'pending' && 'Pending Review'}
+                </span>
+                {reviewStatus.reviewedBy && (
+                  <span className="text-xs opacity-75">by {reviewStatus.reviewedBy}</span>
+                )}
+              </div>
+            )}
+            
             {/* Request Approval - for review workflow */}
-            <button
-              onClick={handleRequestApproval}
-              disabled={approvalLoading || !formData.content}
-              className="flex items-center px-3 py-2 border border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              title="Submit for review and approval"
-            >
-              <DocumentCheckIcon className="w-4 h-4 mr-1.5" />
-              {approvalLoading ? 'Requesting...' : 'Request Approval'}
-            </button>
+            {(reviewStatus.status === 'none' || reviewStatus.status === 'rejected' || reviewStatus.status === 'changes_requested') && (
+              <button
+                onClick={handleRequestApproval}
+                disabled={approvalLoading || !formData.content}
+                className="flex items-center px-3 py-2 border border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                title="Submit for review and approval"
+              >
+                <DocumentCheckIcon className="w-4 h-4 mr-1.5" />
+                {approvalLoading ? 'Requesting...' : reviewStatus.status === 'none' ? 'Request Approval' : 'Resubmit for Approval'}
+              </button>
+            )}
             
             {/* Regenerate - creates new queue item */}
             <button
@@ -1577,6 +1738,57 @@ export default function EditDraftPage() {
                 </button>
               )}
             </div>
+
+            {/* Polish & Refine Section - Available after content exists */}
+            {formData.content && formData.content.length > 100 && (
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                  <SparklesIcon className="w-4 h-4 text-amber-500" />
+                  Polish & Refine Content
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handlePolishContent(['full_polish'])}
+                    disabled={aiGenerating}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  >
+                    {aiGenerating ? (
+                      <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <SparklesIcon className="w-3 h-3" />
+                    )}
+                    Full Polish
+                  </button>
+                  <button
+                    onClick={() => handlePolishContent(['add_internal_links'])}
+                    disabled={aiGenerating}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  >
+                    <ArrowsRightLeftIcon className="w-3 h-3" />
+                    Add Links
+                  </button>
+                  <button
+                    onClick={() => handlePolishContent(['improve_readability'])}
+                    disabled={aiGenerating}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-800 dark:text-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  >
+                    <DocumentTextIcon className="w-3 h-3" />
+                    Readability
+                  </button>
+                  <button
+                    onClick={() => handlePolishContent(['enhance_seo'])}
+                    disabled={aiGenerating}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-800 dark:text-purple-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                  >
+                    <DocumentCheckIcon className="w-3 h-3" />
+                    SEO Check
+                  </button>
+                </div>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Polish operations refine existing content without regenerating. Use for final touches before publishing.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
