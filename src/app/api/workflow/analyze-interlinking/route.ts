@@ -10,7 +10,19 @@ import { createServiceClient } from '@/lib/supabase/server';
 /**
  * POST /api/workflow/analyze-interlinking
  * 
- * Phase 4: Advanced interlinking analysis using hybrid approach
+ * @deprecated This endpoint is now primarily used for EXTERNAL link finding only.
+ * 
+ * Internal linking has been consolidated into Phase 3 (/api/workflow/enhance-content)
+ * which uses the enhanced-interlinking-service with:
+ * - Better relevance scoring via InterlinkingEngine
+ * - Stored Webflow scan data (no re-crawling needed)
+ * - Optional deep analysis with lazy-loading
+ * 
+ * This endpoint remains available for:
+ * - External link finding (citations, authority links)
+ * - Legacy compatibility
+ * 
+ * Migration path: Use enhance-content with insert_hyperlinks=true instead.
  */
 export async function POST(request: NextRequest) {
   try {

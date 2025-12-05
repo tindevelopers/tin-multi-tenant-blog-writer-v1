@@ -458,9 +458,11 @@ async function executePhase3(
     return { status: 'completed' };
   }
 
-  // Enhanced interlinking options
-  // - insertHyperlinks: Enable internal link insertion (uses InterlinkingEngine)
-  // - deepInterlinking: Phase 2 - Fetch full content for top candidates
+  // Phase 3: Content Enhancement + Internal Linking
+  // This phase now handles ALL internal linking via InterlinkingEngine
+  // - insertHyperlinks: Enable internal link insertion (uses enhanced-interlinking-service)
+  // - deepInterlinking: Fetch full content for top candidates for better matching
+  // - maxInternalLinks: Maximum number of internal links to insert
   const response = await fetch('/api/workflow/enhance-content', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -471,7 +473,8 @@ async function executePhase3(
       keywords: config.keywords,
       generate_structured_data: config.generateStructuredData,
       insert_hyperlinks: config.insertHyperlinks ?? true, // Default to enabled
-      deep_interlinking: config.deepInterlinking ?? false, // Phase 2 off by default
+      deep_interlinking: config.deepInterlinking ?? false, // Deep analysis off by default
+      max_internal_links: config.maxInternalLinks || 5, // Consolidated from former Phase 4
       org_id: config.orgId, // Organization ID for Webflow integration lookup
     }),
     signal,
@@ -498,35 +501,28 @@ async function executePhase4(
   contentResult: ContentResult,
   signal: AbortSignal
 ): Promise<InterlinkingResult> {
-  // Phase 4 is now OPTIONAL - internal linking is handled in:
-  // - Phase 1: Site-aware content generation with embedded link targets
-  // - Phase 3: Enhanced interlinking using InterlinkingEngine
+  // Phase 4 is now CONSOLIDATED:
+  // - Internal linking is handled automatically in Phase 3 via InterlinkingEngine
+  // - This phase only runs for EXTERNAL link finding (optional)
   // 
-  // Phase 4 should only run for:
-  // 1. External link finding (citations, authority links)
-  // 2. Advanced cluster analysis
-  // 
-  // Skip Phase 4 if:
-  // - crawlWebsite is false
-  // - insertHyperlinks was enabled in Phase 3 (internal links already done)
+  // The workflow is now:
+  // Phase 1: Content Generation (with site context for link targets)
+  // Phase 2: Image Generation
+  // Phase 3: Enhancement + Internal Linking (via enhanced-interlinking-service)
+  // Phase 4 (optional): External link finding only
+  
+  // Skip if crawlWebsite is not enabled (external links not requested)
   if (!config.crawlWebsite) {
-    return { status: 'completed' };
-  }
-
-  // If internal links were already inserted in Phase 3, skip redundant analysis
-  // Only run Phase 4 for external links if specifically needed
-  if (config.insertHyperlinks) {
-    // Internal linking already handled in Phase 3
-    // TODO: Consider adding external link finding only if needed
     return { 
       status: 'completed',
       data: { 
         skipped: true, 
-        reason: 'Internal linking handled in Phase 3 via InterlinkingEngine' 
+        reason: 'External link finding not requested. Internal links handled in Phase 3.' 
       }
     };
   }
 
+  // Only fetch external links - internal links are already handled in Phase 3
   const response = await fetch('/api/workflow/analyze-interlinking', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -535,27 +531,23 @@ async function executePhase4(
       title: contentResult.title,
       topic: config.topic,
       keywords: config.keywords,
-      max_internal_links: config.maxInternalLinks,
-      max_external_links: config.maxExternalLinks,
-      include_cluster_links: config.includeClusterLinks,
-      webflow_site_id: config.webflowSiteId,
-      webflow_api_key: config.webflowApiKey,
+      max_internal_links: 0, // Internal links handled in Phase 3
+      max_external_links: config.maxExternalLinks || 3,
+      include_cluster_links: false, // Cluster analysis handled in Phase 3
     }),
     signal,
   });
 
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.message || 'Interlinking analysis failed');
+    throw new Error(error.message || 'External link finding failed');
   }
 
   const data = await response.json();
   
   return {
     status: 'completed',
-    internalLinks: data.internal_links,
-    externalLinks: data.external_links,
-    clusterAnalysis: data.cluster_analysis,
+    externalLinks: data.external_links, // Only external links from this phase
     data,
   };
 }

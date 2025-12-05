@@ -385,8 +385,8 @@ export function MultiPhaseWorkflowPanel({
               </label>
             </div>
 
-            {/* Phase 4: Advanced Interlinking */}
-            <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+            {/* Advanced Options - External Links (Optional) */}
+            <div className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -396,29 +396,17 @@ export function MultiPhaseWorkflowPanel({
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <LinkIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                      Phase 4: Advanced Interlinking
+                    <LinkIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      External Link Finding
                     </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">(Optional)</span>
                   </div>
-                  <p className="text-xs text-gray-600 dark:text-gray-400">
-                    Crawl your website and add strategic internal/external links
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Find authority citations and external reference links. Internal linking is automatically handled in Phase 3.
                   </p>
                   {config.crawlWebsite && (
-                    <div className="mt-2 grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
-                          Max Internal Links
-                        </label>
-                        <input
-                          type="number"
-                          value={config.maxInternalLinks || 5}
-                          onChange={(e) => updateConfig({ maxInternalLinks: parseInt(e.target.value) || 5 })}
-                          min={0}
-                          max={10}
-                          className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-900 text-gray-900 dark:text-white"
-                        />
-                      </div>
+                    <div className="mt-2">
                       <div>
                         <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">
                           Max External Links
@@ -438,14 +426,14 @@ export function MultiPhaseWorkflowPanel({
               </label>
             </div>
 
-            {/* Phase 5: Publishing Preparation */}
+            {/* Phase 4: Publishing Preparation */}
             <div className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
               <div className="flex items-start gap-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <CloudArrowUpIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
                     <span className="text-sm font-medium text-gray-900 dark:text-white">
-                      Phase 5: Publishing Preparation
+                      Phase 4: Publishing Preparation
                     </span>
                     <span className="text-xs text-green-600 dark:text-green-400 font-medium">(Always Enabled)</span>
                   </div>

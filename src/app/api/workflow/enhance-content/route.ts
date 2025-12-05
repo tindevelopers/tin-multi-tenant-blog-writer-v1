@@ -63,17 +63,18 @@ async function generateEnhancedMetadata(
  * Insert internal hyperlinks into content based on Webflow site analysis
  * 
  * Uses the enhanced InterlinkingEngine for sophisticated analysis:
- * - Phase 1: Better relevance scoring using keyword/topic overlap, authority scoring
- * - Phase 2 (optional): Lazy-loads full content for top candidates
+ * - Relevance scoring using keyword/topic overlap, authority scoring
+ * - Optional deep analysis: Lazy-loads full content for top candidates
  * 
- * Falls back to on-the-fly discovery if no scan exists
+ * This function now handles ALL internal linking (consolidated from former Phase 4)
  */
 async function insertInternalLinks(
   content: string,
   title: string,
   keywords: string[],
   orgId?: string,
-  enablePhase2?: boolean // Enable Phase 2 lazy-loading for deeper analysis
+  enableDeepAnalysis?: boolean, // Enable lazy-loading for deeper analysis
+  maxLinks: number = 5 // Maximum internal links to insert
 ): Promise<string> {
   try {
     // Get Webflow integration if orgId provided
@@ -92,7 +93,8 @@ async function insertInternalLinks(
     logger.info('Starting enhanced interlinking analysis', {
       siteId: webflowConfig.siteId,
       orgId,
-      enablePhase2: enablePhase2 || false,
+      deepAnalysis: enableDeepAnalysis || false,
+      maxLinks,
     });
     
     // Try to get existing content from stored scan first
@@ -198,20 +200,21 @@ async function insertInternalLinks(
     }
     
     // Use the enhanced InterlinkingEngine for sophisticated analysis
-    // Phase 1: Better relevance scoring using stored data
-    // Phase 2 (optional): Lazy-load full content for top candidates
+    // This consolidates all internal linking (formerly Phase 4)
+    // - Relevance scoring using stored data
+    // - Optional deep analysis: Lazy-load full content for top candidates
     const suggestions = await analyzeInterlinkingEnhanced(
       content,
       title,
       keywords,
       existing_content,
       {
-        maxLinks: 5,
+        maxLinks, // Use the provided maxLinks parameter
         minRelevanceScore: 0.3,
-        enableLazyLoading: enablePhase2 || false,
+        enableLazyLoading: enableDeepAnalysis || false,
         lazyLoadTopN: 10,
-        webflowApiToken: enablePhase2 ? webflowConfig.apiToken : undefined,
-        webflowSiteId: enablePhase2 ? webflowConfig.siteId : undefined,
+        webflowApiToken: enableDeepAnalysis ? webflowConfig.apiToken : undefined,
+        webflowSiteId: enableDeepAnalysis ? webflowConfig.siteId : undefined,
       }
     );
     
@@ -232,7 +235,7 @@ async function insertInternalLinks(
       suggestionsCount: suggestions.length,
       cmsLinks: suggestions.filter(s => s.type === 'cms').length,
       staticLinks: suggestions.filter(s => s.type === 'static').length,
-      phase2Enabled: enablePhase2 || false,
+      deepAnalysis: enableDeepAnalysis || false,
     });
     
     return contentWithLinks;
@@ -338,7 +341,8 @@ export async function POST(request: NextRequest) {
       generate_structured_data,
       improve_formatting = true,
       insert_hyperlinks = false, // Option to insert hyperlinks
-      deep_interlinking = false, // Phase 2: Enable lazy-loading for deeper analysis
+      deep_interlinking = false, // Enable lazy-loading for deeper analysis
+      max_internal_links = 5, // Maximum internal links to insert (consolidated from former Phase 4)
       org_id, // Organization ID for Webflow integration lookup
     } = body;
     
@@ -401,7 +405,7 @@ export async function POST(request: NextRequest) {
 
     // Step 1.5: Insert hyperlinks if requested (before other enhancements)
     // Uses enhanced InterlinkingEngine for better relevance scoring
-    // Phase 2 (deep_interlinking) optionally fetches full content for top candidates
+    // This now consolidates all internal linking (formerly Phase 4)
     if (insert_hyperlinks) {
       try {
         enhancedContent = await insertInternalLinks(
@@ -409,10 +413,12 @@ export async function POST(request: NextRequest) {
           finalTitle, 
           keywords, 
           orgId,
-          deep_interlinking // Enable Phase 2 lazy-loading if requested
+          deep_interlinking, // Enable lazy-loading for deeper analysis if requested
+          max_internal_links // Maximum links to insert
         );
         logger.info('Enhanced hyperlinks inserted into content', {
-          phase2Enabled: deep_interlinking,
+          deepAnalysis: deep_interlinking,
+          maxLinks: max_internal_links,
         });
       } catch (linkError: any) {
         logger.warn('Hyperlink insertion failed, continuing without links', {
