@@ -97,7 +97,7 @@ async function insertInternalLinks(
       // Get latest completed scan for this site
       const { data: latestScan, error: scanError } = await supabase
         .from('webflow_structure_scans')
-        .select('existing_content, scan_completed_at, total_content_items')
+        .select('existing_content, scan_completed_at, total_content_items, published_domain')
         .eq('org_id', orgId)
         .eq('site_id', webflowConfig.siteId)
         .eq('status', 'completed')
@@ -107,10 +107,54 @@ async function insertInternalLinks(
       
       if (!scanError && latestScan?.existing_content) {
         existing_content = latestScan.existing_content as any[];
+        
+        // Fix URLs: rebuild from existing URLs using published_domain to ensure they use the correct domain
+        const publishedDomain = latestScan.published_domain as string | undefined;
+        if (publishedDomain) {
+          const cleanPublishedDomain = publishedDomain.replace(/\/$/, '');
+          const stagingDomainPattern = /https?:\/\/[^\/]+\.webflow\.io/;
+          let urlsFixed = 0;
+          
+          existing_content = existing_content.map((item: any) => {
+            const originalUrl = item.url || '';
+            
+            // Check if URL contains a staging domain (webflow.io) or needs domain replacement
+            const hasStagingDomain = stagingDomainPattern.test(originalUrl);
+            
+            if (hasStagingDomain || !originalUrl.startsWith('http')) {
+              urlsFixed++;
+              
+              // Extract the path from the original URL (everything after the domain)
+              // This preserves collection slugs and full path structure
+              const urlPath = originalUrl.replace(/https?:\/\/[^\/]+/, '');
+              const pathToUse = urlPath || `/${item.slug || ''}`;
+              
+              // Rebuild URL with published domain, preserving the full path
+              const rebuiltUrl = `${cleanPublishedDomain}${pathToUse.startsWith('/') ? pathToUse : '/' + pathToUse}`;
+              
+              return {
+                ...item,
+                url: rebuiltUrl,
+              };
+            }
+            
+            // URL already uses correct domain, keep it as-is
+            return item;
+          });
+          
+          logger.info('Rebuilt URLs using published domain from stored scan', {
+            siteId: webflowConfig.siteId,
+            publishedDomain: cleanPublishedDomain,
+            contentItems: existing_content.length,
+            urlsFixed,
+          });
+        }
+        
         logger.info('Using stored Webflow structure scan', {
           siteId: webflowConfig.siteId,
           contentItems: existing_content.length,
           scanDate: latestScan.scan_completed_at,
+          publishedDomain: publishedDomain || 'not available',
         });
       } else {
         // No stored scan found, discover on-the-fly
