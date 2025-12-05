@@ -15,8 +15,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
-import { buildEnhancedBlogRequestPayload } from '@/lib/blog-generation-utils';
+import { buildEnhancedBlogRequestPayload, getDefaultCustomInstructions } from '@/lib/blog-generation-utils';
 import { logger } from '@/utils/logger';
+import { 
+  getSiteContext, 
+  buildSiteAwareInstructions, 
+  formatLinkOpportunitiesForAPI,
+  type SiteContext 
+} from '@/lib/site-context-service';
 
 const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
 
@@ -212,10 +218,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Step 2: Call Blog Writer API with async_mode=true (ALWAYS async for multi-phase)
+    // Step 2: Fetch site context for intelligent generation
+    let siteContext: SiteContext | null = null;
+    try {
+      siteContext = await getSiteContext({
+        orgId,
+        topic,
+        keywords: keywordsArray,
+        maxLinkOpportunities: 10,
+      });
+      
+      if (siteContext) {
+        logger.info('📚 Site context loaded for multi-phase generation', {
+          existingTitles: siteContext.existingTitles.length,
+          linkOpportunities: siteContext.linkOpportunities.length,
+          siteId: siteContext.siteId,
+        });
+      }
+    } catch (contextError: any) {
+      logger.warn('Failed to fetch site context, continuing without', {
+        error: contextError.message,
+      });
+    }
+
+    // Step 3: Call Blog Writer API with async_mode=true (ALWAYS async for multi-phase)
     logger.info('🚀 Starting Phase 1 (Content Generation) in async mode', {
       queueId,
       topic,
+      hasSiteContext: !!siteContext,
       endpoint: `${BLOG_WRITER_API_URL}/api/v1/blog/generate-enhanced?async_mode=true`,
     });
 
@@ -229,6 +259,31 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       headers['Authorization'] = `Bearer ${API_KEY}`;
     }
 
+    // Build custom instructions with site context if available
+    let finalCustomInstructions = customInstructions || getDefaultCustomInstructions();
+    if (siteContext) {
+      finalCustomInstructions = buildSiteAwareInstructions(
+        finalCustomInstructions,
+        siteContext,
+        topic
+      );
+    }
+
+    // Prepare extra fields with link opportunities if available
+    const extraFields: Record<string, unknown> = {
+      fallback_to_openai: true,
+    };
+    
+    if (siteContext?.linkOpportunities.length) {
+      // Pass link opportunities to the API for embedded linking
+      extraFields.internal_link_targets = formatLinkOpportunitiesForAPI(
+        siteContext.linkOpportunities
+      );
+      extraFields.existing_site_topics = siteContext.existingTopics.slice(0, 15);
+      extraFields.site_has_content = true;
+      extraFields.total_site_content = siteContext.totalContentItems;
+    }
+
     const requestPayload = buildEnhancedBlogRequestPayload({
       topic,
       keywords: keywordsArray,
@@ -236,13 +291,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       tone: tone || 'professional',
       wordCount,
       qualityLevel,
-      customInstructions,
+      customInstructions: finalCustomInstructions,
       featureOverrides: {
         use_consensus_generation: true,
       },
-      extraFields: {
-        fallback_to_openai: true,
-      },
+      extraFields,
     });
 
     const response = await fetch(apiUrl, {
@@ -283,7 +336,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         queueId,
       });
 
-      // Update queue entry with job_id
+      // Update queue entry with job_id and site context metadata
       if (queueId) {
         // Get current metadata first
         const { data: currentQueue } = await supabase
@@ -302,6 +355,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               estimated_completion_time: result.estimated_completion_time || null,
               async_mode: true,
               workflow_type: 'multi_phase',
+              // Site context metadata
+              site_context_used: !!siteContext,
+              site_context_link_opportunities: siteContext?.linkOpportunities.length || 0,
+              site_context_existing_content: siteContext?.totalContentItems || 0,
             },
             generation_started_at: new Date().toISOString(),
           })

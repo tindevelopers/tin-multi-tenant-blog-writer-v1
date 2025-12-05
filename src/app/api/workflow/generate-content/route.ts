@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
-import { buildEnhancedBlogRequestPayload } from '@/lib/blog-generation-utils';
+import { buildEnhancedBlogRequestPayload, getDefaultCustomInstructions } from '@/lib/blog-generation-utils';
 import cloudRunHealth from '@/lib/cloud-run-health';
+import { 
+  getSiteContext, 
+  buildSiteAwareInstructions, 
+  formatLinkOpportunitiesForAPI,
+  type SiteContext 
+} from '@/lib/site-context-service';
 
 /**
  * POST /api/workflow/generate-content
@@ -28,6 +34,9 @@ export async function POST(request: NextRequest) {
       word_count,
       quality_level,
       custom_instructions,
+      template_type,
+      org_id, // Organization ID for site context lookup
+      use_site_context = true, // Enable site-aware generation by default
     } = body;
 
     if (!topic) {
@@ -37,7 +46,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    logger.info('Phase 1: Starting content generation', { topic });
+    logger.info('Phase 1: Starting content generation', { 
+      topic, 
+      orgId: org_id,
+      useSiteContext: use_site_context 
+    });
+
+    // Step 0: Fetch site context for intelligent generation
+    let siteContext: SiteContext | null = null;
+    if (use_site_context && org_id) {
+      try {
+        siteContext = await getSiteContext({
+          orgId: org_id,
+          topic,
+          keywords: keywords || [],
+          maxLinkOpportunities: 10,
+        });
+        
+        if (siteContext) {
+          logger.info('Site context loaded for generation', {
+            existingTitles: siteContext.existingTitles.length,
+            linkOpportunities: siteContext.linkOpportunities.length,
+            siteId: siteContext.siteId,
+          });
+        }
+      } catch (contextError: any) {
+        logger.warn('Failed to fetch site context, continuing without', {
+          error: contextError.message,
+        });
+      }
+    }
 
     // Step 1: Test the endpoint to confirm it's working
     logger.info('🔍 Testing Cloud Run service health...');
@@ -104,6 +142,36 @@ export async function POST(request: NextRequest) {
       keywordsCount: keywords?.length || 0
     });
 
+    // Build custom instructions with site context if available
+    let finalCustomInstructions = custom_instructions || getDefaultCustomInstructions(template_type);
+    
+    if (siteContext) {
+      finalCustomInstructions = buildSiteAwareInstructions(
+        finalCustomInstructions,
+        siteContext,
+        topic
+      );
+      logger.debug('Built site-aware custom instructions', {
+        originalLength: (custom_instructions || '').length,
+        enhancedLength: finalCustomInstructions.length,
+      });
+    }
+
+    // Prepare extra fields with link opportunities if available
+    const extraFields: Record<string, unknown> = {
+      fallback_to_openai: true,
+    };
+    
+    if (siteContext?.linkOpportunities.length) {
+      // Pass link opportunities to the API for embedded linking
+      extraFields.internal_link_targets = formatLinkOpportunitiesForAPI(
+        siteContext.linkOpportunities
+      );
+      extraFields.existing_site_topics = siteContext.existingTopics.slice(0, 15);
+      extraFields.site_has_content = true;
+      extraFields.total_site_content = siteContext.totalContentItems;
+    }
+
     const requestPayload = buildEnhancedBlogRequestPayload({
       topic,
       keywords,
@@ -111,13 +179,12 @@ export async function POST(request: NextRequest) {
       tone: tone || 'professional',
       wordCount: word_count || 1500,
       qualityLevel: quality_level || 'high',
-      customInstructions: custom_instructions,
+      customInstructions: finalCustomInstructions,
+      templateType: template_type,
       featureOverrides: {
         use_consensus_generation: true,
       },
-      extraFields: {
-        fallback_to_openai: true,
-      },
+      extraFields,
     });
 
     const response = await fetch(`${apiUrl}/api/v1/blog/generate-enhanced`, {
@@ -201,6 +268,14 @@ export async function POST(request: NextRequest) {
       },
       quality_score: data.quality_score || data.blog_post?.quality_score,
       generation_time: data.generation_time || data.generation_time_seconds,
+      // Include site context metadata if used
+      site_context_used: !!siteContext,
+      site_context_metadata: siteContext ? {
+        totalContentItems: siteContext.totalContentItems,
+        linkOpportunitiesProvided: siteContext.linkOpportunities.length,
+        siteId: siteContext.siteId,
+        lastScanDate: siteContext.lastScanDate,
+      } : null,
     };
 
     logger.info('Phase 1: Content generation completed successfully', {
@@ -208,6 +283,7 @@ export async function POST(request: NextRequest) {
       wordCount: result.word_count,
       contentLength: result.content.length,
       hasExcerpt: !!result.excerpt,
+      siteContextUsed: result.site_context_used,
     });
 
     return NextResponse.json(result);

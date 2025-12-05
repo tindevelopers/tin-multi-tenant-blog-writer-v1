@@ -371,6 +371,10 @@ async function executePhase1(
   config: WorkflowConfig,
   signal: AbortSignal
 ): Promise<ContentResult> {
+  // Phase 1 now uses site context for intelligent generation
+  // - Avoids duplicate topics
+  // - Includes relevant internal link targets in generation
+  // - Builds content that fits existing cluster structure
   const response = await fetch('/api/workflow/generate-content', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -382,6 +386,9 @@ async function executePhase1(
       word_count: config.wordCount,
       quality_level: config.qualityLevel,
       custom_instructions: config.customInstructions,
+      template_type: config.templateType,
+      org_id: config.orgId, // Pass org_id for site context lookup
+      use_site_context: true, // Enable site-aware generation
     }),
     signal,
   });
@@ -491,8 +498,33 @@ async function executePhase4(
   contentResult: ContentResult,
   signal: AbortSignal
 ): Promise<InterlinkingResult> {
+  // Phase 4 is now OPTIONAL - internal linking is handled in:
+  // - Phase 1: Site-aware content generation with embedded link targets
+  // - Phase 3: Enhanced interlinking using InterlinkingEngine
+  // 
+  // Phase 4 should only run for:
+  // 1. External link finding (citations, authority links)
+  // 2. Advanced cluster analysis
+  // 
+  // Skip Phase 4 if:
+  // - crawlWebsite is false
+  // - insertHyperlinks was enabled in Phase 3 (internal links already done)
   if (!config.crawlWebsite) {
     return { status: 'completed' };
+  }
+
+  // If internal links were already inserted in Phase 3, skip redundant analysis
+  // Only run Phase 4 for external links if specifically needed
+  if (config.insertHyperlinks) {
+    // Internal linking already handled in Phase 3
+    // TODO: Consider adding external link finding only if needed
+    return { 
+      status: 'completed',
+      data: { 
+        skipped: true, 
+        reason: 'Internal linking handled in Phase 3 via InterlinkingEngine' 
+      }
+    };
   }
 
   const response = await fetch('/api/workflow/analyze-interlinking', {
