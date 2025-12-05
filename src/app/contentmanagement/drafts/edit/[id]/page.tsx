@@ -789,15 +789,22 @@ export default function EditDraftPage() {
 
     setAiGenerating(true);
     try {
+      // Get org_id and keywords from draft metadata for site-aware generation
+      const orgId = (draft as any)?.org_id as string | undefined;
+      const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+      const keywords = (draftMetadata?.keywords as string[]) || [];
+
       const response = await fetch('/api/workflow/generate-content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: formData.title,
-          keywords: [],
-          target_audience: 'general',
-          tone: 'professional',
+          keywords: keywords,
+          target_audience: draftMetadata?.target_audience || 'general',
+          tone: draftMetadata?.tone || 'professional',
           word_count: 1500,
+          org_id: orgId, // Enable site-aware generation with stored scan data
+          use_site_context: true, // Use existing site content for context
         }),
       });
 
@@ -821,7 +828,12 @@ export default function EditDraftPage() {
 
         // Update workflow phase
         setWorkflowPhase('phase_1_content');
-        alert('Content generated successfully!');
+        
+        // Show success with site context info
+        const usedSiteContext = result.site_context_used;
+        alert(usedSiteContext 
+          ? 'Content generated with site intelligence! Internal link targets embedded.'
+          : 'Content generated successfully!');
       }
     } catch (error) {
       logger.error('Phase 1 content generation failed:', error);
@@ -1171,7 +1183,9 @@ export default function EditDraftPage() {
           keywords: keywords,
           generate_structured_data: true,
           improve_formatting: true,
-          insert_hyperlinks: true, // Enable internal link insertion
+          insert_hyperlinks: true, // Enable internal link insertion via InterlinkingEngine
+          deep_interlinking: true, // Enable Phase 2 lazy-loading for top candidates
+          max_internal_links: 5, // Maximum internal links to insert
           org_id: orgId, // Pass org_id for Webflow integration lookup
           queue_id: queueId, // Pass queue_id to update the draft automatically
         }),
@@ -1697,96 +1711,153 @@ export default function EditDraftPage() {
               )}
             </div>
             
-            {/* Manual Phase Triggers */}
-            <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-              {!phase1Complete && (
-                <button
-                  onClick={handlePhase1ContentGeneration}
-                  disabled={aiGenerating}
-                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                >
-                  <DocumentTextIcon className="w-4 h-4" />
-                  {aiGenerating ? 'Generating...' : 'Generate Content (Phase 1)'}
-                </button>
-              )}
-              {phase1Complete && !phase2Complete && (
-                <button
-                  onClick={handlePhase2ImageGeneration}
-                  disabled={aiGenerating}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 dark:bg-purple-500 text-white rounded-lg hover:bg-purple-700 dark:hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                >
-                  {aiGenerating ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <PhotoIcon className="w-4 h-4" />
-                  )}
-                  {aiGenerating ? 'Generating Images...' : 'Generate Images (Phase 2)'}
-                </button>
-              )}
-              {phase2Complete && !phase3Complete && (
-                <button
-                  onClick={handlePhase3ContentEnhancement}
-                  disabled={aiGenerating}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                >
-                  {aiGenerating ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <SparklesIcon className="w-4 h-4" />
-                  )}
-                  {aiGenerating ? 'Enhancing...' : 'Enhance & Add Links (Phase 3)'}
-                </button>
-              )}
+            {/* AI Generation Pipeline - For new content creation */}
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  AI Generation Pipeline
+                </h4>
+                {(phase1Complete || phase2Complete || phase3Complete) && (
+                  <span className="text-xs px-2 py-0.5 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-full">
+                    {phase3Complete ? 'All phases complete' : phase2Complete ? '2 of 3 complete' : '1 of 3 complete'}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {!phase1Complete && (
+                  <button
+                    onClick={handlePhase1ContentGeneration}
+                    disabled={aiGenerating}
+                    title="Generate site-aware content using existing site intelligence"
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
+                  >
+                    <DocumentTextIcon className="w-4 h-4" />
+                    {aiGenerating ? 'Generating...' : '1. Generate Content'}
+                  </button>
+                )}
+                {phase1Complete && !phase2Complete && (
+                  <button
+                    onClick={handlePhase2ImageGeneration}
+                    disabled={aiGenerating}
+                    title="Generate featured, thumbnail, and inline images"
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 dark:bg-purple-500 text-white rounded-lg hover:bg-purple-700 dark:hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
+                  >
+                    {aiGenerating ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <PhotoIcon className="w-4 h-4" />
+                    )}
+                    {aiGenerating ? 'Generating Images...' : '2. Add Images'}
+                  </button>
+                )}
+                {phase2Complete && !phase3Complete && (
+                  <button
+                    onClick={handlePhase3ContentEnhancement}
+                    disabled={aiGenerating}
+                    title="Enhance SEO, add internal links, generate structured data"
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium shadow-sm"
+                  >
+                    {aiGenerating ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <SparklesIcon className="w-4 h-4" />
+                    )}
+                    {aiGenerating ? 'Enhancing...' : '3. Enhance & Link'}
+                  </button>
+                )}
+                {phase3Complete && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-300 text-sm font-medium">
+                    <CheckCircleIcon className="w-4 h-4" />
+                    Ready for Review
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Polish & Refine Section - Available after content exists */}
             {formData.content && formData.content.length > 100 && (
               <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                  <SparklesIcon className="w-4 h-4 text-amber-500" />
-                  Polish & Refine Content
-                </h4>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                    <SparklesIcon className="w-4 h-4 text-amber-500" />
+                    Polish & Refine (Human Review Mode)
+                  </h4>
+                  <span className="text-xs px-2 py-0.5 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-full">
+                    Targeted improvements
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Use these tools to make targeted improvements without regenerating content. Ideal for final touches before publishing.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     onClick={() => handlePolishContent(['full_polish'])}
                     disabled={aiGenerating}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    title="Comprehensive polish: readability, grammar, SEO, and links"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
                     {aiGenerating ? (
                       <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      <SparklesIcon className="w-3 h-3" />
+                      <SparklesIcon className="w-4 h-4" />
                     )}
                     Full Polish
                   </button>
                   <button
                     onClick={() => handlePolishContent(['add_internal_links'])}
                     disabled={aiGenerating}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    title="Add internal links using site intelligence"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
-                    <ArrowsRightLeftIcon className="w-3 h-3" />
+                    <ArrowsRightLeftIcon className="w-4 h-4" />
                     Add Links
                   </button>
                   <button
                     onClick={() => handlePolishContent(['improve_readability'])}
                     disabled={aiGenerating}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-800 dark:text-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    title="Improve flow, sentence structure, and clarity"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-green-100 hover:bg-green-200 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-800 dark:text-green-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
-                    <DocumentTextIcon className="w-3 h-3" />
+                    <DocumentTextIcon className="w-4 h-4" />
                     Readability
                   </button>
                   <button
                     onClick={() => handlePolishContent(['enhance_seo'])}
                     disabled={aiGenerating}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-800 dark:text-purple-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    title="Optimize meta title, description, and keywords"
+                    className="flex items-center justify-center gap-2 px-3 py-2 bg-purple-100 hover:bg-purple-200 dark:bg-purple-900/30 dark:hover:bg-purple-900/50 text-purple-800 dark:text-purple-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
-                    <DocumentCheckIcon className="w-3 h-3" />
-                    SEO Check
+                    <DocumentCheckIcon className="w-4 h-4" />
+                    SEO
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Polish operations refine existing content without regenerating. Use for final touches before publishing.
-                </p>
+                {/* Additional polish operations */}
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  <button
+                    onClick={() => handlePolishContent(['fix_grammar'])}
+                    disabled={aiGenerating}
+                    title="Fix grammar, spelling, and punctuation"
+                    className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
+                  >
+                    Fix Grammar
+                  </button>
+                  <button
+                    onClick={() => handlePolishContent(['strengthen_intro'])}
+                    disabled={aiGenerating}
+                    title="Make the introduction more compelling"
+                    className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
+                  >
+                    Better Intro
+                  </button>
+                  <button
+                    onClick={() => handlePolishContent(['strengthen_conclusion'])}
+                    disabled={aiGenerating}
+                    title="Strengthen the conclusion with a clear CTA"
+                    className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
+                  >
+                    Better Outro
+                  </button>
+                </div>
               </div>
             )}
           </div>
