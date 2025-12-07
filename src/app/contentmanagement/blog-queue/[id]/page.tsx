@@ -203,7 +203,13 @@ export default function QueueItemDetailPage() {
     }));
   };
 
-  const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
+  // More lenient check - allow button if status is generated OR if we have any content
+  const hasGeneratedContent = item?.status === "generated" && (
+    item?.generated_content || 
+    item?.generated_title || 
+    postId ||
+    normalizedContent?.content
+  );
 
   const handleCreateDraft = async () => {
     if (!item) return;
@@ -218,6 +224,20 @@ export default function QueueItemDetailPage() {
       // Use normalized content if available, otherwise fallback to raw
       const contentToSave = normalizedContent?.sanitizedContent || item.generated_content;
       
+      // Clean excerpt before saving
+      let cleanedExcerpt = normalizedContent?.excerpt || item.generation_metadata?.excerpt || '';
+      if (cleanedExcerpt) {
+        // Remove AI artifacts from excerpt
+        cleanedExcerpt = cleanedExcerpt
+          .replace(/\b(for example similar cases?\.\.?|such as similar cases?\.\.?|like similar cases?\.\.?|for instance similar cases?\.\.?)/gi, '')
+          .replace(/^!Modern\s+/gi, '')
+          .replace(/^!Content\s+/gi, '')
+          .replace(/^([a-z\s]+)\s+\1\s+/i, '$1 ')
+          .replace(/\s+\.\.\s*$/, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
+      
       // Create draft using save-content endpoint (which will auto-extract fields)
       const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
         method: "POST",
@@ -225,7 +245,7 @@ export default function QueueItemDetailPage() {
         body: JSON.stringify({
           content: contentToSave,
           title: normalizedContent?.title || item.generated_title || item.topic,
-          excerpt: normalizedContent?.excerpt || item.generation_metadata?.excerpt || '',
+          excerpt: cleanedExcerpt,
           queue_item_id: queueId,
         }),
       });
@@ -298,7 +318,12 @@ export default function QueueItemDetailPage() {
           {hasGeneratedContent && postId && (
             <a
               href={`/contentmanagement/drafts/edit/${postId}`}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl no-underline"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl no-underline cursor-pointer"
+              onClick={(e) => {
+                // Ensure navigation works
+                e.preventDefault();
+                router.push(`/contentmanagement/drafts/edit/${postId}`);
+              }}
             >
               Continue in Editor
               <ArrowRightIcon className="w-5 h-5" />
@@ -309,8 +334,13 @@ export default function QueueItemDetailPage() {
           {hasGeneratedContent && !postId && (
             <button
               type="button"
-              onClick={handleCreateDraft}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCreateDraft();
+              }}
+              disabled={!item?.generated_content && !normalizedContent?.content}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
             >
               Continue in Editor
               <ArrowRightIcon className="w-5 h-5" />

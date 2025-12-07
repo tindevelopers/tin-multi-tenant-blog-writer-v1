@@ -197,8 +197,21 @@ export async function PATCH(
             const content = currentItem.generated_content;
             
             // Extract excerpt (from metadata or auto-extract from content)
-            const excerpt = currentItem.generation_metadata?.excerpt || 
+            // extractExcerptFromContent now automatically cleans AI artifacts
+            let excerpt = currentItem.generation_metadata?.excerpt || 
                           extractExcerptFromContent(content, 200);
+            
+            // Additional cleaning for excerpt (in case it came from metadata)
+            if (excerpt) {
+              excerpt = excerpt
+                .replace(/\b(for example similar cases?\.\.?|such as similar cases?\.\.?|like similar cases?\.\.?|for instance similar cases?\.\.?)/gi, '')
+                .replace(/^!Modern\s+/gi, '')
+                .replace(/^!Content\s+/gi, '')
+                .replace(/^([a-z\s]+)\s+\1\s+/i, '$1 ')
+                .replace(/\s+\.\.\s*$/, '')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            }
             
             // Extract featured image (from metadata or auto-extract from content)
             const featuredImageFromMetadata = currentItem.generation_metadata?.featured_image_url 
