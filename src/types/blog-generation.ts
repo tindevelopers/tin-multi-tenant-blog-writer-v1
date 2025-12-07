@@ -274,3 +274,173 @@ export interface EnhancedBlogResponse {
   };
 }
 
+// ============ Image Generation Types (v2.0) ============
+
+/**
+ * Image type options for content-aware generation
+ */
+export type ImageType = 'featured' | 'section_header' | 'infographic';
+
+/**
+ * Image style options
+ */
+export type ImageStyle = 
+  | 'photographic'
+  | 'digital_art'
+  | 'painting'
+  | 'sketch'
+  | 'cartoon'
+  | 'anime'
+  | 'realistic'
+  | 'abstract'
+  | 'minimalist'
+  | 'vintage'
+  | 'cyberpunk'
+  | 'fantasy'
+  | 'sci_fi'
+  | 'watercolor'
+  | 'oil_painting';
+
+/**
+ * Image aspect ratio options
+ */
+export type ImageAspectRatio = '1:1' | '3:4' | '4:3' | '16:9' | '21:9' | '2:3' | 'custom';
+
+/**
+ * Image quality options
+ */
+export type ImageQuality = 'draft' | 'standard' | 'high' | 'ultra';
+
+/**
+ * Image placement suggestion
+ */
+export interface ImagePlacement {
+  position: number;
+  section: string;
+  priority: number; // 1-5, higher is more important
+}
+
+/**
+ * Single image suggestion from content analysis
+ */
+export interface ImageSuggestion {
+  image_type: ImageType;
+  style: ImageStyle;
+  aspect_ratio: ImageAspectRatio;
+  prompt: string;
+  prompt_variations: string[];
+  alt_text: string;
+  placement: ImagePlacement;
+}
+
+/**
+ * Response from /api/v1/images/suggestions endpoint
+ */
+export interface ImageSuggestionsResponse {
+  suggestions: ImageSuggestion[];
+  total_suggestions: number;
+  recommended_count: number;
+}
+
+/**
+ * Request for image suggestions
+ */
+export interface ImageSuggestionsRequest {
+  content: string;
+  topic: string;
+  keywords: string[];
+  tone?: ContentTone;
+}
+
+/**
+ * Request for content-aware image generation
+ */
+export interface GenerateFromContentRequest {
+  content: string;
+  topic: string;
+  keywords: string[];
+  image_type: ImageType;
+  tone?: ContentTone;
+  section_title?: string;
+}
+
+/**
+ * Response from content-aware image generation
+ */
+export interface GenerateFromContentResponse {
+  job_id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+}
+
+/**
+ * Single image in batch generation request
+ */
+export interface BatchImageRequest {
+  prompt: string;
+  provider?: 'stability_ai';
+  style?: ImageStyle;
+  aspect_ratio?: ImageAspectRatio;
+  quality?: ImageQuality;
+  width?: number;
+  height?: number;
+}
+
+/**
+ * Batch image generation request
+ */
+export interface BatchGenerateRequest {
+  images: BatchImageRequest[];
+  blog_id?: string;
+  workflow?: 'standard' | 'draft_then_final';
+}
+
+/**
+ * Batch image generation response
+ */
+export interface BatchGenerateResponse {
+  job_ids: string[];
+  status: 'pending';
+}
+
+/**
+ * Generated image result
+ */
+export interface GeneratedImageResult {
+  image_id: string;
+  image_url?: string;
+  image_data?: string;
+  width: number;
+  height: number;
+  format: string;
+  size_bytes?: number;
+  seed?: number;
+  steps?: number;
+  guidance_scale?: number;
+  created_at: string;
+  expires_at?: string;
+  quality_score?: number;
+  safety_score?: number;
+  provider: 'stability_ai';
+  model?: string;
+}
+
+/**
+ * Image job status response
+ */
+export interface ImageJobStatusResponse {
+  job_id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress_percentage?: number;
+  result?: {
+    success: boolean;
+    images: GeneratedImageResult[];
+    generation_time_seconds?: number;
+    provider?: string;
+    model?: string;
+    cost?: number;
+    prompt_used?: string;
+    error_message?: string;
+  };
+  error_message?: string;
+}
+
