@@ -258,15 +258,21 @@ function findLinkOpportunities(
 
 /**
  * Build custom instructions with site context for content generation
+ * 
+ * @param baseInstructions - Base custom instructions
+ * @param siteContext - Site context with link opportunities and existing content
+ * @param topic - Current topic being generated
+ * @param maxLength - Maximum total length (default: 5000 to match API limit)
  */
 export function buildSiteAwareInstructions(
   baseInstructions: string,
   siteContext: SiteContext,
-  topic: string
+  topic: string,
+  maxLength: number = 5000
 ): string {
   const contextInstructions: string[] = [];
 
-  // Add link opportunities as specific instructions
+  // Add link opportunities as specific instructions (up to 5 links with full details)
   if (siteContext.linkOpportunities.length > 0) {
     contextInstructions.push(`
 INTERNAL LINKING REQUIREMENTS:
@@ -282,7 +288,7 @@ Use descriptive anchor text that flows naturally with the surrounding text.
 `);
   }
 
-  // Add awareness of existing content
+  // Add awareness of existing content (up to 5 related titles)
   if (siteContext.existingTitles.length > 0) {
     const relatedTitles = siteContext.existingTitles
       .filter(t => {
@@ -303,7 +309,7 @@ from existing articles. Reference and link to existing content where appropriate
     }
   }
 
-  // Add topic cluster awareness
+  // Add topic cluster awareness (up to 10 relevant topics)
   if (siteContext.existingTopics.length > 0) {
     const relevantTopics = siteContext.existingTopics
       .filter(t => {
@@ -326,11 +332,22 @@ related concepts to strengthen the site's topical authority.
     return baseInstructions;
   }
 
-  return `${baseInstructions}
+  const result = `${baseInstructions}
 
 === SITE-AWARE GENERATION CONTEXT ===
 ${contextInstructions.join('\n')}
 === END SITE CONTEXT ===`;
+
+  // Final safety check - truncate if exceeds max length
+  if (result.length > maxLength) {
+    logger.warn('Site-aware instructions exceeded max length, truncating', {
+      resultLength: result.length,
+      maxLength,
+    });
+    return result.substring(0, maxLength);
+  }
+  
+  return result;
 }
 
 /**

@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
-import { buildEnhancedBlogRequestPayload, getDefaultCustomInstructions } from '@/lib/blog-generation-utils';
+import { buildEnhancedBlogRequestPayload, getDefaultCustomInstructions, MAX_CUSTOM_INSTRUCTIONS_LENGTH } from '@/lib/blog-generation-utils';
 import { logger } from '@/utils/logger';
 import { 
   getSiteContext, 
@@ -265,7 +265,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       finalCustomInstructions = buildSiteAwareInstructions(
         finalCustomInstructions,
         siteContext,
-        topic
+        topic,
+        MAX_CUSTOM_INSTRUCTIONS_LENGTH // Enforce API character limit
       );
     }
 

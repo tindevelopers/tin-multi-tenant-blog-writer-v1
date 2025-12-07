@@ -1,7 +1,150 @@
 /**
  * Type definitions for blog generation API responses
  * Shared between backend API routes and frontend components
+ * 
+ * Version 1.4 - Supports:
+ * - Multi-site Google Search Console (gsc_site_url)
+ * - Quick Generate vs Multi-Phase modes
+ * - Enhanced custom_instructions (5000 chars)
  */
+
+// ============ Enums and Constants ============
+
+/**
+ * Blog generation mode
+ * - quick_generate: Fast, cost-effective using DataForSEO (30-60s)
+ * - multi_phase: Premium 12-stage pipeline with advanced features
+ */
+export type BlogGenerationMode = 'quick_generate' | 'multi_phase';
+
+/**
+ * Content tone options
+ */
+export type ContentTone = 
+  | 'professional' 
+  | 'casual' 
+  | 'friendly' 
+  | 'authoritative' 
+  | 'conversational'
+  | 'technical'
+  | 'creative';
+
+/**
+ * Content length options
+ */
+export type ContentLength = 'short' | 'medium' | 'long' | 'extended';
+
+/**
+ * Research depth options
+ */
+export type ResearchDepth = 'basic' | 'standard' | 'comprehensive';
+
+/**
+ * All 28 supported blog content types
+ */
+export type BlogContentType =
+  | 'custom'
+  | 'brand'
+  | 'top_10'
+  | 'product_review'
+  | 'how_to'
+  | 'comparison'
+  | 'guide'
+  | 'tutorial'
+  | 'listicle'
+  | 'case_study'
+  | 'news'
+  | 'opinion'
+  | 'interview'
+  | 'faq'
+  | 'checklist'
+  | 'tips'
+  | 'definition'
+  | 'benefits'
+  | 'problem_solution'
+  | 'trend_analysis'
+  | 'statistics'
+  | 'resource_list'
+  | 'timeline'
+  | 'myth_busting'
+  | 'best_practices'
+  | 'getting_started'
+  | 'advanced'
+  | 'troubleshooting';
+
+// ============ Request Types ============
+
+/**
+ * Enhanced blog generation request (v1.4)
+ * Supports both Quick Generate and Multi-Phase modes
+ */
+export interface EnhancedBlogGenerationRequest {
+  // Required fields
+  topic: string;  // 3-200 characters
+  keywords: string[];  // At least 1 keyword
+  
+  // Generation mode (v1.4)
+  mode?: BlogGenerationMode;  // Default: "quick_generate"
+  
+  // Google Search Console (v1.4 - multi-site support)
+  gsc_site_url?: string | null;  // Optional: Site-specific URL
+  
+  // Blog type (for quick_generate)
+  blog_type?: BlogContentType;  // Default: "custom"
+  
+  // Content options
+  tone?: ContentTone;  // Default: "professional"
+  length?: ContentLength;  // Default: "medium"
+  word_count_target?: number;  // Optional: 100-10000
+  
+  // Enhanced options (for multi_phase)
+  use_google_search?: boolean;  // Default: true
+  use_fact_checking?: boolean;  // Default: true
+  use_citations?: boolean;  // Default: true (mandatory for multi_phase)
+  use_serp_optimization?: boolean;  // Default: true
+  
+  // Phase 3 options (for multi_phase)
+  use_consensus_generation?: boolean;  // Default: false
+  use_knowledge_graph?: boolean;  // Default: true
+  use_semantic_keywords?: boolean;  // Default: true
+  use_quality_scoring?: boolean;  // Default: true
+  
+  // Additional context
+  target_audience?: string | null;
+  custom_instructions?: string | null;  // Max 5000 characters
+  template_type?: string | null;
+  
+  // Product research (for product review/comparison)
+  include_product_research?: boolean;  // Default: false
+  include_brands?: boolean;  // Default: true
+  include_models?: boolean;  // Default: true
+  include_prices?: boolean;  // Default: false
+  include_features?: boolean;  // Default: true
+  include_reviews?: boolean;  // Default: true
+  include_pros_cons?: boolean;  // Default: true
+  
+  // Content structure
+  include_product_table?: boolean;  // Default: false
+  include_comparison_section?: boolean;  // Default: true
+  include_buying_guide?: boolean;  // Default: true
+  include_faq_section?: boolean;  // Default: true
+  
+  // Research depth (v1.4)
+  research_depth?: ResearchDepth;  // Default: "standard"
+  
+  // Local business fields
+  location?: string;
+  max_businesses?: number;
+  max_reviews_per_business?: number;
+  include_business_details?: boolean;
+  include_review_sentiment?: boolean;
+  
+  // DataForSEO options
+  use_dataforseo_content_generation?: boolean;  // Default: true
+  use_openai_fallback?: boolean;  // Default: true
+}
+
+// ============ Response Types ============
 
 export interface ProgressUpdate {
   stage: string;

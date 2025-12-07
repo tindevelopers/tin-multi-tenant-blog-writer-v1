@@ -314,6 +314,7 @@ class BlogWriterAPI {
   }
 
   // Create async blog generation job
+  // v1.4: Added mode, gsc_site_url for multi-site GSC support
   async createJob(params: {
     topic: string;
     keywords?: string[];
@@ -351,6 +352,10 @@ class BlogWriterAPI {
     include_buying_guide?: boolean;
     include_faq_section?: boolean;
     research_depth?: 'basic' | 'standard' | 'comprehensive';
+    // v1.4: Generation mode support
+    mode?: 'quick_generate' | 'multi_phase';
+    // v1.4: Google Search Console multi-site support
+    gsc_site_url?: string | null;
   }): Promise<{
     job_id: string;
     status: string;
@@ -452,6 +457,7 @@ class BlogWriterAPI {
 
   // Blog generation API with Cloud Run health check
   // Supports custom instructions and quality features per CLIENT_SIDE_PROMPT_GUIDE.md v1.3.0
+  // v1.4: Added mode and gsc_site_url for multi-site GSC support
   async generateBlog(params: {
     topic?: string;
     keywords?: string[];
@@ -492,6 +498,10 @@ class BlogWriterAPI {
     use_semantic_keywords?: boolean; // Use semantic keywords
     use_quality_scoring?: boolean; // Enable quality scoring
     use_dataforseo_content_generation?: boolean; // Use DataForSEO Content Generation API instead of backend API
+    // v1.4: Generation mode support
+    mode?: 'quick_generate' | 'multi_phase'; // Default: 'quick_generate'
+    // v1.4: Google Search Console multi-site support
+    gsc_site_url?: string | null; // Site-specific GSC URL for multi-site setups
   }): Promise<Record<string, unknown> | null> {
     try {
       logger.debug('Starting blog generation via local API route (async mode)', { params });

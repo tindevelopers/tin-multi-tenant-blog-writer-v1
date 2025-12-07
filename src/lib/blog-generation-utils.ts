@@ -19,8 +19,14 @@ export type TemplateType =
 export type ContentLength = 'short' | 'medium' | 'long' | 'very_long'; // UI type
 export type APIContentLength = 'short' | 'medium' | 'long' | 'extended'; // API type
 
+// Maximum character limit for custom_instructions field (API constraint)
+// Backend supports up to 5000 characters for detailed instructions + site context
+export const MAX_CUSTOM_INSTRUCTIONS_LENGTH = 5000;
+
 /**
  * Generate default custom instructions based on template type
+ * 
+ * Note: Backend supports up to 5000 characters for detailed instructions + site context.
  */
 export function getDefaultCustomInstructions(
   templateType?: TemplateType,
@@ -236,6 +242,18 @@ const BLOG_TYPE_OPTIONS = [
 
 type BlogTypeOption = typeof BLOG_TYPE_OPTIONS[number];
 
+/**
+ * Blog generation mode (v1.4)
+ * - quick_generate: Fast, cost-effective using DataForSEO (30-60s)
+ * - multi_phase: Premium 12-stage pipeline with advanced features
+ */
+export type BlogGenerationMode = 'quick_generate' | 'multi_phase';
+
+/**
+ * Research depth options (v1.4)
+ */
+export type ResearchDepth = 'basic' | 'standard' | 'comprehensive';
+
 export interface EnhancedBlogRequestOptions {
   topic: string;
   keywords?: string[];
@@ -251,6 +269,15 @@ export interface EnhancedBlogRequestOptions {
   location?: string;
   featureOverrides?: Partial<QualityFeatureConfig>;
   extraFields?: Record<string, unknown>;
+  
+  // v1.4: Generation mode support
+  mode?: BlogGenerationMode;  // Default: "quick_generate"
+  
+  // v1.4: Google Search Console multi-site support
+  gscSiteUrl?: string | null;  // Site-specific GSC URL
+  
+  // v1.4: Research depth
+  researchDepth?: ResearchDepth;  // Default: "standard"
 }
 
 function normalizeBlogType(templateType?: string): BlogTypeOption {
@@ -298,6 +325,11 @@ export function buildEnhancedBlogRequestPayload(
     expectation?.target ||
     1500;
 
+  // v1.4: Determine default mode based on quality level
+  // Premium/Enterprise quality levels default to multi_phase for best results
+  const isPremiumQuality = qualityLevel === 'premium' || qualityLevel === 'enterprise';
+  const defaultMode: BlogGenerationMode = isPremiumQuality ? 'multi_phase' : 'quick_generate';
+
   const payload: Record<string, unknown> = {
     blog_type: normalizeBlogType(options.templateType),
     topic: options.topic,
@@ -314,10 +346,25 @@ export function buildEnhancedBlogRequestPayload(
     use_dataforseo_content_generation: true,
     use_openai_fallback: true,
     ...qualityFeatures,
+    
+    // v1.4: Generation mode (defaults based on quality level)
+    mode: options.mode || defaultMode,
+    
+    // v1.4: Research depth
+    research_depth: options.researchDepth || 'standard',
   };
 
+  // v1.4: Add GSC site URL if provided (multi-site support)
+  if (options.gscSiteUrl) {
+    payload.gsc_site_url = options.gscSiteUrl;
+  }
+
   if (options.customInstructions) {
-    payload.custom_instructions = options.customInstructions;
+    // Enforce character limit to prevent API validation errors
+    const instructions = options.customInstructions.length > MAX_CUSTOM_INSTRUCTIONS_LENGTH
+      ? options.customInstructions.substring(0, MAX_CUSTOM_INSTRUCTIONS_LENGTH)
+      : options.customInstructions;
+    payload.custom_instructions = instructions;
   }
 
   if (options.location) {
@@ -357,7 +404,12 @@ export function createOptimizedBlogRequest(params: {
 
   const qualityFeatures = getQualityFeaturesForLevel(qualityLevel);
   const length = mapWordCountToLength(wordCount);
-  const instructions = customInstructions || getDefaultCustomInstructions(templateType, true);
+  let instructions = customInstructions || getDefaultCustomInstructions(templateType, true);
+  
+  // Ensure instructions don't exceed API limit
+  if (instructions.length > MAX_CUSTOM_INSTRUCTIONS_LENGTH) {
+    instructions = instructions.substring(0, MAX_CUSTOM_INSTRUCTIONS_LENGTH);
+  }
 
   return {
     topic,

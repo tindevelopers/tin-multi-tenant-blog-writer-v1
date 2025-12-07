@@ -308,6 +308,9 @@ export async function POST(request: NextRequest) {
       include_review_sentiment,
       use_google,
       use_dataforseo_content_generation = true, // ALWAYS use DataForSEO as primary (default: true)
+      // v1.4: Generation mode and GSC multi-site support
+      mode, // 'quick_generate' or 'multi_phase' (default: 'quick_generate')
+      gsc_site_url, // Google Search Console site URL for multi-site support
     } = body;
     
     logger.debug('📝 Generation parameters:', {
@@ -323,7 +326,11 @@ export async function POST(request: NextRequest) {
       preset,
       preset_id,
       use_enhanced,
-      use_dataforseo_content_generation // Passed to backend API for provider selection
+      use_dataforseo_content_generation, // Passed to backend API for provider selection
+      // v1.4: New parameters
+      mode: mode || 'quick_generate', // Default to quick_generate
+      gsc_site_url: gsc_site_url || null, // Multi-site GSC support
+      research_depth: research_depth || 'standard',
     });
     
     // Validate required fields
@@ -708,6 +715,10 @@ export async function POST(request: NextRequest) {
       length: length || undefined,
       includeFAQ: include_faq_section,
       location,
+      // v1.4: Generation mode and GSC multi-site support
+      mode: mode || undefined, // Will use default based on quality level if not specified
+      gscSiteUrl: gsc_site_url || undefined, // Multi-site GSC support
+      researchDepth: research_depth || undefined, // Default: 'standard'
     });
 
     // Add quality features (enable automatically for premium, or use provided values)

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
-import { buildEnhancedBlogRequestPayload, getDefaultCustomInstructions } from '@/lib/blog-generation-utils';
+import { buildEnhancedBlogRequestPayload, getDefaultCustomInstructions, MAX_CUSTOM_INSTRUCTIONS_LENGTH } from '@/lib/blog-generation-utils';
 import cloudRunHealth from '@/lib/cloud-run-health';
 import { 
   getSiteContext, 
@@ -149,11 +149,13 @@ export async function POST(request: NextRequest) {
       finalCustomInstructions = buildSiteAwareInstructions(
         finalCustomInstructions,
         siteContext,
-        topic
+        topic,
+        MAX_CUSTOM_INSTRUCTIONS_LENGTH // Enforce API character limit
       );
       logger.debug('Built site-aware custom instructions', {
         originalLength: (custom_instructions || '').length,
         enhancedLength: finalCustomInstructions.length,
+        maxAllowed: MAX_CUSTOM_INSTRUCTIONS_LENGTH,
       });
     }
 
