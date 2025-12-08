@@ -211,10 +211,32 @@ export async function publishBlogToWebflow(params: {
         logger.debug('Auto-detected field mappings', { mappings: finalMappings });
       }
       
+      // Transform content for Webflow compatibility
+      let transformedContent = blogPost.content;
+      try {
+        const { transformForWebflow } = await import('@/lib/tiptap/webflow-content-transformer');
+        const transformResult = transformForWebflow(blogPost.content || '', {
+          template: 'default',
+          validate: true,
+          clean: true,
+        });
+        transformedContent = transformResult.html;
+        
+        if (transformResult.validation && !transformResult.validation.valid) {
+          logger.warn('Webflow content validation issues', {
+            errors: transformResult.validation.errors,
+            warnings: transformResult.validation.warnings,
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to transform content for Webflow, using original', { error });
+        // Continue with original content if transformation fails
+      }
+      
       const mappedData = applyWebflowFieldMappings(
         {
           title: blogPost.title,
-          content: blogPost.content,
+          content: transformedContent,
           excerpt: blogPost.excerpt || '',
           slug: blogPost.slug,
           featured_image: blogPost.featured_image,

@@ -11,7 +11,6 @@ import { logger } from '@/utils/logger';
 import { getAuthenticatedUser, handleApiError } from '@/lib/api-utils';
 import { getCloudinaryCredentials } from '@/lib/cloudinary-upload';
 import { createServiceClient } from '@/lib/supabase/service';
-import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 
 interface CloudinaryResource {
   public_id: string;
@@ -37,9 +36,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check if user wants to sync from root (all images) or specific folder
+    const { searchParams } = new URL(request.url);
+    const syncFromRoot = searchParams.get('root') === 'true' || searchParams.get('all') === 'true';
+
     logger.debug('Starting Cloudinary sync', {
       userId: user.id,
       orgId: user.org_id,
+      syncFromRoot,
     });
 
     // Get Cloudinary credentials
@@ -51,44 +55,164 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch resources from Cloudinary via Blog Writer API
-    const API_BASE_URL = BLOG_WRITER_API_URL;
-    const API_KEY = process.env.BLOG_WRITER_API_KEY;
+    // Helper function to sync resources to database
+    const syncResourcesToDatabase = async (resources: CloudinaryResource[]) => {
+      const supabase = createServiceClient();
+      let syncedCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
 
-    // Get all resources from Cloudinary
-    const folder = `blog-images/${user.org_id}`;
-    const syncResponse = await fetch(`${API_BASE_URL}/api/v1/media/cloudinary/list`, {
-      method: 'POST',
+      for (const resource of resources) {
+        try {
+          // Check if asset already exists by public_id
+          const { data: existing } = await supabase
+            .from('media_assets')
+            .select('asset_id')
+            .eq('org_id', user.org_id)
+            .eq('metadata->>public_id', resource.public_id)
+            .single();
+
+          if (existing) {
+            // Update existing asset
+            const { error: updateError } = await supabase
+              .from('media_assets')
+              .update({
+                file_url: resource.secure_url,
+                file_type: resource.format || 'image/png',
+                file_size: resource.bytes,
+                metadata: {
+                  public_id: resource.public_id,
+                  width: resource.width,
+                  height: resource.height,
+                  resource_type: resource.resource_type,
+                  folder: resource.folder,
+                  synced_at: new Date().toISOString(),
+                },
+              })
+              .eq('asset_id', existing.asset_id);
+
+            if (updateError) {
+              logger.error('Error updating media asset:', updateError);
+              skippedCount++;
+            } else {
+              updatedCount++;
+            }
+          } else {
+            // Insert new asset
+            const fileName = resource.public_id.split('/').pop() || resource.public_id;
+            const { error: insertError } = await supabase
+              .from('media_assets')
+              .insert({
+                org_id: user.org_id,
+                uploaded_by: user.id,
+                file_name: fileName,
+                file_url: resource.secure_url,
+                file_type: resource.format || 'image/png',
+                file_size: resource.bytes,
+                provider: 'cloudinary',
+                metadata: {
+                  public_id: resource.public_id,
+                  width: resource.width,
+                  height: resource.height,
+                  resource_type: resource.resource_type,
+                  folder: resource.folder,
+                  synced_at: new Date().toISOString(),
+                },
+              });
+
+            if (insertError) {
+              logger.error('Error inserting media asset:', insertError);
+              skippedCount++;
+            } else {
+              syncedCount++;
+            }
+          }
+        } catch (error) {
+          logger.error('Error processing resource:', {
+            error,
+            public_id: resource.public_id,
+          });
+          skippedCount++;
+        }
+      }
+
+      return { syncedCount, updatedCount, skippedCount };
+    };
+
+    // Fetch resources directly from Cloudinary Admin API
+    // If syncFromRoot is true, sync all images. Otherwise, sync from org-specific folder
+    const folder = syncFromRoot ? undefined : `blog-images/${user.org_id}`;
+    
+    // Cloudinary Admin API supports Basic Auth (simpler and more reliable than signed URLs)
+    const authString = Buffer.from(`${credentials.api_key}:${credentials.api_secret}`).toString('base64');
+    
+    // Build Cloudinary Admin API URL
+    // Note: Cloudinary Admin API requires 'type' parameter (upload, private, authenticated)
+    // Default to 'upload' which is the most common type
+    const cloudinaryUrl = new URL(`https://api.cloudinary.com/v1_1/${credentials.cloud_name}/resources/image`);
+    cloudinaryUrl.searchParams.append('type', 'upload'); // Required parameter
+    cloudinaryUrl.searchParams.append('max_results', '500');
+    if (folder) {
+      cloudinaryUrl.searchParams.append('prefix', folder);
+    }
+    cloudinaryUrl.searchParams.append('resource_type', 'image');
+    
+    logger.debug('Fetching Cloudinary resources', {
+      url: cloudinaryUrl.toString(),
+      folder: folder || 'root (all images)',
+      syncFromRoot,
+      orgId: user.org_id,
+      cloudName: credentials.cloud_name,
+      usingBasicAuth: true,
+    });
+
+    const syncResponse = await fetch(cloudinaryUrl.toString(), {
+      method: 'GET',
       headers: {
+        'Authorization': `Basic ${authString}`,
         'Content-Type': 'application/json',
-        ...(API_KEY && { 'Authorization': `Bearer ${API_KEY}` }),
       },
-      body: JSON.stringify({
-        folder: folder,
-        resource_type: 'image',
-        max_results: 500, // Limit to 500 images per sync
-      }),
       signal: AbortSignal.timeout(120000), // 2 minute timeout
     });
 
     if (!syncResponse.ok) {
       const errorText = await syncResponse.text();
+      let errorJson: any = null;
+      try {
+        errorJson = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use as-is
+      }
+      
+      const errorHeaders = Object.fromEntries(syncResponse.headers.entries());
+      
       logger.error('Cloudinary list API error:', {
         status: syncResponse.status,
+        statusText: syncResponse.statusText,
         error: errorText,
+        errorJson,
+        headers: errorHeaders,
+        cloudName: credentials.cloud_name,
+        folder,
+        url: cloudinaryUrl.toString(),
+        authMethod: 'Basic Auth',
       });
       
-      // If endpoint doesn't exist (404), return helpful message
-      if (syncResponse.status === 404) {
+      // Basic Auth is the primary and only method (Signed URL has issues with these credentials)
+      // If Basic Auth fails, provide helpful error message
+      if (syncResponse.status === 401) {
+        logger.error('Basic Auth failed - credentials may be invalid', {
+          cloudName: credentials.cloud_name,
+          error: errorText,
+        });
+        
         return NextResponse.json(
           { 
-            error: 'Cloudinary list endpoint not available. Please ensure your Blog Writer API supports media listing, or sync will be available once images are uploaded through the system.',
-            synced: 0,
-            updated: 0,
-            skipped: 0,
-            total: 0,
+            error: 'Invalid Cloudinary credentials. Basic Auth authentication failed.',
+            details: errorText,
+            suggestion: 'Please verify your Cloud Name, API Key, and API Secret in Settings → Integrations → Cloudinary. Use the "Test Credentials" button to verify.',
           },
-          { status: 404 }
+          { status: 401 }
         );
       }
       
@@ -99,92 +223,15 @@ export async function POST(request: NextRequest) {
     }
 
     const cloudinaryData = await syncResponse.json();
-    const resources: CloudinaryResource[] = cloudinaryData.resources || cloudinaryData.data || [];
+    const resources: CloudinaryResource[] = cloudinaryData.resources || [];
 
     logger.debug('Fetched Cloudinary resources', {
       count: resources.length,
       orgId: user.org_id,
     });
 
-    // Sync with database
-    const supabase = createServiceClient();
-    let syncedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
-
-    for (const resource of resources) {
-      try {
-        // Check if asset already exists by public_id
-        const { data: existing } = await supabase
-          .from('media_assets')
-          .select('asset_id')
-          .eq('org_id', user.org_id)
-          .eq('metadata->>public_id', resource.public_id)
-          .single();
-
-        if (existing) {
-          // Update existing asset
-          const { error: updateError } = await supabase
-            .from('media_assets')
-            .update({
-              file_url: resource.secure_url,
-              file_type: resource.format || 'image/png',
-              file_size: resource.bytes,
-              metadata: {
-                public_id: resource.public_id,
-                width: resource.width,
-                height: resource.height,
-                resource_type: resource.resource_type,
-                folder: resource.folder,
-                synced_at: new Date().toISOString(),
-              },
-            })
-            .eq('asset_id', existing.asset_id);
-
-          if (updateError) {
-            logger.error('Error updating media asset:', updateError);
-            skippedCount++;
-          } else {
-            updatedCount++;
-          }
-        } else {
-          // Insert new asset
-          const fileName = resource.public_id.split('/').pop() || resource.public_id;
-          const { error: insertError } = await supabase
-            .from('media_assets')
-            .insert({
-              org_id: user.org_id,
-              uploaded_by: user.id,
-              file_name: fileName,
-              file_url: resource.secure_url,
-              file_type: resource.format || 'image/png',
-              file_size: resource.bytes,
-              provider: 'cloudinary',
-              metadata: {
-                public_id: resource.public_id,
-                width: resource.width,
-                height: resource.height,
-                resource_type: resource.resource_type,
-                folder: resource.folder,
-                synced_at: new Date().toISOString(),
-              },
-            });
-
-          if (insertError) {
-            logger.error('Error inserting media asset:', insertError);
-            skippedCount++;
-          } else {
-            syncedCount++;
-          }
-        }
-      } catch (error) {
-        logger.error('Error processing resource:', {
-          error,
-          public_id: resource.public_id,
-        });
-        skippedCount++;
-      }
-    }
+    // Sync with database using helper function
+    const { syncedCount, updatedCount, skippedCount } = await syncResourcesToDatabase(resources);
 
     logger.debug('Cloudinary sync completed', {
       synced: syncedCount,

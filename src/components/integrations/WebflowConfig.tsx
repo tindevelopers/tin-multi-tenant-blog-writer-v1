@@ -24,6 +24,8 @@ import {
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { WebflowFieldMapping } from './WebflowFieldMapping';
+import { SiteSelector } from './SiteSelector';
+import { ContentTypeProfileSelector } from './ContentTypeProfileSelector';
 
 interface WebflowConfigProps {
   integrationId?: string;
@@ -44,6 +46,12 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown');
+  
+  // Multi-site and content type support
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [showSiteManagement, setShowSiteManagement] = useState(false);
+  const [showContentTypeManagement, setShowContentTypeManagement] = useState(false);
 
   useEffect(() => {
     if (integrationId) {
@@ -57,17 +65,33 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const response = await fetch(`/api/integrations/${integrationId}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
+      const response = await fetch(`/api/integrations/${integrationId}`);
 
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
           const integration = result.data;
-          setConnectionStatus(integration.status === 'active' ? 'connected' : 'disconnected');
+          
+          // Check if integration has valid config (API key and collection ID)
+          const config = integration.config as Record<string, unknown> | undefined;
+          const hasApiKey = config?.api_key && typeof config.api_key === 'string' && config.api_key.length > 0;
+          const hasCollectionId = config?.collection_id && typeof config.collection_id === 'string' && config.collection_id.length > 0;
+          
+          // If integration is active and has required config, consider it connected
+          // Also check health_status if available
+          if (integration.status === 'active' && hasApiKey && hasCollectionId) {
+            // If health_status is healthy, definitely connected
+            if (integration.health_status === 'healthy') {
+              setConnectionStatus('connected');
+            } else if (integration.health_status === 'error') {
+              setConnectionStatus('disconnected');
+            } else {
+              // If status is active but health unknown, assume connected (API might be working)
+              setConnectionStatus('connected');
+            }
+          } else {
+            setConnectionStatus('disconnected');
+          }
           
           // Extract config values
           if (integration.config) {
@@ -125,15 +149,6 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     setSuccess(null);
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        setError("Not authenticated");
-        setLoading(false);
-        return;
-      }
-
       if (!apiKey || (!apiKey.includes('****') && !collectionId)) {
         setError("API Key and Collection ID are required");
         setLoading(false);
@@ -175,23 +190,24 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
       if (integrationId) {
         // Update existing integration - need to merge with existing config
         // First get current integration to merge configs
-        const getResponse = await fetch(`/api/integrations/${integrationId}`, {
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
-        });
+        const getResponse = await fetch(`/api/integrations/${integrationId}`);
         
         if (!getResponse.ok) {
           throw new Error("Failed to fetch current integration");
         }
         
         const getData = await getResponse.json();
-        const currentConfig = getData.success && getData.data ? getData.data.config : {};
+        // Handle both 'config' and 'connection' properties for backward compatibility
+        const currentConfig = getData.success && getData.data 
+          ? (getData.data.config || getData.data.connection || {})
+          : {};
         
-        // Merge configs
+        // Merge configs - preserve field_mappings and other existing config
         const mergedConfig = {
           ...currentConfig,
           ...connection,
+          // Explicitly preserve field_mappings if they exist
+          ...(currentConfig.field_mappings && { field_mappings: currentConfig.field_mappings }),
         };
 
         // Update existing integration
@@ -207,7 +223,6 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         response = await fetch(`/api/integrations/${integrationId}`, {
           method: 'PATCH',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(updateBody),
@@ -217,7 +232,6 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         response = await fetch('/api/integrations/connect-api-key', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(requestBody),
@@ -262,19 +276,8 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     setSuccess(null);
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError("Not authenticated");
-        setTesting(false);
-        return;
-      }
-
       const response = await fetch(`/api/integrations/${integrationId}/test`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
       });
 
       const data = await response.json();
@@ -290,9 +293,22 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         
         setSuccess(data.data?.message || 'Connection test successful!');
         setConnectionStatus('connected');
+        
+        // Refresh integration to get updated health status
+        if (integrationId) {
+          loadIntegration();
+        }
       } else {
-        setError(data.error || data.data?.error || 'Connection test failed');
-        setConnectionStatus('disconnected');
+        // Only show error if it's a real failure, not just a warning
+        const errorMsg = data.error || data.data?.error || 'Connection test failed';
+        setError(errorMsg);
+        // Don't automatically set to disconnected - might be a temporary issue
+        // Only set disconnected if it's a clear authentication/configuration error
+        if (errorMsg.toLowerCase().includes('unauthorized') || 
+            errorMsg.toLowerCase().includes('invalid') ||
+            errorMsg.toLowerCase().includes('not found')) {
+          setConnectionStatus('disconnected');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to test connection');
@@ -313,19 +329,8 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     setSuccess(null);
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError("Not authenticated");
-        setSyncing(false);
-        return;
-      }
-
       const response = await fetch(`/api/integrations/${integrationId}/sync`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
       });
 
       const data = await response.json();
@@ -349,18 +354,7 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     }
 
     try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setError("Not authenticated");
-        return;
-      }
-
-      const response = await fetch(`/api/integrations/${integrationId}/export`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
+      const response = await fetch(`/api/integrations/${integrationId}/export`);
 
       const data = await response.json();
 
@@ -624,13 +618,76 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
         </div>
       )}
 
-      {/* Field Mapping Section */}
-      {integrationId && collectionId && connectionStatus === 'connected' && (
-        <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
-          <WebflowFieldMapping 
-            integrationId={integrationId} 
-            collectionId={collectionId}
-          />
+      {/* Multi-Site and Content Type Management Section */}
+      {integrationId && (
+        <div className="mt-8 pt-8 border-t border-gray-200 dark:border-gray-700 space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Multi-Site & Content Type Configuration
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Manage multiple sites and content type profiles for this integration.
+            </p>
+          </div>
+
+          {/* Site Selection */}
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+            <SiteSelector
+              integrationId={integrationId}
+              selectedSiteId={selectedSiteId || undefined}
+              onSiteSelect={(siteId) => {
+                setSelectedSiteId(siteId);
+                // When site changes, reset profile selection
+                setSelectedProfileId(null);
+              }}
+              onSiteCreate={() => setShowSiteManagement(true)}
+              showCreateButton={true}
+            />
+          </div>
+
+          {/* Content Type Profile Selection */}
+          {/* Content Type Profile Selection */}
+          {selectedSiteId && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+              <ContentTypeProfileSelector
+                integrationId={integrationId}
+                siteId={selectedSiteId}
+                selectedProfileId={selectedProfileId || undefined}
+                onProfileSelect={(profileId) => setSelectedProfileId(profileId)}
+                onProfileCreate={() => setShowContentTypeManagement(true)}
+                showCreateButton={true}
+              />
+            </div>
+          )}
+
+          {/* Legacy Field Mapping Section - Show if integration exists and collection ID is set */}
+          {collectionId && !selectedProfileId && (
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <WebflowFieldMapping 
+                integrationId={integrationId} 
+                collectionId={collectionId}
+              />
+            </div>
+          )}
+
+          {/* New Field Mapping Section - Show if profile is selected */}
+          {selectedProfileId && (
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">
+                Field Mappings for Selected Profile
+              </h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Configure field mappings for the selected content type profile.
+              </p>
+              {/* TODO: Add new field mapping component that uses content_type_field_mappings */}
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  Field mapping management for content type profiles is coming soon. 
+                  For now, use the legacy field mapping section above.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

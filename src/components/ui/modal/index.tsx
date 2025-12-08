@@ -1,5 +1,6 @@
 "use client";
 import React, { useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface ModalProps {
   isOpen: boolean;
@@ -48,32 +49,33 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
-
   const contentClasses = isFullscreen
     ? "w-full h-full"
     : "relative w-full rounded-3xl bg-white  dark:bg-gray-900";
 
-  return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-y-auto modal" style={{ zIndex: 99999 }}>
+  const modalContent = (
+    <div 
+      className="fixed inset-0 flex items-center justify-center overflow-y-auto modal px-4 py-4" 
+      style={{ zIndex: 999999 }}
+    >
       {!isFullscreen && (
         <div
           className="fixed inset-0 h-full w-full bg-gray-400/50 backdrop-blur-[32px]"
           onClick={onClose}
-          style={{ zIndex: 99998 }}
+          style={{ zIndex: 999998 }}
         ></div>
       )}
       <div
         ref={modalRef}
         className={`${contentClasses}  ${className}`}
         onClick={(e) => e.stopPropagation()}
-        style={{ zIndex: 99999, position: 'relative' }}
+        style={{ zIndex: 999999, position: 'relative' }}
       >
         {showCloseButton && (
           <button
             onClick={onClose}
             className="absolute right-3 top-3 flex h-9.5 w-9.5 items-center justify-center rounded-full bg-gray-100 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-700 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white sm:right-6 sm:top-6 sm:h-11 sm:w-11"
-            style={{ zIndex: 100000 }}
+            style={{ zIndex: 1000000 }}
           >
             <svg
               width="24"
@@ -95,4 +97,13 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
+
+  if (!isOpen) return null;
+
+  // Use portal to render modal at document body level, ensuring it's above everything
+  if (typeof window !== 'undefined') {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 };

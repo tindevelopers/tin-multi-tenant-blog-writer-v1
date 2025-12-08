@@ -10,13 +10,12 @@ import {
   ShareIcon,
   TrashIcon,
   EyeIcon,
-  Bars3Icon,
+  CodeBracketIcon,
   XMarkIcon,
   ChevronRightIcon
 } from "@heroicons/react/24/outline";
 import { useState, useMemo } from "react";
 import { Modal } from "@/components/ui/modal/index";
-import { TableOfContents } from "@/components/content/TableOfContents";
 import { ContentAnalysisPanel } from "@/components/content/ContentAnalysisPanel";
 import { ContentOptimizationPanel } from "@/components/content/ContentOptimizationPanel";
 import { ImageGallery } from "@/components/content/ImageGallery";
@@ -34,11 +33,11 @@ export default function ViewDraftPage() {
   const params = useParams();
   const draftId = params.id as string;
   const [activeTab, setActiveTab] = useState<'content' | 'preview' | 'analysis' | 'seo' | 'metadata'>('content');
-  const [showTOC, setShowTOC] = useState(false);
+  const [showRawHTML, setShowRawHTML] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copyButtonText, setCopyButtonText] = useState('Copy HTML');
   
-  const { post: draft, loading, error } = useBlogPost(draftId);
+  const { post: draft, loading, error, refetch } = useBlogPost(draftId);
   const { deletePost } = useBlogPostMutations();
 
   // Extract and compute metadata
@@ -253,25 +252,33 @@ export default function ViewDraftPage() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
-          {contentMetadata && (
-            <button
-              onClick={() => setShowTOC(!showTOC)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                showTOC 
-                  ? 'bg-gray-700 text-white' 
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-              }`}
-            >
-              <Bars3Icon className="w-4 h-4" />
-              TOC
-            </button>
-          )}
           <button
-            onClick={() => setActiveTab('preview')}
+            onClick={() => setShowRawHTML(true)}
             className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
           >
-            <EyeIcon className="w-4 h-4" />
-            Preview HTML
+            <CodeBracketIcon className="w-4 h-4" />
+            View HTML
+          </button>
+          <button
+            onClick={handleEdit}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <PencilIcon className="w-4 h-4" />
+            Edit
+          </button>
+          <button
+            onClick={handleShare}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            <ShareIcon className="w-4 h-4" />
+            Share
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            <TrashIcon className="w-4 h-4" />
+            Delete
           </button>
         </div>
       </div>
@@ -332,7 +339,7 @@ export default function ViewDraftPage() {
                     dangerouslySetInnerHTML={{ 
                       __html: draft.content || '<p class="text-gray-500 italic">No content available</p>'
                     }}
-                    className="prose prose-lg max-w-none dark:prose-invert"
+                    className="prose prose-lg max-w-none dark:prose-invert prose-a:text-blue-600 prose-a:underline dark:prose-a:text-blue-400 hover:prose-a:text-blue-800 dark:hover:prose-a:text-blue-300"
                   />
                 </article>
               </div>
@@ -417,7 +424,12 @@ export default function ViewDraftPage() {
           {activeTab === 'analysis' && (
             <div className="space-y-6">
               <ContentAnalysisPanel
-                content={draft.content || ''}
+                title={draft?.title}
+                metaDescription={metadata?.meta_description as string | undefined}
+                targetKeyword={seoData?.keywords?.[0] as string | undefined}
+                featuredImage={metadata?.featured_image as string | undefined}
+                useLocalAnalysis={true}
+                content={draft?.content || ''}
                 topic={topic}
                 keywords={keywords}
                 targetAudience={seoData?.target_audience}
@@ -461,11 +473,14 @@ export default function ViewDraftPage() {
           {activeTab === 'metadata' && (
             <div className="space-y-6">
               {contentMetadata && (
-                <>
-                  <ImageGallery contentMetadata={contentMetadata} />
-                  <LinkValidationPanel contentMetadata={contentMetadata} />
-                </>
+                <ImageGallery contentMetadata={contentMetadata} />
               )}
+              
+              <LinkValidationPanel
+                contentMetadata={contentMetadata}
+                onRefresh={refetch}
+                lastUpdated={draft.updated_at || draft.created_at}
+              />
               
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -535,39 +550,6 @@ export default function ViewDraftPage() {
               keywords={keywords}
               topic={topic}
             />
-
-            {/* Action Buttons in Sidebar */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
-              <button
-                onClick={handleEdit}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <PencilIcon className="w-4 h-4" />
-                Edit
-              </button>
-              <button
-                onClick={handleShare}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                <ShareIcon className="w-4 h-4" />
-                Share
-              </button>
-              <button
-                onClick={handleDelete}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                <TrashIcon className="w-4 h-4" />
-                Delete
-              </button>
-            </div>
-
-            {/* Table of Contents */}
-            {showTOC && contentMetadata && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Table of Contents</h3>
-                <TableOfContents contentMetadata={contentMetadata} />
-              </div>
-            )}
           </div>
         )}
 
@@ -584,6 +566,55 @@ export default function ViewDraftPage() {
           </div>
         )}
       </div>
+
+      {/* Raw HTML Modal */}
+      <Modal
+        isOpen={showRawHTML}
+        onClose={() => setShowRawHTML(false)}
+        className="max-w-4xl"
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <CodeBracketIcon className="w-6 h-6" />
+              Raw HTML Code
+            </h2>
+            <button
+              onClick={() => {
+                const htmlContent = draft?.content || '';
+                navigator.clipboard.writeText(htmlContent).then(() => {
+                  setCopyButtonText('Copied!');
+                  setTimeout(() => setCopyButtonText('Copy HTML'), 2000);
+                }).catch((err) => {
+                  logger.error('Failed to copy HTML:', err);
+                  setCopyButtonText('Copy Failed');
+                  setTimeout(() => setCopyButtonText('Copy HTML'), 2000);
+                });
+              }}
+              className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-sm font-medium ${
+                copyButtonText === 'Copied!' 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : copyButtonText === 'Copy Failed'
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              {copyButtonText}
+            </button>
+          </div>
+          <div className="bg-gray-900 rounded-lg p-4 overflow-auto max-h-[60vh]">
+            <pre className="text-green-400 text-sm font-mono whitespace-pre-wrap break-words">
+              {draft?.content || 'No content available'}
+            </pre>
+          </div>
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            This is the raw HTML content stored in the database. Copy it to use in Webflow, WordPress, or other CMS platforms.
+          </p>
+        </div>
+      </Modal>
     </div>
   );
 

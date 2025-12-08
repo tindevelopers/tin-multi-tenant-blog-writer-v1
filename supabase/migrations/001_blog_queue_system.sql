@@ -7,7 +7,7 @@
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS blog_generation_queue (
-  queue_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  queue_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id UUID REFERENCES organizations(org_id) ON DELETE CASCADE NOT NULL,
   post_id UUID REFERENCES blog_posts(post_id) ON DELETE SET NULL,
   created_by UUID REFERENCES users(user_id) NOT NULL,
@@ -65,7 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_blog_queue_queued_at ON blog_generation_queue(que
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS blog_approvals (
-  approval_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  approval_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   queue_id UUID REFERENCES blog_generation_queue(queue_id) ON DELETE CASCADE,
   post_id UUID REFERENCES blog_posts(post_id) ON DELETE CASCADE,
   org_id UUID REFERENCES organizations(org_id) ON DELETE CASCADE NOT NULL,
@@ -107,7 +107,7 @@ CREATE INDEX IF NOT EXISTS idx_blog_approvals_requested_at ON blog_approvals(req
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS blog_platform_publishing (
-  publishing_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  publishing_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   post_id UUID REFERENCES blog_posts(post_id) ON DELETE CASCADE NOT NULL,
   queue_id UUID REFERENCES blog_generation_queue(queue_id) ON DELETE SET NULL,
   org_id UUID REFERENCES organizations(org_id) ON DELETE CASCADE NOT NULL,

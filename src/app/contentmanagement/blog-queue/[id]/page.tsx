@@ -2,22 +2,26 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import {
+import { 
   ArrowLeftIcon,
   ClockIcon,
   XCircleIcon,
   ArrowPathIcon,
   XMarkIcon,
-  DocumentCheckIcon,
   PencilIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   CheckCircleIcon,
+  PhotoIcon,
+  ArrowRightIcon,
 } from "@heroicons/react/24/outline";
 import { BlogGenerationQueueItem, type ProgressUpdate } from "@/types/blog-queue";
 import { getQueueStatusMetadata, QueueStatus } from "@/lib/blog-queue-state-machine";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
+import { normalizeBlogContent } from "@/lib/content-sanitizer";
+import HeadingStructure from "@/components/blog-writer/HeadingStructure";
+import { createClient } from "@/lib/supabase/client";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -30,7 +34,16 @@ export default function QueueItemDetailPage() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     status: true,
     metadata: false,
+    content: false,
+    images: true, // Show images section by default
   });
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [normalizedContent, setNormalizedContent] = useState<ReturnType<typeof normalizeBlogContent> | null>(null);
+  const [draftImages, setDraftImages] = useState<{
+    featured_image?: string;
+    featured_image_alt?: string;
+    content_images?: Array<{ url: string; alt: string }>;
+  } | null>(null);
 
   // Use SSE for real-time updates
   const { status, progress, stage } = useQueueStatusSSE(queueId);
@@ -54,6 +67,23 @@ export default function QueueItemDetailPage() {
     }
   }, [queueId]);
 
+  // Fetch current user's role to control admin-only visibility (e.g., cost)
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        const { data } = await supabase
+          .from("users")
+          .select("role")
+          .eq("user_id", user.id)
+          .single();
+        if (data?.role) {
+          setUserRole(data.role);
+        }
+      }
+    });
+  }, []);
+
   useEffect(() => {
     fetchQueueItem();
   }, [fetchQueueItem]);
@@ -69,6 +99,54 @@ export default function QueueItemDetailPage() {
       }
     }
   }, [status, progress, stage, item, fetchQueueItem]);
+
+  // Get postId from item (needed for useEffect dependencies)
+  const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
+
+  // Normalize content when item changes
+  useEffect(() => {
+    if (item && item.status === "generated" && item.generated_content) {
+      try {
+        const normalized = normalizeBlogContent({
+          title: item.generated_title || item.topic,
+          content: item.generated_content,
+          excerpt: item.generation_metadata?.excerpt,
+          word_count: item.generation_metadata?.word_count,
+          ...item.generation_metadata,
+        });
+        setNormalizedContent(normalized);
+      } catch (error) {
+        logger.error("Error normalizing content", { error });
+      }
+    }
+  }, [item]);
+
+  // Fetch draft images for preview
+  useEffect(() => {
+    const fetchDraftImages = async () => {
+      if (postId) {
+        try {
+          const response = await fetch(`/api/drafts/${postId}`);
+          if (response.ok) {
+            const result = await response.json();
+            const draft = result.data;
+            if (draft?.metadata) {
+              const metadata = draft.metadata as Record<string, unknown>;
+              setDraftImages({
+                featured_image: metadata.featured_image as string | undefined,
+                featured_image_alt: metadata.featured_image_alt as string | undefined,
+                content_images: metadata.content_images as Array<{ url: string; alt: string }> | undefined,
+              });
+            }
+          }
+        } catch (error) {
+          logger.error("Error fetching draft images", { error });
+        }
+      }
+    };
+    
+    fetchDraftImages();
+  }, [postId]);
 
 
   const handleCancel = async () => {
@@ -96,27 +174,6 @@ export default function QueueItemDetailPage() {
     } catch (err) {
       console.error("Error retrying:", err);
       alert("Failed to retry queue item");
-    }
-  };
-
-  const handleRequestApproval = async () => {
-    try {
-      const response = await fetch("/api/blog-approvals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          queue_id: queueId,
-        }),
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to request approval");
-      }
-      await fetchQueueItem();
-      alert("Approval requested successfully");
-    } catch (err) {
-      console.error("Error requesting approval:", err);
-      alert(err instanceof Error ? err.message : "Failed to request approval");
     }
   };
 
@@ -165,8 +222,13 @@ export default function QueueItemDetailPage() {
     }));
   };
 
-  const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
-  const hasGeneratedContent = item?.status === "generated" && (item?.generated_content || postId);
+  // More lenient check - allow button if status is generated OR if we have any content
+  const hasGeneratedContent = item?.status === "generated" && (
+    item?.generated_content || 
+    item?.generated_title || 
+    postId ||
+    normalizedContent?.content
+  );
 
   const handleCreateDraft = async () => {
     if (!item) return;
@@ -178,14 +240,31 @@ export default function QueueItemDetailPage() {
         return;
       }
       
+      // Use normalized content if available, otherwise fallback to raw
+      const contentToSave = normalizedContent?.sanitizedContent || item.generated_content;
+      
+      // Clean excerpt before saving
+      let cleanedExcerpt = normalizedContent?.excerpt || item.generation_metadata?.excerpt || '';
+      if (cleanedExcerpt) {
+        // Remove AI artifacts from excerpt
+        cleanedExcerpt = cleanedExcerpt
+          .replace(/\b(for example similar cases?\.\.?|such as similar cases?\.\.?|like similar cases?\.\.?|for instance similar cases?\.\.?)/gi, '')
+          .replace(/^!Modern\s+/gi, '')
+          .replace(/^!Content\s+/gi, '')
+          .replace(/^([a-z\s]+)\s+\1\s+/i, '$1 ')
+          .replace(/\s+\.\.\s*$/, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
+      
       // Create draft using save-content endpoint (which will auto-extract fields)
       const response = await fetch(`/api/blog-queue/${queueId}/save-content`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: item.generated_content,
-          title: item.generated_title || item.topic,
-          excerpt: item.generation_metadata?.excerpt || '',
+          content: contentToSave,
+          title: normalizedContent?.title || item.generated_title || item.topic,
+          excerpt: cleanedExcerpt,
           queue_item_id: queueId,
         }),
       });
@@ -228,15 +307,18 @@ export default function QueueItemDetailPage() {
   }
 
   const statusMeta = getQueueStatusMetadata(item?.status);
+  const isOrgAdmin = ['admin', 'owner', 'system_admin', 'super_admin'].includes(userRole || '');
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between relative z-10" style={{ pointerEvents: 'auto' }}>
-        <div className="flex items-center gap-4">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        {/* Title and back button */}
+        <div className="flex items-start gap-4">
           <button
+            type="button"
             onClick={() => router.back()}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors shrink-0"
           >
             <ArrowLeftIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
@@ -249,70 +331,81 @@ export default function QueueItemDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap relative z-10" style={{ pointerEvents: 'auto' }}>
-          {/* Edit in Drafts button - redirects to draft editor */}
+        
+        {/* Action Buttons - Simplified: Monitor page focuses on status, Editor is for actions */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* PRIMARY CTA: Continue in Editor - Large and prominent */}
           {hasGeneratedContent && postId && (
-            <button
-              onClick={() => router.push(`/contentmanagement/drafts/edit/${postId}`)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-10"
-              style={{ pointerEvents: 'auto' }}
+            <a
+              href={`/contentmanagement/drafts/edit/${postId}`}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl no-underline cursor-pointer"
+              onClick={(e) => {
+                // Ensure navigation works
+                e.preventDefault();
+                router.push(`/contentmanagement/drafts/edit/${postId}`);
+              }}
             >
-              <PencilIcon className="w-5 h-5" />
-              Edit in Drafts
-            </button>
+              Continue in Editor
+              <ArrowRightIcon className="w-5 h-5" />
+            </a>
           )}
-          {/* Create & Edit Draft button - if content exists but no post_id yet */}
+          
+          {/* PRIMARY CTA: Create Draft & Continue - Large and prominent */}
           {hasGeneratedContent && !postId && (
             <button
-              onClick={handleCreateDraft}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-50"
-              style={{ pointerEvents: 'auto', position: 'relative' }}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCreateDraft();
+              }}
+              disabled={!item?.generated_content && !normalizedContent?.content}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
             >
-              <PencilIcon className="w-5 h-5" />
-              Create & Edit Draft
+              Continue in Editor
+              <ArrowRightIcon className="w-5 h-5" />
             </button>
           )}
-          {/* Regenerate button - show when blog is generated */}
-          {item.status === "generated" && (
-            <button
-              onClick={handleRegenerate}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors relative z-10"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-              Regenerate
-            </button>
-          )}
-          {item.status === "generated" && (
-            <button
-              onClick={handleRequestApproval}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors relative z-10"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <DocumentCheckIcon className="w-5 h-5" />
-              Request Approval
-            </button>
-          )}
-          {item.status === "failed" && (
-            <button
-              onClick={handleRetry}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors relative z-10"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <ArrowPathIcon className="w-5 h-5" />
-              Retry
-            </button>
-          )}
-          {!["published", "cancelled"].includes(item.status) && (
-            <button
-              onClick={handleCancel}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors relative z-10"
-              style={{ pointerEvents: 'auto' }}
-            >
-              <XMarkIcon className="w-5 h-5" />
-              Cancel
-            </button>
-          )}
+          
+          {/* Secondary Actions */}
+          <div className="flex items-center gap-2">
+            {/* Regenerate - Creates new queue item */}
+            {item.status === "generated" && (
+              <button
+                type="button"
+                onClick={handleRegenerate}
+                className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm"
+                title="Create a new generation with the same settings"
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Regenerate
+              </button>
+            )}
+            
+            {/* Retry - For failed items */}
+            {item.status === "failed" && (
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Retry
+              </button>
+            )}
+            
+            {/* Cancel */}
+            {!["published", "cancelled"].includes(item.status) && (
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="inline-flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors text-sm"
+              >
+                <XMarkIcon className="w-4 h-4" />
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -380,10 +473,103 @@ export default function QueueItemDetailPage() {
                 value={formatDate(item.generation_completed_at)}
               />
             )}
+            {isOrgAdmin && (
+              <InfoItem
+                label="Total Cost"
+                value={
+                  (() => {
+                    const totalCost =
+                      (item.generation_metadata as any)?.total_cost ??
+                      (item.generation_metadata as any)?.cost ??
+                      (item as any)?.total_cost;
+                    return totalCost !== undefined && totalCost !== null
+                      ? `$${Number(totalCost).toFixed(2)}`
+                      : "N/A";
+                  })()
+                }
+              />
+            )}
           </div>
         </div>
         )}
       </div>
+
+      {/* Generated Images Section */}
+      {(() => {
+        // Get images from queue metadata or draft metadata
+        const featuredImageUrl = item.metadata?.featured_image_url || item.metadata?.featured_image || draftImages?.featured_image;
+        const featuredImageAlt = item.metadata?.featured_image_alt || draftImages?.featured_image_alt;
+        const contentImages = item.metadata?.content_images || draftImages?.content_images;
+        const hasImages = featuredImageUrl || (contentImages && Array.isArray(contentImages) && contentImages.length > 0);
+        
+        if (!hasImages) return null;
+        
+        return (
+          <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden mb-6">
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                <PhotoIcon className="w-5 h-5 text-purple-500" />
+                Generated Images
+              </h2>
+              
+              <div className="space-y-6">
+                {/* Featured Image */}
+                {featuredImageUrl && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Featured Image
+                    </label>
+                    <div className="relative w-full max-w-2xl aspect-video bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                      <img
+                        src={featuredImageUrl}
+                        alt={featuredImageAlt || 'Featured image'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          logger.error('Failed to load featured image', { url: featuredImageUrl });
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    {featuredImageAlt && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                        Alt text: {featuredImageAlt}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Content Images */}
+                {contentImages && Array.isArray(contentImages) && contentImages.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Content Images ({contentImages.length})
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {contentImages.map((img: any, idx: number) => {
+                        const imgUrl = typeof img === 'string' ? img : img.url;
+                        const imgAlt = typeof img === 'string' ? `Content image ${idx + 1}` : (img.alt || `Content image ${idx + 1}`);
+                        return (
+                          <div key={idx} className="relative aspect-video bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={imgUrl}
+                              alt={imgAlt}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                logger.error('Failed to load content image', { url: imgUrl, index: idx });
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Generation Details */}
       <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -444,37 +630,20 @@ export default function QueueItemDetailPage() {
         )}
       </div>
 
-      {/* Generation Complete - Action Card */}
-      {hasGeneratedContent && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  Blog Generation Complete
-                </h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {postId 
-                    ? "Your draft has been created and is ready to edit."
-                    : "Click below to create a draft and start editing your blog post."
-                  }
-                </p>
-              </div>
-              <button
-                onClick={handleCreateDraft}
-                className="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
-              >
-                <PencilIcon className="w-5 h-5" />
-                {postId ? "Edit in Drafts" : "Create & Edit Draft"}
-              </button>
-            </div>
-            {postId && (
-              <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
-                <p className="text-sm text-green-800 dark:text-green-200">
-                  ✅ Draft created successfully. All fields have been auto-populated from the generated content.
-                </p>
-              </div>
-            )}
+      {/* Success Message - shown when draft is created */}
+      {hasGeneratedContent && postId && (
+        <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-green-800 dark:text-green-200">
+              ✅ Content generated! Continue in the Editor to add images, enhance SEO, and prepare for publishing.
+            </p>
+            <a
+              href={`/contentmanagement/drafts/edit/${postId}`}
+              className="ml-4 inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium no-underline whitespace-nowrap"
+            >
+              Open Editor
+              <ArrowRightIcon className="w-4 h-4" />
+            </a>
           </div>
         </div>
       )}
@@ -493,6 +662,59 @@ export default function QueueItemDetailPage() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Content Preview Section */}
+      {hasGeneratedContent && normalizedContent && (
+        <div className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleSection('content')}
+            className="w-full flex items-center justify-between p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+          >
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Generated Content Preview
+            </h2>
+            {expandedSections.content ? (
+              <ChevronUpIcon className="w-5 h-5 text-gray-500" />
+            ) : (
+              <ChevronDownIcon className="w-5 h-5 text-gray-500" />
+            )}
+          </button>
+
+          {expandedSections.content && (
+            <div className="p-6 border-t border-gray-200 dark:border-gray-700 space-y-6">
+              {/* Heading Structure */}
+              {normalizedContent.headings.length > 0 && (
+                <HeadingStructure headings={normalizedContent.headings} />
+              )}
+
+              {/* Content Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <InfoItem label="Word Count" value={normalizedContent.wordCount.toLocaleString()} />
+                <InfoItem label="Headings" value={`${normalizedContent.headings.length} total`} />
+                <InfoItem 
+                  label="H1 Headings" 
+                  value={normalizedContent.headings.filter(h => h.level === 1).length.toString()} 
+                />
+                <InfoItem 
+                  label="H2 Headings" 
+                  value={normalizedContent.headings.filter(h => h.level === 2).length.toString()} 
+                />
+              </div>
+
+              {/* Sanitized Content Preview */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Content Preview (Sanitized)
+                </label>
+                <div 
+                  className="prose prose-lg dark:prose-invert max-w-none bg-gray-50 dark:bg-gray-900 rounded-lg p-6 max-h-96 overflow-y-auto border border-gray-200 dark:border-gray-700"
+                  dangerouslySetInnerHTML={{ __html: normalizedContent.sanitizedContent }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

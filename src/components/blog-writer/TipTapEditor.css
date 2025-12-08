@@ -6,10 +6,23 @@
   font-size: 1.125rem;
   line-height: 1.75;
   color: #1f2937;
+  pointer-events: auto !important;
+  cursor: text;
 }
 
 .dark .ProseMirror {
   color: #e5e7eb;
+}
+
+/* Ensure editor is always clickable when editable */
+.ProseMirror[data-editable="true"] {
+  pointer-events: auto !important;
+  cursor: text !important;
+}
+
+.ProseMirror[data-editable="false"] {
+  pointer-events: none;
+  cursor: default;
 }
 
 /* Headings with better visual hierarchy */
@@ -115,8 +128,8 @@
   border-left-color: #60a5fa;
 }
 
-/* Code blocks */
-.ProseMirror code {
+/* Code blocks - Only apply red color to inline code, not everything */
+.ProseMirror code:not(pre code) {
   background-color: #f3f4f6;
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
@@ -125,9 +138,17 @@
   color: #dc2626;
 }
 
-.dark .ProseMirror code {
+.dark .ProseMirror code:not(pre code) {
   background-color: #374151;
   color: #fca5a5;
+}
+
+/* Ensure code blocks inside pre tags don't inherit red color */
+.ProseMirror pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
 }
 
 .ProseMirror pre {

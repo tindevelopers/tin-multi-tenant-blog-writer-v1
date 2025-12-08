@@ -4,6 +4,8 @@
  * Based on CLIENT_SIDE_PROMPT_GUIDE.md v1.3.0
  */
 
+import { getWordCountExpectation } from './word-count-expectations';
+
 export type TemplateType = 
   | 'expert_authority' 
   | 'how_to_guide' 
@@ -17,8 +19,14 @@ export type TemplateType =
 export type ContentLength = 'short' | 'medium' | 'long' | 'very_long'; // UI type
 export type APIContentLength = 'short' | 'medium' | 'long' | 'extended'; // API type
 
+// Maximum character limit for custom_instructions field (API constraint)
+// Backend supports up to 5000 characters for detailed instructions + site context
+export const MAX_CUSTOM_INSTRUCTIONS_LENGTH = 5000;
+
 /**
  * Generate default custom instructions based on template type
+ * 
+ * Note: Backend supports up to 5000 characters for detailed instructions + site context.
  */
 export function getDefaultCustomInstructions(
   templateType?: TemplateType,
@@ -174,7 +182,7 @@ export function convertLengthToAPI(length: ContentLength): APIContentLength {
 /**
  * Get recommended quality features based on quality level
  */
-export function getQualityFeaturesForLevel(qualityLevel: string): {
+export interface QualityFeatureConfig {
   use_google_search: boolean;
   use_fact_checking: boolean;
   use_citations: boolean;
@@ -183,7 +191,9 @@ export function getQualityFeaturesForLevel(qualityLevel: string): {
   use_knowledge_graph: boolean;
   use_semantic_keywords: boolean;
   use_quality_scoring: boolean;
-} {
+}
+
+export function getQualityFeaturesForLevel(qualityLevel: string): QualityFeatureConfig {
   const isPremium = qualityLevel === 'premium' || qualityLevel === 'enterprise';
   const isHigh = qualityLevel === 'high';
 
@@ -197,6 +207,175 @@ export function getQualityFeaturesForLevel(qualityLevel: string): {
     use_semantic_keywords: isPremium || isHigh,
     use_quality_scoring: isPremium || isHigh,
   };
+}
+
+const BLOG_TYPE_OPTIONS = [
+  'custom',
+  'brand',
+  'top_10',
+  'product_review',
+  'how_to',
+  'comparison',
+  'guide',
+  'tutorial',
+  'listicle',
+  'case_study',
+  'news',
+  'opinion',
+  'interview',
+  'faq',
+  'checklist',
+  'tips',
+  'definition',
+  'benefits',
+  'problem_solution',
+  'trend_analysis',
+  'statistics',
+  'resource_list',
+  'timeline',
+  'myth_busting',
+  'best_practices',
+  'getting_started',
+  'advanced',
+  'troubleshooting',
+] as const;
+
+type BlogTypeOption = typeof BLOG_TYPE_OPTIONS[number];
+
+/**
+ * Blog generation mode (v1.4)
+ * - quick_generate: Fast, cost-effective using DataForSEO (30-60s)
+ * - multi_phase: Premium 12-stage pipeline with advanced features
+ */
+export type BlogGenerationMode = 'quick_generate' | 'multi_phase';
+
+/**
+ * Research depth options (v1.4)
+ */
+export type ResearchDepth = 'basic' | 'standard' | 'comprehensive';
+
+export interface EnhancedBlogRequestOptions {
+  topic: string;
+  keywords?: string[];
+  targetAudience?: string;
+  tone?: string;
+  wordCount?: number;
+  qualityLevel?: string;
+  customInstructions?: string;
+  templateType?: string;
+  length?: ContentLength | APIContentLength | string | null;
+  includeFAQ?: boolean;
+  includeToc?: boolean;
+  location?: string;
+  featureOverrides?: Partial<QualityFeatureConfig>;
+  extraFields?: Record<string, unknown>;
+  
+  // v1.4: Generation mode support
+  mode?: BlogGenerationMode;  // Default: "quick_generate"
+  
+  // v1.4: Google Search Console multi-site support
+  gscSiteUrl?: string | null;  // Site-specific GSC URL
+  
+  // v1.4: Research depth
+  researchDepth?: ResearchDepth;  // Default: "standard"
+}
+
+function normalizeBlogType(templateType?: string): BlogTypeOption {
+  if (!templateType) return 'custom';
+  const normalized = templateType.toLowerCase() as BlogTypeOption;
+  return BLOG_TYPE_OPTIONS.includes(normalized) ? normalized : 'custom';
+}
+
+function normalizeContentLength(
+  length: ContentLength | APIContentLength | string | null | undefined,
+  wordCount?: number
+): ContentLength {
+  if (length) {
+    const normalized = length.toLowerCase();
+    if (normalized === 'extended') return 'very_long';
+    if (['short', 'medium', 'long', 'very_long'].includes(normalized)) {
+      return normalized as ContentLength;
+    }
+  }
+  return mapWordCountToLength(wordCount ?? 1500);
+}
+
+export function buildEnhancedBlogRequestPayload(
+  options: EnhancedBlogRequestOptions
+): Record<string, unknown> {
+  const keywords = (options.keywords || [])
+    .map(keyword => String(keyword).trim())
+    .filter(Boolean);
+
+  if (keywords.length === 0) {
+    keywords.push(options.topic);
+  }
+
+  const normalizedLength = normalizeContentLength(options.length, options.wordCount);
+  const apiLength = convertLengthToAPI(normalizedLength);
+  const qualityLevel = options.qualityLevel || 'medium';
+  const qualityFeatures: QualityFeatureConfig = {
+    ...getQualityFeaturesForLevel(qualityLevel),
+    ...(options.featureOverrides || {}),
+  };
+
+  const expectation = getWordCountExpectation(normalizedLength);
+  const wordCountTarget =
+    (options.wordCount && options.wordCount > 0 ? options.wordCount : undefined) ||
+    expectation?.target ||
+    1500;
+
+  // v1.4: Determine default mode based on quality level
+  // Premium/Enterprise quality levels default to multi_phase for best results
+  const isPremiumQuality = qualityLevel === 'premium' || qualityLevel === 'enterprise';
+  const defaultMode: BlogGenerationMode = isPremiumQuality ? 'multi_phase' : 'quick_generate';
+
+  const payload: Record<string, unknown> = {
+    blog_type: normalizeBlogType(options.templateType),
+    topic: options.topic,
+    keywords,
+    target_audience: options.targetAudience || 'general',
+    tone: (options.tone || 'professional'),
+    length: apiLength,
+    format: 'html',
+    word_count_target: wordCountTarget,
+    include_introduction: true,
+    include_conclusion: true,
+    include_faq: options.includeFAQ ?? false,
+    include_toc: options.includeToc ?? false,
+    use_dataforseo_content_generation: true,
+    use_openai_fallback: true,
+    ...qualityFeatures,
+    
+    // v1.4: Generation mode (defaults based on quality level)
+    mode: options.mode || defaultMode,
+    
+    // v1.4: Research depth
+    research_depth: options.researchDepth || 'standard',
+  };
+
+  // v1.4: Add GSC site URL if provided (multi-site support)
+  if (options.gscSiteUrl) {
+    payload.gsc_site_url = options.gscSiteUrl;
+  }
+
+  if (options.customInstructions) {
+    // Enforce character limit to prevent API validation errors
+    const instructions = options.customInstructions.length > MAX_CUSTOM_INSTRUCTIONS_LENGTH
+      ? options.customInstructions.substring(0, MAX_CUSTOM_INSTRUCTIONS_LENGTH)
+      : options.customInstructions;
+    payload.custom_instructions = instructions;
+  }
+
+  if (options.location) {
+    payload.location = options.location;
+  }
+
+  if (options.extraFields) {
+    Object.assign(payload, options.extraFields);
+  }
+
+  return payload;
 }
 
 /**
@@ -225,7 +404,12 @@ export function createOptimizedBlogRequest(params: {
 
   const qualityFeatures = getQualityFeaturesForLevel(qualityLevel);
   const length = mapWordCountToLength(wordCount);
-  const instructions = customInstructions || getDefaultCustomInstructions(templateType, true);
+  let instructions = customInstructions || getDefaultCustomInstructions(templateType, true);
+  
+  // Ensure instructions don't exceed API limit
+  if (instructions.length > MAX_CUSTOM_INSTRUCTIONS_LENGTH) {
+    instructions = instructions.substring(0, MAX_CUSTOM_INSTRUCTIONS_LENGTH);
+  }
 
   return {
     topic,

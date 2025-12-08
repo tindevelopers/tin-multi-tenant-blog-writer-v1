@@ -11,6 +11,9 @@ export interface ContentAnalysisResult {
   readability_score: number;
   seo_score: number;
   quality_score: number;
+  engagement_score?: number;
+  accessibility_score?: number;
+  eeat_score?: number;
   keyword_density: Record<string, number>;
   missing_keywords: string[];
   recommendations: string[];

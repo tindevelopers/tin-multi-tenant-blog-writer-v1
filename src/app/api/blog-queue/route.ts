@@ -38,12 +38,11 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') || 'queued_at';
     const order = searchParams.get('order') || 'desc';
 
-    // Build query
+    // Build query - using simpler select without explicit FK names
     let query = supabase
       .from('blog_generation_queue')
       .select(`
         *,
-        created_by_user:users!blog_generation_queue_created_by_fkey(user_id, email, full_name),
         post:blog_posts(post_id, title, status)
       `)
       .eq('org_id', orgId)
@@ -59,6 +58,24 @@ export async function GET(request: NextRequest) {
     }
 
     const { data: queueItems, error } = await query;
+
+    // Fetch created_by users for all items
+    if (queueItems && queueItems.length > 0) {
+      const userIds = [...new Set(queueItems.map(item => item.created_by).filter(Boolean))];
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('users')
+          .select('user_id, email, full_name')
+          .in('user_id', userIds);
+        
+        if (users) {
+          const usersMap = new Map(users.map(u => [u.user_id, u]));
+          queueItems.forEach((item: any) => {
+            item.created_by_user = usersMap.get(item.created_by) || null;
+          });
+        }
+      }
+    }
 
     if (error) {
       logger.error('Error fetching queue items:', error);
@@ -164,11 +181,21 @@ export async function POST(request: NextRequest) {
         progress_percentage: 0,
         metadata: body.metadata || {}
       })
-      .select(`
-        *,
-        created_by_user:users!blog_generation_queue_created_by_fkey(user_id, email, full_name)
-      `)
+      .select('*')
       .single();
+
+    // Fetch created_by user
+    if (queueItem) {
+      const { data: createdByUser } = await supabase
+        .from('users')
+        .select('user_id, email, full_name')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (createdByUser) {
+        (queueItem as any).created_by_user = createdByUser;
+      }
+    }
 
     if (insertError) {
       logger.error('Error creating queue item:', insertError);

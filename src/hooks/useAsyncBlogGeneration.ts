@@ -24,6 +24,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+/**
+ * Blog generation request interface (v1.4)
+ * Supports Quick Generate and Multi-Phase modes
+ */
 export interface BlogGenerationRequest {
   topic: string;
   keywords?: string[];
@@ -38,11 +42,25 @@ export interface BlogGenerationRequest {
   use_semantic_keywords?: boolean;
   use_quality_scoring?: boolean;
   target_audience?: string;
-  custom_instructions?: string;
+  custom_instructions?: string;  // Max 5000 characters (v1.4)
   template_type?: string;
   include_product_research?: boolean;
   quality_level?: string;
   word_count?: number;
+  
+  // v1.4: Generation mode
+  // - quick_generate: Fast, cost-effective using DataForSEO (30-60s)
+  // - multi_phase: Premium 12-stage pipeline with advanced features
+  mode?: 'quick_generate' | 'multi_phase';
+  
+  // v1.4: Google Search Console multi-site support
+  // Provide site-specific URL for multi-site setups
+  // Format: "https://example.com" or "sc-domain:example.com"
+  gsc_site_url?: string | null;
+  
+  // v1.4: Research depth
+  research_depth?: 'basic' | 'standard' | 'comprehensive';
+  
   [key: string]: any;
 }
 

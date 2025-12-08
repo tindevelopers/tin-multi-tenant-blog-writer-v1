@@ -1229,11 +1229,11 @@ export class EnhancedContentClustersService {
           .eq('org_id', orgId)
           .eq('cluster_name', clusterName);
         
-        // If duplicate exists, append timestamp to make it unique
+        // If duplicate exists, append date to make it unique
         if (existingClusters && existingClusters.length > 0) {
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-          clusterName = `${cluster.cluster_name} (${timestamp})`;
-          logger.debug('⚠️ Duplicate cluster name detected, appending timestamp:', {
+          const date = new Date().toISOString().split('T')[0]; // Just the date: YYYY-MM-DD
+          clusterName = `${cluster.cluster_name} (${date})`;
+          logger.debug('⚠️ Duplicate cluster name detected, appending date:', {
             original: cluster.cluster_name,
             new: clusterName
           });
@@ -1471,6 +1471,48 @@ export class EnhancedContentClustersService {
     } catch (error) {
       logger.error('Error fetching enhanced articles:', error);
       return [];
+    }
+  }
+
+  /**
+   * Delete a saved enhanced content cluster (and cascade its articles)
+   */
+  async deleteEnhancedCluster(
+    clusterId: string,
+    userId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const supabase = createClient();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      if (user.id !== userId) {
+        return { success: false, error: 'User ID mismatch' };
+      }
+
+      const { error } = await supabase
+        .from('content_clusters')
+        .delete()
+        .eq('id', clusterId)
+        .eq('user_id', userId);
+
+      if (error) {
+        logger.error('Failed to delete enhanced cluster', { clusterId, error });
+        return { success: false, error: error.message || 'Failed to delete cluster' };
+      }
+
+      // cluster_content_ideas rows cascade via FK
+      logger.debug('✅ Deleted enhanced cluster', { clusterId });
+      return { success: true };
+    } catch (error) {
+      logger.error('Error deleting enhanced cluster', { clusterId, error });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to delete cluster',
+      };
     }
   }
 

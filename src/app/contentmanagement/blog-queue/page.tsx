@@ -14,6 +14,8 @@ import {
   PencilIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  StopIcon,
+  TrashIcon,
 } from "@heroicons/react/24/outline";
 import { QueueStatus, getQueueStatusMetadata } from "@/lib/blog-queue-state-machine";
 import { BlogGenerationQueueItem } from "@/types/blog-queue";
@@ -309,6 +311,92 @@ export default function BlogQueuePage() {
     } catch (err) {
       // Error batch updating status - already shown to user via alert
       alert("Failed to update items. Please try again.");
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
+  const handleBatchRetry = async () => {
+    const failedItems = selectedItems.filter(id => 
+      queueItems.find(q => q.queue_id === id)?.status === 'failed'
+    );
+    
+    if (failedItems.length === 0) {
+      alert('No failed items selected.');
+      return;
+    }
+
+    if (!confirm(`Retry ${failedItems.length} failed item(s)?`)) {
+      return;
+    }
+
+    setBatchActionLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        failedItems.map(queueId => 
+          fetch(`/api/blog-queue/${queueId}/retry`, { method: "POST" })
+        )
+      );
+
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+      const failed = results.length - successful;
+
+      if (failed > 0) {
+        alert(`${successful} item(s) retried successfully. ${failed} item(s) failed.`);
+      } else {
+        alert(`${successful} item(s) retried successfully.`);
+      }
+
+      setSelectedItems([]);
+      await fetchQueueItems();
+      await fetchStats();
+    } catch (err) {
+      alert("Failed to retry items. Please try again.");
+    } finally {
+      setBatchActionLoading(false);
+    }
+  };
+
+  const handleBatchStop = async () => {
+    const generatingItems = selectedItems.filter(id => 
+      ['generating', 'queued'].includes(queueItems.find(q => q.queue_id === id)?.status || '')
+    );
+    
+    if (generatingItems.length === 0) {
+      alert('No generating items selected.');
+      return;
+    }
+
+    if (!confirm(`Stop ${generatingItems.length} generating item(s)? This will cancel the generation.`)) {
+      return;
+    }
+
+    setBatchActionLoading(true);
+    try {
+      const results = await Promise.allSettled(
+        generatingItems.map(queueId => 
+          fetch(`/api/blog-queue/${queueId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "cancelled" }),
+          })
+        )
+      );
+
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value.ok).length;
+      const failed = results.length - successful;
+
+      if (failed > 0) {
+        alert(`${successful} item(s) stopped successfully. ${failed} item(s) failed to stop.`);
+      } else {
+        alert(`${successful} item(s) stopped successfully.`);
+      }
+
+      setSelectedItems([]);
+      await fetchQueueItems();
+      await fetchStats();
+    } catch (err) {
+      alert("Failed to stop items. Please try again.");
     } finally {
       setBatchActionLoading(false);
     }
@@ -682,11 +770,35 @@ export default function BlogQueuePage() {
           {/* Batch Actions Bar */}
           {selectedItems.length > 0 && (
             <div className="bg-blue-50 dark:bg-blue-900/20 border-t border-blue-200 dark:border-blue-800 px-6 py-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-3">
                 <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
                   {selectedItems.length} item{selectedItems.length !== 1 ? 's' : ''} selected
                 </span>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Batch Retry - Only show if some selected items are failed */}
+                  {selectedItems.some(id => queueItems.find(q => q.queue_id === id)?.status === 'failed') && (
+                    <button
+                      onClick={handleBatchRetry}
+                      disabled={batchActionLoading}
+                      className="px-4 py-1.5 text-sm font-medium text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <ArrowPathIcon className="w-4 h-4" />
+                      Retry Failed
+                    </button>
+                  )}
+                  
+                  {/* Batch Stop - Only show if some selected items are generating/queued */}
+                  {selectedItems.some(id => ['generating', 'queued'].includes(queueItems.find(q => q.queue_id === id)?.status || '')) && (
+                    <button
+                      onClick={handleBatchStop}
+                      disabled={batchActionLoading}
+                      className="px-4 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      <StopIcon className="w-4 h-4" />
+                      Stop Generating
+                    </button>
+                  )}
+                  
                   <select
                     onChange={(e) => {
                       if (e.target.value) {
@@ -710,7 +822,7 @@ export default function BlogQueuePage() {
                     disabled={batchActionLoading}
                     className="px-4 py-1.5 text-sm font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    <XMarkIcon className="w-4 h-4" />
+                    <TrashIcon className="w-4 h-4" />
                     Delete Selected
                   </button>
                   <button
@@ -847,70 +959,81 @@ function QueueItemRow({
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-        <div className="flex items-center justify-end gap-2 flex-wrap">
-          {/* View Queue Details */}
+        <div className="flex items-center justify-end gap-2">
+          {/* STOP - Prominent for generating/queued items */}
+          {(item.status === "generating" || item.status === "queued") && (
           <button
-            onClick={onView}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition-colors"
-            title="View Queue Details"
+              onClick={onCancel}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              title="Stop generation"
           >
-            <EyeIcon className="w-4 h-4" />
-            <span className="text-xs">Details</span>
+              <StopIcon className="w-4 h-4" />
+              Stop
           </button>
+          )}
           
-          {/* View in Editor / Create Draft - show when blog is generated */}
+          {/* PRIMARY: Continue in Editor - Most prominent for generated items */}
           {hasGeneratedContent && (
             <button
               onClick={() => {
                 if (postId) {
-                  // Draft exists - go directly to editor
                   router.push(`/contentmanagement/drafts/edit/${postId}`);
                 } else {
-                  // No draft yet - go to detail page to create one
                   onView?.();
                 }
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
-              title={postId ? "Edit in Drafts" : "Create & Edit Draft"}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors"
+              title={postId ? "Continue editing in Draft Editor" : "Create draft and continue"}
             >
               <PencilIcon className="w-4 h-4" />
-              <span className="text-xs">{postId ? "Edit" : "Create Draft"}</span>
+              {postId ? "Continue" : "Start Editing"}
             </button>
           )}
           
-          {/* Regenerate - show when blog is generated */}
-          {item.status === "generated" && (
+          {/* Regenerate - For failed items */}
+          {item.status === "failed" && (
+            <>
             <button
-              onClick={() => onRegenerate?.()}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
-              title="Regenerate Blog"
+                onClick={onRetry}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                title="Retry with same settings"
+              >
+                <ArrowPathIcon className="w-4 h-4" />
+                Retry
+              </button>
+              <button
+                onClick={onRegenerate}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
+                title="Create new generation with same topic"
             >
               <ArrowPathIcon className="w-4 h-4" />
               <span className="text-xs">Regenerate</span>
             </button>
+            </>
           )}
           
-          {/* Retry - show when failed */}
-          {item.status === "failed" && (
+          {/* View Details */}
             <button
-              onClick={onRetry}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
-              title="Retry"
+            onClick={onView}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded transition-colors ${
+              hasGeneratedContent 
+                ? "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                : "text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20"
+            }`}
+            title="View generation details and progress"
             >
-              <ArrowPathIcon className="w-4 h-4" />
-              <span className="text-xs">Retry</span>
+            <EyeIcon className="w-4 h-4" />
+            <span className="text-xs">Details</span>
             </button>
-          )}
           
-          {/* Cancel - show when not published or cancelled */}
-          {!["published", "cancelled"].includes(item.status) && (
+          {/* Delete - For completed/generated items that aren't published */}
+          {["generated", "failed", "cancelled", "in_review", "approved", "rejected"].includes(item.status) && (
             <button
               onClick={onCancel}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-              title="Cancel"
+              className="flex items-center gap-1 px-2 py-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded transition-colors"
+              title="Remove from queue"
             >
-              <XMarkIcon className="w-4 h-4" />
-              <span className="text-xs">Cancel</span>
+              <TrashIcon className="w-4 h-4" />
             </button>
           )}
         </div>

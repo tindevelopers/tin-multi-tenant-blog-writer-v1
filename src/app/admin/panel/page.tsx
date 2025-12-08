@@ -59,8 +59,13 @@ export default function AdminPanelDashboard() {
         const [usersResult, orgsResult, integrationsResult] = await Promise.all([
           supabase.from("users").select("user_id", { count: "exact", head: true }),
           supabase.from("organizations").select("org_id", { count: "exact", head: true }),
-          supabase.from("integrations_development").select("integration_id", { count: "exact", head: true }),
+          supabase.from("integrations").select("integration_id", { count: "exact", head: true }),
         ]);
+
+        // Log integration errors but don't fail the whole page
+        if (integrationsResult.error) {
+          console.warn('Failed to load integrations count:', integrationsResult.error);
+        }
 
         setStats({
           totalUsers: usersResult.count || 0,
@@ -102,8 +107,13 @@ export default function AdminPanelDashboard() {
         // Organization admins see only their organization's stats
         const [usersResult, integrationsResult] = await Promise.all([
           supabase.from("users").select("user_id", { count: "exact", head: true }).eq("org_id", orgId),
-          supabase.from("integrations_development").select("integration_id", { count: "exact", head: true }).eq("org_id", orgId),
+          supabase.from("integrations").select("integration_id", { count: "exact", head: true }).eq("org_id", orgId),
         ]);
+
+        // Log integration errors but don't fail the whole page
+        if (integrationsResult.error) {
+          console.warn('Failed to load integrations count:', integrationsResult.error);
+        }
 
         setStats({
           totalUsers: usersResult.count || 0,

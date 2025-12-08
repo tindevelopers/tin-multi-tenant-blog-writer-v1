@@ -135,6 +135,78 @@ export async function getWebflowCollectionById(
 }
 
 /**
+ * Get the published domain for a Webflow site
+ * 
+ * Strategy:
+ * 1. First check for custom domains (paid Webflow plans)
+ * 2. Fall back to the staging domain if no custom domain
+ * 3. Return null if unable to determine
+ */
+export async function getWebflowPublishedDomain(
+  apiKey: string,
+  siteId: string
+): Promise<string | null> {
+  try {
+    // Try to get custom domains first
+    const customDomainsResponse = await fetch(
+      `https://api.webflow.com/v2/sites/${siteId}/custom_domains`,
+      {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json',
+          'authorization': `Bearer ${apiKey}`,
+        },
+      }
+    );
+
+    if (customDomainsResponse.ok) {
+      const data = await customDomainsResponse.json();
+      const customDomains = data.customDomains || data.custom_domains || [];
+      
+      // Find the primary/default domain (usually the first one that's registered)
+      for (const domain of customDomains) {
+        const hostname = domain.url || domain.hostname || domain.name;
+        if (hostname && !hostname.includes('webflow.io')) {
+          // Return the custom domain with https://
+          const cleanHostname = hostname.replace(/^https?:\/\//, '');
+          return `https://${cleanHostname}`;
+        }
+      }
+    }
+
+    // Fall back to getting site info for staging domain
+    const siteResponse = await fetch(
+      `https://api.webflow.com/v2/sites/${siteId}`,
+      {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json',
+          'authorization': `Bearer ${apiKey}`,
+        },
+      }
+    );
+
+    if (siteResponse.ok) {
+      const site = await siteResponse.json();
+      // Use the shortName for staging domain
+      if (site.shortName) {
+        return `https://${site.shortName}.webflow.io`;
+      }
+      // Fall back to previewUrl
+      if (site.previewUrl) {
+        return site.previewUrl.replace(/\/$/, ''); // Remove trailing slash
+      }
+    }
+
+    // Last resort: use the siteId in the staging domain
+    return `https://${siteId}.webflow.io`;
+  } catch (error: any) {
+    logger.warn('Could not determine Webflow published domain:', { error: error.message, siteId });
+    return null;
+  }
+}
+
+/**
  * Auto-detect Site ID from API key
  * 
  * Strategy:

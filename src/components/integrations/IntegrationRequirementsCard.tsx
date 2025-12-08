@@ -41,14 +41,39 @@ export function IntegrationRequirementsCard({
   }
 
   const analysis = IntegrationRequirementsAnalyzer.analyzeConfiguration(provider, config);
+  
+  // Calculate field mapping statistics
+  const fieldMappings = (config.field_mappings as Array<{ blogField: string; targetField: string }>) || [];
+  const mappedBlogFields = new Set(fieldMappings.map(m => m.blogField));
+  
+  // Get field mapping requirements
+  const fieldMappingRequirements = requirements.fieldMappingRequirements || [];
+  const mandatoryFieldMappings = fieldMappingRequirements.filter(f => f.required);
+  const optionalFieldMappings = fieldMappingRequirements.filter(f => !f.required);
+  
+  // Calculate missing mandatory field mappings
+  const missingMandatoryMappings = mandatoryFieldMappings.filter(
+    req => !mappedBlogFields.has(req.blogField)
+  );
+  
+  // Calculate total missing field mappings (mandatory + optional)
+  const missingTotalMappings = fieldMappingRequirements.filter(
+    req => !mappedBlogFields.has(req.blogField)
+  );
+  
+  const allMandatoryMapped = missingMandatoryMappings.length === 0;
   const isReady = analysis.valid && analysis.missingFields.length === 0;
   const hasWarnings = analysis.warnings.length > 0;
 
+  // Determine card styling based on mandatory fields and credentials
+  const cardIsReady = isReady && (fieldMappingRequirements.length === 0 || allMandatoryMapped);
+  const cardHasWarnings = hasWarnings || (fieldMappingRequirements.length > 0 && !allMandatoryMapped && missingTotalMappings.length > 0);
+  
   return (
     <div className={`border rounded-lg p-4 transition-all ${
-      isReady 
+      cardIsReady 
         ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
-        : hasWarnings
+        : cardHasWarnings
         ? 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20'
         : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
     }`}>
@@ -56,15 +81,15 @@ export function IntegrationRequirementsCard({
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3 flex-1">
           <div className={`p-2 rounded-lg ${
-            isReady 
+            cardIsReady 
               ? 'bg-green-100 dark:bg-green-900/30'
-              : hasWarnings
+              : cardHasWarnings
               ? 'bg-yellow-100 dark:bg-yellow-900/30'
               : 'bg-gray-100 dark:bg-gray-700'
           }`}>
-            {isReady ? (
+            {cardIsReady ? (
               <CheckCircleIcon className="w-5 h-5 text-green-600 dark:text-green-400" />
-            ) : hasWarnings ? (
+            ) : cardHasWarnings ? (
               <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
             ) : (
               <KeyIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -79,15 +104,39 @@ export function IntegrationRequirementsCard({
               {requirements.description}
             </p>
             
-            {/* Status Badge */}
-            <div className="mt-2 flex items-center gap-2">
-              <span className={`text-xs px-2 py-1 rounded ${
-                isReady
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                  : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-              }`}>
-                {isReady ? 'Ready to Publish' : `${analysis.missingFields.length} Missing Field${analysis.missingFields.length !== 1 ? 's' : ''}`}
-              </span>
+            {/* Status Badges */}
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              {/* Mandatory Fields Badge */}
+              {fieldMappingRequirements.length > 0 && (
+                <span className={`text-xs px-2 py-1 rounded ${
+                  allMandatoryMapped
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                    : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                }`}>
+                  {allMandatoryMapped 
+                    ? '0 Mandatory Fields' 
+                    : `${missingMandatoryMappings.length} Mandatory Field${missingMandatoryMappings.length !== 1 ? 's' : ''}`
+                  }
+                </span>
+              )}
+              
+              {/* Total Missing Fields Badge */}
+              {fieldMappingRequirements.length > 0 && missingTotalMappings.length > 0 && (
+                <span className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                  {missingTotalMappings.length} Missing Field{missingTotalMappings.length !== 1 ? 's' : ''}
+                </span>
+              )}
+              
+              {/* Credentials Status Badge */}
+              {fieldMappingRequirements.length === 0 && (
+                <span className={`text-xs px-2 py-1 rounded ${
+                  isReady
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                    : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                }`}>
+                  {isReady ? 'Ready to Publish' : `${analysis.missingFields.length} Missing Field${analysis.missingFields.length !== 1 ? 's' : ''}`}
+                </span>
+              )}
               
               {hasWarnings && (
                 <span className="text-xs px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">
@@ -232,26 +281,87 @@ export function IntegrationRequirementsCard({
           {/* Field Mapping Info */}
           {requirements.fieldMappingRequirements.length > 0 && (
             <div>
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
-                Field Mapping
-              </h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Field Mapping
+                </h4>
+                {(() => {
+                  // Check if field mappings exist in config
+                  const fieldMappings = (config.field_mappings as Array<{ blogField: string; targetField: string }>) || [];
+                  const hasMappings = Array.isArray(fieldMappings) && fieldMappings.length > 0;
+                  
+                  return hasMappings ? (
+                    <span className="text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                      {fieldMappings.length} mapped
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                      Not configured
+                    </span>
+                  );
+                })()}
+              </div>
               <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                 <p>
-                  This integration requires mapping blog post fields to {requirements.displayName} fields:
+                  This integration requires mapping blog post fields to {requirements.displayName} fields.
+                  {(() => {
+                    const fieldMappings = (config.field_mappings as Array<{ blogField: string; targetField: string }>) || [];
+                    const hasMappings = Array.isArray(fieldMappings) && fieldMappings.length > 0;
+                    
+                    if (hasMappings) {
+                      return (
+                        <span className="text-green-600 dark:text-green-400 font-medium ml-1">
+                          Configured mappings will be used when publishing.
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="text-amber-600 dark:text-amber-400 font-medium ml-1">
+                        Configure field mappings in the integration settings.
+                      </span>
+                    );
+                  })()}
                 </p>
-                <ul className="list-disc list-inside ml-2 space-y-1">
-                  {requirements.fieldMappingRequirements.slice(0, 3).map((mapping, idx) => (
-                    <li key={idx}>
-                      <strong>{mapping.blogField}</strong> → {mapping.targetField}
-                      {mapping.required && <span className="text-red-600 dark:text-red-400"> *</span>}
-                    </li>
-                  ))}
-                  {requirements.fieldMappingRequirements.length > 3 && (
-                    <li className="text-gray-500 dark:text-gray-500">
-                      +{requirements.fieldMappingRequirements.length - 3} more fields
-                    </li>
-                  )}
-                </ul>
+                {(() => {
+                  const fieldMappings = (config.field_mappings as Array<{ blogField: string; targetField: string }>) || [];
+                  const hasMappings = Array.isArray(fieldMappings) && fieldMappings.length > 0;
+                  
+                  if (hasMappings) {
+                    return (
+                      <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/10 rounded border border-green-200 dark:border-green-800">
+                        <p className="font-medium text-green-800 dark:text-green-200 mb-1">Current Mappings:</p>
+                        <ul className="space-y-0.5">
+                          {fieldMappings.slice(0, 5).map((mapping, idx) => (
+                            <li key={idx} className="text-green-700 dark:text-green-300">
+                              <strong>{mapping.blogField}</strong> → {mapping.targetField}
+                            </li>
+                          ))}
+                          {fieldMappings.length > 5 && (
+                            <li className="text-green-600 dark:text-green-400 text-xs">
+                              +{fieldMappings.length - 5} more mappings
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <ul className="list-disc list-inside ml-2 space-y-1 mt-2">
+                      {requirements.fieldMappingRequirements.slice(0, 3).map((mapping, idx) => (
+                        <li key={idx}>
+                          <strong>{mapping.blogField}</strong> → {mapping.targetField}
+                          {mapping.required && <span className="text-red-600 dark:text-red-400"> *</span>}
+                        </li>
+                      ))}
+                      {requirements.fieldMappingRequirements.length > 3 && (
+                        <li className="text-gray-500 dark:text-gray-500">
+                          +{requirements.fieldMappingRequirements.length - 3} more fields
+                        </li>
+                      )}
+                    </ul>
+                  );
+                })()}
               </div>
             </div>
           )}

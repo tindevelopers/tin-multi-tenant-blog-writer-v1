@@ -90,6 +90,19 @@ export async function POST(
     const finalSlug = slug || generateSlug(finalTitle);
     const finalWordCount = word_count || (content ? content.split(/\s+/).filter((w: string) => w.length > 0).length : 0);
     const readTime = finalWordCount ? calculateReadTime(finalWordCount) : null;
+    
+    // Clean excerpt of AI artifacts
+    let cleanedExcerpt = excerpt || '';
+    if (cleanedExcerpt) {
+      cleanedExcerpt = cleanedExcerpt
+        .replace(/\b(for example similar cases?\.\.?|such as similar cases?\.\.?|like similar cases?\.\.?|for instance similar cases?\.\.?)/gi, '')
+        .replace(/^!Modern\s+/gi, '')
+        .replace(/^!Content\s+/gi, '')
+        .replace(/^([a-z\s]+)\s+\1\s+/i, '$1 ')
+        .replace(/\s+\.\.\s*$/, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    }
 
     // Build comprehensive metadata with all fields
     const finalMetadata: Record<string, unknown> = {
@@ -119,7 +132,7 @@ export async function POST(
     const finalSeoData: Record<string, unknown> = {
       ...(seo_data || {}),
       meta_title: seo_data?.meta_title || finalTitle,
-      meta_description: seo_data?.meta_description || excerpt || '',
+      meta_description: seo_data?.meta_description || cleanedExcerpt || '',
     };
 
     let result;
@@ -131,7 +144,7 @@ export async function POST(
       const updateData: BlogPostUpdate = {
         content,
         title: finalTitle,
-        excerpt: excerpt || null,
+        excerpt: cleanedExcerpt || null,
         updated_at: new Date().toISOString(),
         seo_data: finalSeoData as Database['public']['Tables']['blog_posts']['Row']['seo_data'],
         metadata: finalMetadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],
@@ -164,7 +177,7 @@ export async function POST(
         created_by: userId,
         title: finalTitle,
         content,
-        excerpt: excerpt || null,
+        excerpt: cleanedExcerpt || null,
         status: 'draft',
         seo_data: finalSeoData as Database['public']['Tables']['blog_posts']['Row']['seo_data'],
         metadata: finalMetadata as Database['public']['Tables']['blog_posts']['Row']['metadata'],

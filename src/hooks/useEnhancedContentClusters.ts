@@ -28,6 +28,7 @@ export interface UseEnhancedContentClustersResult {
   saveEnhancedClusters: () => Promise<{ success: boolean; cluster_ids?: string[]; error?: string }>;
   loadUserClusters: () => Promise<void>;
   loadClusterArticles: (clusterId: string) => Promise<void>;
+  deleteCluster: (clusterId: string) => Promise<{ success: boolean; error?: string }>;
   selectArticle: (articleId: string) => void;
   updateArticle: (articleId: string, updates: Partial<HumanReadableArticle>) => void;
   reset: () => void;
@@ -196,6 +197,40 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
   }, []);
 
   /**
+   * Delete a saved cluster
+   */
+  const deleteCluster = useCallback(async (clusterId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const supabase = createClient();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        return { success: false, error: 'User not authenticated' };
+      }
+
+      const result = await enhancedClustersService.deleteEnhancedCluster(clusterId, user.id);
+
+      if (result.success) {
+        setClusters(prev => prev.filter(cluster => cluster.id !== clusterId));
+        setArticles(prev => prev.filter(article => article.cluster_id !== clusterId));
+      } else if (result.error) {
+        setError(result.error);
+      }
+
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete cluster';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Select/deselect an article
    */
   const selectArticle = useCallback((articleId: string) => {
@@ -244,6 +279,7 @@ export function useEnhancedContentClusters(): UseEnhancedContentClustersResult {
     saveEnhancedClusters,
     loadUserClusters,
     loadClusterArticles,
+    deleteCluster,
     selectArticle,
     updateArticle,
     reset,

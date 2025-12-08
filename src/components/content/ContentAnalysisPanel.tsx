@@ -6,8 +6,9 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useContentAnalysis } from '@/hooks/useContentAnalysis';
+import { analyzeContent, type ContentAnalysisResult } from '@/lib/content-analysis-service';
 import { logger } from '@/utils/logger';
 import { 
   ChartBarIcon, 
@@ -16,38 +17,156 @@ import {
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
 
+type ScoreCardColor =
+  | 'blue'
+  | 'green'
+  | 'purple'
+  | 'indigo'
+  | 'amber'
+  | 'pink';
+
+const colorClasses: Record<ScoreCardColor, { bg: string; text: string }> = {
+  blue: { bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-600 dark:text-blue-400' },
+  green: { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-600 dark:text-green-400' },
+  purple: { bg: 'bg-purple-50 dark:bg-purple-900/20', text: 'text-purple-600 dark:text-purple-400' },
+  indigo: { bg: 'bg-indigo-50 dark:bg-indigo-900/20', text: 'text-indigo-600 dark:text-indigo-400' },
+  amber: { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-600 dark:text-amber-400' },
+  pink: { bg: 'bg-pink-50 dark:bg-pink-900/20', text: 'text-pink-600 dark:text-pink-400' },
+};
+
+function ScoreCard({ label, value, color }: { label: string; value?: number; color: ScoreCardColor }) {
+  const classes = colorClasses[color];
+  return (
+    <div className={`${classes.bg} rounded-lg p-4`}>
+      <div className={`text-2xl font-bold ${classes.text}`}>
+        {value !== undefined && value !== null ? Math.round(value) : '—'}
+      </div>
+      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+        {label}
+      </div>
+    </div>
+  );
+}
+
 interface ContentAnalysisPanelProps {
   content: string;
   topic?: string;
   keywords?: string[];
   targetAudience?: string;
-  onAnalysisComplete?: (result: any) => void;
+  title?: string;
+  metaDescription?: string;
+  targetKeyword?: string;
+  featuredImage?: string;
+  onAnalysisComplete?: (result: ContentAnalysisResult) => void;
+  useLocalAnalysis?: boolean; // Use local analysis instead of API
 }
 
 export function ContentAnalysisPanel({
   content,
   topic,
-  keywords,
+  keywords = [],
   targetAudience,
-  onAnalysisComplete
+  title,
+  metaDescription,
+  targetKeyword,
+  featuredImage,
+  onAnalysisComplete,
+  useLocalAnalysis = true, // Default to local analysis for instant results
 }: ContentAnalysisPanelProps) {
-  const { analyze, loading, error, result } = useContentAnalysis();
+  const { analyze: analyzeViaAPI, loading: apiLoading, error: apiError, result: apiResult } = useContentAnalysis();
   const [showDetails, setShowDetails] = useState(false);
+  const [localResult, setLocalResult] = useState<ContentAnalysisResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use local analysis result if available, otherwise use API result
+  const result = localResult || apiResult;
+  const isLoading = loading || apiLoading;
+  const hasError = error || apiError;
+
+  // Auto-analyze on mount if content exists and useLocalAnalysis is true
+  const autoAnalysis = useMemo(() => {
+    if (useLocalAnalysis && content && content.length > 50) {
+      try {
+        const analysis = analyzeContent({
+          content,
+          title,
+          meta_description: metaDescription,
+          keywords,
+          target_keyword: targetKeyword || topic,
+          featured_image: featuredImage,
+        });
+        setLocalResult(analysis);
+        if (onAnalysisComplete) {
+          onAnalysisComplete(analysis);
+        }
+        return analysis;
+      } catch (err) {
+        logger.error('Local analysis failed:', err);
+        return null;
+      }
+    }
+    return null;
+  }, [content, title, metaDescription, keywords, targetKeyword, topic, featuredImage, useLocalAnalysis]);
 
   const handleAnalyze = async () => {
-    try {
-      const analysisResult = await analyze({
-        content,
-        topic,
-        keywords,
-        target_audience: targetAudience
-      });
-      if (onAnalysisComplete) {
-        onAnalysisComplete(analysisResult);
+    if (useLocalAnalysis) {
+      // Use local analysis for instant results
+      setLoading(true);
+      setError(null);
+      try {
+        const analysis = analyzeContent({
+          content,
+          title,
+          meta_description: metaDescription,
+          keywords,
+          target_keyword: targetKeyword || topic,
+          featured_image: featuredImage,
+        });
+        setLocalResult(analysis);
+        if (onAnalysisComplete) {
+          onAnalysisComplete(analysis);
+        }
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Analysis failed';
+        setError(errorMessage);
+        logger.error('Local analysis failed:', err);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      logger.error('Analysis failed:', err);
-    }
+      } else {
+        // Use API analysis
+        try {
+          const analysisResult = await analyzeViaAPI({
+            content,
+            topic,
+            keywords,
+            target_audience: targetAudience
+          });
+          // Convert API result to match ContentAnalysisResult type
+          const convertedResult: ContentAnalysisResult = {
+            ...analysisResult,
+            content_structure: {
+              has_title: !!title,
+              has_meta_description: !!metaDescription,
+              has_featured_image: !!featuredImage,
+              heading_structure: {
+                h1: (content.match(/<h1[^>]*>/gi) || []).length,
+                h2: (content.match(/<h2[^>]*>/gi) || []).length,
+                h3: (content.match(/<h3[^>]*>/gi) || []).length,
+                h4: (content.match(/<h4[^>]*>/gi) || []).length,
+              },
+              paragraph_count: (content.match(/<p[^>]*>/gi) || []).length,
+              list_count: (content.match(/<(ul|ol)[^>]*>/gi) || []).length,
+            },
+          };
+          if (onAnalysisComplete) {
+            onAnalysisComplete(convertedResult);
+          }
+        } catch (err) {
+          logger.error('API analysis failed:', err);
+        }
+      }
   };
 
   return (
@@ -68,11 +187,11 @@ export function ContentAnalysisPanel({
         </button>
       </div>
 
-      {error && (
+      {(hasError) && (
         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             <ExclamationTriangleIcon className="w-5 h-5 text-red-600 dark:text-red-400" />
-            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+            <p className="text-sm text-red-700 dark:text-red-300">{hasError || 'Unknown error'}</p>
           </div>
         </div>
       )}
@@ -80,31 +199,13 @@ export function ContentAnalysisPanel({
       {result && (
         <div className="space-y-4">
           {/* Scores */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {result.readability_score}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Readability
-              </div>
-            </div>
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {result.seo_score}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                SEO Score
-              </div>
-            </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {result.quality_score}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Quality
-              </div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <ScoreCard label="Readability" value={result.readability_score} color="blue" />
+            <ScoreCard label="SEO Score" value={result.seo_score} color="green" />
+            <ScoreCard label="Quality" value={result.quality_score} color="purple" />
+            <ScoreCard label="Engagement" value={result.engagement_score} color="indigo" />
+            <ScoreCard label="Accessibility" value={result.accessibility_score} color="amber" />
+            <ScoreCard label="E-E-A-T" value={result.eeat_score} color="pink" />
           </div>
 
           {/* Stats */}
@@ -112,27 +213,35 @@ export function ContentAnalysisPanel({
             <div>
               <span className="text-gray-600 dark:text-gray-400">Word Count:</span>
               <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {result.word_count.toLocaleString()}
+                {result.word_count?.toLocaleString() || 0}
               </span>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Reading Time:</span>
               <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {result.reading_time_minutes} min
+                {result.reading_time_minutes || 0} min
               </span>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Headings:</span>
               <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {result.headings_count}
+                {result.headings_count || 0}
               </span>
             </div>
             <div>
               <span className="text-gray-600 dark:text-gray-400">Links:</span>
               <span className="ml-2 font-medium text-gray-900 dark:text-white">
-                {result.links_count}
+                {result.links_count || 0}
               </span>
             </div>
+            {result.images_count !== undefined && (
+              <div>
+                <span className="text-gray-600 dark:text-gray-400">Images:</span>
+                <span className="ml-2 font-medium text-gray-900 dark:text-white">
+                  {result.images_count}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Recommendations */}

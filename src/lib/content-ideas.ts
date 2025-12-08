@@ -226,7 +226,7 @@ export class ContentIdeasService {
     return pillar_keyword
       .split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ') + ' Content Hub';
+      .join(' ');
   }
 
   /**
@@ -402,11 +402,11 @@ export class ContentIdeasService {
         .eq('org_id', orgId)
         .eq('cluster_name', clusterName);
       
-      // If duplicate exists, append timestamp to make it unique
+      // If duplicate exists, append a short timestamp to make it unique
       if (existingClusters && existingClusters.length > 0) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const timestamp = new Date().toISOString().split('T')[0]; // Just the date: YYYY-MM-DD
         clusterName = `${cluster.cluster_name} (${timestamp})`;
-        logger.debug('⚠️ Duplicate cluster name detected, appending timestamp:', {
+        logger.debug('⚠️ Duplicate cluster name detected, appending date:', {
           original: cluster.cluster_name,
           new: clusterName
         });

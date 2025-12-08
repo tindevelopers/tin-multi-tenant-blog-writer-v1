@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { logger } from '@/utils/logger';
-import { ArrowPathIcon, CheckCircleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, CheckCircleIcon, XCircleIcon, ArrowPathRoundedSquareIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type { FieldMapping, BlogField } from '@/lib/integrations/types';
+import { getDefaultWebflowFieldMappings } from '@/lib/integrations/webflow-field-mapping';
 
 interface WebflowField {
   id: string;
@@ -112,12 +113,32 @@ export function WebflowFieldMapping({ integrationId, collectionId }: WebflowFiel
             }
           }
           
+          // If no mappings found, use defaults but don't save them yet
+          if (mappings.length === 0) {
+            logger.debug('No saved mappings found, using defaults for display');
+            // Don't set defaults here - let user see empty state and choose to use defaults
+          }
+          
           setFieldMappings(mappings);
         }
       }
     } catch (err) {
       logger.error('Error loading field mappings:', err);
     }
+  };
+
+  const handleResetToDefaults = () => {
+    if (confirm('Are you sure you want to reset all mappings to default values? This will overwrite your current mappings.')) {
+      const defaults = getDefaultWebflowFieldMappings();
+      setFieldMappings(defaults);
+      setSuccess('Mappings reset to defaults. Click "Save Field Mappings" to persist.');
+    }
+  };
+
+  const handleClearMapping = (blogField: BlogField) => {
+    setFieldMappings(prev => prev.filter(m => m.blogField !== blogField));
+    setSuccess(`Mapping cleared for ${BLOG_FIELDS.find(f => f.value === blogField)?.label}. Click "Save Field Mappings" to persist.`);
+    setTimeout(() => setSuccess(null), 3000);
   };
 
   const handleMappingChange = (blogField: BlogField, webflowFieldSlug: string) => {
@@ -193,20 +214,36 @@ export function WebflowFieldMapping({ integrationId, collectionId }: WebflowFiel
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Field Mapping
+            Field Mapping Configuration
           </h3>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Map your blog post fields to Webflow CMS collection fields
             {collectionName && ` (${collectionName})`}
+            {fieldMappings.length > 0 && (
+              <span className="ml-2 text-green-600 dark:text-green-400">
+                • {fieldMappings.length} mapping{fieldMappings.length !== 1 ? 's' : ''} configured
+              </span>
+            )}
           </p>
         </div>
-        <button
-          onClick={fetchCollectionFields}
-          className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
-        >
-          <ArrowPathIcon className="w-4 h-4" />
-          Refresh Fields
-        </button>
+        <div className="flex items-center gap-2">
+          {fieldMappings.length > 0 && (
+            <button
+              onClick={handleResetToDefaults}
+              className="text-sm text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 flex items-center gap-1 px-2 py-1 border border-amber-200 dark:border-amber-800 rounded"
+            >
+              <ArrowPathRoundedSquareIcon className="w-4 h-4" />
+              Reset to Defaults
+            </button>
+          )}
+          <button
+            onClick={fetchCollectionFields}
+            className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+          >
+            <ArrowPathIcon className="w-4 h-4" />
+            Refresh Fields
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -243,41 +280,68 @@ export function WebflowFieldMapping({ integrationId, collectionId }: WebflowFiel
           </div>
 
           <div className="space-y-3">
-            {BLOG_FIELDS.map(blogField => (
-              <div
-                key={blogField.value}
-                className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
-              >
-                <div className="flex flex-col">
-                  <label className="font-medium text-gray-900 dark:text-white">
-                    {blogField.label}
-                  </label>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    {blogField.description}
-                  </span>
+            {BLOG_FIELDS.map(blogField => {
+              const currentMapping = fieldMappings.find(m => m.blogField === blogField.value);
+              const isMapped = !!currentMapping;
+              
+              return (
+                <div
+                  key={blogField.value}
+                  className={`grid grid-cols-1 md:grid-cols-2 gap-4 p-3 rounded-lg border ${
+                    isMapped
+                      ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
+                      : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600'
+                  }`}
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <label className="font-medium text-gray-900 dark:text-white">
+                        {blogField.label}
+                      </label>
+                      {isMapped && (
+                        <CheckCircleIcon className="w-4 h-4 text-green-600 dark:text-green-400" />
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      {blogField.description}
+                    </span>
+                    {isMapped && (
+                      <span className="text-xs text-green-600 dark:text-green-400 mt-1 font-medium">
+                        → {currentMapping.targetField}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <select
+                      value={getMappedField(blogField.value)}
+                      onChange={(e) => handleMappingChange(blogField.value, e.target.value)}
+                      className={`flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white ${
+                        isMapped
+                          ? 'border-green-300 dark:border-green-700'
+                          : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                    >
+                      <option value="">-- Select Webflow Field --</option>
+                      {webflowFields.map(field => (
+                        <option key={field.id} value={field.slug}>
+                          {field.displayName} ({field.type})
+                          {field.isRequired && ' *'}
+                        </option>
+                      ))}
+                    </select>
+                    {isMapped && (
+                      <button
+                        onClick={() => handleClearMapping(blogField.value)}
+                        className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                        title="Clear mapping"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <select
-                    value={getMappedField(blogField.value)}
-                    onChange={(e) => handleMappingChange(blogField.value, e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white"
-                  >
-                    <option value="">-- Select Webflow Field --</option>
-                    {webflowFields.map(field => (
-                      <option key={field.id} value={field.slug}>
-                        {field.displayName} ({field.type})
-                        {field.isRequired && ' *'}
-                      </option>
-                    ))}
-                  </select>
-                  {fieldMappings.find(m => m.blogField === blogField.value) && (
-                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                      ✓ Mapped
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">

@@ -917,6 +917,21 @@ pre[class*="language-"].line-numbers {
 /* TipTap Editor Styles */
 .ProseMirror {
   outline: none;
+  pointer-events: auto !important;
+  cursor: text;
+}
+
+/* Ensure editor content is always clickable when editable */
+.ProseMirror[data-editable="true"],
+.ProseMirror[contenteditable="true"] {
+  pointer-events: auto !important;
+  cursor: text !important;
+}
+
+.ProseMirror[data-editable="false"],
+.ProseMirror[contenteditable="false"] {
+  pointer-events: none;
+  cursor: default;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
@@ -968,17 +983,27 @@ pre[class*="language-"].line-numbers {
   color: #9ca3af;
 }
 
-.ProseMirror code {
+/* Inline code only - not code blocks */
+.ProseMirror code:not(pre code) {
   background-color: #f3f4f6;
   padding: 0.125rem 0.25rem;
   border-radius: 0.25rem;
   font-size: 0.875em;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: #dc2626; /* Red for inline code only */
 }
 
-.dark .ProseMirror code {
+.dark .ProseMirror code:not(pre code) {
   background-color: #374151;
-  color: #f9fafb;
+  color: #fca5a5;
+}
+
+/* Ensure code blocks don't inherit red color */
+.ProseMirror pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
 }
 
 .ProseMirror pre {

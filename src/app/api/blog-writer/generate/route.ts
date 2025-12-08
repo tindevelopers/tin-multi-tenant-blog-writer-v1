@@ -3,8 +3,8 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { createClient } from '@/lib/supabase/server';
 import cloudRunHealth from '@/lib/cloud-run-health';
 import { type GeneratedImage } from '@/lib/image-generation';
-import { enhanceContentToRichHTML, extractSections } from '@/lib/content-enhancer';
-import { getDefaultCustomInstructions, getQualityFeaturesForLevel, mapWordCountToLength, convertLengthToAPI } from '@/lib/blog-generation-utils';
+import { enhanceContentToRichHTML, extractSections, cleanExcerpt } from '@/lib/content-enhancer';
+import { getDefaultCustomInstructions, getQualityFeaturesForLevel, buildEnhancedBlogRequestPayload } from '@/lib/blog-generation-utils';
 import type { ProgressUpdate, EnhancedBlogResponse } from '@/types/blog-generation';
 import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
@@ -152,7 +152,8 @@ function buildBlogResponse(
   // Fallback chain: blog_post.title → title → topic
   // All fallbacks ensure a valid string is always returned
   const title = result.blog_post?.title || result.title || topic;
-  const excerpt = result.blog_post?.excerpt || result.blog_post?.summary || result.excerpt || result.meta_description || '';
+  // Use cleaned excerpt if available, otherwise fallback chain
+  const excerpt = result.excerpt || result.blog_post?.excerpt || result.blog_post?.summary || result.meta_description || '';
   
   return {
     // Core content fields
@@ -307,6 +308,9 @@ export async function POST(request: NextRequest) {
       include_review_sentiment,
       use_google,
       use_dataforseo_content_generation = true, // ALWAYS use DataForSEO as primary (default: true)
+      // v1.4: Generation mode and GSC multi-site support
+      mode, // 'quick_generate' or 'multi_phase' (default: 'quick_generate')
+      gsc_site_url, // Google Search Console site URL for multi-site support
     } = body;
     
     logger.debug('📝 Generation parameters:', {
@@ -322,7 +326,11 @@ export async function POST(request: NextRequest) {
       preset,
       preset_id,
       use_enhanced,
-      use_dataforseo_content_generation // Passed to backend API for provider selection
+      use_dataforseo_content_generation, // Passed to backend API for provider selection
+      // v1.4: New parameters
+      mode: mode || 'quick_generate', // Default to quick_generate
+      gsc_site_url: gsc_site_url || null, // Multi-site GSC support
+      research_depth: research_depth || 'standard',
     });
     
     // Validate required fields
@@ -686,42 +694,32 @@ export async function POST(request: NextRequest) {
     }
     
     // Build request payload for enhanced endpoint (v1.3.6)
-    // Map template_type to blog_type, or use 'custom' as default
-    // Valid blog_type values: custom, brand, top_10, product_review, how_to, comparison, guide,
-    // tutorial, listicle, case_study, news, opinion, interview, faq, checklist, tips, definition,
-    // benefits, problem_solution, trend_analysis, statistics, resource_list, timeline, myth_busting,
-    // best_practices, getting_started, advanced, troubleshooting
-    const blogType = template_type && [
-      'custom', 'brand', 'top_10', 'product_review', 'how_to', 'comparison', 'guide',
-      'tutorial', 'listicle', 'case_study', 'news', 'opinion', 'interview', 'faq', 'checklist', 'tips',
-      'definition', 'benefits', 'problem_solution', 'trend_analysis', 'statistics', 'resource_list',
-      'timeline', 'myth_busting', 'best_practices', 'getting_started', 'advanced', 'troubleshooting'
-    ].includes(template_type) ? template_type : 'custom';
-    
-    const requestPayload: Record<string, unknown> = {
-      blog_type: blogType,
-      topic,
-      keywords: keywordsArray,
-      target_audience: target_audience || brandVoice?.target_audience || 'general',
-      tone: (tone || brandVoice?.tone || 'professional') as 'professional' | 'casual' | 'academic' | 'conversational' | 'instructional',
-      length: length ? convertLengthToAPI(length) : convertLengthToAPI(mapWordCountToLength(word_count || contentPreset?.word_count || 1000)),
-      format: 'html' as 'markdown' | 'html' | 'json',
-      // ALWAYS use DataForSEO as primary content generation provider
-      use_dataforseo_content_generation: true, // Force DataForSEO as primary
-      // OpenAI will be used as fallback for missing mandatory fields after DataForSEO response
-      use_openai_fallback: true, // Enable OpenAI fallback for missing fields
-    };
+    const resolvedCustomInstructions =
+      custom_instructions || defaultCustomInstructions || undefined;
 
-    // Add custom instructions (use provided or default for premium)
     if (custom_instructions) {
-      requestPayload.custom_instructions = custom_instructions;
       logger.debug('📝 Using provided custom instructions');
     } else if (defaultCustomInstructions) {
-      requestPayload.custom_instructions = defaultCustomInstructions;
       logger.debug('📝 Using default premium custom instructions');
     }
 
-    // Note: template_type is now mapped to blog_type above, no need to set separately
+    const requestPayload: Record<string, unknown> = buildEnhancedBlogRequestPayload({
+      topic,
+      keywords: keywordsArray,
+      targetAudience: target_audience || brandVoice?.target_audience || 'general',
+      tone: tone || brandVoice?.tone || 'professional',
+      wordCount: word_count || contentPreset?.word_count || 1500,
+      qualityLevel: quality_level || contentPreset?.quality_level || 'medium',
+      customInstructions: resolvedCustomInstructions,
+      templateType: template_type || undefined,
+      length: length || undefined,
+      includeFAQ: include_faq_section,
+      location,
+      // v1.4: Generation mode and GSC multi-site support
+      mode: mode || undefined, // Will use default based on quality level if not specified
+      gscSiteUrl: gsc_site_url || undefined, // Multi-site GSC support
+      researchDepth: research_depth || undefined, // Default: 'standard'
+    });
 
     // Add quality features (enable automatically for premium, or use provided values)
     const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
@@ -764,16 +762,6 @@ export async function POST(request: NextRequest) {
     requestPayload.include_faq = include_faq_section !== undefined ? include_faq_section : false;
     requestPayload.include_toc = false; // Default to false
     
-    // Add word_count_target if word_count is provided
-    if (word_count) {
-      requestPayload.word_count_target = word_count;
-    }
-    
-    // Add location if provided (for location-based content)
-    if (location) {
-      requestPayload.location = location;
-    }
-    
     // v1.3.4: Abstraction blog type is not currently used in this implementation
     // If needed in the future, add logic to determine when blogType should be 'abstraction'
     // Abstraction blogs support content_strategy and quality_target fields
@@ -785,8 +773,8 @@ export async function POST(request: NextRequest) {
       keywords: requestPayload.keywords,
       target_audience: requestPayload.target_audience,
       tone: requestPayload.tone,
-      word_count: requestPayload.word_count,
-      quality_level: requestPayload.quality_level,
+      word_count_target: requestPayload.word_count_target,
+      quality_level: quality_level || contentPreset?.quality_level || 'medium',
       endpoint: endpoint,
       has_custom_instructions: !!requestPayload.custom_instructions,
       has_enhanced_insights: !!requestPayload.enhanced_keyword_insights,
@@ -1044,13 +1032,24 @@ export async function POST(request: NextRequest) {
     const blogTitle = result.blog_post?.title || result.title || topic;
     const metaDescription = result.blog_post?.meta_description || result.meta_description;
     
+    // Clean excerpt immediately if it contains artifacts (before any processing)
+    const rawExcerpt = result.blog_post?.excerpt || result.excerpt || '';
+    let cleanedExcerpt = rawExcerpt;
+    if (rawExcerpt && (rawExcerpt.includes("enhanced version") || rawExcerpt.includes("addressing the specified") || rawExcerpt.includes("readability concerns") || rawExcerpt.includes("!AI"))) {
+      cleanedExcerpt = cleanExcerpt(rawExcerpt);
+      // If excerpt is still bad after cleaning, force regeneration
+      if (cleanedExcerpt.length < 50 || cleanedExcerpt.includes("enhanced version") || cleanedExcerpt.includes("addressing")) {
+        cleanedExcerpt = ''; // Force regeneration from cleaned content
+      }
+    }
+    
     // Check for missing mandatory fields from DataForSEO response
     // If missing, use OpenAI to fill them in (fallback)
     logger.debug('🔍 Checking for missing mandatory fields from DataForSEO response...');
     const dataForSEOFields: BlogFieldData = {
       title: blogTitle,
       content: rawContent,
-      excerpt: result.blog_post?.excerpt || result.excerpt,
+      excerpt: cleanedExcerpt || result.blog_post?.excerpt || result.excerpt || '',
       meta_description: metaDescription,
       seo_title: result.meta_title || result.title || blogTitle,
     };
@@ -1163,13 +1162,66 @@ export async function POST(request: NextRequest) {
     
     // Enhance content to rich HTML (without images - they'll be added later)
     logger.debug('✨ Enhancing content to rich HTML...');
-    const enhancedContent = enhanceContentToRichHTML(rawContent, {
+    let enhancedContent = enhanceContentToRichHTML(rawContent, {
       featuredImage: null, // Images will be generated separately
       sectionImages: [], // Images will be generated separately
       includeImages: false, // Don't include images in initial generation
       enhanceFormatting: true,
       addStructure: true
     });
+    
+    // Phase 3: Additional content enhancement for formatting fixes
+    // This addresses DataForSEO formatting issues (malformed markdown, poor structure)
+    if (enhancedContent && enhancedContent.length > 0) {
+      try {
+        logger.debug('🔧 Running Phase 3: Content Enhancement (formatting fixes)...');
+        const enhancementResponse = await fetch(`${request.nextUrl.origin}/api/workflow/enhance-content`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content: enhancedContent,
+            title: blogTitle,
+            topic,
+            keywords: keywordsArray,
+            improve_formatting: true,
+            generate_structured_data: false, // Already handled above
+          }),
+        });
+        
+        if (enhancementResponse.ok) {
+          const enhancementData = await enhancementResponse.json();
+          if (enhancementData.enhanced_content && enhancementData.enhanced_content.length > enhancedContent.length * 0.5) {
+            enhancedContent = enhancementData.enhanced_content;
+            logger.debug('✅ Phase 3 enhancement applied successfully', {
+              originalLength: rawContent.length,
+              enhancedLength: enhancedContent.length,
+            });
+            
+            // Update excerpt and meta_description if enhanced versions are better
+            if (enhancementData.enhanced_fields?.excerpt && enhancementData.enhanced_fields.excerpt.length > 100) {
+              result.excerpt = enhancementData.enhanced_fields.excerpt;
+            }
+            if (enhancementData.enhanced_fields?.meta_description && enhancementData.enhanced_fields.meta_description.length > 100) {
+              result.meta_description = enhancementData.enhanced_fields.meta_description;
+            }
+            if (enhancementData.enhanced_fields?.meta_title) {
+              result.meta_title = enhancementData.enhanced_fields.meta_title;
+            }
+          }
+        } else {
+          logger.warn('⚠️ Phase 3 enhancement failed, using basic enhancement', {
+            status: enhancementResponse.status,
+          });
+        }
+      } catch (error) {
+        logger.warn('⚠️ Phase 3 enhancement error (non-critical), continuing with basic enhancement', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        // Continue with basic enhancement - non-critical
+      }
+    }
     
     logger.debug('📊 Content enhancement:', {
       originalLength: rawContent.length,

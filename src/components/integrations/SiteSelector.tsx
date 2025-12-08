@@ -1,0 +1,183 @@
+/**
+ * Site Selector Component
+ * 
+ * Allows users to select and manage sites for an integration
+ */
+
+'use client';
+
+import { useState, useEffect } from 'react';
+import {
+  GlobeAltIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  CheckCircleIcon,
+} from '@heroicons/react/24/outline';
+
+interface IntegrationSite {
+  id: string;
+  site_name: string;
+  site_id: string;
+  site_url?: string;
+  is_default: boolean;
+  is_active: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+interface SiteSelectorProps {
+  integrationId: string;
+  selectedSiteId?: string;
+  onSiteSelect?: (siteId: string | null) => void;
+  onSiteCreate?: () => void;
+  showCreateButton?: boolean;
+}
+
+export function SiteSelector({
+  integrationId,
+  selectedSiteId,
+  onSiteSelect,
+  onSiteCreate,
+  showCreateButton = true,
+}: SiteSelectorProps) {
+  const [sites, setSites] = useState<IntegrationSite[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSites();
+  }, [integrationId]);
+
+  const loadSites = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`/api/integrations/${integrationId}/sites`);
+      const result = await response.json();
+
+      if (result.success) {
+        setSites(result.data || []);
+        
+        // Auto-select default site if no selection and default exists
+        if (!selectedSiteId && result.data?.length > 0) {
+          const defaultSite = result.data.find((s: IntegrationSite) => s.is_default);
+          if (defaultSite && onSiteSelect) {
+            onSiteSelect(defaultSite.id);
+          }
+        }
+      } else {
+        setError(result.error || 'Failed to load sites');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load sites');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSiteSelect = (siteId: string) => {
+    if (onSiteSelect) {
+      onSiteSelect(siteId);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-4">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Select Site
+        </label>
+        {showCreateButton && onSiteCreate && (
+          <button
+            onClick={onSiteCreate}
+            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Add Site
+          </button>
+        )}
+      </div>
+
+      {sites.length === 0 ? (
+        <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-center">
+          <GlobeAltIcon className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            No sites configured yet
+          </p>
+          {showCreateButton && onSiteCreate && (
+            <button
+              onClick={onSiteCreate}
+              className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+            >
+              Create your first site
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sites.map((site) => (
+            <button
+              key={site.id}
+              onClick={() => handleSiteSelect(site.id)}
+              className={`w-full p-3 rounded-lg border text-left transition-all ${
+                selectedSiteId === site.id
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              } ${!site.is_active ? 'opacity-50' : ''}`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <GlobeAltIcon className="w-5 h-5 text-gray-400" />
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {site.site_name}
+                    </span>
+                    {site.is_default && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                        Default
+                      </span>
+                    )}
+                    {!site.is_active && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+                  {site.site_url && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-7">
+                      {site.site_url}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 ml-7">
+                    ID: {site.site_id}
+                  </p>
+                </div>
+                {selectedSiteId === site.id && (
+                  <CheckCircleIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+

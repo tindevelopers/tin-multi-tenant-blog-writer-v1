@@ -14,6 +14,82 @@ export interface ContentEnhancementOptions {
 }
 
 /**
+ * Clean excerpt from AI artifacts
+ */
+export function cleanExcerpt(excerpt: string): string {
+  if (!excerpt) return '';
+  
+  let cleaned = excerpt;
+  
+  // STEP 1: Remove keyword/topic prefix at start (often raw keyword repeated)
+  // Pattern: lowercase words at start followed by uppercase or content start
+  cleaned = cleaned.replace(/^[a-z][a-z\s]{2,40}(?=[A-Z])/i, '');
+  
+  // Remove common artifacts that appear in excerpts (order matters - most specific first)
+  cleaned = cleaned.replace(/Here's the enhanced version of the blog post.*?:/gi, '');
+  cleaned = cleaned.replace(/Here's the enhanced version.*?:/gi, '');
+  cleaned = cleaned.replace(/enhanced version of the blog post.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified improvement tasks.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified.*?:/gi, '');
+  cleaned = cleaned.replace(/readability concerns:.*?/gi, '');
+  cleaned = cleaned.replace(/!AI\s+[^!\n]{5,50}/gi, '');
+  cleaned = cleaned.replace(/!Featured\s+[^!\n]{5,50}/gi, '');
+  cleaned = cleaned.replace(/!AI.*?/gi, '');
+  cleaned = cleaned.replace(/!Featured.*?/gi, '');
+  
+  // Remove topic/keyword prefix if it's just repeated (e.g., "best ai voice agents Here's...")
+  cleaned = cleaned.replace(/^([a-z\s]{5,50})\s+(Here's|Here is|Best|Top|Discover|Learn)/i, '$2');
+  
+  // STEP 2: Fix broken/truncated words
+  // Fix "f." appearing as truncation of "for" or other words
+  cleaned = cleaned.replace(/\bf\.\s*$/i, '');
+  cleaned = cleaned.replace(/\bf\.\s+/gi, 'for ');
+  // Fix other common truncations (single letter followed by period)
+  cleaned = cleaned.replace(/\s+[a-z]\.\s*$/i, '.');
+  cleaned = cleaned.replace(/\s+[a-z]\.\s+/gi, ' ');
+  
+  // STEP 3: Clean up broken punctuation
+  cleaned = cleaned.replace(/\s+\.\s+/g, '. ');
+  cleaned = cleaned.replace(/\s+,\s+/g, ', ');
+  cleaned = cleaned.replace(/\.\s*\./g, '.'); // Double periods
+  cleaned = cleaned.replace(/,\s*,/g, ','); // Double commas
+  
+  // Remove markdown artifacts
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]*\)/g, '$1');
+  cleaned = cleaned.replace(/!\[?[^\]]*\]?/g, '');
+  
+  // Remove HTML artifacts that may have leaked in
+  cleaned = cleaned.replace(/<[^>]+>/g, '');
+  cleaned = cleaned.replace(/["']\s*class=["'][^"']*["']/gi, '');
+  
+  // Trim and clean whitespace
+  cleaned = cleaned.trim().replace(/\s{2,}/g, ' ');
+  
+  // STEP 4: Ensure excerpt ends with proper sentence
+  // If it ends without proper punctuation, try to find last complete sentence
+  if (!/[.!?]$/.test(cleaned)) {
+    const lastSentenceEnd = Math.max(
+      cleaned.lastIndexOf('. '),
+      cleaned.lastIndexOf('! '),
+      cleaned.lastIndexOf('? ')
+    );
+    if (lastSentenceEnd > cleaned.length * 0.5) {
+      cleaned = cleaned.substring(0, lastSentenceEnd + 1);
+    } else {
+      // Just add ellipsis if no good break point
+      cleaned = cleaned.replace(/[,;:\s]+$/, '') + '...';
+    }
+  }
+  
+  // If excerpt is too short or still contains artifacts, return empty to force regeneration
+  if (cleaned.length < 50 || cleaned.includes("enhanced version") || cleaned.includes("addressing")) {
+    return '';
+  }
+  
+  return cleaned;
+}
+
+/**
  * Enhance content to rich HTML with proper formatting and images
  */
 export function enhanceContentToRichHTML(
@@ -31,10 +107,16 @@ export function enhanceContentToRichHTML(
   let html = content || '';
 
   // Step 1: Detect content format
+  // Check for HTML tags
   const isHTML = html.includes('<') && html.includes('>');
-  const isMarkdown = !isHTML && (html.includes('#') || html.includes('*') || html.includes('`'));
+  // Check for markdown syntax (headers, bold, code, links, lists)
+  const hasMarkdownHeaders = /^#{1,6}\s+/m.test(html);
+  const hasMarkdownFormatting = /\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[.*?\]\(.*?\)|^[-*+]\s+/m.test(html);
+  const isMarkdown = hasMarkdownHeaders || hasMarkdownFormatting;
 
   // Step 2: Convert markdown to HTML if needed
+  // IMPORTANT: Process markdown even if HTML is present (mixed content case)
+  // This handles cases where backend returns HTML paragraphs but markdown headers
   if (isMarkdown) {
     html = markdownToHTML(html);
   } else if (!isHTML) {
@@ -69,54 +151,186 @@ export function enhanceContentToRichHTML(
 }
 
 /**
+ * Clean content from common AI generation artifacts
+ */
+function cleanAIArtifacts(content: string): string {
+  let cleaned = content;
+  
+  // FIRST: Clean broken HTML artifacts (malformed img tags, exposed attributes)
+  // Pattern: Text followed by exposed HTML attributes like `" class="w-full h-auto...">`
+  cleaned = cleaned.replace(/["']\s*class=["'][^"']*["']\s*>/gi, '');
+  cleaned = cleaned.replace(/["']\s*style=["'][^"']*["']\s*>/gi, '');
+  // Fix broken img tags that expose alt text and attributes as text
+  cleaned = cleaned.replace(/[^<]*["']\s*(?:class|style|alt|src|width|height)=["'][^"']*["'][^>]*>/gi, '');
+  // Clean up orphaned HTML attribute fragments
+  cleaned = cleaned.replace(/\s+class=["'][^"']*["']/gi, '');
+  cleaned = cleaned.replace(/\s+style=["'][^"']*["']/gi, '');
+  // Remove malformed closing angle brackets
+  cleaned = cleaned.replace(/^[^<]*>/gm, '');
+  
+  // Remove common AI generation artifacts (more aggressive patterns)
+  cleaned = cleaned.replace(/Here's an enhanced version of.*?:/gi, '');
+  cleaned = cleaned.replace(/Here's the enhanced version.*?:/gi, '');
+  cleaned = cleaned.replace(/enhanced version of the blog post.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified.*?:/gi, '');
+  cleaned = cleaned.replace(/addressing the specified improvement tasks.*?:/gi, '');
+  cleaned = cleaned.replace(/readability concerns:.*?(?=\n|$)/gi, '');
+  cleaned = cleaned.replace(/Enhancements Made:[\s\S]*?(?=\n\n|$)/gi, '');
+  cleaned = cleaned.replace(/Key Enhancements:[\s\S]*?(?=\n\n|$)/gi, '');
+  cleaned = cleaned.replace(/Citations added where appropriate.*?(?=\n|$)/gi, '');
+  cleaned = cleaned.replace(/Methodology Note:.*?(?=\n|$)/gi, '');
+  cleaned = cleaned.replace(/\*Last updated:.*?\*/gi, '');
+  cleaned = cleaned.replace(/The revised content.*?(?=\n|$)/gi, '');
+  
+  // Remove "enhanced version" text that appears in content (catch all variations)
+  cleaned = cleaned.replace(/\benhanced version\b.*?:/gi, '');
+  
+  // Fix malformed markdown headers at start (like "# voice ai agent Here's..." or "# best ai voice agents Here's...")
+  // Extract the topic and make it a proper H1, remove the rest
+  cleaned = cleaned.replace(/^#\s*([a-z\s]+?)\s+(Here's|Here is|This is|Learn|Discover|Explore|Have you|Best|Top|Discover)/i, '# $1\n\n$2');
+  
+  // Remove topic/keyword prefixes that appear before "Here's" or "Best" (e.g., "best ai voice agents Here's...")
+  cleaned = cleaned.replace(/^([a-z\s]{5,40})\s+(Here's|Here is|Best|Top|Discover|Learn)/i, '$2');
+  
+  // Clean up broken punctuation patterns from DataForSEO
+  // Fix "." being used instead of "," (e.g., "learn . improve" → "learn, improve")
+  cleaned = cleaned.replace(/\s+\.\s+/g, ', ');
+  // Fix "f." being used instead of "for" 
+  cleaned = cleaned.replace(/\bf\.\s+/gi, 'for ');
+  // Fix isolated periods that break words (e.g., "Underst." → "Understand", "Superi." → "Superior")
+  cleaned = cleaned.replace(/\b([A-Z][a-z]+)\.\s+/g, '$1 ');
+  // Fix isolated periods before lowercase (e.g., "2024 . beyond" → "2024 and beyond")
+  cleaned = cleaned.replace(/\s+\.\s+(?=[a-z])/gi, ' and ');
+  
+  // Clean up exclamation marks used as image placeholders (like "!Featured Voice AI Technology" or "!AI Voice Technology Landscape")
+  cleaned = cleaned.replace(/!\s*([A-Z][^!\n]{5,50})(?:\s|$)/g, '');
+  cleaned = cleaned.replace(/!AI\s+[^!\n]{5,50}(?:\s|$)/gi, '');
+  cleaned = cleaned.replace(/!Featured\s+[^!\n]{5,50}(?:\s|$)/gi, '');
+  cleaned = cleaned.replace(/!\[?[^\]]*\]?(?!\()/g, '');
+  
+  // Fix broken markdown links (like "[Voice AI Agent](/voice-ai-agent)s:")
+  cleaned = cleaned.replace(/\[([^\]]+)\]\(([^)]+)\)([a-z]+)/g, '[$1]($2) $3');
+  
+  // Clean up broken markdown links without URLs (keep the text)
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]*\)/g, '$1');
+  
+  // Fix section titles that should be headings (common pattern: "Section Title." or "Section Title:")
+  // Convert standalone capitalized phrases ending with period/colon to H2
+  cleaned = cleaned.replace(/^([A-Z][^.!?]{10,80})[.:]\s*$/gm, '## $1');
+  
+  // Remove "Pro Tip:" and similar artifacts at end
+  cleaned = cleaned.replace(/Pro Tip:.*?(?=\n|$)/gi, '');
+  
+  // Remove extra whitespace
+  cleaned = cleaned.replace(/\s{3,}/g, ' ');
+  cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
+  
+  return cleaned.trim();
+}
+
+/**
  * Convert markdown to HTML
+ * Handles both pure markdown and mixed HTML+markdown content
  */
 function markdownToHTML(markdown: string): string {
-  let html = markdown;
+  // First clean AI artifacts
+  let html = cleanAIArtifacts(markdown);
 
-  // Headers (must be at start of line)
+  // PRE-PROCESSING: Extract markdown headers from inside HTML tags (mixed content fix)
+  // Handle cases like: <p># Title</p> or <p>## Section</p>
+  html = html.replace(/<p[^>]*>\s*(#{1,6})\s+([^<]+)<\/p>/gi, (match, hashes, content) => {
+    const level = hashes.length;
+    return `<h${level}>${content.trim()}</h${level}>`;
+  });
+  
+  // Also handle markdown headers that appear after HTML elements on their own line
+  // e.g., "</p>\n# Title" or "</p>\n\n## Section"
+  html = html.replace(/(<\/[^>]+>)\s*\n+(#{1,6})\s+(.+?)(?=\n|$)/gi, (match, closingTag, hashes, content) => {
+    const level = hashes.length;
+    return `${closingTag}\n<h${level}>${content.trim()}</h${level}>`;
+  });
+
+  // Headers (must be at start of line) - process longer patterns first
+  html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
+  html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
   html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
   html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+  
+  // Handle inline markdown headers that weren't caught (after other elements)
+  html = html.replace(/>\s*#{6}\s+([^<]+)/gi, '><h6>$1</h6>');
+  html = html.replace(/>\s*#{5}\s+([^<]+)/gi, '><h5>$1</h5>');
+  html = html.replace(/>\s*#{4}\s+([^<]+)/gi, '><h4>$1</h4>');
+  html = html.replace(/>\s*#{3}\s+([^<]+)/gi, '><h3>$1</h3>');
+  html = html.replace(/>\s*#{2}\s+([^<]+)/gi, '><h2>$1</h2>');
+  html = html.replace(/>\s*#\s+([^<]+)/gi, '><h1>$1</h1>');
+  
+  // Ensure we have exactly ONE H1 (the title)
+  // If multiple H1s exist, convert extras to H2
+  const h1Matches = html.match(/<h1[^>]*>.*?<\/h1>/gi);
+  if (h1Matches && h1Matches.length > 1) {
+    // Keep first H1, convert rest to H2
+    let h1Count = 0;
+    html = html.replace(/<h1([^>]*)>(.*?)<\/h1>/gi, (match, attrs, content) => {
+      h1Count++;
+      if (h1Count === 1) {
+        return `<h1${attrs}>${content}</h1>`;
+      }
+      return `<h2${attrs}>${content}</h2>`;
+    });
+  }
 
   // Bold and italic
   html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  // Only apply italic if not part of a list marker
+  html = html.replace(/(?<!\*)\*([^\*\n]+?)\*(?!\*)/g, '<em>$1</em>');
 
-  // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  // Links (only those with valid URLs)
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
-  // Images
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="blog-image" />');
+  // Images with valid URLs
+  html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<figure><img src="$2" alt="$1" class="blog-image" /></figure>');
 
   // Code blocks
   html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
-  // Blockquotes
+  // Blockquotes (handle multiple lines)
   html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+  // Merge consecutive blockquotes
+  html = html.replace(/<\/blockquote>\n<blockquote>/g, '<br/>');
 
-  // Lists - handle unordered lists
-  const unorderedListRegex = /(?:^[\*\-\+] (.+)$\n?)+/gim;
-  html = html.replace(unorderedListRegex, (match) => {
-    const items = match.split('\n').filter(line => line.trim().match(/^[\*\-\+]/));
-    const listItems = items.map(item => `<li>${item.replace(/^[\*\-\+] /, '').trim()}</li>`).join('\n');
-    return `<ul>\n${listItems}\n</ul>`;
+  // Lists - handle unordered lists (improved regex)
+  html = html.replace(/(?:^[-\*\+] .+\n?)+/gim, (match) => {
+    const items = match.split('\n').filter(line => line.trim().match(/^[-\*\+]/));
+    if (items.length === 0) return match;
+    const listItems = items.map(item => {
+      const content = item.replace(/^[-\*\+]\s*/, '').trim();
+      return content ? `<li>${content}</li>` : '';
+    }).filter(Boolean).join('\n');
+    return listItems ? `<ul>\n${listItems}\n</ul>` : '';
   });
   
   // Lists - handle ordered lists
-  const orderedListRegex = /(?:^\d+\. (.+)$\n?)+/gim;
-  html = html.replace(orderedListRegex, (match) => {
+  html = html.replace(/(?:^\d+\.\s+.+\n?)+/gim, (match) => {
     const items = match.split('\n').filter(line => line.trim().match(/^\d+\./));
-    const listItems = items.map(item => `<li>${item.replace(/^\d+\. /, '').trim()}</li>`).join('\n');
-    return `<ol>\n${listItems}\n</ol>`;
+    if (items.length === 0) return match;
+    const listItems = items.map(item => {
+      const content = item.replace(/^\d+\.\s*/, '').trim();
+      return content ? `<li>${content}</li>` : '';
+    }).filter(Boolean).join('\n');
+    return listItems ? `<ol>\n${listItems}\n</ol>` : '';
   });
 
   // Horizontal rules
-  html = html.replace(/^---$/gim, '<hr />');
+  html = html.replace(/^[-_*]{3,}$/gim, '<hr />');
 
+  // Key Takeaways / Important sections - convert to callout
+  html = html.replace(/<h([234])>(Key Takeaways?|Important|Note|Tip|Warning):?<\/h\1>\s*<ul>/gi, 
+    '<div class="blog-callout blog-callout-key"><h$1>$2</h$1><ul>');
+  
   // Paragraphs (wrap non-block elements)
   const lines = html.split('\n');
   const processedLines: string[] = [];
@@ -133,7 +347,14 @@ function markdownToHTML(markdown: string): string {
     }
 
     // If it's a block element, close paragraph and add block
-    if (trimmed.match(/^<(h[1-6]|ul|ol|pre|blockquote|hr|div|figure|img)/i)) {
+    if (trimmed.match(/^<(h[1-6]|ul|ol|pre|blockquote|hr|div|figure|img|article|section)/i)) {
+      if (currentParagraph.length > 0) {
+        processedLines.push(`<p>${currentParagraph.join(' ')}</p>`);
+        currentParagraph = [];
+      }
+      processedLines.push(trimmed);
+    } else if (trimmed.match(/<\/?(h[1-6]|ul|ol|pre|blockquote|hr|div|figure|article|section)/i)) {
+      // Closing block tags
       if (currentParagraph.length > 0) {
         processedLines.push(`<p>${currentParagraph.join(' ')}</p>`);
         currentParagraph = [];
@@ -148,7 +369,67 @@ function markdownToHTML(markdown: string): string {
     processedLines.push(`<p>${currentParagraph.join(' ')}</p>`);
   }
 
-  return processedLines.join('\n');
+  // Validate and improve heading structure for SEO
+  let result = processedLines.join('\n');
+  result = validateAndImproveHeadings(result);
+  
+  return result;
+}
+
+/**
+ * Validate and improve heading structure for SEO
+ * Ensures proper H1/H2/H3 hierarchy with SEO-friendly keyword opportunities
+ */
+function validateAndImproveHeadings(html: string): string {
+  let enhanced = html;
+  
+  // Count existing headings
+  const h1Count = (enhanced.match(/<h1[^>]*>/gi) || []).length;
+  const h2Count = (enhanced.match(/<h2[^>]*>/gi) || []).length;
+  const h3Count = (enhanced.match(/<h3[^>]*>/gi) || []).length;
+  
+  // Log warning if heading structure is weak
+  if (h1Count === 0 && h2Count === 0) {
+    console.warn('[content-enhancer] No headings detected in content. Attempting to auto-detect section headers.');
+    
+    // Try to detect potential section headers from content patterns
+    // Pattern 1: Short bold paragraphs that could be headers (under 100 chars, all bold)
+    enhanced = enhanced.replace(/<p[^>]*>\s*<strong>([^<]{10,80})<\/strong>\s*<\/p>/gi, (match, content) => {
+      // Don't convert if it looks like a sentence (has period at end)
+      if (content.trim().endsWith('.') || content.trim().endsWith('?')) {
+        return match;
+      }
+      return `<h2>${content.trim()}</h2>`;
+    });
+    
+    // Pattern 2: Short paragraphs followed by lists (likely section headers)
+    enhanced = enhanced.replace(/<p[^>]*>([^<]{10,60})<\/p>\s*(<ul|<ol)/gi, (match, content, listTag) => {
+      // Only convert if it doesn't have sentence-ending punctuation
+      if (content.trim().match(/[.?!]$/)) {
+        return match;
+      }
+      return `<h3>${content.trim()}</h3>\n${listTag}`;
+    });
+    
+    // Pattern 3: Capitalized short lines (potential headers)
+    enhanced = enhanced.replace(/<p[^>]*>([A-Z][^<.!?]{8,50})<\/p>/g, (match, content) => {
+      // Check if mostly uppercase words (title case)
+      const words = content.trim().split(/\s+/);
+      const capitalizedWords = words.filter((w: string) => /^[A-Z]/.test(w)).length;
+      if (capitalizedWords >= words.length * 0.6 && words.length >= 2 && words.length <= 8) {
+        return `<h2>${content.trim()}</h2>`;
+      }
+      return match;
+    });
+  }
+  
+  // Ensure we have at least some H2s for SEO (minimum 3 recommended)
+  const updatedH2Count = (enhanced.match(/<h2[^>]*>/gi) || []).length;
+  if (updatedH2Count < 3) {
+    console.warn(`[content-enhancer] Only ${updatedH2Count} H2 headings found. SEO best practice recommends at least 3-4 H2 sections.`);
+  }
+  
+  return enhanced;
 }
 
 /**

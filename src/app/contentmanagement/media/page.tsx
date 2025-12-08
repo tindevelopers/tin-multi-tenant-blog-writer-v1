@@ -54,6 +54,8 @@ export default function MediaPage() {
   const [mediaFiles, setMediaFiles] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [testingCredentials, setTestingCredentials] = useState(false);
+  const [checkingRoot, setCheckingRoot] = useState(false);
   const [stats, setStats] = useState<MediaStats>({
     total: 0,
     images: 0,
@@ -78,6 +80,29 @@ export default function MediaPage() {
       }
 
       const result = await response.json();
+      
+      // Debug: Log what we received
+      logger.debug('Media assets loaded:', {
+        count: result.data?.length || 0,
+        files: result.data?.map((f: MediaAsset) => ({
+          asset_id: f.asset_id,
+          file_name: f.file_name,
+          file_type: f.file_type,
+          file_url: f.file_url ? f.file_url.substring(0, 50) + '...' : 'MISSING',
+          has_file_url: !!f.file_url,
+        })),
+      });
+      
+      // Check for missing URLs
+      const missingUrls = result.data?.filter((f: MediaAsset) => !f.file_url) || [];
+      if (missingUrls.length > 0) {
+        logger.warn('Media assets with missing file_url:', {
+          count: missingUrls.length,
+          asset_ids: missingUrls.map((f: MediaAsset) => f.asset_id),
+        });
+        console.warn('⚠️ Found', missingUrls.length, 'media assets without file_url');
+      }
+      
       setMediaFiles(result.data || []);
       setStats(result.stats || stats);
     } catch (error) {
@@ -92,11 +117,192 @@ export default function MediaPage() {
     loadMediaAssets();
   }, [loadMediaAssets]);
 
+  // Debug media assets
+  const handleDebugMedia = async () => {
+    try {
+      const response = await fetch('/api/media/debug', {
+        method: 'GET',
+      });
+
+      const result = await response.json();
+
+      let message = `🔍 Media Assets Debug:\n\n`;
+      message += `User: ${result.user?.id}\n`;
+      message += `Org ID: ${result.user?.orgId}\n\n`;
+      message += `Assets in DB (Service Client): ${result.serviceClient?.count || 0}\n`;
+      message += `  - With file_url: ${result.serviceClient?.withFileUrl || 0}\n`;
+      message += `  - Without file_url: ${result.serviceClient?.withoutFileUrl || 0}\n`;
+      message += `Assets Visible (User Client): ${result.userClient?.count || 0}\n`;
+      message += `  - With file_url: ${result.userClient?.withFileUrl || 0}\n`;
+      message += `  - Without file_url: ${result.userClient?.withoutFileUrl || 0}\n\n`;
+
+      if (result.rlsIssue) {
+        message += `⚠️ RLS ISSUE DETECTED!\n`;
+        message += `Service client can see ${result.serviceClient?.count || 0} assets,\n`;
+        message += `but user client can only see ${result.userClient?.count || 0} assets.\n\n`;
+      }
+
+      if (result.fileUrlIssue) {
+        message += `⚠️ FILE_URL ISSUE DETECTED!\n`;
+        message += `${result.userClient?.withoutFileUrl || 0} assets are missing file_url.\n\n`;
+        if (result.userClient?.missingUrls && result.userClient.missingUrls.length > 0) {
+          message += `Missing URLs:\n`;
+          result.userClient.missingUrls.slice(0, 3).forEach((asset: any, idx: number) => {
+            message += `${idx + 1}. ${asset.file_name} (${asset.file_type})\n`;
+            if (asset.metadata?.public_id) {
+              message += `   public_id: ${asset.metadata.public_id}\n`;
+            }
+            if (asset.metadata?.secure_url) {
+              message += `   secure_url in metadata: YES\n`;
+            }
+          });
+          message += `\n`;
+        }
+      }
+
+      if (result.userClient?.error) {
+        message += `❌ User Client Error:\n`;
+        message += `${result.userClient.error.message}\n`;
+        message += `Code: ${result.userClient.error.code}\n\n`;
+      }
+
+      if (result.serviceClient?.data && result.serviceClient.data.length > 0) {
+        message += `Recent Assets:\n`;
+        result.serviceClient.data.slice(0, 5).forEach((asset: any, idx: number) => {
+          message += `${idx + 1}. ${asset.file_name} (${asset.file_type})\n`;
+          message += `   file_url: ${asset.file_url ? asset.file_url.substring(0, 50) + '...' : 'MISSING'}\n`;
+          message += `   created: ${asset.created_at}\n`;
+        });
+      }
+
+      alert(message);
+    } catch (error) {
+      logger.error('Error debugging media:', error);
+      alert(error instanceof Error ? error.message : 'Failed to debug media assets.');
+    }
+  };
+
+  // Check Cloudinary root directory access
+  const handleCheckRoot = async () => {
+    setCheckingRoot(true);
+    try {
+      const response = await fetch('/api/integrations/cloudinary/check-root', {
+        method: 'GET',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        let message = `✅ Cloudinary Root Directory Access:\n\n`;
+        message += `Root Access: ${result.summary.rootAccess ? '✅ Yes' : '❌ No'}\n`;
+        message += `Total Resources Found: ${result.summary.totalResourcesFound}\n\n`;
+        
+        if (result.checks && result.checks.length > 0) {
+          message += `Location Checks:\n`;
+          result.checks.forEach((check: any) => {
+            message += `  • ${check.location}: ${check.success ? '✅' : '❌'}`;
+            if (check.resourceCount !== undefined) {
+              message += ` (${check.resourceCount} resources)`;
+            }
+            if (check.folders && check.folders.length > 0) {
+              message += `\n    Folders: ${check.folders.join(', ')}`;
+            }
+            if (check.error) {
+              message += ` - ${check.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        
+        alert(message);
+      } else {
+        let message = `❌ Root Directory Access Failed:\n\n`;
+        if (result.checks && result.checks.length > 0) {
+          result.checks.forEach((check: any) => {
+            message += `  • ${check.location}: ❌ Failed`;
+            if (check.error) {
+              message += ` - ${check.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        alert(message);
+      }
+    } catch (error) {
+      logger.error('Error checking Cloudinary root:', error);
+      alert(`Failed to check root directory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setCheckingRoot(false);
+    }
+  };
+
+  // Test Cloudinary credentials
+  const handleTestCredentials = async () => {
+    setTestingCredentials(true);
+    try {
+      const response = await fetch('/api/integrations/cloudinary/test-direct', {
+        method: 'GET',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        const method = result.summary?.recommendedMethod || 'Unknown';
+        const passedTests = result.summary?.passedTests || 0;
+        const totalTests = result.summary?.totalTests || 0;
+        
+        let message = `✅ Cloudinary Credentials Test Results:\n\n`;
+        message += `Status: Valid ✓\n`;
+        message += `Working Method: ${method}\n`;
+        message += `Tests Passed: ${passedTests}/${totalTests}\n\n`;
+        
+        if (result.tests && result.tests.length > 0) {
+          message += `Test Details:\n`;
+          result.tests.forEach((test: any) => {
+            message += `  • ${test.method}: ${test.success ? '✅ Success' : '❌ Failed'}`;
+            if (test.resourceCount !== undefined) {
+              message += ` (${test.resourceCount} resources found)`;
+            }
+            if (test.error) {
+              message += ` - ${test.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        
+        alert(message);
+      } else {
+        let message = `❌ Cloudinary Credentials Test Failed:\n\n`;
+        message += `All authentication methods failed.\n\n`;
+        
+        if (result.tests && result.tests.length > 0) {
+          message += `Test Details:\n`;
+          result.tests.forEach((test: any) => {
+            message += `  • ${test.method}: ❌ Failed`;
+            if (test.error) {
+              message += ` - ${test.error}`;
+            }
+            message += `\n`;
+          });
+        }
+        
+        message += `\nPlease verify your credentials in Settings → Integrations → Cloudinary.`;
+        alert(message);
+      }
+    } catch (error) {
+      logger.error('Error testing Cloudinary credentials:', error);
+      alert(`Failed to test Cloudinary credentials: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setTestingCredentials(false);
+    }
+  };
+
   // Sync with Cloudinary
   const handleSyncCloudinary = async () => {
     setSyncing(true);
     try {
-      const response = await fetch('/api/media/sync', {
+      // Sync from root (all images) by default, user can change this if needed
+      const response = await fetch('/api/media/sync?root=true', {
         method: 'POST',
       });
 
@@ -125,28 +331,49 @@ export default function MediaPage() {
 
   // Handle file upload
   const handleFileUpload = async (files: FileList) => {
-    const formData = new FormData();
-    Array.from(files).forEach((file) => {
-      formData.append('file', file);
-    });
+    const fileArray = Array.from(files);
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
 
-    try {
-      const response = await fetch('/api/images/upload', {
-        method: 'POST',
-        body: formData,
-      });
+    // Upload files one by one (Cloudinary API accepts one file per request)
+    for (const file of fileArray) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Upload failed');
+        const response = await fetch('/api/images/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Upload failed');
+        }
+
+        successCount++;
+        logger.debug('File uploaded successfully:', file.name);
+      } catch (error) {
+        failCount++;
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        errors.push(`${file.name}: ${errorMessage}`);
+        logger.error('Error uploading file:', { fileName: file.name, error: errorMessage });
       }
+    }
 
-      // Reload media assets
+    // Reload media assets after a short delay to ensure DB is updated
+    setTimeout(async () => {
       await loadMediaAssets();
-      alert('Files uploaded successfully!');
-    } catch (error) {
-      logger.error('Error uploading files:', error);
-      alert(error instanceof Error ? error.message : 'Failed to upload files. Please try again.');
+    }, 1000);
+
+    // Show results
+    if (successCount > 0 && failCount === 0) {
+      alert(`✅ ${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully!`);
+    } else if (successCount > 0 && failCount > 0) {
+      alert(`⚠️ ${successCount} file${successCount > 1 ? 's' : ''} uploaded, ${failCount} failed.\n\nErrors:\n${errors.join('\n')}`);
+    } else {
+      alert(`❌ Upload failed for all files.\n\nErrors:\n${errors.join('\n')}`);
     }
   };
 
@@ -259,9 +486,23 @@ export default function MediaPage() {
   };
 
   const getFileType = (fileType: string): string => {
+    if (!fileType) return 'document';
+    
+    // Handle MIME types (image/png, video/mp4, etc.)
     if (fileType.startsWith('image/')) return 'image';
     if (fileType.startsWith('video/')) return 'video';
     if (fileType.startsWith('audio/')) return 'audio';
+    
+    // Handle format-only values (backward compatibility)
+    const formatLower = fileType.toLowerCase();
+    const imageFormats = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif'];
+    const videoFormats = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'flv'];
+    const audioFormats = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'];
+    
+    if (imageFormats.includes(formatLower)) return 'image';
+    if (videoFormats.includes(formatLower)) return 'video';
+    if (audioFormats.includes(formatLower)) return 'audio';
+    
     return 'document';
   };
 
@@ -306,6 +547,56 @@ export default function MediaPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleDebugMedia}
+              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              title="Debug media assets visibility"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Debug Media</span>
+            </button>
+            <button
+              onClick={handleCheckRoot}
+              disabled={checkingRoot}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              title="Check Cloudinary root directory access"
+            >
+              {checkingRoot ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Checking...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <span>Check Root</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleTestCredentials}
+              disabled={testingCredentials}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+              title="Test Cloudinary credentials"
+            >
+              {testingCredentials ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Testing...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Test Credentials</span>
+                </>
+              )}
+            </button>
             <button
               onClick={handleSyncCloudinary}
               disabled={syncing}
@@ -519,15 +810,51 @@ export default function MediaPage() {
                 onClick={() => handleSelectMedia(file.asset_id)}
               >
                 <div className="aspect-square relative bg-gray-100 dark:bg-gray-700">
-                  {fileType === "image" ? (
-                    <img
-                      src={file.file_url}
-                      alt={file.file_name}
-                      className="w-full h-full object-cover"
-                    />
+                  {fileType === "image" && file.file_url ? (
+                    <>
+                      <img
+                        src={file.file_url}
+                        alt={file.file_name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          logger.error('Image failed to load:', {
+                            file_url: file.file_url,
+                            file_name: file.file_name,
+                            asset_id: file.asset_id,
+                            file_type: file.file_type,
+                          });
+                          // Show error overlay
+                          const errorDiv = document.createElement('div');
+                          errorDiv.className = 'absolute inset-0 bg-red-100 dark:bg-red-900 flex items-center justify-center text-red-600 dark:text-red-300 text-xs p-2';
+                          errorDiv.textContent = 'Failed to load';
+                          e.currentTarget.parentElement?.appendChild(errorDiv);
+                          e.currentTarget.style.display = 'none';
+                        }}
+                        onLoad={() => {
+                          logger.debug('Image loaded successfully:', {
+                            file_url: file.file_url?.substring(0, 50) + '...',
+                            file_name: file.file_name,
+                          });
+                        }}
+                      />
+                      {/* Debug info - remove in production */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 truncate">
+                          {file.file_url?.substring(0, 40)}...
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       {getFileTypeIcon(fileType)}
+                    </div>
+                  )}
+                  {fileType === "image" && !file.file_url && (
+                    <div className="w-full h-full flex items-center justify-center text-red-500">
+                      <div className="text-center">
+                        <span className="text-xs block">No URL</span>
+                        <span className="text-xs block text-gray-400">{file.file_type}</span>
+                      </div>
                     </div>
                   )}
                   
@@ -632,11 +959,19 @@ export default function MediaPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-10 w-10">
-                            {fileType === "image" ? (
+                            {fileType === "image" && file.file_url ? (
                               <img
                                 src={file.file_url}
                                 alt={file.file_name}
                                 className="h-10 w-10 rounded-lg object-cover"
+                                onError={(e) => {
+                                  logger.error('Image failed to load in list view:', {
+                                    file_url: file.file_url,
+                                    file_name: file.file_name,
+                                    asset_id: file.asset_id,
+                                  });
+                                  e.currentTarget.style.display = 'none';
+                                }}
                               />
                             ) : (
                               <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${getFileTypeColor(fileType)}`}>

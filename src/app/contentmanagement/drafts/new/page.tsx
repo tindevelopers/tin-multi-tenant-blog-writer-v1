@@ -6,7 +6,9 @@ import {
   ArrowLeftIcon,
   DocumentTextIcon,
   SparklesIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  BoltIcon,
+  Cog6ToothIcon
 } from "@heroicons/react/24/outline";
 import { useBlogPostMutations } from "@/hooks/useBlogPosts";
 import { blogWriterAPI } from "@/lib/blog-writer-api";
@@ -25,6 +27,7 @@ import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
 import { extractBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
+import MultiPhaseWorkflowPanel from "@/components/workflow/MultiPhaseWorkflowPanel";
 // import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
@@ -264,6 +267,9 @@ function NewDraftContent() {
   const [brandVoice, setBrandVoice] = useState<any>(null);
   const [selectedPreset, setSelectedPreset] = useState<any>(null);
   
+  // Creation mode: 'quick' = standard generation, 'multi-phase' = 5-phase workflow
+  const [creationMode, setCreationMode] = useState<'quick' | 'multi-phase'>('quick');
+  
   // Research workflow state
   const [researchResults, setResearchResults] = useState<BlogResearchResults | null>(null);
   const [showResearchPanel, setShowResearchPanel] = useState(true);
@@ -404,6 +410,61 @@ function NewDraftContent() {
     console.log('📝 Draft saved with ID:', draftId);
     // Optionally redirect to drafts page or show success message
     // router.push('/contentmanagement/drafts');
+  };
+
+  const handleGenerateTestBlog = async () => {
+    setIsGenerating(true);
+    try {
+      const testTopic = formData.topic || "Test Blog Post";
+      
+      console.log('🧪 Generating test blog (100 words):', { topic: testTopic });
+      
+      const result = await blogWriterAPI.generateBlog({
+        topic: testTopic,
+        keywords: [],
+        target_audience: "general",
+        tone: "professional",
+        word_count: 100, // Test blog: exactly 100 words
+        template_type: formData.template_type || "expert_authority",
+        length: "short",
+        // Disable all advanced features for faster test generation
+        use_google_search: false,
+        use_fact_checking: false,
+        use_citations: false,
+        use_serp_optimization: false,
+        use_consensus_generation: false,
+        use_knowledge_graph: false,
+        use_semantic_keywords: false,
+        use_quality_scoring: false,
+        custom_instructions: "Generate a concise 100-word blog post. Keep it brief and focused.",
+      });
+
+      console.log('🧪 Test blog generated:', result);
+
+      // Handle async response
+      if (result && (result as any).queue_id) {
+        const capturedQueueId = (result as any).queue_id;
+        setQueueId(capturedQueueId);
+        
+        if (result.error || result.status === 'failed') {
+          setQueueStatus("failed");
+          console.warn('⚠️ Test blog generation failed:', capturedQueueId, result.error);
+        } else {
+          setQueueStatus("generating");
+          console.log('✅ Test blog generation queued:', capturedQueueId);
+        }
+        
+        setIsGenerating(false);
+      } else {
+        console.error('❌ No queue_id returned from test blog generation:', result);
+        setIsGenerating(false);
+        alert('Test blog generation failed to start. Please try again.');
+      }
+    } catch (error) {
+      console.error("Error generating test blog:", error);
+      setIsGenerating(false);
+      alert("Error generating test blog. Please check your connection and try again.");
+    }
   };
 
   const handleGenerateContent = async () => {
@@ -770,6 +831,35 @@ function NewDraftContent() {
             <p className="text-gray-600 dark:text-gray-400 mt-2">
               Use AI to generate content or start from scratch
             </p>
+            
+            {/* Creation Mode Toggle */}
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">Mode:</span>
+              <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+                <button
+                  onClick={() => setCreationMode('quick')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    creationMode === 'quick'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <BoltIcon className="w-4 h-4" />
+                  Quick Generate
+                </button>
+                <button
+                  onClick={() => setCreationMode('multi-phase')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    creationMode === 'multi-phase'
+                      ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <Cog6ToothIcon className="w-4 h-4" />
+                  Multi-Phase Workflow
+                </button>
+              </div>
+            </div>
             {/* Workflow Status Indicator */}
             {(queueId || approvalId) && (
               <div className="mt-3">
@@ -843,8 +933,46 @@ function NewDraftContent() {
         </div>
       </div>
 
-          {/* Research Panel */}
-          {showResearchPanel && (
+          {/* Multi-Phase Workflow Panel */}
+          {creationMode === 'multi-phase' && (
+            <div className="mb-8">
+              <MultiPhaseWorkflowPanel
+                defaultConfig={{
+                  topic: formData.topic || formData.title,
+                  keywords: formData.keywords ? formData.keywords.split(',').map(k => k.trim()) : [],
+                  targetAudience: formData.target_audience,
+                  tone: formData.tone,
+                  wordCount: formData.word_count,
+                  qualityLevel: formData.quality_level,
+                }}
+                onWorkflowComplete={(state) => {
+                  // Handle workflow completion
+                  logger.info('Multi-phase workflow completed', { state });
+                  if (state.publishingResult?.postId) {
+                    setSavedPostId(state.publishingResult.postId);
+                  }
+                  // Populate form with generated content
+                  if (state.contentResult?.content) {
+                    setGeneratedContent({
+                      title: state.contentResult.title,
+                      content: state.contentResult.content,
+                      excerpt: state.contentResult.excerpt,
+                      word_count: state.contentResult.wordCount,
+                    });
+                    setFormData(prev => ({
+                      ...prev,
+                      title: state.contentResult?.title || prev.title,
+                      content: state.contentResult?.content || prev.content,
+                      excerpt: state.contentResult?.excerpt || prev.excerpt,
+                    }));
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {/* Research Panel - Only show in quick mode */}
+          {creationMode === 'quick' && showResearchPanel && (
             <div className="mb-8">
               <BlogResearchPanel
                 onResearchComplete={handleResearchComplete}
@@ -854,8 +982,8 @@ function NewDraftContent() {
             </div>
           )}
 
-          {/* Content Clusters Panel */}
-          {showContentClusters && researchResults && (
+          {/* Content Clusters Panel - Only in quick mode */}
+          {creationMode === 'quick' && showContentClusters && researchResults && (
             <div className="mb-8">
               <EnhancedContentClustersPanel
                 researchResults={researchResults}
@@ -866,8 +994,8 @@ function NewDraftContent() {
             </div>
           )}
 
-          {/* Content Suggestions Panel */}
-          {showContentSuggestions && researchResults && (
+          {/* Content Suggestions Panel - Only in quick mode */}
+          {creationMode === 'quick' && showContentSuggestions && researchResults && (
             <div className="mb-8">
               <ContentSuggestionsPanel
                 researchResults={researchResults}
@@ -879,8 +1007,8 @@ function NewDraftContent() {
             </div>
           )}
 
-      {/* Research Results Summary */}
-      {researchResults && !showResearchPanel && (
+      {/* Research Results Summary - Only in quick mode */}
+      {creationMode === 'quick' && researchResults && !showResearchPanel && (
         <div className="mb-8 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
@@ -903,6 +1031,8 @@ function NewDraftContent() {
         </div>
       )}
 
+      {/* Quick Mode Form */}
+      {creationMode === 'quick' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left Column - Form */}
         <div className="space-y-6">
@@ -1331,6 +1461,16 @@ function NewDraftContent() {
                 </button>
               ) : null}
               <button
+                onClick={handleGenerateTestBlog}
+                disabled={isGenerating}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg flex items-center justify-center gap-2 transition-colors text-sm font-medium"
+                title="Generate a quick 100-word test blog"
+              >
+                <BoltIcon className="w-4 h-4" />
+                {isGenerating ? "Generating..." : "Test Blog (100 words)"}
+              </button>
+              
+              <button
                 onClick={handleGenerateContent}
                 disabled={isGenerating || !formData.topic}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
@@ -1436,6 +1576,7 @@ function NewDraftContent() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Platform Selector Modal */}
       {showPlatformSelector && (
