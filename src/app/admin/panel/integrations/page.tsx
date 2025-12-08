@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { KeyIcon, LockClosedIcon, PencilIcon, CheckCircleIcon, ArrowPathIcon, ArrowDownTrayIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { KeyIcon, LockClosedIcon, PencilIcon, CheckCircleIcon, ArrowPathIcon, ArrowDownTrayIcon, XMarkIcon, PlusIcon } from "@heroicons/react/24/outline";
 import EditIntegrationModal from "@/components/admin/EditIntegrationModal";
 import { WebflowConfig } from "@/components/integrations/WebflowConfig";
 import { CloudinaryConfig } from "@/components/integrations/CloudinaryConfig";
