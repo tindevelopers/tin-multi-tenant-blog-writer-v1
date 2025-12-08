@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import {
+import { 
   ArrowLeftIcon,
   ClockIcon,
   XCircleIcon,
@@ -21,6 +21,7 @@ import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
 import { normalizeBlogContent } from "@/lib/content-sanitizer";
 import HeadingStructure from "@/components/blog-writer/HeadingStructure";
+import { createClient } from "@/lib/supabase/client";
 
 export default function QueueItemDetailPage() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function QueueItemDetailPage() {
     content: false,
     images: true, // Show images section by default
   });
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [normalizedContent, setNormalizedContent] = useState<ReturnType<typeof normalizeBlogContent> | null>(null);
   const [draftImages, setDraftImages] = useState<{
     featured_image?: string;
@@ -64,6 +66,23 @@ export default function QueueItemDetailPage() {
       setLoading(false);
     }
   }, [queueId]);
+
+  // Fetch current user's role to control admin-only visibility (e.g., cost)
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        const { data } = await supabase
+          .from("users")
+          .select("role")
+          .eq("user_id", user.id)
+          .single();
+        if (data?.role) {
+          setUserRole(data.role);
+        }
+      }
+    });
+  }, []);
 
   useEffect(() => {
     fetchQueueItem();
@@ -288,6 +307,7 @@ export default function QueueItemDetailPage() {
   }
 
   const statusMeta = getQueueStatusMetadata(item?.status);
+  const isOrgAdmin = ['admin', 'owner', 'system_admin', 'super_admin'].includes(userRole || '');
 
   return (
     <div className="p-6 space-y-6">
@@ -451,6 +471,22 @@ export default function QueueItemDetailPage() {
               <InfoItem
                 label="Completed At"
                 value={formatDate(item.generation_completed_at)}
+              />
+            )}
+            {isOrgAdmin && (
+              <InfoItem
+                label="Total Cost"
+                value={
+                  (() => {
+                    const totalCost =
+                      (item.generation_metadata as any)?.total_cost ??
+                      (item.generation_metadata as any)?.cost ??
+                      (item as any)?.total_cost;
+                    return totalCost !== undefined && totalCost !== null
+                      ? `$${Number(totalCost).toFixed(2)}`
+                      : "N/A";
+                  })()
+                }
               />
             )}
           </div>

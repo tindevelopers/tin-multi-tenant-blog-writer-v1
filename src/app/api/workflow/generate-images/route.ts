@@ -429,8 +429,8 @@ export async function POST(request: NextRequest) {
         
         const timestamp = Date.now();
         const headerImage = await generateAndUploadImage(headerPrompt, {
-          width: 1920,
-          height: 1080,
+            width: 1920,
+            height: 1080,
           aspectRatio: '16:9',
           quality: 'high',
           style: style || 'photographic',
@@ -442,7 +442,7 @@ export async function POST(request: NextRequest) {
 
         if (headerImage) {
           results.header_image = headerImage;
-          // Also set as featured_image for backward compatibility
+            // Also set as featured_image for backward compatibility
           results.featured_image = headerImage;
           logger.info('✅ Header image generated and uploaded to Cloudinary');
         } else {
@@ -463,8 +463,8 @@ export async function POST(request: NextRequest) {
         
         const timestamp = Date.now();
         const thumbnailImage = await generateAndUploadImage(thumbnailPrompt, {
-          width: 400,
-          height: 400,
+            width: 400,
+            height: 400,
           aspectRatio: '1:1',
           quality: 'standard',
           style: style || 'photographic',
@@ -503,8 +503,8 @@ export async function POST(request: NextRequest) {
           
           const timestamp = Date.now();
           const contentImage = await generateAndUploadImage(sectionPrompt, {
-            width: 1200,
-            height: 675,
+              width: 1200,
+              height: 675,
             aspectRatio: '16:9',
             quality: 'standard',
             style: style || 'photographic',
@@ -515,10 +515,10 @@ export async function POST(request: NextRequest) {
           });
 
           if (contentImage) {
-            results.content_images.push({
+              results.content_images.push({
               ...contentImage,
-              position: section.position,
-            });
+                position: section.position,
+              });
             logger.info('✅ Content image generated and uploaded to Cloudinary', { section: section.heading });
           }
         } catch (imgError: unknown) {

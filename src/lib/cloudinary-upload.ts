@@ -243,7 +243,7 @@ export async function uploadViaBlogWriterAPI(
       if (imageData.startsWith('data:')) {
         imageBase64 = imageData.split(',')[1] || imageData;
       } else {
-        imageBase64 = imageData;
+      imageBase64 = imageData;
       }
     } else if (imageUrl) {
       // Fetch and convert to base64 (server-side)

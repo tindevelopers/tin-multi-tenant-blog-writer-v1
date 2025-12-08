@@ -14,6 +14,9 @@ export interface ContentAnalysisResult {
   readability_score: number;
   seo_score: number;
   quality_score: number;
+  engagement_score?: number;
+  accessibility_score?: number;
+  eeat_score?: number;
   word_count: number;
   reading_time_minutes: number;
   headings_count: number;
@@ -86,6 +89,32 @@ export function analyzeContent(options: ContentAnalysisOptions): ContentAnalysis
     imagesCount,
   });
 
+  // Additional indicators
+  const engagementScore = calculateEngagementScore({
+    wordCount,
+    headingsCount,
+    linksCount,
+    imagesCount,
+    readingTimeMinutes,
+  });
+
+  const accessibilityScore = calculateAccessibilityScore({
+    content,
+    imagesCount,
+    linksCount,
+    headingsCount,
+    wordCount,
+    readabilityScore,
+  });
+
+  const eeatScore = calculateEEATScore({
+    wordCount,
+    linksCount,
+    imagesCount,
+    seoScore,
+    readabilityScore,
+  });
+
   // Analyze keyword density
   const keywordDensity = calculateKeywordDensity(textContent, keywords, target_keyword);
   
@@ -114,6 +143,9 @@ export function analyzeContent(options: ContentAnalysisOptions): ContentAnalysis
     readability_score: Math.round(readabilityScore),
     seo_score: Math.round(seoScore),
     quality_score: Math.round(qualityScore),
+    engagement_score: Math.round(engagementScore),
+    accessibility_score: Math.round(accessibilityScore),
+    eeat_score: Math.round(eeatScore),
     word_count: wordCount,
     reading_time_minutes: readingTimeMinutes,
     headings_count: headingsCount,
@@ -409,6 +441,126 @@ function calculateQualityScore(params: {
   qualityScore = (qualityScore * 0.6) + (structureScore * 0.4);
 
   return Math.max(0, Math.min(100, qualityScore));
+}
+
+/**
+ * Estimate engagement score (0-100)
+ * Factors: links, images, headings, reading time
+ */
+function calculateEngagementScore(params: {
+  wordCount: number;
+  headingsCount: number;
+  linksCount: number;
+  imagesCount: number;
+  readingTimeMinutes: number;
+}): number {
+  const { wordCount, headingsCount, linksCount, imagesCount, readingTimeMinutes } = params;
+
+  let score = 40; // base
+
+  // Headings encourage skimming
+  score += Math.min(20, headingsCount * 4);
+
+  // Links encourage deeper navigation
+  score += Math.min(20, linksCount * 5);
+
+  // Images improve engagement
+  score += Math.min(15, imagesCount * 5);
+
+  // Reading time sweet spot (2-7 min)
+  if (readingTimeMinutes >= 2 && readingTimeMinutes <= 7) {
+    score += 10;
+  } else if (readingTimeMinutes > 7 && readingTimeMinutes <= 10) {
+    score += 6;
+  } else if (readingTimeMinutes > 10) {
+    score += 2;
+  }
+
+  // Longer form content generally engages better
+  if (wordCount >= 1200) score += 10;
+  else if (wordCount >= 800) score += 6;
+  else if (wordCount >= 500) score += 3;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+/**
+ * Estimate accessibility score (0-100)
+ * Factors: alt text presence, heading structure, readable length, link presence
+ */
+function calculateAccessibilityScore(params: {
+  content: string;
+  imagesCount: number;
+  linksCount: number;
+  headingsCount: number;
+  wordCount: number;
+  readabilityScore: number;
+}): number {
+  const { content, imagesCount, linksCount, headingsCount, wordCount, readabilityScore } = params;
+
+  let score = 40; // base
+
+  // Alt text coverage
+  if (imagesCount > 0) {
+    const imagesWithAlt = (content.match(/<img[^>]+alt=["'][^"']+["'][^>]*>/gi) || []).length;
+    const altRatio = imagesWithAlt / imagesCount;
+    score += Math.min(25, altRatio * 25);
+  } else {
+    score += 5; // no images, neutral
+  }
+
+  // Headings help navigation
+  if (headingsCount >= 3) score += 15;
+  else score += headingsCount * 5;
+
+  // Links for navigation/context
+  if (linksCount >= 3) score += 10;
+  else if (linksCount >= 1) score += 6;
+
+  // Readability contributes
+  score += Math.min(20, (readabilityScore / 100) * 20);
+
+  // Reasonable length
+  if (wordCount >= 500 && wordCount <= 2500) score += 10;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+/**
+ * Estimate E-E-A-T score (0-100)
+ * Factors: content length, links (as signals), media, readability, seo
+ */
+function calculateEEATScore(params: {
+  wordCount: number;
+  linksCount: number;
+  imagesCount: number;
+  seoScore: number;
+  readabilityScore: number;
+}): number {
+  const { wordCount, linksCount, imagesCount, seoScore, readabilityScore } = params;
+
+  let score = 30; // base
+
+  // Depth of content
+  if (wordCount >= 1500) score += 25;
+  else if (wordCount >= 1000) score += 18;
+  else if (wordCount >= 700) score += 12;
+  else if (wordCount >= 500) score += 8;
+
+  // Outbound/internal links as authority signals
+  if (linksCount >= 5) score += 20;
+  else if (linksCount >= 3) score += 14;
+  else if (linksCount >= 1) score += 8;
+
+  // Media richness
+  if (imagesCount >= 2) score += 10;
+  else if (imagesCount >= 1) score += 6;
+
+  // SEO and readability contribute
+  score += Math.min(10, (seoScore / 100) * 10);
+  score += Math.min(10, (readabilityScore / 100) * 10);
+
+  return Math.max(0, Math.min(100, score));
 }
 
 /**

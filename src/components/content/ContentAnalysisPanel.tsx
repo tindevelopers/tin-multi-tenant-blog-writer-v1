@@ -17,6 +17,37 @@ import {
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
 
+type ScoreCardColor =
+  | 'blue'
+  | 'green'
+  | 'purple'
+  | 'indigo'
+  | 'amber'
+  | 'pink';
+
+const colorClasses: Record<ScoreCardColor, { bg: string; text: string }> = {
+  blue: { bg: 'bg-blue-50 dark:bg-blue-900/20', text: 'text-blue-600 dark:text-blue-400' },
+  green: { bg: 'bg-green-50 dark:bg-green-900/20', text: 'text-green-600 dark:text-green-400' },
+  purple: { bg: 'bg-purple-50 dark:bg-purple-900/20', text: 'text-purple-600 dark:text-purple-400' },
+  indigo: { bg: 'bg-indigo-50 dark:bg-indigo-900/20', text: 'text-indigo-600 dark:text-indigo-400' },
+  amber: { bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-600 dark:text-amber-400' },
+  pink: { bg: 'bg-pink-50 dark:bg-pink-900/20', text: 'text-pink-600 dark:text-pink-400' },
+};
+
+function ScoreCard({ label, value, color }: { label: string; value?: number; color: ScoreCardColor }) {
+  const classes = colorClasses[color];
+  return (
+    <div className={`${classes.bg} rounded-lg p-4`}>
+      <div className={`text-2xl font-bold ${classes.text}`}>
+        {value !== undefined && value !== null ? Math.round(value) : '—'}
+      </div>
+      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+        {label}
+      </div>
+    </div>
+  );
+}
+
 interface ContentAnalysisPanelProps {
   content: string;
   topic?: string;
@@ -168,31 +199,13 @@ export function ContentAnalysisPanel({
       {result && (
         <div className="space-y-4">
           {/* Scores */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {result.readability_score}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Readability
-              </div>
-            </div>
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {result.seo_score}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                SEO Score
-              </div>
-            </div>
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {result.quality_score}
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Quality
-              </div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <ScoreCard label="Readability" value={result.readability_score} color="blue" />
+            <ScoreCard label="SEO Score" value={result.seo_score} color="green" />
+            <ScoreCard label="Quality" value={result.quality_score} color="purple" />
+            <ScoreCard label="Engagement" value={result.engagement_score} color="indigo" />
+            <ScoreCard label="Accessibility" value={result.accessibility_score} color="amber" />
+            <ScoreCard label="E-E-A-T" value={result.eeat_score} color="pink" />
           </div>
 
           {/* Stats */}

@@ -962,16 +962,16 @@ function QueueItemRow({
         <div className="flex items-center justify-end gap-2">
           {/* STOP - Prominent for generating/queued items */}
           {(item.status === "generating" || item.status === "queued") && (
-            <button
+          <button
               onClick={onCancel}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
               title="Stop generation"
-            >
+          >
               <StopIcon className="w-4 h-4" />
               Stop
-            </button>
+          </button>
           )}
-
+          
           {/* PRIMARY: Continue in Editor - Most prominent for generated items */}
           {hasGeneratedContent && (
             <button
@@ -993,7 +993,7 @@ function QueueItemRow({
           {/* Regenerate - For failed items */}
           {item.status === "failed" && (
             <>
-              <button
+            <button
                 onClick={onRetry}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
                 title="Retry with same settings"
@@ -1005,15 +1005,15 @@ function QueueItemRow({
                 onClick={onRegenerate}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-purple-600 hover:text-purple-800 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors"
                 title="Create new generation with same topic"
-              >
-                <ArrowPathIcon className="w-4 h-4" />
-                <span className="text-xs">Regenerate</span>
-              </button>
+            >
+              <ArrowPathIcon className="w-4 h-4" />
+              <span className="text-xs">Regenerate</span>
+            </button>
             </>
           )}
           
           {/* View Details */}
-          <button
+            <button
             onClick={onView}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded transition-colors ${
               hasGeneratedContent 
@@ -1021,10 +1021,10 @@ function QueueItemRow({
                 : "text-brand-600 hover:text-brand-800 dark:text-brand-400 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/20"
             }`}
             title="View generation details and progress"
-          >
+            >
             <EyeIcon className="w-4 h-4" />
             <span className="text-xs">Details</span>
-          </button>
+            </button>
           
           {/* Delete - For completed/generated items that aren't published */}
           {["generated", "failed", "cancelled", "in_review", "approved", "rejected"].includes(item.status) && (

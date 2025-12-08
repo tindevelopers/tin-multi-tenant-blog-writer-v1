@@ -208,7 +208,7 @@ async function uploadAndSaveToMediaLibrary(
   
   const timestamp = Date.now();
   const fileName = `${imageType}_${timestamp}.png`;
-  
+
   // Determine the image URL to return (Cloudinary URL or original)
   let finalUrl = imageUrl;
   let publicId: string | undefined;
@@ -228,36 +228,36 @@ async function uploadAndSaveToMediaLibrary(
     );
 
     if (uploadResult) {
-      logger.debug('✅ Uploaded to Cloudinary', {
-        publicId: uploadResult.public_id,
-        url: uploadResult.secure_url?.substring(0, 50),
-      });
+    logger.debug('✅ Uploaded to Cloudinary', {
+      publicId: uploadResult.public_id,
+      url: uploadResult.secure_url?.substring(0, 50),
+    });
       
       finalUrl = uploadResult.secure_url || uploadResult.url || imageUrl;
       publicId = uploadResult.public_id;
       width = uploadResult.width;
       height = uploadResult.height;
 
-      // Step 3: Save to media library
-      logger.debug('💾 Step 3: Saving to media library...');
+    // Step 3: Save to media library
+    logger.debug('💾 Step 3: Saving to media library...');
       assetId = await saveMediaAsset(
-        orgId,
-        userId,
-        uploadResult,
-        fileName,
-        {
-          source: 'ai_generated',
-          image_type: imageType,
-          title: title,
-          generated_at: new Date().toISOString(),
-        }
-      );
-
-      if (assetId) {
-        logger.debug('✅ Saved to media library', { assetId });
-      } else {
-        logger.warn('⚠️ Failed to save to media library, but Cloudinary upload succeeded');
+      orgId,
+      userId,
+      uploadResult,
+      fileName,
+      {
+        source: 'ai_generated',
+        image_type: imageType,
+        title: title,
+        generated_at: new Date().toISOString(),
       }
+    );
+
+    if (assetId) {
+      logger.debug('✅ Saved to media library', { assetId });
+    } else {
+      logger.warn('⚠️ Failed to save to media library, but Cloudinary upload succeeded');
+    }
     } else {
       // Cloudinary upload failed - log warning but continue with original URL
       logger.warn('⚠️ Cloudinary upload failed, returning original image URL as fallback');
@@ -270,14 +270,14 @@ async function uploadAndSaveToMediaLibrary(
   }
 
   // Return success with either Cloudinary URL or original URL as fallback
-  return NextResponse.json({
-    success: true,
+    return NextResponse.json({
+      success: true,
     url: finalUrl,
     public_id: publicId,
     width: width,
     height: height,
-    asset_id: assetId,
-    image_type: imageType,
+      asset_id: assetId,
+      image_type: imageType,
     cloudinary_uploaded: !!publicId, // Indicate if Cloudinary upload succeeded
   });
 }
