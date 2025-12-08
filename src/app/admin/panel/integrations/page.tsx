@@ -620,6 +620,8 @@ export default function IntegrationsManagementPage() {
     return matchesSearch && matchesStatus;
   });
 
+  const webflowIntegrations = allIntegrations.filter((integration) => integration.type === "webflow");
+
   const canManageIntegrations = ["system_admin", "super_admin", "admin", "manager"].includes(userRole);
 
   const getStatusBadge = (status: Integration['status']) => {
@@ -821,6 +823,25 @@ export default function IntegrationsManagementPage() {
           </div>
         </div>
       </div>
+
+      {/* Webflow multi-site helper */}
+      {webflowIntegrations.length > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">Webflow supports multiple sites.</p>
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              Add another Webflow connection to publish to a different site or collection. Currently connected: {webflowIntegrations.length} site{webflowIntegrations.length === 1 ? "" : "s"}.
+            </p>
+          </div>
+          <button
+            onClick={() => window.location.href = "/admin/integrations/blog-writer?provider=webflow&mode=new"}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Add Webflow Site
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
