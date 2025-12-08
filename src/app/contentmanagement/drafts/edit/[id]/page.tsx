@@ -30,6 +30,7 @@ import type { WorkflowPhase } from "@/lib/workflow-phase-manager";
 import { PublishButton } from "@/components/publishing/PublishButton";
 import { PublishingTargetSelector } from "@/components/publishing/PublishingTargetSelector";
 import { UserRole, type PublishingTarget } from "@/types/publishing";
+import { createClient } from "@/lib/supabase/client";
 
 type DraftFormState = {
   title: string;
