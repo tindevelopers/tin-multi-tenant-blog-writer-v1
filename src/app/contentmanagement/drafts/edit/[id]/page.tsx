@@ -27,6 +27,9 @@ import { logger } from "@/utils/logger";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
 import WorkflowStagesHorizontal from "@/components/workflow/WorkflowStagesHorizontal";
 import type { WorkflowPhase } from "@/lib/workflow-phase-manager";
+import { PublishButton } from "@/components/publishing/PublishButton";
+import { PublishingTargetSelector } from "@/components/publishing/PublishingTargetSelector";
+import { UserRole, type PublishingTarget } from "@/types/publishing";
 
 type DraftFormState = {
   title: string;
@@ -141,6 +144,10 @@ export default function EditDraftPage() {
   const [pendingSaveAction, setPendingSaveAction] = useState<(() => void) | null>(null);
   const [workflowPhase, setWorkflowPhase] = useState<WorkflowPhase | null>(null);
   const [contentImages, setContentImages] = useState<Array<{ url: string; alt: string }>>([]);
+  const [publishingTarget, setPublishingTarget] = useState<PublishingTarget | undefined>();
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>(UserRole.WRITER);
   const [reviewStatus, setReviewStatus] = useState<{
     status: 'none' | 'pending' | 'approved' | 'rejected' | 'changes_requested';
     reviewedBy?: string;
@@ -246,8 +253,44 @@ export default function EditDraftPage() {
         isFeatured: extractedFields.is_featured ?? false,
         publishedAt: extractedFields.published_at || draft.published_at || '',
       });
+
+      // Capture org_id from draft if present
+      if ((draft as any)?.org_id) {
+        setOrgId((draft as any).org_id);
+      }
+
+      // Capture publishing target from metadata if present
+      if (metadata.cms_provider && metadata.site_id) {
+        setPublishingTarget({
+          cms_provider: metadata.cms_provider as any,
+          site_id: metadata.site_id as string,
+          collection_id: metadata.collection_id as string | undefined,
+          site_name: (metadata as any).site_name as string | undefined,
+        });
+      }
     }
   }, [draft]);
+
+  // Fetch current user to populate userId and role
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        setUserId(user.id);
+        const { data } = await supabase
+          .from("users")
+          .select("role, org_id")
+          .eq("user_id", user.id)
+          .single();
+        if (data?.role) {
+          setUserRole((data.role as UserRole) || UserRole.WRITER);
+        }
+        if (data?.org_id && !orgId) {
+          setOrgId(data.org_id);
+        }
+      }
+    });
+  }, [orgId]);
 
   useEffect(() => {
     const plainText = stripHtml(formData.content || '');
@@ -2366,6 +2409,57 @@ export default function EditDraftPage() {
               <CheckCircleIcon className="w-3 h-3 text-green-500" />
               Last analyzed: {new Date(linkAnalysis.lastAnalyzed).toLocaleString()}
             </div>
+          )}
+        </div>
+
+        {/* Publish Button */}
+        {orgId && userId && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Publish</h2>
+            <PublishButton
+              orgId={orgId}
+              userId={userId}
+              userRole={userRole}
+              blogId={draftId}
+              currentTarget={publishingTarget}
+              onPublished={() => {
+                refetch(); // reload draft to get updated publish status
+              }}
+            />
+          </div>
+        )}
+
+        {/* Publishing Target Selection */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Publishing Target</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Choose the CMS, site, and collection where this blog will be published.
+              </p>
+            </div>
+          </div>
+          {orgId && userId ? (
+            <PublishingTargetSelector
+              orgId={orgId}
+              userId={userId}
+              userRole={userRole}
+              value={publishingTarget}
+              onChange={async (target) => {
+                setPublishingTarget(target);
+                try {
+                  await fetch(`/api/publishing/drafts/${draftId}/target`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(target),
+                  });
+                } catch (err) {
+                  console.error("Failed to save publishing target", err);
+                }
+              }}
+            />
+          ) : (
+            <div className="text-sm text-gray-500">Loading user/org...</div>
           )}
         </div>
 
