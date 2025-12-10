@@ -187,6 +187,8 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
     avatar_url?: string; 
     organizations?: { name: string }[] 
   } | null>(null);
+  const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -203,6 +205,45 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
           });
       }
     });
+  }, []);
+
+  // Load tenant logo/wordmark from organizations (stored in Supabase storage)
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from("users")
+          .select("org_id")
+          .eq("user_id", user.id)
+          .single();
+
+        const orgId = profile?.org_id;
+        if (!orgId) return;
+
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("name, logo_url, settings")
+          .eq("org_id", orgId)
+          .single();
+
+        if (org) {
+          const logo =
+            (org.settings as any)?.logo_url ||
+            org.logo_url ||
+            null;
+          setOrgLogoUrl(logo);
+          setOrgName(org.name || null);
+        }
+      } catch (error) {
+        console.warn("Failed to load org branding (admin sidebar)", error);
+      }
+    };
+
+    loadBranding();
   }, []);
 
   const handleSubmenuToggle = (itemName: string) => {
@@ -229,8 +270,8 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-3">
           <Image
-            src="/images/logo/logo-icon.svg"
-            alt="Logo"
+            src={orgLogoUrl || "/images/logo/logo-icon.svg"}
+            alt={orgName || "Logo"}
             width={32}
             height={32}
           />

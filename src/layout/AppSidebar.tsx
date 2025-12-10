@@ -169,6 +169,8 @@ const AppSidebar: React.FC = () => {
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [newBadgeOverrides, setNewBadgeOverrides] = useState<Record<string, boolean>>({});
+  const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState<string | null>(null);
 
   // Load persisted state from localStorage, default Blog Writer menu to open
   useEffect(() => {
@@ -269,6 +271,45 @@ const AppSidebar: React.FC = () => {
           });
       }
     });
+  }, []);
+
+  // Load tenant branding (logo/wordmark) from Supabase storage via organizations table
+  useEffect(() => {
+    const loadBranding = async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from("users")
+          .select("org_id")
+          .eq("user_id", user.id)
+          .single();
+
+        const orgId = profile?.org_id;
+        if (!orgId) return;
+
+        const { data: org } = await supabase
+          .from("organizations")
+          .select("name, logo_url, settings")
+          .eq("org_id", orgId)
+          .single();
+
+        if (org) {
+          const logo =
+            (org.settings as any)?.logo_url ||
+            org.logo_url ||
+            null;
+          setOrgLogoUrl(logo);
+          setOrgName(org.name || null);
+        }
+      } catch (error) {
+        console.warn("Failed to load org branding", error);
+      }
+    };
+
+    loadBranding();
   }, []);
 
   // Smart auto-expand logic - automatically open accordions for active routes
@@ -651,15 +692,15 @@ const AppSidebar: React.FC = () => {
           >
             {isExpanded || isHovered || isMobileOpen ? (
               <Image
-                src="/images/logo/logo.svg"
-                alt="Logo"
+                src={orgLogoUrl || "/images/logo/logo.svg"}
+                alt={orgName || "Logo"}
                 width={32}
                 height={32}
               />
             ) : (
               <Image
-                src="/images/logo/logo-icon.svg"
-                alt="Logo"
+                src={orgLogoUrl || "/images/logo/logo-icon.svg"}
+                alt={orgName || "Logo"}
                 width={32}
                 height={32}
               />
