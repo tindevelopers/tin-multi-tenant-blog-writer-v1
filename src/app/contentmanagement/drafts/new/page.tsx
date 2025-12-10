@@ -148,6 +148,7 @@ function NewDraftContent() {
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingType, setGeneratingType] = useState<'test' | 'content' | null>(null); // Track which button triggered generation
   const [savedPostId, setSavedPostId] = useState<string | null>(null);
   const [queueId, setQueueId] = useState<string | null>(null);
   const [queueStatus, setQueueStatus] = useState<string | null>(null);
@@ -414,6 +415,7 @@ function NewDraftContent() {
 
   const handleGenerateTestBlog = async () => {
     setIsGenerating(true);
+    setGeneratingType('test');
     try {
       const testTopic = formData.topic || "Test Blog Post";
       
@@ -455,14 +457,17 @@ function NewDraftContent() {
         }
         
         setIsGenerating(false);
+        setGeneratingType(null);
       } else {
         console.error('❌ No queue_id returned from test blog generation:', result);
         setIsGenerating(false);
+        setGeneratingType(null);
         alert('Test blog generation failed to start. Please try again.');
       }
     } catch (error) {
       console.error("Error generating test blog:", error);
       setIsGenerating(false);
+      setGeneratingType(null);
       alert("Error generating test blog. Please check your connection and try again.");
     }
   };
@@ -474,6 +479,7 @@ function NewDraftContent() {
     }
 
     setIsGenerating(true);
+    setGeneratingType('content');
     try {
       // Use research results if available, otherwise use form data
       let keywords: string[] = [];
@@ -545,12 +551,14 @@ function NewDraftContent() {
         }
         
         setIsGenerating(false); // Stop loading spinner
+        setGeneratingType(null);
         // Don't show alert - let the progress UI handle feedback
         // The SSE hook will update status automatically
       } else {
         // This should rarely happen now, but handle gracefully
         console.error('❌ No queue_id returned from generation:', result);
         setIsGenerating(false);
+        setGeneratingType(null);
         alert('Blog generation failed to start. Please try again or check the queue dashboard.');
       }
 
@@ -560,6 +568,7 @@ function NewDraftContent() {
     } catch (error) {
       console.error("Error generating content:", error);
       setIsGenerating(false);
+      setGeneratingType(null);
       alert("Error generating content. Please check your connection and try again.");
     }
   };
@@ -812,7 +821,7 @@ function NewDraftContent() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <button
@@ -872,34 +881,6 @@ function NewDraftContent() {
               </div>
             )}
             
-            {/* Generation Progress Display */}
-            {queueId && queueStatus === "generating" && (
-              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-blue-900 dark:text-blue-300">
-                    {generationProgress.stage || "Generating blog..."}
-                  </span>
-                  <span className="text-sm text-blue-700 dark:text-blue-400">
-                    {generationProgress.percentage}%
-                  </span>
-                </div>
-                <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2 mb-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${generationProgress.percentage}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-xs text-blue-600 dark:text-blue-400">
-                  <span>Queue ID: {queueId.substring(0, 8)}...</span>
-                  <button
-                    onClick={() => router.push(`/contentmanagement/blog-queue/${queueId}`)}
-                    className="hover:underline"
-                  >
-                    View Details →
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
           <div className="flex items-center space-x-2">
             {/* Quick Actions Menu */}
@@ -1033,9 +1014,9 @@ function NewDraftContent() {
 
       {/* Quick Mode Form */}
       {creationMode === 'quick' && (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 xl:gap-8">
         {/* Left Column - Form */}
-        <div className="space-y-6">
+        <div className="lg:col-span-3 space-y-6">
           {/* Basic Information */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -1266,9 +1247,29 @@ function NewDraftContent() {
 
               {!isPremiumQuality && (
                 <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4 space-y-3">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Quality Features (Optional)
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                      Quality Features (Optional)
+                    </h3>
+                    {/* Show count of active features */}
+                    {(() => {
+                      const activeCount = [
+                        formData.use_google_search,
+                        formData.use_fact_checking,
+                        formData.use_citations,
+                        formData.use_serp_optimization,
+                        formData.use_consensus_generation,
+                        formData.use_knowledge_graph,
+                        formData.use_semantic_keywords,
+                        formData.use_quality_scoring,
+                      ].filter(Boolean).length;
+                      return activeCount > 0 ? (
+                        <span className="text-xs font-medium px-2 py-1 bg-purple-600 text-white rounded-full">
+                          {activeCount} active
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
                     Enable advanced features for better content quality. Premium/Enterprise quality enables all features automatically.
                   </p>
@@ -1445,54 +1446,112 @@ function NewDraftContent() {
           </div>
 
           {/* Actions */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <div className="flex flex-col sm:flex-row gap-3">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
+            {/* Generation Progress - Inline when generating */}
+            {queueId && queueStatus === "generating" && (
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-900 dark:text-blue-300 flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    {generationProgress.stage || "Processing..."}
+                  </span>
+                  <span className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                    {generationProgress.percentage}%
+                  </span>
+                </div>
+                <div className="w-full bg-blue-200 dark:bg-blue-800 rounded-full h-2.5">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${generationProgress.percentage}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between mt-2 text-xs text-blue-600 dark:text-blue-400">
+                  <span>Queue ID: {queueId.substring(0, 8)}...</span>
+                  <button
+                    onClick={() => router.push(`/contentmanagement/blog-queue/${queueId}`)}
+                    className="hover:underline font-medium"
+                  >
+                    View Details →
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Field Configuration Button */}
-              {formData.title && (formData.content || (generatedContent?.content && String(generatedContent.content).trim().length > 0)) ? (
+              {formData.title && (formData.content || (generatedContent?.content && String(generatedContent.content).trim().length > 0)) && (
                 <button
                   onClick={() => {
                     setBlogFieldData(prepareFieldConfigData());
                     setShowFieldConfig(true);
                   }}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+                  className="px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
                   title="Configure all blog fields before saving"
                 >
-                  ⚙️ Configure Fields
+                  <Cog6ToothIcon className="w-4 h-4" />
+                  Configure Fields
                 </button>
-              ) : null}
+              )}
+              
+              {/* Test Blog Button */}
               <button
                 onClick={handleGenerateTestBlog}
                 disabled={isGenerating}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg flex items-center justify-center gap-2 transition-colors text-sm font-medium"
+                className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors text-sm font-medium whitespace-nowrap"
                 title="Generate a quick 100-word test blog"
               >
                 <BoltIcon className="w-4 h-4" />
-                {isGenerating ? "Generating..." : "Test Blog (100 words)"}
+                {generatingType === 'test' ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Testing...
+                  </>
+                ) : "Test (100w)"}
               </button>
               
+              {/* Generate Content Button */}
               <button
                 onClick={handleGenerateContent}
                 disabled={isGenerating || !formData.topic}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors text-sm font-medium whitespace-nowrap"
               >
-                <SparklesIcon className="w-4 h-4" />
-                {isGenerating ? "Generating..." : "Generate Content"}
+                {generatingType === 'content' ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <SparklesIcon className="w-4 h-4" />
+                    Generate
+                  </>
+                )}
               </button>
               
+              {/* Save as Draft Button */}
               <button
                 onClick={handleSaveDraft}
                 disabled={creatingPost || !formData.title}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                className="px-4 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors text-sm font-medium whitespace-nowrap"
               >
                 <DocumentTextIcon className="w-4 h-4" />
-                {creatingPost ? "Saving..." : "Save as Draft"}
+                {creatingPost ? "Saving..." : "Save Draft"}
               </button>
             </div>
           </div>
         </div>
 
         {/* Right Column - Generated Content Preview */}
-        <div className="space-y-6">
+        <div className="lg:col-span-2 space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
               Generated Content
@@ -1600,14 +1659,14 @@ function NewDraftContent() {
 export default function NewDraftPage() {
   return (
     <Suspense fallback={
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded mb-8"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="space-y-6">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded mb-4 w-48"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded mb-8 w-64"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 xl:gap-8">
+            <div className="lg:col-span-3 space-y-6">
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mb-4 w-32"></div>
                 <div className="space-y-4">
                   <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
                   <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
@@ -1615,9 +1674,9 @@ export default function NewDraftPage() {
                 </div>
               </div>
             </div>
-            <div className="space-y-6">
+            <div className="lg:col-span-2 space-y-6">
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mb-4"></div>
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded mb-4 w-40"></div>
                 <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
               </div>
             </div>

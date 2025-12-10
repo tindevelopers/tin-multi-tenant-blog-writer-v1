@@ -310,9 +310,9 @@ export default function QueueItemDetailPage() {
   const isOrgAdmin = ['admin', 'owner', 'system_admin', 'super_admin'].includes(userRole || '');
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="relative z-0 p-4 sm:p-6 space-y-6 max-w-screen-2xl mx-auto pointer-events-auto">
       {/* Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 relative z-20 pointer-events-auto">
         {/* Title and back button */}
         <div className="flex items-start gap-4">
           <button
@@ -333,12 +333,12 @@ export default function QueueItemDetailPage() {
         </div>
         
         {/* Action Buttons - Simplified: Monitor page focuses on status, Editor is for actions */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap relative z-30 pointer-events-auto">
           {/* PRIMARY CTA: Continue in Editor - Large and prominent */}
           {hasGeneratedContent && postId && (
             <a
               href={`/contentmanagement/drafts/edit/${postId}`}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl no-underline cursor-pointer"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl no-underline cursor-pointer relative z-40 pointer-events-auto"
               onClick={(e) => {
                 // Ensure navigation works
                 e.preventDefault();
@@ -360,7 +360,7 @@ export default function QueueItemDetailPage() {
                 handleCreateDraft();
               }}
               disabled={!item?.generated_content && !normalizedContent?.content}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400 relative z-40 pointer-events-auto"
             >
               Continue in Editor
               <ArrowRightIcon className="w-5 h-5" />
