@@ -1503,7 +1503,6 @@ function NewDraftContent() {
                 className="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg flex items-center justify-center gap-2 transition-colors text-sm font-medium whitespace-nowrap"
                 title="Generate a quick 100-word test blog"
               >
-                <BoltIcon className="w-4 h-4" />
                 {generatingType === 'test' ? (
                   <>
                     <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1512,7 +1511,12 @@ function NewDraftContent() {
                     </svg>
                     Testing...
                   </>
-                ) : "Test (100w)"}
+                ) : (
+                  <>
+                    <BoltIcon className="w-4 h-4" />
+                    Test (100w)
+                  </>
+                )}
               </button>
               
               {/* Generate Content Button */}
