@@ -108,9 +108,20 @@ export class PublishingService {
     userId: string,
     userRole: UserRole
   ): Promise<PublishingTargetsResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/publishing/targets`, {
+    const url =
+      API_BASE_URL && API_BASE_URL.trim().length > 0
+        ? `${API_BASE_URL}/api/v1/publishing/targets`
+        : "/api/v1/publishing/targets";
+
+    const response = await fetch(url, {
       headers: getHeaders(orgId, userId, userRole),
     });
+
+    // If the endpoint isn't available (404), fall back to an empty target list
+    if (response.status === 404) {
+      return { providers: [], sites: [], default: null };
+    }
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || response.statusText);

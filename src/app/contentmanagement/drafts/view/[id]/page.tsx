@@ -36,6 +36,9 @@ export default function ViewDraftPage() {
   const [showRawHTML, setShowRawHTML] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copyButtonText, setCopyButtonText] = useState('Copy HTML');
+  const [suppliers, setSuppliers] = useState<Array<{ name: string; product: string; url: string }>>([
+    { name: '', product: '', url: '' },
+  ]);
   
   const { post: draft, loading, error, refetch } = useBlogPost(draftId);
   const { deletePost } = useBlogPostMutations();
@@ -417,6 +420,83 @@ export default function ViewDraftPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Supplier References Editor */}
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Supplier References (optional)</h3>
+                  <button
+                    type="button"
+                    onClick={() => setSuppliers((prev) => [...prev, { name: '', product: '', url: '' }])}
+                    className="px-3 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  >
+                    Add supplier
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Add suppliers that provide products for the techniques. They will be appended to the Webflow HTML as a “Recommended Suppliers” section.
+                </p>
+                <div className="space-y-3">
+                  {suppliers.map((supplier, idx) => (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 rounded-lg p-3"
+                    >
+                      <div className="md:col-span-4">
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Name</label>
+                        <input
+                          type="text"
+                          value={supplier.name}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSuppliers((prev) => prev.map((s, i) => (i === idx ? { ...s, name: val } : s)));
+                          }}
+                          className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                          placeholder="e.g., Acme Supplies"
+                        />
+                      </div>
+                      <div className="md:col-span-4">
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Product / category</label>
+                        <input
+                          type="text"
+                          value={supplier.product}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSuppliers((prev) => prev.map((s, i) => (i === idx ? { ...s, product: val } : s)));
+                          }}
+                          className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                          placeholder="e.g., Concrete repair kits"
+                        />
+                      </div>
+                      <div className="md:col-span-3">
+                        <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Link (optional)</label>
+                        <input
+                          type="url"
+                          value={supplier.url}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSuppliers((prev) => prev.map((s, i) => (i === idx ? { ...s, url: val } : s)));
+                          }}
+                          className="mt-1 w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                          placeholder="https://supplier.com/product"
+                        />
+                      </div>
+                      <div className="md:col-span-1 flex justify-end md:items-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSuppliers((prev) => prev.filter((_, i) => i !== idx))
+                          }
+                          className="mt-2 md:mt-6 text-sm text-red-600 dark:text-red-400 hover:underline disabled:text-gray-400 disabled:cursor-not-allowed"
+                          disabled={suppliers.length === 1}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -636,6 +716,59 @@ export default function ViewDraftPage() {
     // Clean up for Webflow
     html = html.replace(/style="[^"]*"/gi, '');
     html = html.replace(/<figure class="featured-image">/g, '<figure>');
+
+    // Remove instruction/prompt preamble if present (common LLM artifact)
+    // We strip leading blocks that contain these phrases
+    if (typeof window !== 'undefined') {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+      const container = doc.body.firstElementChild;
+      if (container) {
+        const instructionPatterns = [
+          /i'll provide a comprehensive enhancement/i,
+          /i will provide a comprehensive enhancement/i,
+          /key enhancements/i,
+          /enhanced draft/i,
+        ];
+        while (
+          container.firstElementChild &&
+          instructionPatterns.some((p) =>
+            p.test((container.firstElementChild.textContent || '').trim())
+          )
+        ) {
+          container.removeChild(container.firstElementChild);
+        }
+        html = container.innerHTML;
+      }
+    }
+
+    // Append supplier section if provided
+    const supplierList = suppliers
+      .map((s) => ({
+        name: s.name?.trim(),
+        product: s.product?.trim(),
+        url: s.url?.trim(),
+      }))
+      .filter((s) => s.name || s.product || s.url);
+
+    if (supplierList.length > 0) {
+      const supplierHtml = `
+        <section class="supplier-references">
+          <h2>Recommended Suppliers</h2>
+          <ul>
+            ${supplierList
+              .map((s) => {
+                const name = s.name || 'Supplier';
+                const product = s.product ? ` – ${s.product}` : '';
+                const link = s.url ? ` <a href="${s.url}" target="_blank" rel="noopener">${s.url}</a>` : '';
+                return `<li><strong>${name}</strong>${product}${link}</li>`;
+              })
+              .join('')}
+          </ul>
+        </section>
+      `;
+      html = `${html}${supplierHtml}`;
+    }
 
     return formatHtmlForWebflow(html);
   }
