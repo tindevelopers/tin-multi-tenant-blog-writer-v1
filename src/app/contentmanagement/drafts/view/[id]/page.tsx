@@ -730,13 +730,15 @@ export default function ViewDraftPage() {
           /key enhancements/i,
           /enhanced draft/i,
         ];
-        while (
-          container.firstElementChild &&
-          instructionPatterns.some((p) =>
-            p.test((container.firstElementChild.textContent || '').trim())
-          )
-        ) {
-          container.removeChild(container.firstElementChild);
+        let firstChild = container.firstElementChild;
+        while (firstChild) {
+          const textContent = (firstChild.textContent ?? '').trim();
+          const hasInstruction = instructionPatterns.some((p) =>
+            p.test(textContent)
+          );
+          if (!hasInstruction) break;
+          container.removeChild(firstChild);
+          firstChild = container.firstElementChild;
         }
         html = container.innerHTML;
       }
