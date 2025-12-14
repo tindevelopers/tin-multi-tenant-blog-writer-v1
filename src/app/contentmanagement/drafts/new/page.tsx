@@ -28,6 +28,20 @@ import { logger } from "@/utils/logger";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
 import { extractBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
 import MultiPhaseWorkflowPanel from "@/components/workflow/MultiPhaseWorkflowPanel";
+
+type GeneratedContent = {
+  title?: string;
+  content?: string;
+  excerpt?: string;
+  meta_title?: string;
+  meta_description?: string;
+  featured_image?: string;
+  seo_score?: number;
+  readability_score?: number;
+  quality_score?: number;
+  word_count?: number;
+  metadata?: Record<string, unknown>;
+};
 // import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
@@ -146,7 +160,7 @@ function NewDraftContent() {
   const [showFieldConfig, setShowFieldConfig] = useState(false);
   const [blogFieldData, setBlogFieldData] = useState<BlogFieldData>({});
 
-  const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
+  const [generatedContent, setGeneratedContent] = useState<GeneratedContent | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatingType, setGeneratingType] = useState<'test' | 'content' | null>(null); // Track which button triggered generation
   const [savedPostId, setSavedPostId] = useState<string | null>(null);

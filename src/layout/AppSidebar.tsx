@@ -281,6 +281,16 @@ const AppSidebar: React.FC = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        const normalizeLogoUrl = (raw: string | null | undefined) => {
+          const trimmed = raw?.trim();
+          if (!trimmed) return null;
+          if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:")) {
+            return trimmed;
+          }
+          const { data } = supabase.storage.from("organization-logos").getPublicUrl(trimmed);
+          return data?.publicUrl || trimmed;
+        };
+
         const { data: profile } = await supabase
           .from("users")
           .select("org_id")
@@ -297,11 +307,11 @@ const AppSidebar: React.FC = () => {
           .single();
 
         if (org) {
-          const logo =
+          const logoRaw =
             (org.settings as any)?.logo_url ||
             org.logo_url ||
             null;
-          setOrgLogoUrl(logo);
+          setOrgLogoUrl(normalizeLogoUrl(logoRaw));
           setOrgName(org.name || null);
         }
       } catch (error) {
