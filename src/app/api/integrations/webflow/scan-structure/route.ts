@@ -56,10 +56,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const dbAdapter = new EnvironmentIntegrationsDB();
       const allIntegrations = await dbAdapter.getIntegrations(orgId);
       
-      // Find active Webflow integration
-      integration = allIntegrations.find(
+      // Gather all active Webflow integrations
+      const activeWebflow = allIntegrations.filter(
         (int: any) => int.type === 'webflow' && int.status === 'active'
       );
+
+      // Helper to read site_id from various shapes
+      const getSiteId = (int: any) =>
+        int?.config?.site_id ||
+        int?.config?.siteId ||
+        int?.metadata?.site_id;
+
+      // Prefer integration whose site_id matches the requested site
+      if (activeWebflow.length > 0) {
+        integration =
+          (targetSiteId && activeWebflow.find((int: any) => getSiteId(int) === targetSiteId)) ||
+          activeWebflow[0];
+      }
       
       if (integration) {
         logger.info('Found Webflow integration via EnvironmentIntegrationsDB', {
