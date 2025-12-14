@@ -166,7 +166,7 @@ export default function PublishingTargetsPage() {
       }
       setSuccessMessage('Publishing target saved.');
       resetForm();
-      fetchTargets(authInfo);
+      fetchTargets();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Failed to save publishing target.');
     } finally {
@@ -188,7 +188,7 @@ export default function PublishingTargetsPage() {
         const json = await response.json().catch(() => ({}));
         throw new Error(json?.error || 'Failed to delete target');
       }
-      fetchTargets(authInfo);
+      fetchTargets();
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Failed to delete target.');
     }
@@ -207,7 +207,7 @@ export default function PublishingTargetsPage() {
         const json = await response.json().catch(() => ({}));
         throw new Error(json?.error || 'Failed to update default target');
       }
-      fetchTargets(authInfo);
+      fetchTargets();
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Failed to set default target.');
     }
@@ -253,7 +253,7 @@ export default function PublishingTargetsPage() {
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Configured Targets</h2>
             <button
-              onClick={() => fetchTargets(authInfo)}
+              onClick={() => fetchTargets()}
               className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               <ArrowPathIcon className={`w-4 h-4 ${loadingTargets ? 'animate-spin' : ''}`} />
