@@ -149,8 +149,16 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
     setSuccess(null);
 
     try {
+      const isNewIntegration = !integrationId;
       if (!apiKey || (!apiKey.includes('****') && !collectionId)) {
         setError("API Key and Collection ID are required");
+        setLoading(false);
+        return;
+      }
+
+      // For new Webflow connections, require a site_id so we don't overwrite an existing site.
+      if (isNewIntegration && !siteId) {
+        setError("Site ID is required for a new Webflow connection");
         setLoading(false);
         return;
       }
@@ -184,6 +192,8 @@ export function WebflowConfig({ integrationId, onSuccess, onClose }: WebflowConf
       
       if (integrationName) {
         requestBody.name = integrationName;
+      } else if (siteName || siteId) {
+        requestBody.name = siteName || siteId;
       }
 
       let response;
