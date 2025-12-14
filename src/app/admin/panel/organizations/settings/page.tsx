@@ -12,7 +12,9 @@ interface Organization {
   logo_url?: string;
   settings?: {
     company_name?: string;
-    logo_url?: string;
+    logo_url?: string; // legacy
+    logo_square_url?: string;
+    logo_wide_url?: string;
   };
 }
 
@@ -25,8 +27,10 @@ export default function OrganizationSettingsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   
   const [companyName, setCompanyName] = useState("");
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [squareLogoPreview, setSquareLogoPreview] = useState<string | null>(null);
+  const [wideLogoPreview, setWideLogoPreview] = useState<string | null>(null);
+  const [squareLogoFile, setSquareLogoFile] = useState<File | null>(null);
+  const [wideLogoFile, setWideLogoFile] = useState<File | null>(null);
 
   useEffect(() => {
     fetchOrganization();
@@ -71,8 +75,10 @@ export default function OrganizationSettingsPage() {
               const companyNameValue = org.settings?.company_name || org.name || "";
               setCompanyName(companyNameValue);
               
-              const logoUrl = org.settings?.logo_url || org.logo_url || null;
-              setLogoPreview(logoUrl);
+              const squareUrl = org.settings?.logo_square_url || null;
+              const wideUrl = org.settings?.logo_wide_url || org.settings?.logo_url || org.logo_url || null;
+              setSquareLogoPreview(squareUrl);
+              setWideLogoPreview(wideUrl);
             } else {
               setError("Organization not found for this user.");
             }
@@ -87,7 +93,7 @@ export default function OrganizationSettingsPage() {
     }
   };
 
-  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>, type: "square" | "wide") => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -103,23 +109,36 @@ export default function OrganizationSettingsPage() {
       return;
     }
 
-    setLogoFile(file);
+    if (type === "square") {
+      setSquareLogoFile(file);
+    } else {
+      setWideLogoFile(file);
+    }
     setError(null);
 
     // Create preview
     const reader = new FileReader();
     reader.onloadend = () => {
-      setLogoPreview(reader.result as string);
+      if (type === "square") {
+        setSquareLogoPreview(reader.result as string);
+      } else {
+        setWideLogoPreview(reader.result as string);
+      }
     };
     reader.readAsDataURL(file);
   };
 
-  const handleRemoveLogo = () => {
-    setLogoFile(null);
-    setLogoPreview(null);
+  const handleRemoveLogo = (type: "square" | "wide") => {
+    if (type === "square") {
+      setSquareLogoFile(null);
+      setSquareLogoPreview(null);
+    } else {
+      setWideLogoFile(null);
+      setWideLogoPreview(null);
+    }
   };
 
-  const uploadLogo = async (file: File): Promise<string | null> => {
+  const uploadLogo = async (file: File, type: "square" | "wide"): Promise<string | null> => {
     try {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -130,7 +149,8 @@ export default function OrganizationSettingsPage() {
 
       // Create a unique filename
       const fileExt = file.name.split('.').pop();
-      const fileName = `${organization.org_id}/${Date.now()}.${fileExt}`;
+      const folder = type === "square" ? "square" : "wide";
+      const fileName = `${organization.org_id}/${folder}/${Date.now()}.${fileExt}`;
 
       // Upload to Supabase Storage
       const { error } = await supabase.storage
@@ -173,18 +193,35 @@ export default function OrganizationSettingsPage() {
 
     try {
       const supabase = createClient();
-      let logoUrl = logoPreview;
+      let squareUrl = squareLogoPreview;
+      let wideUrl = wideLogoPreview;
 
-      // Upload new logo if selected
-      if (logoFile) {
+      // Upload square logo if selected
+      if (squareLogoFile) {
         setUploading(true);
         try {
-          const uploadedUrl = await uploadLogo(logoFile);
+          const uploadedUrl = await uploadLogo(squareLogoFile, "square");
           if (uploadedUrl) {
-            logoUrl = uploadedUrl;
+            squareUrl = uploadedUrl;
           }
         } catch (uploadError) {
-          console.error("Logo upload failed:", uploadError);
+          console.error("Square logo upload failed:", uploadError);
+          // Continue with save even if upload fails
+        } finally {
+          setUploading(false);
+        }
+      }
+
+      // Upload wide logo if selected
+      if (wideLogoFile) {
+        setUploading(true);
+        try {
+          const uploadedUrl = await uploadLogo(wideLogoFile, "wide");
+          if (uploadedUrl) {
+            wideUrl = uploadedUrl;
+          }
+        } catch (uploadError) {
+          console.error("Wide logo upload failed:", uploadError);
           // Continue with save even if upload fails
         } finally {
           setUploading(false);
@@ -199,7 +236,9 @@ export default function OrganizationSettingsPage() {
           settings: {
             ...organization.settings,
             company_name: companyName,
-            logo_url: logoUrl,
+            logo_square_url: squareUrl || undefined,
+            logo_wide_url: wideUrl || undefined,
+            logo_url: wideUrl || squareUrl || organization.settings?.logo_url, // backward compat
           },
           updated_at: new Date().toISOString(),
         })
@@ -214,12 +253,15 @@ export default function OrganizationSettingsPage() {
         settings: {
           ...prev.settings,
           company_name: companyName,
-          logo_url: logoUrl || undefined,
+          logo_square_url: squareUrl || undefined,
+          logo_wide_url: wideUrl || undefined,
+          logo_url: wideUrl || squareUrl || prev.settings?.logo_url,
         },
       } : null);
 
       setSuccess("Organization settings saved successfully!");
-      setLogoFile(null);
+      setSquareLogoFile(null);
+      setWideLogoFile(null);
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
@@ -279,51 +321,50 @@ export default function OrganizationSettingsPage() {
       )}
 
       {/* Logo Upload Section */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Organization Logo
-        </h2>
-        
-        <div className="flex items-start gap-6">
-          {/* Logo Preview/Upload Area */}
-          <div className="flex-shrink-0">
-            <div className="relative w-32 h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-700 flex items-center justify-center">
-              {logoPreview ? (
-                <>
-                  <Image
-                    src={logoPreview}
-                    alt="Organization logo"
-                    fill
-                    className="object-contain p-2"
-                  />
-                  <button
-                    onClick={handleRemoveLogo}
-                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                    type="button"
-                  >
-                    <XMarkIcon className="w-4 h-4" />
-                  </button>
-                </>
-              ) : (
-                <div className="text-center p-4">
-                  <PhotoIcon className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">No logo</p>
-                </div>
-              )}
-            </div>
-          </div>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 space-y-8">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            Organization Logos
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Upload a square icon and an optional wide/wordmark logo. Wide logo is shown directly; square icon can be paired with the company name.
+          </p>
+        </div>
 
-          {/* Upload Controls */}
-          <div className="flex-1">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Upload Logo
-                </label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Square Logo */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Square Logo (icon)</h3>
+            <div className="flex items-start gap-4">
+              <div className="relative w-28 h-28 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-700 flex items-center justify-center">
+                {squareLogoPreview ? (
+                  <>
+                    <Image
+                      src={squareLogoPreview}
+                      alt="Square logo"
+                      fill
+                      className="object-contain p-2"
+                    />
+                    <button
+                      onClick={() => handleRemoveLogo("square")}
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                      type="button"
+                    >
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-center p-4">
+                    <PhotoIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">No square logo</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={handleLogoSelect}
+                  onChange={(e) => handleLogoSelect(e, "square")}
                   className="block w-full text-sm text-gray-500 dark:text-gray-400
                     file:mr-4 file:py-2 file:px-4
                     file:rounded-lg file:border-0
@@ -334,8 +375,58 @@ export default function OrganizationSettingsPage() {
                     dark:hover:file:bg-brand-800
                     cursor-pointer"
                 />
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Recommended: Square image, at least 200x200px. Max file size: 5MB
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Square/near-square icon. Recommended ≥200x200px. Max 5MB.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Wide Logo */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Wide Logo (wordmark)</h3>
+            <div className="flex items-start gap-4">
+              <div className="relative w-44 h-20 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-700 flex items-center justify-center">
+                {wideLogoPreview ? (
+                  <>
+                    <Image
+                      src={wideLogoPreview}
+                      alt="Wide logo"
+                      fill
+                      className="object-contain p-2"
+                    />
+                    <button
+                      onClick={() => handleRemoveLogo("wide")}
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                      type="button"
+                    >
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-center p-4">
+                    <PhotoIcon className="w-10 h-10 text-gray-400 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">No wide logo</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleLogoSelect(e, "wide")}
+                  className="block w-full text-sm text-gray-500 dark:text-gray-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-lg file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-brand-50 file:text-brand-700
+                    hover:file:bg-brand-100
+                    dark:file:bg-brand-900 dark:file:text-brand-300
+                    dark:hover:file:bg-brand-800
+                    cursor-pointer"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Wide/rectangular wordmark. Recommended width ≥400px. Max 5MB.
                 </p>
               </div>
             </div>

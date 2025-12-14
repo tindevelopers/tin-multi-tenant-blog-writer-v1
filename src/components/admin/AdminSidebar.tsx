@@ -241,11 +241,15 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
           .single();
 
         if (org) {
+          const settings = (org.settings as any) || {};
           const logoRaw =
-            (org.settings as any)?.logo_url ||
+            settings.logo_wide_url ||
+            settings.logo_url ||
             org.logo_url ||
             null;
-          setOrgLogoUrl(normalizeLogoUrl(logoRaw));
+          const squareRaw = settings.logo_square_url || null;
+
+          setOrgLogoUrl(normalizeLogoUrl(logoRaw) || normalizeLogoUrl(squareRaw));
           setOrgName(org.name || null);
         }
       } catch (error) {
