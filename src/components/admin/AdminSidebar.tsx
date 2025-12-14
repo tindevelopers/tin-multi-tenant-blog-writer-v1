@@ -70,7 +70,7 @@ const menuItems: MenuItem[] = [
       </svg>
     ),
     path: "/admin/panel/organizations",
-    roles: ["system_admin", "super_admin"],
+    roles: ["system_admin", "super_admin", "admin", "owner"],
     children: [
       {
         name: "All Organizations",
