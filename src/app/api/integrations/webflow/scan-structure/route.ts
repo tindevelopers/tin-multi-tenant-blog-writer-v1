@@ -69,9 +69,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       // Prefer integration whose site_id matches the requested site
       if (activeWebflow.length > 0) {
-        integration =
-          (targetSiteId && activeWebflow.find((int: any) => getSiteId(int) === targetSiteId)) ||
-          activeWebflow[0];
+        if (targetSiteId) {
+          integration = activeWebflow.find((int: any) => getSiteId(int) === targetSiteId);
+          if (!integration) {
+            logger.warn('No Webflow integration matches requested site_id', {
+              orgId,
+              targetSiteId,
+              availableSites: activeWebflow.map((int: any) => getSiteId(int)).filter(Boolean),
+            });
+            return NextResponse.json(
+              { 
+                error: 'No Webflow integration configured for this site_id',
+                hint: 'Connect the site in Integrations, then retry the scan.',
+                site_id: targetSiteId,
+              },
+              { status: 404 }
+            );
+          }
+        } else {
+          integration = activeWebflow[0];
+        }
       }
       
       if (integration) {
