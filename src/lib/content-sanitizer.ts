@@ -26,6 +26,13 @@ function markdownToHTML(markdown: string): string {
 
   let html = markdown;
 
+  // Ensure headings are on their own lines even when the model leaves them inline
+  // e.g., "... growth. ## What is AI Marketing" -> adds a newline before ##
+  html = html.replace(/([^\n])(\#{1,6}\s+)/g, '$1\n$2');
+
+  // Remove leading bang artifacts like "!AI Marketing ..." (often model image placeholders)
+  html = html.replace(/!\s*([A-Za-z].*)/g, '$1');
+
   // Convert headers (# Header -> <h1>Header</h1>)
   html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
   html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
