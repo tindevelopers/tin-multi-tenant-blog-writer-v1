@@ -189,6 +189,28 @@ export default function AccountSettingsPage() {
         </div>
       </div>
 
+      {/* Organization Branding access for admins */}
+      {["admin", "owner", "system_admin", "super_admin"].includes(userProfile?.role || "") && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Organization Branding
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Manage square and wide logos for your organization. Admins and system admins can upload logos.
+              </p>
+            </div>
+            <button
+              onClick={() => router.push("/admin/panel/organizations/settings")}
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 transition-colors"
+            >
+              Go to Branding
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Security Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
