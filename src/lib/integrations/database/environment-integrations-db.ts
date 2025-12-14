@@ -140,14 +140,23 @@ export class EnvironmentIntegrationsDB {
     metadata?: Record<string, unknown>
   ): Promise<EnvironmentIntegration> {
     const tableName = getTableName('integrations', this.env);
+    const siteId =
+      (connection as any)?.site_id ||
+      (connection as any)?.siteId ||
+      (metadata as any)?.site_id ||
+      undefined;
     
-    // First, check if an integration with the same org_id and provider already exists
-    const { data: existingIntegration } = await this.supabase
-      .from(tableName)
-      .select('id')
-      .eq('org_id', orgId)
-      .eq('provider', provider)
-      .single();
+    // First, check if an integration with the same org_id and provider already exists.
+    // For Webflow we allow multiple (one per site), so skip the pre-check to avoid overwriting.
+    const { data: existingIntegration } =
+      provider === 'webflow'
+        ? { data: null }
+        : await this.supabase
+            .from(tableName)
+            .select('id')
+            .eq('org_id', orgId)
+            .eq('provider', provider)
+            .single();
 
     // Encrypt sensitive credentials before storing
     const encryptedConnection = encryptConnectionConfig(connection as Record<string, unknown>);
@@ -167,8 +176,11 @@ export class EnvironmentIntegrationsDB {
       updateData.error_message = errorMessage;
     }
 
-    if (metadata) {
-      updateData.metadata = metadata;
+    if (metadata || siteId) {
+      updateData.metadata = {
+        ...(metadata || {}),
+        ...(siteId ? { site_id: siteId } : {}),
+      };
     }
 
     if (existingIntegration) {
