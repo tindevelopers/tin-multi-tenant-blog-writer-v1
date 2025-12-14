@@ -74,11 +74,11 @@ export default function PublishingTargetsPage() {
           return;
         }
         const allowedRoles: UserRole[] = [
-          'admin',
-          'owner',
-          'manager',
-          'system_admin',
-          'super_admin',
+          UserRole.ADMIN,
+          UserRole.OWNER,
+          UserRole.MANAGER,
+          UserRole.SYSTEM_ADMIN,
+          UserRole.SUPER_ADMIN,
         ];
         if (!allowedRoles.includes(profile.role as UserRole)) {
           setAuthError('Access denied. Please contact an administrator.');
