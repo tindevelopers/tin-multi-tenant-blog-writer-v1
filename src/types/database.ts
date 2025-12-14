@@ -284,6 +284,50 @@ export interface Database {
           created_by?: string | null;
         };
       };
+      publishing_targets: {
+        Row: {
+          target_id: string;
+          org_id: string;
+          integration_id: string;
+          provider: string;
+          site_id: string;
+          site_name: string | null;
+          collection_id: string | null;
+          is_default: boolean;
+          metadata: Json;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          target_id?: string;
+          org_id: string;
+          integration_id: string;
+          provider: string;
+          site_id: string;
+          site_name?: string | null;
+          collection_id?: string | null;
+          is_default?: boolean;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          target_id?: string;
+          org_id?: string;
+          integration_id?: string;
+          provider?: string;
+          site_id?: string;
+          site_name?: string | null;
+          collection_id?: string | null;
+          is_default?: boolean;
+          metadata?: Json;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       integration_publish_logs: {
         Row: {
           log_id: string;
