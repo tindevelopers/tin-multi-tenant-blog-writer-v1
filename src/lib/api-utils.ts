@@ -37,7 +37,7 @@ export async function getAuthenticatedUser(
     } = await supabase.auth.getUser();
 
     if (authError || !authUser) {
-      logger.debug('Authentication failed', { error: authError?.message });
+      logger.debug('Authentication check failed in api-utils', { error: authError?.message });
       return null;
     }
 
