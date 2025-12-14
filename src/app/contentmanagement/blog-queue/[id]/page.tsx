@@ -333,7 +333,7 @@ export default function QueueItemDetailPage() {
         </div>
         
         {/* Action Buttons - Simplified: Monitor page focuses on status, Editor is for actions */}
-        <div className="flex items-center gap-3 flex-wrap relative z-30 pointer-events-auto">
+        <div className="flex items-center gap-3 flex-wrap relative z-50 pointer-events-auto isolate">
           {/* PRIMARY CTA: Continue in Editor - Large and prominent */}
           {hasGeneratedContent && postId && (
             <a
