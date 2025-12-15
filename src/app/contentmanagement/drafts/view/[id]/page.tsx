@@ -107,6 +107,49 @@ export default function ViewDraftPage() {
     return null;
   }, [contentMetadata?.reading_time_minutes, derivedWordCount]);
 
+  // Load suppliers from draft metadata/localStorage to make them persistent per draft
+  React.useEffect(() => {
+    const seedSuppliers = () => {
+      const metadataSuppliers = Array.isArray((draft?.metadata as any)?.suppliers)
+        ? (draft?.metadata as any).suppliers
+        : null;
+
+      const persisted = typeof window !== 'undefined'
+        ? localStorage.getItem(`draft-suppliers-${draftId}`)
+        : null;
+
+      let next: Array<{ name: string; product: string; url: string }> | null = null;
+      if (persisted) {
+        try {
+          const parsed = JSON.parse(persisted);
+          if (Array.isArray(parsed)) next = parsed;
+        } catch (e) {
+          console.warn('Failed to parse persisted suppliers', e);
+        }
+      }
+      if (!next && metadataSuppliers) {
+        next = metadataSuppliers;
+      }
+      if (next && next.length > 0) {
+        setSuppliers(
+          next.map((s) => ({
+            name: s?.name ?? '',
+            product: s?.product ?? '',
+            url: s?.url ?? '',
+          }))
+        );
+      }
+    };
+    seedSuppliers();
+  }, [draftId, draft?.metadata]);
+
+  // Persist suppliers to localStorage per draft to survive refreshes
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const toStore = suppliers.filter((s) => s.name || s.product || s.url);
+    localStorage.setItem(`draft-suppliers-${draftId}`, JSON.stringify(toStore));
+  }, [draftId, suppliers]);
+
   const handleEdit = () => {
     router.push(`/contentmanagement/drafts/edit/${draftId}`);
   };
@@ -745,6 +788,14 @@ export default function ViewDraftPage() {
     }
 
     // Append supplier section if provided
+    const escapeHtml = (value: string | undefined | null) =>
+      (value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
     const supplierList = suppliers
       .map((s) => ({
         name: s.name?.trim(),
@@ -760,9 +811,11 @@ export default function ViewDraftPage() {
           <ul>
             ${supplierList
               .map((s) => {
-                const name = s.name || 'Supplier';
-                const product = s.product ? ` – ${s.product}` : '';
-                const link = s.url ? ` <a href="${s.url}" target="_blank" rel="noopener">${s.url}</a>` : '';
+                const name = escapeHtml(s.name || 'Supplier');
+                const product = s.product ? ` – ${escapeHtml(s.product)}` : '';
+                const link = s.url
+                  ? ` <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(s.url)}</a>`
+                  : '';
                 return `<li><strong>${name}</strong>${product}${link}</li>`;
               })
               .join('')}
