@@ -79,11 +79,10 @@ export default function DraftsPage() {
 
           // Extract tags from metadata if available
           const tags: string[] = [];
-          if (post.metadata && typeof post.metadata === 'object' && 'tags' in post.metadata) {
-            const metadataTags = post.metadata.tags;
-            if (Array.isArray(metadataTags)) {
-              tags.push(...metadataTags);
-            }
+          const metadataTags = (post.metadata as any)?.tags;
+          if (Array.isArray(metadataTags)) {
+            const stringTags = metadataTags.filter((tag: unknown): tag is string => typeof tag === "string");
+            tags.push(...stringTags);
           }
 
           return {
