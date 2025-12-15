@@ -219,12 +219,23 @@ export class EnvironmentIntegrationsDB {
           logger.debug(`[EnvironmentIntegrationsDB] Unique constraint violation detected. Attempting to update existing integration.`);
           
           // Try to find and update the existing integration
-          const { data: existing } = await this.supabase
+          // For Webflow: match by site_id if available, otherwise fall back to first match
+          let query = this.supabase
             .from(tableName)
-            .select('id')
+            .select('id, connection, metadata')
             .eq('org_id', orgId)
-            .eq('provider', provider)
-            .single();
+            .eq('provider', provider);
+
+          const { data: candidates } = await query;
+
+          let existing = candidates?.[0];
+          if (provider === 'webflow' && siteId && candidates && candidates.length > 0) {
+            // Find the integration with matching site_id
+            existing = candidates.find((c: any) => {
+              const cSiteId = c.connection?.site_id || c.metadata?.site_id;
+              return cSiteId === siteId;
+            }) || existing;
+          }
 
           if (existing) {
             const { data: updatedData, error: updateError } = await this.supabase

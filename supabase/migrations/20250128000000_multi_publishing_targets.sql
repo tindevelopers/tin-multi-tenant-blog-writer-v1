@@ -4,8 +4,19 @@
 BEGIN;
 
 -- Allow multiple integrations of the same type per organization
+-- Drop from base table (if exists)
 ALTER TABLE integrations
   DROP CONSTRAINT IF EXISTS unique_org_integration_type;
+
+-- Drop from environment-specific tables (dev, staging, prod)
+ALTER TABLE IF EXISTS integrations_dev
+  DROP CONSTRAINT IF EXISTS integrations_dev_org_provider_unique;
+
+ALTER TABLE IF EXISTS integrations_staging
+  DROP CONSTRAINT IF EXISTS integrations_staging_org_provider_unique;
+
+ALTER TABLE IF EXISTS integrations_prod
+  DROP CONSTRAINT IF EXISTS integrations_prod_org_provider_unique;
 
 -- Publishing targets table
 CREATE TABLE IF NOT EXISTS publishing_targets (
