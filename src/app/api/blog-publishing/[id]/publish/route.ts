@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server';
 import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environment-integrations-db';
 import { publishBlogToWebflow } from '@/lib/integrations/webflow-publish';
 import { enhanceBlogFields } from '@/lib/integrations/enhance-fields';
+import { LinkValidationService } from '@/lib/interlinking/link-validation-service';
 import { logger } from '@/utils/logger';
 import { PlatformStatus } from '@/lib/blog-queue-state-machine';
 
@@ -100,6 +101,54 @@ export async function POST(
         const post = publishing.post as any;
         if (!post) {
           throw new Error('Blog post not found');
+        }
+
+        // Validate internal links before publishing (non-blocking warning)
+        if (post.content && siteId) {
+          try {
+            const linkValidator = new LinkValidationService();
+            const linkValidation = await linkValidator.validateLinks({
+              content: post.content,
+              targetSiteId: siteId,
+              postId: post.post_id,
+              orgId: userProfile.org_id,
+              strictMode: false, // Warnings only, don't block publishing
+            });
+
+            if (!linkValidation.isValid) {
+              logger.warn('Link validation found issues', {
+                postId: post.post_id,
+                totalLinks: linkValidation.totalLinks,
+                brokenLinks: linkValidation.brokenLinks,
+                wrongSiteLinks: linkValidation.wrongSiteLinks,
+                warnings: linkValidation.warnings,
+              });
+              
+              // Store validation warnings in publishing metadata
+              await supabase
+                .from('blog_platform_publishing')
+                .update({
+                  publishing_metadata: {
+                    ...(publishing.publishing_metadata || {}),
+                    link_validation: {
+                      validated_at: new Date().toISOString(),
+                      is_valid: linkValidation.isValid,
+                      total_links: linkValidation.totalLinks,
+                      broken_links: linkValidation.brokenLinks,
+                      wrong_site_links: linkValidation.wrongSiteLinks,
+                      warnings: linkValidation.warnings.slice(0, 5), // Keep first 5 warnings
+                    },
+                  },
+                })
+                .eq('publishing_id', publishingId);
+            }
+          } catch (validationError: any) {
+            // Log but don't block publishing
+            logger.warn('Link validation failed, continuing with publish', {
+              error: validationError.message,
+              postId: post.post_id,
+            });
+          }
         }
 
         // Prepare initial blog post data
