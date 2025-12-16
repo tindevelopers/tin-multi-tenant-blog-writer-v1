@@ -19,9 +19,9 @@ export default function BlogWriterDashboardPage() {
             </p>
           </div>
           <div className="hidden md:block flex-shrink-0">
-            <div className="bg-white bg-opacity-20 rounded-lg p-4 text-center">
-              <div className="text-2xl font-bold">24</div>
-              <div className="text-sm text-indigo-100">Posts This Month</div>
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-4 text-center border border-white/30">
+              <div className="text-2xl font-bold text-white">24</div>
+              <div className="text-sm text-white/80">Posts This Month</div>
             </div>
           </div>
         </div>
