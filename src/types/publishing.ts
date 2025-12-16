@@ -51,6 +51,7 @@ export interface PublishingSite {
   provider: CMSProvider;
   collections: string[];
   is_default: boolean;
+  integration_id?: string;
 }
 
 export interface PublishingTargetsResponse {

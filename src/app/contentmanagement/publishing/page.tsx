@@ -21,6 +21,7 @@ import {
 import { BlogPlatformPublishing } from "@/types/blog-queue";
 import type { Database } from "@/types/database";
 import { getPlatformStatusMetadata, PlatformStatus } from "@/lib/blog-queue-state-machine";
+import { PublishingSite } from "@/types/publishing";
 
 interface PublishingFilters {
   platform: "webflow" | "wordpress" | "shopify" | "all";
@@ -30,6 +31,14 @@ interface PublishingFilters {
 
 type BlogPost = Database["public"]["Tables"]["blog_posts"]["Row"];
 
+// Tracks which site is selected per post (site_id -> provider + collection)
+interface SiteSelection {
+  platform: "webflow" | "wordpress" | "shopify";
+  site_id: string;
+  site_name?: string;
+  collection_id?: string;
+}
+
 export default function PublishingPage() {
   const router = useRouter();
   const [publishing, setPublishing] = useState<BlogPlatformPublishing[]>([]);
@@ -37,7 +46,9 @@ export default function PublishingPage() {
   const [error, setError] = useState<string | null>(null);
   const [readyPosts, setReadyPosts] = useState<BlogPost[]>([]);
   const [readyLoading, setReadyLoading] = useState(true);
-  const [platformSelections, setPlatformSelections] = useState<Record<string, "webflow" | "wordpress" | "shopify">>({});
+  const [platformSelections, setPlatformSelections] = useState<Record<string, SiteSelection>>({});
+  const [availableSites, setAvailableSites] = useState<PublishingSite[]>([]);
+  const [sitesLoading, setSitesLoading] = useState(true);
   const [publishingPostId, setPublishingPostId] = useState<string | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null); // publishingId of item being processed
   const [filters, setFilters] = useState<PublishingFilters>({
@@ -90,10 +101,39 @@ export default function PublishingPage() {
     }
   }, []);
 
+  const fetchAvailableSites = useCallback(async () => {
+    try {
+      setSitesLoading(true);
+      const response = await fetch("/api/publishing/targets");
+      if (!response.ok) {
+        console.warn("Failed to fetch publishing targets");
+        return;
+      }
+      const data = await response.json();
+      setAvailableSites(data.sites || []);
+      
+      // Set default selection for posts that don't have one
+      if (data.default) {
+        const defaultSelection: SiteSelection = {
+          platform: data.default.cms_provider,
+          site_id: data.default.site_id,
+          site_name: data.default.site_name,
+          collection_id: data.default.collection_id,
+        };
+        // We'll apply this default when rendering if no selection exists
+      }
+    } catch (err) {
+      console.error("Error fetching available sites:", err);
+    } finally {
+      setSitesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchPublishing();
     fetchReadyPosts();
-  }, [fetchPublishing, fetchReadyPosts]);
+    fetchAvailableSites();
+  }, [fetchPublishing, fetchReadyPosts, fetchAvailableSites]);
 
   const stats = {
     pending: publishing.filter((p) => p.status === "pending").length,
@@ -123,11 +163,19 @@ export default function PublishingPage() {
   };
 
   const handleStartPublishing = async (postId: string, isDraft: boolean = false) => {
-    const platform = platformSelections[postId] || "webflow";
+    // Get the selected site, or use the first available site as default
+    const selection = platformSelections[postId];
+    const defaultSite = availableSites[0];
+    
+    const platform = selection?.platform || defaultSite?.provider || "webflow";
+    const siteId = selection?.site_id || defaultSite?.id;
+    const collectionId = selection?.collection_id || defaultSite?.collections?.[0];
+    const siteName = selection?.site_name || defaultSite?.name || platform;
+
     try {
       setPublishingPostId(postId);
       
-      // Step 1: Create publishing record
+      // Step 1: Create publishing record with site-specific info
       const response = await fetch("/api/blog-publishing", {
         method: "POST",
         headers: {
@@ -136,6 +184,8 @@ export default function PublishingPage() {
         body: JSON.stringify({
           post_id: postId,
           platform,
+          site_id: siteId,
+          collection_id: collectionId,
           is_draft: isDraft,
         }),
       });
@@ -171,10 +221,10 @@ export default function PublishingPage() {
         
         // Show success message with details
         const successMessage = isDraft 
-          ? `✅ Blog post saved as draft on ${platform}.\n\n` +
+          ? `✅ Blog post saved as draft on ${siteName}.\n\n` +
             (publishResult.result?.itemId ? `Item ID: ${publishResult.result.itemId}\n` : '') +
             `Track progress in the publishing table below.`
-          : `✅ Blog post published successfully to ${platform}!\n\n` +
+          : `✅ Blog post published successfully to ${siteName}!\n\n` +
             (publishResult.result?.itemId ? `Item ID: ${publishResult.result.itemId}\n` : '') +
             (publishResult.result?.url ? `URL: ${publishResult.result.url}\n` : '') +
             `\nEnhanced fields (SEO title, meta description, slug, alt text) were automatically optimized using OpenAI.`;
@@ -185,7 +235,7 @@ export default function PublishingPage() {
         console.error("Error publishing to platform:", publishErr);
         const errorMessage = publishErr instanceof Error ? publishErr.message : "Unknown error";
         alert(
-          `⚠️ Publishing record created, but failed to publish to ${platform}:\n\n${errorMessage}\n\n` +
+          `⚠️ Publishing record created, but failed to publish to ${siteName}:\n\n${errorMessage}\n\n` +
           `You can retry from the publishing table below.`
         );
       }
@@ -439,36 +489,61 @@ export default function PublishingPage() {
                         : "-"}
                     </td>
                     <td className="px-4 py-3">
-                      <select
-                        value={platformSelections[post.post_id] || "webflow"}
-                        onChange={(e) =>
-                          setPlatformSelections((prev) => ({
-                            ...prev,
-                            [post.post_id]: e.target.value as "webflow" | "wordpress" | "shopify",
-                          }))
-                        }
-                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
-                      >
-                        <option value="webflow">Webflow</option>
-                        <option value="wordpress">WordPress</option>
-                        <option value="shopify">Shopify</option>
-                      </select>
+                      {sitesLoading ? (
+                        <div className="text-sm text-gray-400 animate-pulse">Loading sites...</div>
+                      ) : availableSites.length === 0 ? (
+                        <div className="text-sm text-gray-500">
+                          <span>No sites configured</span>
+                          <a 
+                            href="/admin/panel/integrations" 
+                            className="ml-2 text-brand-600 hover:underline"
+                          >
+                            Add →
+                          </a>
+                        </div>
+                      ) : (
+                        <select
+                          value={platformSelections[post.post_id]?.site_id || availableSites[0]?.id || ""}
+                          onChange={(e) => {
+                            const selectedSite = availableSites.find(s => s.id === e.target.value);
+                            if (selectedSite) {
+                              setPlatformSelections((prev) => ({
+                                ...prev,
+                                [post.post_id]: {
+                                  platform: selectedSite.provider as "webflow" | "wordpress" | "shopify",
+                                  site_id: selectedSite.id,
+                                  site_name: selectedSite.name,
+                                  collection_id: selectedSite.collections?.[0],
+                                },
+                              }));
+                            }
+                          }}
+                          className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white min-w-[180px]"
+                        >
+                          {availableSites.map((site) => (
+                            <option key={site.id} value={site.id}>
+                              {site.name} ({site.provider})
+                              {site.is_default ? " ★" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleStartPublishing(post.post_id, false)}
-                          disabled={publishingPostId === post.post_id}
+                          disabled={publishingPostId === post.post_id || availableSites.length === 0}
                           className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                          title="Publish immediately to Webflow with enhanced SEO fields"
+                          title={`Publish immediately to ${platformSelections[post.post_id]?.site_name || availableSites[0]?.name || 'selected site'} with enhanced SEO fields`}
                         >
                           {publishingPostId === post.post_id ? "Publishing..." : "Publish Now"}
                         </button>
                         <button
                           onClick={() => handleStartPublishing(post.post_id, true)}
-                          disabled={publishingPostId === post.post_id}
+                          disabled={publishingPostId === post.post_id || availableSites.length === 0}
                           className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                          title="Save as draft on Webflow"
+                          title={`Save as draft on ${platformSelections[post.post_id]?.site_name || availableSites[0]?.name || 'selected site'}`}
                         >
                           Draft
                         </button>
