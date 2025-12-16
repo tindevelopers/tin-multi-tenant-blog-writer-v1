@@ -192,10 +192,14 @@ export async function POST(request: NextRequest) {
         // For Webflow, allow multiple integrations per organization (one per site)
         if (connection.site_id) {
           // Check if integration already exists for this org + provider + site_id
+          // site_id can be in config OR metadata, check both locations
           const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
-          const existingIntegration = integrations.find(
-            (i) => i.type === provider && i.config.site_id === connection.site_id
-          );
+          const existingIntegration = integrations.find((i) => {
+            if (i.type !== provider) return false;
+            const configSiteId = i.config?.site_id || i.config?.siteId;
+            const metadataSiteId = (i as any).metadata?.site_id;
+            return configSiteId === connection.site_id || metadataSiteId === connection.site_id;
+          });
 
           if (existingIntegration) {
             // Update existing integration for this site

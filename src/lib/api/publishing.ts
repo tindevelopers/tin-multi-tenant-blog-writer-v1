@@ -108,25 +108,39 @@ export class PublishingService {
     userId: string,
     userRole: UserRole
   ): Promise<PublishingTargetsResponse> {
-    const url =
-      API_BASE_URL && API_BASE_URL.trim().length > 0
-        ? `${API_BASE_URL}/api/v1/publishing/targets`
-        : "/api/v1/publishing/targets";
-
-    const response = await fetch(url, {
-      headers: getHeaders(orgId, userId, userRole),
-    });
-
-    // If the endpoint isn't available (404), fall back to an empty target list
-    if (response.status === 404) {
-      return { providers: [], sites: [], default: null };
+    // Try local API first (fetches from integrations database)
+    const localUrl = "/api/publishing/targets";
+    
+    try {
+      const localResponse = await fetch(localUrl, {
+        headers: getHeaders(orgId, userId, userRole),
+      });
+      
+      if (localResponse.ok) {
+        const data = await localResponse.json();
+        // Return if we got valid data with sites
+        if (data && (data.sites?.length > 0 || data.providers?.length > 0)) {
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn("Local publishing targets endpoint failed, trying remote", err);
     }
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || response.statusText);
+    // Fall back to remote API if available
+    if (API_BASE_URL && API_BASE_URL.trim().length > 0) {
+      const remoteUrl = `${API_BASE_URL}/api/v1/publishing/targets`;
+      const response = await fetch(remoteUrl, {
+        headers: getHeaders(orgId, userId, userRole),
+      });
+
+      if (response.ok) {
+        return response.json();
+      }
     }
-    return response.json();
+
+    // Return empty if nothing worked
+    return { providers: [], sites: [], default: null };
   }
 
   static async updateDraftTarget(

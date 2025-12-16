@@ -14,6 +14,7 @@ export enum IntegrationStatus {
 export enum UserRole {
   OWNER = "owner",
   ADMIN = "admin",
+  MANAGER = "manager",
   EDITOR = "editor",
   WRITER = "writer",
   SYSTEM_ADMIN = "system_admin",
@@ -50,6 +51,7 @@ export interface PublishingSite {
   provider: CMSProvider;
   collections: string[];
   is_default: boolean;
+  integration_id?: string;
 }
 
 export interface PublishingTargetsResponse {

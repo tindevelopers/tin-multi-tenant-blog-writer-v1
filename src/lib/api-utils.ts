@@ -30,14 +30,14 @@ export async function getAuthenticatedUser(
   request: NextRequest
 ): Promise<AuthenticatedUser | null> {
   try {
-    const supabase = await createClient();
+    const supabase = await createClient(request);
     const {
       data: { user: authUser },
       error: authError,
     } = await supabase.auth.getUser();
 
     if (authError || !authUser) {
-      logger.debug('Authentication failed', { error: authError?.message });
+      logger.debug('Authentication check failed in api-utils', { error: authError?.message });
       return null;
     }
 
@@ -225,7 +225,33 @@ export function withAuth<T = unknown>(
 }
 
 /**
- * API route wrapper for GET requests
+ * API route wrapper for optional authentication
+ */
+export function withOptionalAuth<T = unknown>(
+  handler: (request: NextRequest, user: AuthenticatedUser | null) => Promise<NextResponse>,
+  options?: {
+    requireRoles?: string[];
+  }
+) {
+  return async (request: NextRequest): Promise<NextResponse> => {
+    try {
+      let user: AuthenticatedUser | null = null;
+
+      if (options?.requireRoles) {
+        user = await requireRole(request, options.requireRoles);
+      } else {
+        user = await getAuthenticatedUser(request);
+      }
+
+      return await handler(request, user);
+    } catch (error) {
+      return handleApiError(error);
+    }
+  };
+}
+
+/**
+ * API route wrapper that handles both authenticated and unauthenticated requests
  */
 export function withGetAuth<T = unknown>(
   handler: (request: NextRequest, user: AuthenticatedUser | null) => Promise<NextResponse>,
@@ -234,6 +260,9 @@ export function withGetAuth<T = unknown>(
     allowUnauthenticated?: boolean;
   }
 ) {
+  if (options?.allowUnauthenticated) {
+    return withOptionalAuth(handler, options);
+  }
   return withAuth(handler, options);
 }
 
@@ -248,4 +277,3 @@ export function withMutationAuth<T = unknown>(
 ) {
   return withAuth(handler, { ...options, allowUnauthenticated: false });
 }
-
