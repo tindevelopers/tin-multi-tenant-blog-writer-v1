@@ -2446,17 +2446,9 @@ export default function EditDraftPage() {
               userId={userId}
               userRole={userRole}
               value={publishingTarget}
-              onChange={async (target) => {
+              onChange={(target) => {
+                // Store target selection in state - will be used when publishing
                 setPublishingTarget(target);
-                try {
-                  await fetch(`/api/publishing/drafts/${draftId}/target`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(target),
-                  });
-                } catch (err) {
-                  console.error("Failed to save publishing target", err);
-                }
               }}
             />
           ) : (
