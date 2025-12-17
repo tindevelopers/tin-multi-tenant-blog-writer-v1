@@ -234,22 +234,26 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
         const orgId = profile?.org_id;
         if (!orgId) return;
 
-        const { data: org } = await supabase
+        const { data: org, error: orgError } = await supabase
           .from("organizations")
-          .select("name, logo_url, settings")
+          .select("name, settings")
           .eq("org_id", orgId)
           .single();
+
+        if (orgError) {
+          console.warn("Failed to load organization branding", orgError.message);
+          return;
+        }
 
         if (org) {
           const settings = (org.settings as any) || {};
           const logoRaw =
             settings.logo_wide_url ||
             settings.logo_url ||
-            org.logo_url ||
+            settings.logo_square_url ||
             null;
-          const squareRaw = settings.logo_square_url || null;
 
-          setOrgLogoUrl(normalizeLogoUrl(logoRaw) || normalizeLogoUrl(squareRaw));
+          setOrgLogoUrl(normalizeLogoUrl(logoRaw));
           setOrgName(org.name || null);
         }
       } catch (error) {
