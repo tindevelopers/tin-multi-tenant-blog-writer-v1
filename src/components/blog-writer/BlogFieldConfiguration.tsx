@@ -44,7 +44,7 @@ export default function BlogFieldConfiguration({
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4"
       onClick={(e) => {
         // Close modal when clicking backdrop
         if (e.target === e.currentTarget) {
@@ -53,7 +53,7 @@ export default function BlogFieldConfiguration({
       }}
     >
       <div 
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative z-[10000]"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative z-[61]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

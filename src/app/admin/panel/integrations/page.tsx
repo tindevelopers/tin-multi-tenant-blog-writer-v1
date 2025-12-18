@@ -1335,13 +1335,13 @@ export default function IntegrationsManagementPage() {
 
       {/* Webflow Configuration Modal */}
       {showWebflowConfig && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => {
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity z-[60]" onClick={() => {
               setShowWebflowConfig(false);
               setSelectedIntegration(null);
             }} />
-            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 z-[61]">
               <WebflowConfig
                 integrationId={selectedIntegration?.integration_id}
                 onSuccess={() => {
@@ -1380,12 +1380,12 @@ export default function IntegrationsManagementPage() {
 
       {/* Cloudinary Configuration Modal */}
       {showCloudinaryConfig && orgId && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => {
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity z-[60]" onClick={() => {
               setShowCloudinaryConfig(false);
             }} />
-            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 z-[61]">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                   Cloudinary Configuration

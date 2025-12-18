@@ -909,10 +909,10 @@ function PublishingRow({
               {showDeleteMenu && (
                 <>
                   <div
-                    className="fixed inset-0 z-10"
+                    className="fixed inset-0 z-30"
                     onClick={() => setShowDeleteMenu(false)}
                   />
-                  <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-20">
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-30">
                     <div className="py-1">
                       <button
                         onClick={() => {

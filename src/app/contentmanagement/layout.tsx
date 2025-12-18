@@ -37,14 +37,14 @@ export default function ContentManagementLayout({
       {/* Sidebar and Backdrop */}
       <AppSidebar />
       <Backdrop />
-      {/* Main Content Area - needs relative positioning and z-index for proper stacking */}
+      {/* Main Content Area */}
       <div
-        className={`flex-1 transition-all duration-300 ease-in-out bg-gray-50 dark:bg-gray-900 relative z-0 ${mainContentMargin}`}
+        className={`flex-1 transition-all duration-300 ease-in-out bg-gray-50 dark:bg-gray-900 ${mainContentMargin}`}
       >
         {/* Header */}
         <AppHeader />
-        {/* Page Content - isolated stacking context */}
-        <div className={`${getRouteSpecificStyles()} bg-gray-50 dark:bg-gray-900 relative`}>{children}</div>
+        {/* Page Content */}
+        <div className={`${getRouteSpecificStyles()} bg-gray-50 dark:bg-gray-900`}>{children}</div>
       </div>
     </div>
   );

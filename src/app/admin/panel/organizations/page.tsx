@@ -541,10 +541,10 @@ export default function OrganizationsManagementPage() {
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && deletingOrgId && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
           <div className="flex min-h-screen items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleDeleteCancel} />
-            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity z-[60]" onClick={handleDeleteCancel} />
+            <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6 z-[61]">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Delete Organization
               </h3>
