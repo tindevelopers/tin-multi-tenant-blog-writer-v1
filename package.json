@@ -64,6 +64,7 @@
     "analyze": "ANALYZE=true npm run build"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.88",
     "@heroicons/react": "^2.1.0",
     "@popperjs/core": "^2.11.8",
     "@sentry/nextjs": "^10.25.0",
@@ -91,6 +92,7 @@
     "@types/prismjs": "^1.26.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "ai": "^5.0.115",
     "apexcharts": "^4.3.0",
     "autoprefixer": "^10.4.0",
     "clsx": "^2.1.0",

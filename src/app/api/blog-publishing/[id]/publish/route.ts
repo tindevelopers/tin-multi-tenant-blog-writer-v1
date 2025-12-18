@@ -10,6 +10,8 @@ import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environme
 import { publishBlogToWebflow } from '@/lib/integrations/webflow-publish';
 import { enhanceBlogFields } from '@/lib/integrations/enhance-fields';
 import { LinkValidationService } from '@/lib/interlinking/link-validation-service';
+import { postProcessBlogContent, isAIGatewayEnabled } from '@/lib/ai-gateway';
+import { enhanceForWebflowSEO } from '@/lib/integrations/webflow-seo-enhancer';
 import { logger } from '@/utils/logger';
 import { PlatformStatus } from '@/lib/blog-queue-state-machine';
 
@@ -151,7 +153,86 @@ export async function POST(
           }
         }
 
-        // Prepare initial blog post data
+        // AI Gateway Post-Processing and SEO Enhancement
+        let processedContent = post.content || '';
+        let seoEnhancement = null;
+        
+        if (post.content) {
+          try {
+            // Extract keywords from post metadata
+            const keywords: string[] = [];
+            if (post.metadata?.keywords) {
+              if (Array.isArray(post.metadata.keywords)) {
+                keywords.push(...post.metadata.keywords);
+              } else if (typeof post.metadata.keywords === 'string') {
+                keywords.push(...post.metadata.keywords.split(',').map((k: string) => k.trim()));
+              }
+            }
+            
+            // Post-process content to remove artifacts and check quality
+            if (isAIGatewayEnabled()) {
+              logger.info('Running AI Gateway post-processing', { postId: post.post_id });
+              
+              const postProcessResult = await postProcessBlogContent({
+                content: post.content,
+                title: post.title,
+                keywords,
+                enableAISuggestions: true,
+              });
+              
+              processedContent = postProcessResult.cleanedContent;
+              
+              // Store post-processing results in metadata
+              await supabase
+                .from('blog_platform_publishing')
+                .update({
+                  publishing_metadata: {
+                    ...(publishing.publishing_metadata || {}),
+                    ai_post_processing: {
+                      processed_at: new Date().toISOString(),
+                      quality_score: postProcessResult.qualityScore,
+                      issues_found: postProcessResult.issuesFound.length,
+                      seo_suggestions: postProcessResult.seoSuggestions.slice(0, 3),
+                    },
+                  },
+                })
+                .eq('publishing_id', publishingId);
+              
+              logger.info('AI post-processing complete', {
+                postId: post.post_id,
+                qualityScore: postProcessResult.qualityScore,
+                issuesFound: postProcessResult.issuesFound.length,
+              });
+            }
+            
+            // Enhance for Webflow SEO
+            seoEnhancement = await enhanceForWebflowSEO({
+              content: processedContent,
+              title: post.title,
+              excerpt: post.excerpt,
+              keywords,
+              featuredImage: (post.metadata as Record<string, unknown>)?.featured_image as string | undefined,
+              publishDate: new Date(),
+              slug: (post.metadata as Record<string, unknown>)?.slug as string | undefined,
+            });
+            
+            logger.info('Webflow SEO enhancement complete', {
+              postId: post.post_id,
+              seoScore: seoEnhancement.seoScore,
+              recommendations: seoEnhancement.recommendations.length,
+            });
+            
+          } catch (processingError: any) {
+            // Log but don't block publishing
+            logger.warn('AI processing failed, continuing with original content', {
+              error: processingError.message,
+              postId: post.post_id,
+            });
+            processedContent = post.content;
+          }
+        }
+
+        // Prepare initial blog post data (using processed content and SEO-enhanced fields)
         const initialBlogPostData: {
           title: string;
           content: string;
@@ -164,19 +245,25 @@ export async function POST(
           published_at: string;
           tags?: string[];
           categories?: string[];
+          schema_markup?: string;
         } = {
           title: post.title,
-          content: post.content || '',
+          content: processedContent, // Use AI-cleaned content
           excerpt: post.excerpt || '',
           slug: (post.metadata as Record<string, unknown>)?.slug as string | undefined,
           featured_image: (post.metadata as Record<string, unknown>)?.featured_image as string | undefined,
           featured_image_alt: (post.metadata as Record<string, unknown>)?.featured_image_alt as string | undefined,
-          seo_title: (post.seo_data as Record<string, unknown>)?.meta_title as string | undefined,
-          seo_description: (post.seo_data as Record<string, unknown>)?.meta_description as string | undefined,
+          // Use SEO-enhanced meta tags if available
+          seo_title: seoEnhancement?.metaTags.seoTitle || 
+                     (post.seo_data as Record<string, unknown>)?.meta_title as string | undefined,
+          seo_description: seoEnhancement?.metaTags.metaDescription || 
+                          (post.seo_data as Record<string, unknown>)?.meta_description as string | undefined,
           published_at: new Date().toISOString(),
           // Include tags and categories if available in metadata
           tags: (post.metadata as Record<string, unknown>)?.tags as string[] | undefined,
           categories: (post.metadata as Record<string, unknown>)?.categories as string[] | undefined,
+          // Include schema markup if generated
+          schema_markup: seoEnhancement ? JSON.stringify(seoEnhancement.schemaMarkup) : undefined,
         };
 
         // Enhance mandatory fields using OpenAI before publishing to Webflow
