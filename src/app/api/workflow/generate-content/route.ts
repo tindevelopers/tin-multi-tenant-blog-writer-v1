@@ -142,9 +142,10 @@ export async function POST(request: NextRequest) {
       keywordsCount: keywords?.length || 0
     });
 
-    // FIX: Only use detailed default instructions for quick_generate mode
-    // For multi-phase mode (premium/enterprise quality), the backend handles quality internally
-    // Sending detailed instructions was confusing the LLM (it thought they were content to edit)
+    // FIX: Use minimal, clear instructions for ALL generation modes
+    // The previous detailed instructions from getDefaultCustomInstructions() were being
+    // misinterpreted by the LLM as a meta-task to "enhance" content rather than generate it.
+    // This caused outputs like "I'll provide a comprehensive enhancement..." instead of actual content.
     const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise';
     
     let finalCustomInstructions: string | undefined = undefined;
@@ -153,29 +154,14 @@ export async function POST(request: NextRequest) {
       // User provided custom instructions - always use them
       finalCustomInstructions = custom_instructions;
     } else if (!isPremiumQuality) {
-      // Only add detailed default instructions for quick_generate mode (non-premium)
-      finalCustomInstructions = getDefaultCustomInstructions(template_type);
+      // Use minimal, clear instructions that explicitly state this is NEW content generation
+      // DO NOT use getDefaultCustomInstructions() - those detailed editorial guidelines confuse the LLM
+      finalCustomInstructions = `Generate a comprehensive, original blog post about the topic. Include an engaging introduction, main sections with H2 headings, and a conclusion. Use bullet points and numbered lists where appropriate. Focus on providing valuable, actionable information for the reader.`;
     }
     // For premium/enterprise (multi-phase): don't add default instructions - backend handles it
     
-    // Add site context as structured data, not in custom_instructions
-    // This prevents the instructions from becoming too complex
-    if (siteContext && finalCustomInstructions) {
-      // Only add site context to instructions for quick_generate mode
-      if (!isPremiumQuality) {
-        finalCustomInstructions = buildSiteAwareInstructions(
-          finalCustomInstructions,
-          siteContext,
-          topic,
-          MAX_CUSTOM_INSTRUCTIONS_LENGTH // Enforce API character limit
-        );
-        logger.debug('Built site-aware custom instructions', {
-          originalLength: (custom_instructions || '').length,
-          enhancedLength: finalCustomInstructions.length,
-          maxAllowed: MAX_CUSTOM_INSTRUCTIONS_LENGTH,
-        });
-      }
-    }
+    // NOTE: Site context is passed as STRUCTURED DATA in extraFields below, not in custom_instructions
+    // This prevents the instructions from becoming too complex and confusing the LLM
 
     // Prepare extra fields with link opportunities if available
     const extraFields: Record<string, unknown> = {
