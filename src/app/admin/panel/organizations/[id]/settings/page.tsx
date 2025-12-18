@@ -10,10 +10,11 @@ interface Organization {
   org_id: string;
   name: string;
   slug: string;
-  logo_url?: string;
   settings?: {
     company_name?: string;
     logo_url?: string;
+    logo_square_url?: string;
+    logo_wide_url?: string;
   };
 }
 
@@ -95,7 +96,8 @@ export default function OrganizationSettingsAdminPage() {
         const companyNameValue = (orgData.settings as any)?.company_name || orgData.name || "";
         setCompanyName(companyNameValue);
         
-        const logoUrl = (orgData.settings as any)?.logo_url || orgData.logo_url || null;
+        const settings = (orgData.settings as any) || {};
+        const logoUrl = settings.logo_url || settings.logo_square_url || settings.logo_wide_url || null;
         setLogoPreview(logoUrl);
       } else {
         setError("Organization not found.");
@@ -211,7 +213,7 @@ export default function OrganizationSettingsAdminPage() {
         }
       }
 
-      // Update organization settings
+      // Update organization settings (logo stored in settings JSON, not as column)
       const updatedSettings = {
         ...organization.settings,
         company_name: companyName,
@@ -223,7 +225,6 @@ export default function OrganizationSettingsAdminPage() {
         .update({ 
           name: companyName,
           settings: updatedSettings,
-          logo_url: logoUrl,
         })
         .eq("org_id", organization.org_id);
 
