@@ -187,7 +187,8 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
     avatar_url?: string; 
     organizations?: { name: string }[] 
   } | null>(null);
-  const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null);
+  const [logoSquareUrl, setLogoSquareUrl] = useState<string | null>(null);
+  const [logoWideUrl, setLogoWideUrl] = useState<string | null>(null);
   const [orgName, setOrgName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -247,13 +248,13 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
 
         if (org) {
           const settings = (org.settings as any) || {};
-          const logoRaw =
-            settings.logo_wide_url ||
-            settings.logo_url ||
-            settings.logo_square_url ||
-            null;
+          
+          // Load both logo types separately
+          const squareRaw = settings.logo_square_url || settings.logo_url || null;
+          const wideRaw = settings.logo_wide_url || null;
 
-          setOrgLogoUrl(normalizeLogoUrl(logoRaw));
+          setLogoSquareUrl(normalizeLogoUrl(squareRaw));
+          setLogoWideUrl(normalizeLogoUrl(wideRaw));
           setOrgName(org.name || null);
         }
       } catch (error) {
@@ -286,21 +287,36 @@ export default function AdminSidebar({ userRole }: AdminSidebarProps) {
     <aside className="fixed left-0 top-0 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 z-50">
       {/* Header */}
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center space-x-3">
-          <Image
-            src={orgLogoUrl || "/images/logo/logo-icon.svg"}
-            alt={orgName || "Logo"}
-            width={32}
-            height={32}
-          />
-          <div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-              Admin Panel
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              {userProfile?.organizations?.[0]?.name}
-            </p>
-          </div>
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Wide logo (wordmark): show alone, replaces logo + text */}
+          {logoWideUrl ? (
+            <Image
+              src={logoWideUrl}
+              alt={orgName || "Logo"}
+              width={150}
+              height={40}
+              className="object-contain max-h-10"
+            />
+          ) : (
+            <>
+              {/* Square logo + company name, or defaults */}
+              <Image
+                src={logoSquareUrl || "/images/logo/logo-icon.svg"}
+                alt={orgName || "Logo"}
+                width={32}
+                height={32}
+                className="flex-shrink-0"
+              />
+              <div className="min-w-0">
+                <h1 className="text-lg font-bold text-gray-900 dark:text-white truncate">
+                  {orgName || "Admin Panel"}
+                </h1>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {userProfile?.organizations?.[0]?.name || "Administration"}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

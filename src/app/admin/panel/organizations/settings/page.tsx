@@ -147,17 +147,17 @@ export default function OrganizationSettingsPage() {
         throw new Error("User or organization not found");
       }
 
-      // Create a unique filename
-      const fileExt = file.name.split('.').pop();
-      const folder = type === "square" ? "square" : "wide";
-      const fileName = `${organization.org_id}/${folder}/${Date.now()}.${fileExt}`;
+      // Use a clean filename: {org_id}/square.{ext} or {org_id}/wide.{ext}
+      // This ensures only one file per type per organization
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+      const fileName = `${organization.org_id}/${type}.${fileExt}`;
 
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage with upsert to replace existing
       const { error } = await supabase.storage
         .from('organization-logos')
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: true // Replace existing file
         });
 
       if (error) {

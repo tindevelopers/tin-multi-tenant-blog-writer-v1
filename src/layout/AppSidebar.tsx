@@ -185,7 +185,8 @@ const AppSidebar: React.FC = () => {
   const [openNestedSubmenus, setOpenNestedSubmenus] = useState<Set<string>>(new Set());
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [newBadgeOverrides, setNewBadgeOverrides] = useState<Record<string, boolean>>({});
-  const [orgLogoUrl, setOrgLogoUrl] = useState<string | null>(null);
+  const [logoSquareUrl, setLogoSquareUrl] = useState<string | null>(null);
+  const [logoWideUrl, setLogoWideUrl] = useState<string | null>(null);
   const [orgName, setOrgName] = useState<string | null>(null);
 
   // Load persisted state from localStorage, default Blog Writer menu to open
@@ -329,13 +330,13 @@ const AppSidebar: React.FC = () => {
 
         if (org) {
           const settings = (org.settings as any) || {};
-          const logoRaw =
-            settings.logo_wide_url ||
-            settings.logo_url ||
-            settings.logo_square_url ||
-            null;
+          
+          // Load both logo types separately
+          const squareRaw = settings.logo_square_url || settings.logo_url || null;
+          const wideRaw = settings.logo_wide_url || null;
 
-          setOrgLogoUrl(normalizeLogoUrl(logoRaw));
+          setLogoSquareUrl(normalizeLogoUrl(squareRaw));
+          setLogoWideUrl(normalizeLogoUrl(wideRaw));
           setOrgName(org.name || null);
         }
       } catch (error) {
@@ -722,22 +723,33 @@ const AppSidebar: React.FC = () => {
         <div className="flex items-center justify-between px-4 py-4">
           <Link
             href="/admin"
-            className="flex items-center gap-3"
+            className="flex items-center gap-2 min-w-0"
           >
-            {isExpanded || isHovered || isMobileOpen ? (
+            {/* Wide logo (wordmark): show alone, replaces logo + text */}
+            {logoWideUrl && (isExpanded || isHovered || isMobileOpen) ? (
               <Image
-                src={orgLogoUrl || "/images/logo/logo.svg"}
+                src={logoWideUrl}
                 alt={orgName || "Logo"}
-                width={32}
-                height={32}
+                width={150}
+                height={40}
+                className="object-contain max-h-10"
               />
             ) : (
-              <Image
-                src={orgLogoUrl || "/images/logo/logo-icon.svg"}
-                alt={orgName || "Logo"}
-                width={32}
-                height={32}
-              />
+              <>
+                {/* Square logo + company name, or defaults */}
+                <Image
+                  src={logoSquareUrl || "/images/logo/logo-icon.svg"}
+                  alt={orgName || "Logo"}
+                  width={32}
+                  height={32}
+                  className="flex-shrink-0"
+                />
+                {(isExpanded || isHovered || isMobileOpen) && orgName && (
+                  <span className="font-semibold text-gray-900 dark:text-white truncate text-sm">
+                    {orgName}
+                  </span>
+                )}
+              </>
             )}
           </Link>
         </div>
