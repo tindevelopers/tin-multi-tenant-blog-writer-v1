@@ -21,7 +21,7 @@ const AppHeader: React.FC = () => {
       <div className="flex items-center justify-between w-full px-6 py-4">
         {/* Left side - Menu toggle */}
         <button
-          className={`flex items-center justify-center w-10 h-10 text-gray-500 border border-gray-200 rounded-lg z-50 dark:border-gray-800 dark:text-gray-400 lg:h-11 lg:w-11 ${
+          className={`flex items-center justify-center w-10 h-10 text-gray-500 border border-gray-200 rounded-lg dark:border-gray-800 dark:text-gray-400 lg:h-11 lg:w-11 ${
             isMobileOpen ? "bg-gray-100 dark:bg-white/[0.03]" : ""
           }`}
           onClick={handleToggle}

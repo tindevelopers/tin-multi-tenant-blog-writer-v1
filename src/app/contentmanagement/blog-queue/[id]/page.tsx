@@ -310,7 +310,7 @@ export default function QueueItemDetailPage() {
   const isOrgAdmin = ['admin', 'owner', 'system_admin', 'super_admin'].includes(userRole || '');
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-screen-2xl mx-auto">
+    <div className="relative p-4 sm:p-6 space-y-6 max-w-screen-2xl mx-auto">
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
         {/* Title and back button */}

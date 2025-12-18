@@ -710,7 +710,7 @@ const AppSidebar: React.FC = () => {
 
   return (
     <aside
-      className={`sidebar group fixed h-screen w-72 overflow-hidden bg-white shadow-lg transition-all duration-300 ease-in-out dark:bg-gray-900 lg:left-0 ${
+      className={`sidebar group fixed h-screen w-72 overflow-hidden bg-white shadow-lg transition-all duration-300 ease-in-out dark:bg-gray-900 lg:left-0 isolate ${
         isExpanded || isHovered || isMobileOpen
           ? "left-0"
           : "-left-72 lg:left-0 lg:w-20"

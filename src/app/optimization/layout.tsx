@@ -25,9 +25,9 @@ export default function OptimizationLayout({
       {/* Sidebar and Backdrop */}
       <AppSidebar />
       <Backdrop />
-      {/* Main Content Area */}
+      {/* Main Content Area - isolate creates stacking context for proper z-index layering */}
       <div
-        className={`flex-1 transition-all duration-300 ease-in-out bg-gray-50 dark:bg-gray-900 ${mainContentMargin}`}
+        className={`flex-1 transition-all duration-300 ease-in-out bg-gray-50 dark:bg-gray-900 isolate ${mainContentMargin}`}
       >
         {/* Header */}
         <AppHeader />
