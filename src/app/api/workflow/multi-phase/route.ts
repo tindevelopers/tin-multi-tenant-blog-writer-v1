@@ -259,30 +259,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       headers['Authorization'] = `Bearer ${API_KEY}`;
     }
 
-    // Build custom instructions with site context if available
-    let finalCustomInstructions = customInstructions || getDefaultCustomInstructions();
-    if (siteContext) {
-      finalCustomInstructions = buildSiteAwareInstructions(
-        finalCustomInstructions,
-        siteContext,
-        topic,
-        MAX_CUSTOM_INSTRUCTIONS_LENGTH // Enforce API character limit
-      );
-    }
-
+    // FIX: For multi-phase mode, the backend API handles quality features internally.
+    // Only pass user-provided custom instructions, NOT the default detailed instructions
+    // which were confusing the LLM (it thought they were content to edit).
+    // Pass site context as structured data in extraFields instead.
+    let finalCustomInstructions: string | undefined = customInstructions || undefined;
+    
     // Prepare extra fields with link opportunities if available
     const extraFields: Record<string, unknown> = {
       fallback_to_openai: true,
+      // Explicitly set mode for backend clarity
+      mode: 'multi_phase',
     };
     
     if (siteContext?.linkOpportunities.length) {
-      // Pass link opportunities to the API for embedded linking
+      // Pass link opportunities to the API as STRUCTURED DATA (not in custom_instructions)
       extraFields.internal_link_targets = formatLinkOpportunitiesForAPI(
         siteContext.linkOpportunities
       );
       extraFields.existing_site_topics = siteContext.existingTopics.slice(0, 15);
       extraFields.site_has_content = true;
       extraFields.total_site_content = siteContext.totalContentItems;
+      
+      // Also pass existing titles for duplicate avoidance
+      if (siteContext.existingTitles.length > 0) {
+        extraFields.existing_titles = siteContext.existingTitles.slice(0, 20);
+      }
     }
 
     const requestPayload = buildEnhancedBlogRequestPayload({
@@ -293,10 +295,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       wordCount,
       qualityLevel,
       customInstructions: finalCustomInstructions,
+      mode: 'multi_phase', // Explicitly set mode
       featureOverrides: {
         use_consensus_generation: true,
       },
       extraFields,
+    });
+    
+    // Log the full request payload for debugging
+    const customInstr = requestPayload.custom_instructions as string | undefined;
+    logger.info('📤 Multi-phase request payload', {
+      queueId,
+      topic: requestPayload.topic,
+      keywords: requestPayload.keywords,
+      mode: requestPayload.mode,
+      hasCustomInstructions: !!customInstr,
+      customInstructionsLength: customInstr?.length || 0,
+      extraFieldKeys: Object.keys(extraFields),
+      hasSiteContext: !!siteContext,
+      linkOpportunitiesCount: siteContext?.linkOpportunities.length || 0,
     });
 
     const response = await fetch(apiUrl, {
@@ -329,6 +346,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const result = await response.json();
+    
+    // Log the raw response for debugging
+    logger.info('📥 Multi-phase API response', {
+      queueId,
+      hasJobId: !!result.job_id,
+      responseKeys: Object.keys(result),
+      status: result.status,
+      hasContent: !!result.content,
+      hasTitle: !!result.title,
+      // Log first 200 chars of content if present (for debugging broken generation)
+      contentPreview: result.content ? result.content.substring(0, 200) : null,
+    });
 
     // Step 3: Handle async response (should always return job_id)
     if (result.job_id) {

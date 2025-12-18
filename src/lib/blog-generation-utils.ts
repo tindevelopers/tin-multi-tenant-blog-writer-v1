@@ -359,13 +359,25 @@ export function buildEnhancedBlogRequestPayload(
     payload.gsc_site_url = options.gscSiteUrl;
   }
 
+  // FIX: Handle custom_instructions based on mode
+  // For multi_phase mode, the backend handles quality features internally.
+  // Only pass user-provided custom instructions, NOT detailed default instructions
+  // which were confusing the LLM (it interpreted them as content to edit).
+  const isMultiPhaseMode = (options.mode || defaultMode) === 'multi_phase';
+  
   if (options.customInstructions) {
     // Enforce character limit to prevent API validation errors
     const instructions = options.customInstructions.length > MAX_CUSTOM_INSTRUCTIONS_LENGTH
       ? options.customInstructions.substring(0, MAX_CUSTOM_INSTRUCTIONS_LENGTH)
       : options.customInstructions;
     payload.custom_instructions = instructions;
+  } else if (!isMultiPhaseMode) {
+    // For quick_generate mode only: add minimal default instructions if none provided
+    // This helps quick_generate produce better-structured content
+    // Multi-phase mode should NOT get default instructions - backend handles this
+    payload.custom_instructions = `Write a comprehensive, well-structured blog post about the topic. Include an introduction, main sections with H2 headings, and a conclusion. Use bullet points and numbered lists where appropriate.`;
   }
+  // For multi_phase with no custom instructions: don't add any - backend handles it
 
   if (options.location) {
     payload.location = options.location;

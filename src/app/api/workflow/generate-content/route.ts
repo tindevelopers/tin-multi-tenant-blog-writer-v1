@@ -142,21 +142,39 @@ export async function POST(request: NextRequest) {
       keywordsCount: keywords?.length || 0
     });
 
-    // Build custom instructions with site context if available
-    let finalCustomInstructions = custom_instructions || getDefaultCustomInstructions(template_type);
+    // FIX: Only use detailed default instructions for quick_generate mode
+    // For multi-phase mode (premium/enterprise quality), the backend handles quality internally
+    // Sending detailed instructions was confusing the LLM (it thought they were content to edit)
+    const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise';
     
-    if (siteContext) {
-      finalCustomInstructions = buildSiteAwareInstructions(
-        finalCustomInstructions,
-        siteContext,
-        topic,
-        MAX_CUSTOM_INSTRUCTIONS_LENGTH // Enforce API character limit
-      );
-      logger.debug('Built site-aware custom instructions', {
-        originalLength: (custom_instructions || '').length,
-        enhancedLength: finalCustomInstructions.length,
-        maxAllowed: MAX_CUSTOM_INSTRUCTIONS_LENGTH,
-      });
+    let finalCustomInstructions: string | undefined = undefined;
+    
+    if (custom_instructions) {
+      // User provided custom instructions - always use them
+      finalCustomInstructions = custom_instructions;
+    } else if (!isPremiumQuality) {
+      // Only add detailed default instructions for quick_generate mode (non-premium)
+      finalCustomInstructions = getDefaultCustomInstructions(template_type);
+    }
+    // For premium/enterprise (multi-phase): don't add default instructions - backend handles it
+    
+    // Add site context as structured data, not in custom_instructions
+    // This prevents the instructions from becoming too complex
+    if (siteContext && finalCustomInstructions) {
+      // Only add site context to instructions for quick_generate mode
+      if (!isPremiumQuality) {
+        finalCustomInstructions = buildSiteAwareInstructions(
+          finalCustomInstructions,
+          siteContext,
+          topic,
+          MAX_CUSTOM_INSTRUCTIONS_LENGTH // Enforce API character limit
+        );
+        logger.debug('Built site-aware custom instructions', {
+          originalLength: (custom_instructions || '').length,
+          enhancedLength: finalCustomInstructions.length,
+          maxAllowed: MAX_CUSTOM_INSTRUCTIONS_LENGTH,
+        });
+      }
     }
 
     // Prepare extra fields with link opportunities if available
@@ -165,14 +183,22 @@ export async function POST(request: NextRequest) {
     };
     
     if (siteContext?.linkOpportunities.length) {
-      // Pass link opportunities to the API for embedded linking
+      // Pass link opportunities to the API for embedded linking (structured data)
       extraFields.internal_link_targets = formatLinkOpportunitiesForAPI(
         siteContext.linkOpportunities
       );
       extraFields.existing_site_topics = siteContext.existingTopics.slice(0, 15);
       extraFields.site_has_content = true;
       extraFields.total_site_content = siteContext.totalContentItems;
+      
+      // Also pass existing titles for duplicate avoidance
+      if (siteContext.existingTitles.length > 0) {
+        extraFields.existing_titles = siteContext.existingTitles.slice(0, 20);
+      }
     }
+
+    // Determine mode based on quality level
+    const mode = isPremiumQuality ? 'multi_phase' : 'quick_generate';
 
     const requestPayload = buildEnhancedBlogRequestPayload({
       topic,
@@ -183,10 +209,21 @@ export async function POST(request: NextRequest) {
       qualityLevel: quality_level || 'high',
       customInstructions: finalCustomInstructions,
       templateType: template_type,
+      mode, // Explicitly set mode based on quality level
       featureOverrides: {
-        use_consensus_generation: true,
+        use_consensus_generation: isPremiumQuality, // Only for multi-phase
       },
       extraFields,
+    });
+    
+    // Log request for debugging
+    logger.debug('Content generation request payload', {
+      topic,
+      mode,
+      hasCustomInstructions: !!finalCustomInstructions,
+      customInstructionsLength: finalCustomInstructions?.length || 0,
+      isPremiumQuality,
+      hasSiteContext: !!siteContext,
     });
 
     const response = await fetch(`${apiUrl}/api/v1/blog/generate-enhanced`, {
