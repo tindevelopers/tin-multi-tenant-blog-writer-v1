@@ -35,7 +35,10 @@ import {
   Shield,
   History,
   Layers2,
-  Search
+  Search,
+  Zap,
+  Code2,
+  Sparkles
 } from "lucide-react";
 
 type NavItem = {
@@ -118,6 +121,19 @@ const blogWriterItems: NavItem[] = [
         subItems: [
           { name: "Team", path: "/admin/team", icon: <Users className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
           { name: "Media", path: "/contentmanagement/media", icon: <ImageIcon className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+        ]
+      },
+      { 
+        name: "Optimization", 
+        icon: <Zap className="w-4 h-4" />,
+        isAccordionHeader: true,
+        releaseDate: DEFAULT_RELEASE_DATE,
+        subItems: [
+          { name: "Webflow SEO", path: "/optimization/webflow", icon: <Globe className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "WordPress SEO", path: "/optimization/wordpress", icon: <FileText className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Content Quality", path: "/optimization/content-quality", icon: <Sparkles className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Schema Markup", path: "/optimization/schema", icon: <Code2 className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Image Alt Text", path: "/optimization/images", icon: <ImageIcon className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
         ]
       },
       { 
