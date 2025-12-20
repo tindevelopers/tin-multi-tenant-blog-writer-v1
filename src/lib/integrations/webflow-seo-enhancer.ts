@@ -6,15 +6,7 @@
  * and internal linking validation.
  */
 
-import { generateText } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
 import { logger } from '@/utils/logger';
-import { isAIGatewayEnabled } from '@/lib/ai-gateway';
-
-// Initialize OpenAI provider
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
 
 export interface SEOMetaTags {
   seoTitle: string;
@@ -121,40 +113,14 @@ function extractImages(content: string): ImageSEOData[] {
 }
 
 /**
- * Generate alt text for images using AI
+ * Generate alt text for images
  */
-async function generateImageAltText(
+function generateImageAltText(
   imageSrc: string,
   context: string,
   keywords: string[]
-): Promise<string> {
-  if (!isAIGatewayEnabled()) {
-    return `Image related to ${keywords[0] || 'the article content'}`;
-  }
-  
-  try {
-    const { text } = await generateText({
-      model: openai('gpt-4o-mini'),
-      prompt: `Generate a descriptive, SEO-friendly alt text for an image.
-
-Image URL: ${imageSrc}
-Article context: ${context.substring(0, 500)}
-Keywords: ${keywords.join(', ')}
-
-Requirements:
-- Be descriptive but concise (under 125 characters)
-- Include relevant keywords naturally
-- Describe what the image likely shows based on context
-- Don't start with "Image of" or "Picture of"
-
-Return ONLY the alt text, no quotes or formatting.`,
-    });
-    
-    return text.trim().substring(0, 125);
-  } catch (error) {
-    logger.warn('AI alt text generation failed', { error, imageSrc });
-    return `Image related to ${keywords[0] || 'the article content'}`;
-  }
+): string {
+  return `Image related to ${keywords[0] || 'the article content'}`;
 }
 
 /**
@@ -402,12 +368,10 @@ export async function enhanceForWebflowSEO(
   // Extract and enhance images
   const images = extractImages(content);
   
-  // Generate AI alt text for images without alt
-  if (isAIGatewayEnabled()) {
-    for (const image of images) {
-      if (!image.alt || image.alt.length < 5) {
-        image.alt = await generateImageAltText(image.src, content, keywords);
-      }
+  // Generate alt text for images without alt
+  for (const image of images) {
+    if (!image.alt || image.alt.length < 5) {
+      image.alt = generateImageAltText(image.src, content, keywords);
     }
   }
   

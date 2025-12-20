@@ -10,7 +10,6 @@ import { EnvironmentIntegrationsDB } from '@/lib/integrations/database/environme
 import { publishBlogToWebflow } from '@/lib/integrations/webflow-publish';
 import { enhanceBlogFields } from '@/lib/integrations/enhance-fields';
 import { LinkValidationService } from '@/lib/interlinking/link-validation-service';
-import { postProcessBlogContent, isAIGatewayEnabled } from '@/lib/ai-gateway';
 import { enhanceForWebflowSEO } from '@/lib/integrations/webflow-seo-enhancer';
 import { logger } from '@/utils/logger';
 import { PlatformStatus } from '@/lib/blog-queue-state-machine';
@@ -153,7 +152,7 @@ export async function POST(
           }
         }
 
-        // AI Gateway Post-Processing and SEO Enhancement
+        // SEO Enhancement
         let processedContent = post.content || '';
         let seoEnhancement = null;
         
@@ -169,41 +168,7 @@ export async function POST(
               }
             }
             
-            // Post-process content to remove artifacts and check quality
-            if (isAIGatewayEnabled()) {
-              logger.info('Running AI Gateway post-processing', { postId: post.post_id });
-              
-              const postProcessResult = await postProcessBlogContent({
-                content: post.content,
-                title: post.title,
-                keywords,
-                enableAISuggestions: true,
-              });
-              
-              processedContent = postProcessResult.cleanedContent;
-              
-              // Store post-processing results in metadata
-              await supabase
-                .from('blog_platform_publishing')
-                .update({
-                  publishing_metadata: {
-                    ...(publishing.publishing_metadata || {}),
-                    ai_post_processing: {
-                      processed_at: new Date().toISOString(),
-                      quality_score: postProcessResult.qualityScore,
-                      issues_found: postProcessResult.issuesFound.length,
-                      seo_suggestions: postProcessResult.seoSuggestions.slice(0, 3),
-                    },
-                  },
-                })
-                .eq('publishing_id', publishingId);
-              
-              logger.info('AI post-processing complete', {
-                postId: post.post_id,
-                qualityScore: postProcessResult.qualityScore,
-                issuesFound: postProcessResult.issuesFound.length,
-              });
-            }
+            processedContent = post.content;
             
             // Enhance for Webflow SEO
             seoEnhancement = await enhanceForWebflowSEO({
@@ -224,7 +189,7 @@ export async function POST(
             
           } catch (processingError: any) {
             // Log but don't block publishing
-            logger.warn('AI processing failed, continuing with original content', {
+            logger.warn('SEO processing failed, continuing with original content', {
               error: processingError.message,
               postId: post.post_id,
             });

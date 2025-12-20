@@ -12,7 +12,6 @@ import {
 import { discoverWebflowStructure } from '@/lib/integrations/webflow-structure-discovery';
 import { createServiceClient } from '@/lib/supabase/service';
 import { analyzeInterlinkingEnhanced } from '@/lib/interlinking/enhanced-interlinking-service';
-import { postProcessBlogContent, isAIGatewayEnabled, checkContentQuality } from '@/lib/ai-gateway';
 
 /**
  * Generate high-quality meta description and excerpt using LLM Service
@@ -398,33 +397,7 @@ export async function POST(request: NextRequest) {
       hasTopic: !!topic,
     });
 
-    // Step 0: AI Gateway Quality Check and Artifact Removal
-    // Run quality check to detect and clean LLM artifacts before enhancement
     let enhancedContent = content;
-    let qualityResult = null;
-    
-    try {
-      qualityResult = checkContentQuality(content);
-      
-      if (!qualityResult.isClean) {
-        logger.info('Phase 3: AI Gateway detected quality issues, cleaning content', {
-          qualityScore: qualityResult.qualityScore,
-          issueCount: qualityResult.issues.length,
-          issues: qualityResult.issues.map(i => i.type),
-        });
-        
-        // Use cleaned content for further processing
-        enhancedContent = qualityResult.cleanedContent;
-      } else {
-        logger.debug('Phase 3: Content passed AI Gateway quality check', {
-          qualityScore: qualityResult.qualityScore,
-        });
-      }
-    } catch (qualityError: any) {
-      logger.warn('Phase 3: AI Gateway quality check failed, continuing with original content', {
-        error: qualityError.message,
-      });
-    }
 
     // Step 1: Improve content structure and formatting
     if (improve_formatting) {
@@ -543,11 +516,6 @@ export async function POST(request: NextRequest) {
       recommendations: string[];
       missing_keywords: string[];
       post_id?: string;
-      ai_gateway?: {
-        quality_score: number;
-        issues_found: number;
-        content_cleaned: boolean;
-      };
     } = {
       enhanced_fields: enhancedFields,
       enhanced_content: enhancedContent,
@@ -556,12 +524,6 @@ export async function POST(request: NextRequest) {
       quality_score: analysis.quality_score,
       recommendations: analysis.recommendations,
       missing_keywords: analysis.missing_keywords,
-      // Include AI Gateway quality check results
-      ai_gateway: qualityResult ? {
-        quality_score: qualityResult.qualityScore,
-        issues_found: qualityResult.issues.length,
-        content_cleaned: !qualityResult.isClean,
-      } : undefined,
     };
 
     // Auto-update draft with enhancements if queue_id provided
