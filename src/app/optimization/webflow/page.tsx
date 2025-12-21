@@ -20,7 +20,6 @@ import {
 interface BlogPost {
   post_id: string;
   title: string;
-  slug: string;
   status: string;
   seo_score?: number;
   seo_title?: string;
@@ -28,6 +27,7 @@ interface BlogPost {
   schema_markup?: string;
   published_at?: string;
   webflow_item_id?: string;
+  metadata?: any;
 }
 
 interface SEOAnalysis {
@@ -73,7 +73,7 @@ export default function WebflowSEOPage() {
 
       const { data, error } = await supabase
         .from("blog_posts")
-        .select("post_id, title, slug, status, seo_score, seo_title, seo_description, schema_markup, published_at, webflow_item_id")
+        .select("post_id, title, status, seo_score, seo_title, seo_description, schema_markup, published_at, webflow_item_id, metadata")
         .eq("org_id", profile.org_id)
         .in("status", ["published", "pending_publish"])
         .order("published_at", { ascending: false })
@@ -212,9 +212,11 @@ export default function WebflowSEOPage() {
                       <h3 className="font-medium text-gray-900 dark:text-white truncate">
                         {post.title}
                       </h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        /{post.slug}
-                      </p>
+                      {post.metadata?.slug && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                          /{post.metadata.slug}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {post.seo_score && (

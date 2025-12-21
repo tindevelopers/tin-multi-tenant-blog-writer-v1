@@ -21,13 +21,13 @@ import {
 interface WordPressPost {
   post_id: string;
   title: string;
-  slug: string;
   status: string;
   seo_score?: number;
   seo_title?: string;
   seo_description?: string;
   published_at?: string;
   wordpress_id?: string;
+  metadata?: any;
 }
 
 interface SEOAnalysis {
@@ -101,7 +101,7 @@ export default function WordPressSEOPage() {
 
       const { data, error } = await supabase
         .from("blog_posts")
-        .select("post_id, title, slug, status, seo_score, seo_title, seo_description, published_at")
+        .select("post_id, title, status, seo_score, seo_title, seo_description, published_at, metadata")
         .eq("org_id", profile.org_id)
         .in("status", ["published", "pending_publish", "draft"])
         .order("created_at", { ascending: false })
