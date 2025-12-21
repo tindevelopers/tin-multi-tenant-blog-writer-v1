@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 interface BlogPost {
-  id: string;
+  post_id: string;
   title: string;
   slug: string;
   status: string;
@@ -73,7 +73,7 @@ export default function WebflowSEOPage() {
 
       const { data, error } = await supabase
         .from("blog_posts")
-        .select("id, title, slug, status, seo_score, seo_title, seo_description, schema_markup, published_at, webflow_item_id")
+        .select("post_id, title, slug, status, seo_score, seo_title, seo_description, schema_markup, published_at, webflow_item_id")
         .eq("org_id", profile.org_id)
         .in("status", ["published", "pending_publish"])
         .order("published_at", { ascending: false })
@@ -90,7 +90,7 @@ export default function WebflowSEOPage() {
 
   const analyzePost = async (post: BlogPost) => {
     try {
-      setAnalyzing(post.id);
+      setAnalyzing(post.post_id);
       setSelectedPost(post);
       
       // Simulate SEO analysis (in production, this would call the AI Gateway)
@@ -201,9 +201,9 @@ export default function WebflowSEOPage() {
             <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[600px] overflow-y-auto">
               {posts.map((post) => (
                 <div
-                  key={post.id}
+                  key={post.post_id}
                   className={`p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${
-                    selectedPost?.id === post.id ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                    selectedPost?.post_id === post.post_id ? "bg-blue-50 dark:bg-blue-900/20" : ""
                   }`}
                   onClick={() => analyzePost(post)}
                 >
@@ -222,7 +222,7 @@ export default function WebflowSEOPage() {
                           {post.seo_score}%
                         </span>
                       )}
-                      {analyzing === post.id ? (
+                      {analyzing === post.post_id ? (
                         <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
                       ) : (
                         <ArrowRight className="w-4 h-4 text-gray-400" />

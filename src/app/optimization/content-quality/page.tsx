@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 interface ContentItem {
-  id: string;
+  post_id: string;
   title: string;
   content: string;
   status: string;
@@ -68,7 +68,7 @@ export default function ContentQualityPage() {
 
       const { data, error } = await supabase
         .from("blog_posts")
-        .select("id, title, content, status, created_at")
+        .select("post_id, title, content, status, created_at")
         .eq("org_id", profile.org_id)
         .order("created_at", { ascending: false })
         .limit(30);
@@ -84,7 +84,7 @@ export default function ContentQualityPage() {
 
   const analyzeContent = async (draft: ContentItem) => {
     try {
-      setAnalyzing(draft.id);
+      setAnalyzing(draft.post_id);
       setSelectedDraft(draft);
       setResult(null);
       
@@ -275,9 +275,9 @@ export default function ContentQualityPage() {
             <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[500px] overflow-y-auto">
               {drafts.map((draft) => (
                 <div
-                  key={draft.id}
+                  key={draft.post_id}
                   className={`p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${
-                    selectedDraft?.id === draft.id ? "bg-purple-50 dark:bg-purple-900/20" : ""
+                    selectedDraft?.post_id === draft.post_id ? "bg-purple-50 dark:bg-purple-900/20" : ""
                   }`}
                   onClick={() => analyzeContent(draft)}
                 >
@@ -290,7 +290,7 @@ export default function ContentQualityPage() {
                         {draft.content?.slice(0, 100) || "No content"}...
                       </p>
                     </div>
-                    {analyzing === draft.id ? (
+                    {analyzing === draft.post_id ? (
                       <RefreshCw className="w-4 h-4 animate-spin text-purple-600" />
                     ) : (
                       <ArrowRight className="w-4 h-4 text-gray-400" />

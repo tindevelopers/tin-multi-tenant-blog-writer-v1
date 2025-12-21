@@ -26,7 +26,7 @@ interface ImageData {
 }
 
 interface ContentWithImages {
-  id: string;
+  post_id: string;
   title: string;
   content: string;
   images: ImageData[];
@@ -123,7 +123,7 @@ export default function ImageAltTextPage() {
 
       const { data, error } = await supabase
         .from("blog_posts")
-        .select("id, title, content")
+        .select("post_id, title, content")
         .eq("org_id", profile.org_id)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -132,10 +132,10 @@ export default function ImageAltTextPage() {
 
       const postsWithImages = (data || [])
         .map(post => ({
-          id: post.id,
+          post_id: post.post_id,
           title: post.title || "Untitled",
           content: post.content || "",
-          images: extractImages(post.content || "", post.id, post.title || "Untitled"),
+          images: extractImages(post.content || "", post.post_id, post.title || "Untitled"),
         }))
         .filter(post => post.images.length > 0);
 
@@ -308,9 +308,9 @@ export default function ImageAltTextPage() {
             <div className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[500px] overflow-y-auto">
               {posts.map((post) => (
                 <div
-                  key={post.id}
+                  key={post.post_id}
                   className={`p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors ${
-                    selectedPost?.id === post.id ? "bg-green-50 dark:bg-green-900/20" : ""
+                    selectedPost?.post_id === post.post_id ? "bg-green-50 dark:bg-green-900/20" : ""
                   }`}
                   onClick={() => setSelectedPost(post)}
                 >
