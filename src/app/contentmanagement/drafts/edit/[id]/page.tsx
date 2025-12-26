@@ -24,11 +24,13 @@ import { dataForSEOContentGenerationClient } from "@/lib/dataforseo-content-gene
 import { llmAnalysisClient } from "@/lib/llm-analysis-client";
 import { extractImagesFromContent, extractFeaturedImage } from "@/lib/image-extractor";
 import { logger } from "@/utils/logger";
+import { sanitizeContent, sanitizeExcerpt, sanitizeTitle, sanitizeBlogData } from "@/lib/unified-content-sanitizer";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
 import WorkflowStagesHorizontal from "@/components/workflow/WorkflowStagesHorizontal";
 import type { WorkflowPhase } from "@/lib/workflow-phase-manager";
 import { PublishButton } from "@/components/publishing/PublishButton";
 import { PublishingTargetSelector } from "@/components/publishing/PublishingTargetSelector";
+import { SiteScanStatus } from "@/components/publishing/SiteScanStatus";
 import { UserRole, type PublishingTarget } from "@/types/publishing";
 import { createClient } from "@/lib/supabase/client";
 
@@ -683,18 +685,26 @@ export default function EditDraftPage() {
     try {
       setSaving(true);
       
-      // Normalize content before saving
-      const { normalizeBlogContent } = await import('@/lib/content-sanitizer');
-      const normalized = normalizeBlogContent({
+      // Apply unified sanitization before saving to remove any remaining AI artifacts
+      const draftMetadata = draft?.metadata as Record<string, unknown> | undefined;
+      const primaryKeyword = (draftMetadata?.keywords as string[])?.[0];
+      
+      const sanitizedData = sanitizeBlogData({
         title: formData.title,
         content: formData.content,
         excerpt: formData.excerpt,
-      });
+      }, primaryKeyword);
+      
+      if (sanitizedData.sanitizationApplied) {
+        logger.info('Save: Content sanitized before saving', {
+          summary: sanitizedData.summary,
+        });
+      }
       
       const payload = {
-        title: normalized.title,
-        content: normalized.sanitizedContent || normalized.content,
-        excerpt: normalized.excerpt,
+        title: sanitizedData.title,
+        content: sanitizedData.content,
+        excerpt: sanitizedData.excerpt,
         status: formData.status,
         metadata: buildMetadataPayload(),
         seo_data: buildSeoPayload(),
@@ -864,10 +874,21 @@ export default function EditDraftPage() {
         const { normalizeBlogContent } = await import('@/lib/content-sanitizer');
         const normalized = normalizeBlogContent(result);
         
+        // Apply unified sanitization to remove AI artifacts
+        const sanitizedContent = sanitizeContent(normalized.sanitizedContent || normalized.content);
+        const sanitizedExcerpt = sanitizeExcerpt(normalized.excerpt || '');
+        
+        if (sanitizedContent.wasModified) {
+          logger.info('Phase 1: AI artifacts removed', {
+            artifactsRemoved: sanitizedContent.artifactsRemoved.length,
+            stats: sanitizedContent.stats,
+          });
+        }
+        
         setFormData(prev => ({
           ...prev,
-          content: normalized.sanitizedContent || normalized.content,
-          excerpt: normalized.excerpt || prev.excerpt,
+          content: sanitizedContent.content,
+          excerpt: sanitizedExcerpt.excerpt || prev.excerpt,
         }));
 
         // Update workflow phase
@@ -1231,6 +1252,7 @@ export default function EditDraftPage() {
           deep_interlinking: true, // Enable Phase 2 lazy-loading for top candidates
           max_internal_links: 5, // Maximum internal links to insert
           org_id: orgId, // Pass org_id for Webflow integration lookup
+          site_id: publishingTarget?.site_id, // Pass explicit site_id for multi-site orgs
           queue_id: queueId, // Pass queue_id to update the draft automatically
         }),
       });
@@ -1249,15 +1271,27 @@ export default function EditDraftPage() {
         contentLengthAfter: result.enhanced_content?.length,
       });
       
+      // Sanitize the enhanced content to remove any AI artifacts
+      const sanitizedContent = sanitizeContent(result.enhanced_content || '');
+      const sanitizedExcerpt = sanitizeExcerpt(result.enhanced_fields?.excerpt || '');
+      const sanitizedMetaDesc = sanitizeExcerpt(result.enhanced_fields?.meta_description || '');
+      
+      if (sanitizedContent.wasModified) {
+        logger.info('Phase 3: AI artifacts removed from enhanced content', {
+          artifactsRemoved: sanitizedContent.artifactsRemoved.length,
+          stats: sanitizedContent.stats,
+        });
+      }
+      
       // Update enhanced fields INCLUDING the enhanced content with internal links
       setFormData(prev => ({
         ...prev,
-        // Update content with the enhanced version (includes internal links)
-        content: result.enhanced_content || prev.content,
-        // Update SEO fields
-        seoTitle: result.enhanced_fields?.meta_title || prev.seoTitle,
-        metaDescription: result.enhanced_fields?.meta_description || prev.metaDescription,
-        excerpt: result.enhanced_fields?.excerpt || prev.excerpt,
+        // Update content with the sanitized enhanced version (includes internal links)
+        content: sanitizedContent.content || prev.content,
+        // Update SEO fields (also sanitized)
+        seoTitle: sanitizeTitle(result.enhanced_fields?.meta_title || '') || prev.seoTitle,
+        metaDescription: sanitizedMetaDesc.excerpt || prev.metaDescription,
+        excerpt: sanitizedExcerpt.excerpt || prev.excerpt,
         slug: result.enhanced_fields?.slug || prev.slug,
       }));
 
@@ -1305,6 +1339,7 @@ export default function EditDraftPage() {
           keywords,
           operations,
           org_id: orgId,
+          site_id: publishingTarget?.site_id, // Pass explicit site_id for multi-site orgs
           max_internal_links: 5,
         }),
       });
@@ -1322,11 +1357,20 @@ export default function EditDraftPage() {
         suggestionsCount: result.suggestions?.length || 0,
       });
 
-      // Update content with polished version
+      // Update content with polished version (sanitized)
       if (result.polished_content) {
+        const sanitizedContent = sanitizeContent(result.polished_content);
+        
+        if (sanitizedContent.wasModified) {
+          logger.info('Polish: AI artifacts removed', {
+            artifactsRemoved: sanitizedContent.artifactsRemoved.length,
+            stats: sanitizedContent.stats,
+          });
+        }
+        
         setFormData(prev => ({
           ...prev,
-          content: result.polished_content,
+          content: sanitizedContent.content,
         }));
       }
 
@@ -1755,6 +1799,57 @@ export default function EditDraftPage() {
               )}
             </div>
             
+            {/* Publishing Target Selection - MUST be set before Phase 3 for internal linking */}
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Publishing Target
+                </h4>
+                {!publishingTarget?.site_id && (
+                  <span className="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-full flex items-center gap-1">
+                    <ExclamationTriangleIcon className="w-3 h-3" />
+                    Required for internal linking
+                  </span>
+                )}
+                {publishingTarget?.site_id && (
+                  <span className="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-full flex items-center gap-1">
+                    <CheckCircleIcon className="w-3 h-3" />
+                    Site selected
+                  </span>
+                )}
+              </div>
+              <div className="space-y-3">
+                <PublishingTargetSelector
+                  orgId={orgId || ''}
+                  userId={userId || ''}
+                  userRole={userRole}
+                  value={publishingTarget}
+                  onChange={(target) => {
+                    setPublishingTarget(target);
+                    logger.info('Publishing target selected', {
+                      siteId: target?.site_id,
+                      siteName: target?.site_name,
+                      cmsProvider: target?.cms_provider,
+                    });
+                  }}
+                />
+                {/* Site Scan Status - Shows internal linking data availability */}
+                {publishingTarget?.site_id && orgId && (
+                  <SiteScanStatus
+                    orgId={orgId}
+                    siteId={publishingTarget.site_id}
+                    siteName={publishingTarget.site_name}
+                    compact={true}
+                  />
+                )}
+                {!publishingTarget?.site_id && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Select a publishing target to enable intelligent internal linking during content enhancement (Phase 3).
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* AI Generation Pipeline - For new content creation */}
             <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between mb-3">

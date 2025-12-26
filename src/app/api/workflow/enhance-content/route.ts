@@ -74,7 +74,8 @@ async function insertInternalLinks(
   keywords: string[],
   orgId?: string,
   enableDeepAnalysis?: boolean, // Enable lazy-loading for deeper analysis
-  maxLinks: number = 5 // Maximum internal links to insert
+  maxLinks: number = 5, // Maximum internal links to insert
+  explicitSiteId?: string // Explicit site ID for multi-site orgs
 ): Promise<string> {
   try {
     // Get Webflow integration if orgId provided
@@ -90,8 +91,12 @@ async function insertInternalLinks(
       return content;
     }
     
+    // Use explicit site_id if provided (for multi-site orgs), otherwise use from integration
+    const targetSiteId = explicitSiteId || webflowConfig.siteId;
+    
     logger.info('Starting enhanced interlinking analysis', {
-      siteId: webflowConfig.siteId,
+      siteId: targetSiteId,
+      explicitSiteId: explicitSiteId || 'none',
       orgId,
       deepAnalysis: enableDeepAnalysis || false,
       maxLinks,
@@ -102,12 +107,12 @@ async function insertInternalLinks(
     const supabase = createServiceClient();
     
     try {
-      // Get latest completed scan for this site
+      // Get latest completed scan for this site (use explicit site_id if provided)
       const { data: latestScan, error: scanError } = await supabase
         .from('webflow_structure_scans')
         .select('existing_content, scan_completed_at, total_content_items, published_domain')
         .eq('org_id', orgId)
-        .eq('site_id', webflowConfig.siteId)
+        .eq('site_id', targetSiteId)
         .eq('status', 'completed')
         .order('scan_completed_at', { ascending: false })
         .limit(1)
@@ -159,7 +164,7 @@ async function insertInternalLinks(
         }
         
         logger.info('Using stored Webflow structure scan', {
-          siteId: webflowConfig.siteId,
+          siteId: targetSiteId,
           contentItems: existing_content.length,
           scanDate: latestScan.scan_completed_at,
           publishedDomain: publishedDomain || 'not available',
@@ -167,18 +172,18 @@ async function insertInternalLinks(
       } else {
         // No stored scan found, discover on-the-fly
         logger.info('No stored scan found, discovering Webflow structure on-the-fly', {
-          siteId: webflowConfig.siteId,
+          siteId: targetSiteId,
         });
         
         const structure = await discoverWebflowStructure(
           webflowConfig.apiToken,
-          webflowConfig.siteId
+          targetSiteId
         );
         existing_content = structure.existing_content;
         
         // Optionally trigger a background scan for future use
         // (don't await - let it run in background)
-        triggerBackgroundScan(orgId, webflowConfig.siteId, webflowConfig.apiToken)
+        triggerBackgroundScan(orgId, targetSiteId, webflowConfig.apiToken)
           .catch(err => logger.warn('Background scan trigger failed', { error: err.message }));
       }
     } catch (error: any) {
@@ -189,13 +194,13 @@ async function insertInternalLinks(
       // Fallback to on-the-fly discovery
       const structure = await discoverWebflowStructure(
         webflowConfig.apiToken,
-        webflowConfig.siteId
+        targetSiteId
       );
       existing_content = structure.existing_content;
     }
     
     if (existing_content.length === 0) {
-      logger.debug('No Webflow content found for hyperlinking', { siteId: webflowConfig.siteId });
+      logger.debug('No Webflow content found for hyperlinking', { siteId: targetSiteId });
       return content;
     }
     
@@ -214,7 +219,7 @@ async function insertInternalLinks(
         enableLazyLoading: enableDeepAnalysis || false,
         lazyLoadTopN: 10,
         webflowApiToken: enableDeepAnalysis ? webflowConfig.apiToken : undefined,
-        webflowSiteId: enableDeepAnalysis ? webflowConfig.siteId : undefined,
+        webflowSiteId: enableDeepAnalysis ? targetSiteId : undefined,
       }
     );
     
@@ -344,6 +349,7 @@ export async function POST(request: NextRequest) {
       deep_interlinking = false, // Enable lazy-loading for deeper analysis
       max_internal_links = 5, // Maximum internal links to insert (consolidated from former Phase 4)
       org_id, // Organization ID for Webflow integration lookup
+      site_id, // Explicit site ID for multi-site orgs (overrides default from integration)
     } = body;
     
     // Get org_id from user if not provided
@@ -415,11 +421,13 @@ export async function POST(request: NextRequest) {
           keywords, 
           orgId,
           deep_interlinking, // Enable lazy-loading for deeper analysis if requested
-          max_internal_links // Maximum links to insert
+          max_internal_links, // Maximum links to insert
+          site_id // Explicit site ID for multi-site orgs
         );
         logger.info('Enhanced hyperlinks inserted into content', {
           deepAnalysis: deep_interlinking,
           maxLinks: max_internal_links,
+          siteId: site_id || 'default from integration',
         });
       } catch (linkError: any) {
         logger.warn('Hyperlink insertion failed, continuing without links', {
