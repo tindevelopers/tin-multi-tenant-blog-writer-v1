@@ -25,6 +25,46 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
+    const id = searchParams.get('id');
+    
+    // If id is provided, return single result
+    if (id) {
+      const { data: result, error } = await supabase
+        .from('keyword_research_results')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error || !result) {
+        logger.error('Error fetching research result by id', { 
+          error, 
+          id,
+          userId: user.id,
+        });
+        return NextResponse.json(
+          { success: false, error: 'Research result not found' },
+          { status: 404 }
+        );
+      }
+
+      // Get keyword count for this result
+      const { data: termsData } = await supabase
+        .from('keyword_terms')
+        .select('research_result_id')
+        .eq('research_result_id', result.id);
+
+      const keywordCount = termsData?.length || 0;
+
+      return NextResponse.json({
+        success: true,
+        result: {
+          ...result,
+          keyword_count: keywordCount,
+        },
+      });
+    }
+
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
     const searchType = searchParams.get('search_type') as SearchType | undefined;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { 
   History, 
@@ -25,7 +25,7 @@ import {
   Square
 } from 'lucide-react';
 import Alert from '@/components/ui/alert/Alert';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Checkbox from '@/components/form/input/Checkbox';
 
 interface KeywordResearchResult {
@@ -63,8 +63,9 @@ interface KeywordTerm {
   search_type: string;
 }
 
-export default function KeywordHistoryPage() {
+function KeywordHistoryPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [researchResults, setResearchResults] = useState<KeywordResearchResult[]>([]);
   const [selectedResult, setSelectedResult] = useState<KeywordResearchResult | null>(null);
   const [keywordTerms, setKeywordTerms] = useState<KeywordTerm[]>([]);
@@ -72,6 +73,7 @@ export default function KeywordHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [loadingTerms, setLoadingTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [idParamLoaded, setIdParamLoaded] = useState(false);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -190,11 +192,11 @@ export default function KeywordHistoryPage() {
     }
   }, []);
 
-  const handleViewDetails = async (result: KeywordResearchResult) => {
+  const handleViewDetails = useCallback(async (result: KeywordResearchResult) => {
     setSelectedResult(result);
     setSelectedKeywords(new Set()); // Clear selection when opening new details
     await loadKeywordTerms(result.id);
-  };
+  }, [loadKeywordTerms]);
 
   const toggleKeywordSelection = (keyword: string) => {
     setSelectedKeywords(prev => {
@@ -276,6 +278,90 @@ export default function KeywordHistoryPage() {
       alert('Failed to flush cache');
     }
   };
+
+  // Load a single research result by ID
+  const loadResearchResultById = useCallback(async (resultId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setError('Please log in to view your keyword history');
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch(`/api/keywords/research-results?id=${resultId}`);
+      
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+
+      if (!data.success || !data.result) {
+        throw new Error(data.error || 'Research result not found');
+      }
+
+      const result = data.result;
+      
+      // Load keyword preview for the result
+      if (result.keyword_count > 0) {
+        try {
+          const previewParams = new URLSearchParams({
+            research_result_id: result.id,
+            limit: '10',
+          });
+          const previewResponse = await fetch(`/api/keywords/list?${previewParams.toString()}`);
+          if (previewResponse.ok) {
+            const previewData = await previewResponse.json();
+            if (previewData.success && previewData.terms) {
+              result.keyword_preview = previewData.terms;
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load keyword preview for result', result.id, err);
+        }
+      }
+
+      // Set the result and open the modal
+      setSelectedResult(result);
+      await loadKeywordTerms(result.id);
+      
+      // Also add it to the research results list if not already there
+      setResearchResults(prev => {
+        const exists = prev.some(r => r.id === result.id);
+        if (!exists) {
+          return [result, ...prev];
+        }
+        return prev;
+      });
+    } catch (err) {
+      console.error('Error loading research result:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load research result');
+    } finally {
+      setLoading(false);
+    }
+  }, [loadKeywordTerms]);
+
+  // Handle URL id parameter to auto-open modal
+  useEffect(() => {
+    const idParam = searchParams?.get('id');
+    if (idParam && !idParamLoaded) {
+      setIdParamLoaded(true);
+      // Check if result is already in the list
+      const existingResult = researchResults.find(r => r.id === idParam);
+      if (existingResult) {
+        handleViewDetails(existingResult);
+      } else {
+        // Result not in list, fetch it directly
+        loadResearchResultById(idParam);
+      }
+    }
+  }, [searchParams, idParamLoaded, researchResults, loadResearchResultById, handleViewDetails]);
 
   useEffect(() => {
     console.log('useEffect triggered - loading research results', { page });
@@ -633,8 +719,25 @@ export default function KeywordHistoryPage() {
 
         {/* Detail Modal */}
         {selectedResult && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={(e) => {
+              // Close modal when clicking on overlay (not the modal content)
+              if (e.target === e.currentTarget) {
+                setSelectedResult(null);
+                setKeywordTerms([]);
+                setSelectedKeywords(new Set());
+                // Remove id from URL when closing modal
+                const url = new URL(window.location.href);
+                url.searchParams.delete('id');
+                router.replace(url.pathname + url.search);
+              }
+            }}
+          >
+            <div 
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -650,6 +753,10 @@ export default function KeywordHistoryPage() {
                       setSelectedResult(null);
                       setKeywordTerms([]);
                       setSelectedKeywords(new Set());
+                      // Remove id from URL when closing modal
+                      const url = new URL(window.location.href);
+                      url.searchParams.delete('id');
+                      router.replace(url.pathname + url.search);
                     }}
                     className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                   >
@@ -807,5 +914,22 @@ export default function KeywordHistoryPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function KeywordHistoryPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 text-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600 dark:text-gray-400">Loading saved searches...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <KeywordHistoryPageContent />
+    </Suspense>
   );
 }
