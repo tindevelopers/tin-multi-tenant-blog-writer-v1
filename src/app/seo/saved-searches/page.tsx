@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { createClient } from '@/lib/supabase/client';
 import { 
   History, 
@@ -717,10 +718,10 @@ function KeywordHistoryPageContent() {
           </>
         )}
 
-        {/* Detail Modal */}
-        {selectedResult && (
+        {/* Detail Modal (rendered in portal to ensure it overlays the sidebar) */}
+        {selectedResult && typeof document !== 'undefined' && createPortal(
           <div 
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
             onClick={(e) => {
               // Close modal when clicking on overlay (not the modal content)
               if (e.target === e.currentTarget) {
@@ -738,7 +739,7 @@ function KeywordHistoryPageContent() {
               className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6">
+              <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 z-[61]">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -910,7 +911,8 @@ function KeywordHistoryPageContent() {
                 )}
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </div>
