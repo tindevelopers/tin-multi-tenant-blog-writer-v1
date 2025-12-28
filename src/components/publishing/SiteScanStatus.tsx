@@ -112,8 +112,11 @@ export const SiteScanStatus: React.FC<SiteScanStatusProps> = ({
   }, [orgId, siteId, siteName]);
 
   useEffect(() => {
+    // Reset scan info when siteId changes
+    setScanInfo({ hasScan: false });
+    setScanning(false);
     fetchScanStatus();
-  }, [fetchScanStatus]);
+  }, [fetchScanStatus, siteId]);
 
   const handleTriggerScan = async () => {
     if (!siteId) {

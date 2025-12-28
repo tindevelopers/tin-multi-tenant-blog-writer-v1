@@ -1836,13 +1836,34 @@ export default function EditDraftPage() {
                   userId={userId || ''}
                   userRole={userRole}
                   value={publishingTarget}
-                  onChange={(target) => {
+                  onChange={async (target) => {
                     setPublishingTarget(target);
                     logger.info('Publishing target selected', {
                       siteId: target?.site_id,
                       siteName: target?.site_name,
                       cmsProvider: target?.cms_provider,
                     });
+                    
+                    // Save publishing target immediately to metadata
+                    if (target && draftId) {
+                      try {
+                        const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
+                        const updatedMetadata = {
+                          ...existingMetadata,
+                          cms_provider: target.cms_provider,
+                          site_id: target.site_id,
+                          collection_id: target.collection_id,
+                          site_name: target.site_name,
+                        };
+                        
+                        await updatePost(draftId, {
+                          metadata: updatedMetadata,
+                        });
+                        logger.info('✅ Publishing target saved to metadata');
+                      } catch (error) {
+                        logger.error('Failed to save publishing target', { error });
+                      }
+                    }
                   }}
                 />
                 {/* Site Scan Status - Shows internal linking data availability */}
@@ -2553,9 +2574,30 @@ export default function EditDraftPage() {
               userId={userId}
               userRole={userRole}
               value={publishingTarget}
-              onChange={(target) => {
+              onChange={async (target) => {
                 // Store target selection in state - will be used when publishing
                 setPublishingTarget(target);
+                
+                // Save publishing target immediately to metadata
+                if (target && draftId) {
+                  try {
+                    const existingMetadata = (draft?.metadata as Record<string, unknown>) || {};
+                    const updatedMetadata = {
+                      ...existingMetadata,
+                      cms_provider: target.cms_provider,
+                      site_id: target.site_id,
+                      collection_id: target.collection_id,
+                      site_name: target.site_name,
+                    };
+                    
+                    await updatePost(draftId, {
+                      metadata: updatedMetadata,
+                    });
+                    logger.info('✅ Publishing target saved to metadata');
+                  } catch (error) {
+                    logger.error('Failed to save publishing target', { error });
+                  }
+                }
               }}
             />
           ) : (
