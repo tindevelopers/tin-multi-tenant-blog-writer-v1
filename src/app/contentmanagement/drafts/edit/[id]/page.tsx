@@ -398,6 +398,18 @@ export default function EditDraftPage() {
     if (formData.publishedAt) metadataPayload.published_at = formData.publishedAt;
     // Include content images from Phase 2
     if (contentImages.length > 0) metadataPayload.content_images = contentImages;
+    
+    // Include publishing target if selected
+    if (publishingTarget) {
+      metadataPayload.cms_provider = publishingTarget.cms_provider;
+      metadataPayload.site_id = publishingTarget.site_id;
+      if (publishingTarget.collection_id) {
+        metadataPayload.collection_id = publishingTarget.collection_id;
+      }
+      if (publishingTarget.site_name) {
+        metadataPayload.site_name = publishingTarget.site_name;
+      }
+    }
 
     return {
       ...existingMetadata,

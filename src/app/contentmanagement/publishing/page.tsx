@@ -93,7 +93,23 @@ export default function PublishingPage() {
         throw new Error("Failed to fetch published posts");
       }
       const data = await response.json();
-      setReadyPosts(data.data || []);
+      const posts = data.data || [];
+      setReadyPosts(posts);
+      
+      // Initialize platform selections from draft metadata
+      const selections: Record<string, SiteSelection> = {};
+      posts.forEach((post: BlogPost) => {
+        const metadata = (post.metadata as Record<string, unknown>) || {};
+        if (metadata.cms_provider && metadata.site_id) {
+          selections[post.post_id] = {
+            platform: metadata.cms_provider as "webflow" | "wordpress" | "shopify",
+            site_id: metadata.site_id as string,
+            site_name: (metadata.site_name as string) || undefined,
+            collection_id: (metadata.collection_id as string) || undefined,
+          };
+        }
+      });
+      setPlatformSelections(selections);
     } catch (err) {
       console.error("Error fetching ready posts:", err);
     } finally {
