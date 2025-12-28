@@ -80,10 +80,29 @@ export async function POST(
     try {
       // Platform-specific publishing logic
       if (publishing.platform === 'webflow') {
-        // Get Webflow integration
+        // Get Webflow integration - use site_id from publish_metadata if available
         const dbAdapter = new EnvironmentIntegrationsDB();
         const integrations = await dbAdapter.getIntegrations(userProfile.org_id);
-        const webflowIntegration = integrations.find(i => i.type === 'webflow' && i.status === 'active');
+        
+        // Get site_id and collection_id from publish_metadata if available
+        const publishMetadata = (publishing.publish_metadata as Record<string, unknown>) || {};
+        const targetSiteId = publishMetadata.site_id as string | undefined;
+        const targetCollectionId = publishMetadata.collection_id as string | undefined;
+        
+        // Find the integration matching the target site_id, or fallback to first active
+        let webflowIntegration = targetSiteId
+          ? integrations.find(i => {
+              if (i.type !== 'webflow' || i.status !== 'active') return false;
+              const config = i.config as Record<string, unknown>;
+              const integrationSiteId = config.site_id as string | undefined;
+              return integrationSiteId === targetSiteId;
+            })
+          : integrations.find(i => i.type === 'webflow' && i.status === 'active');
+        
+        // If no match found with site_id, fallback to first active
+        if (!webflowIntegration) {
+          webflowIntegration = integrations.find(i => i.type === 'webflow' && i.status === 'active');
+        }
 
         if (!webflowIntegration) {
           throw new Error('Webflow integration not found or not active');
@@ -91,12 +110,21 @@ export async function POST(
 
         const config = webflowIntegration.config as Record<string, unknown>;
         const apiKey = config.api_key as string;
-        const collectionId = config.collection_id as string;
-        const siteId = config.site_id as string | undefined;
+        // Use collection_id from publish_metadata if provided, otherwise from integration config
+        const collectionId = (targetCollectionId || config.collection_id) as string;
+        // Use site_id from publish_metadata if provided, otherwise from integration config
+        const siteId = (targetSiteId || config.site_id) as string | undefined;
 
         if (!apiKey || !collectionId) {
           throw new Error('Webflow integration is not fully configured');
         }
+        
+        logger.info('Using Webflow integration for publishing', {
+          siteId,
+          collectionId,
+          integrationId: webflowIntegration.integration_id,
+          fromMetadata: !!targetSiteId,
+        });
 
         // Get blog post data
         const post = publishing.post as any;

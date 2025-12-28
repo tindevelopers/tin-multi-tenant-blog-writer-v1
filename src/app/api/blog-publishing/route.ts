@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { post_id, queue_id, platform, scheduled_at, publish_metadata, is_draft = false } = body;
+    const { post_id, queue_id, platform, scheduled_at, publish_metadata, is_draft = false, site_id, collection_id } = body;
 
     if (!post_id && !queue_id) {
       return NextResponse.json(
@@ -235,6 +235,15 @@ export async function POST(request: NextRequest) {
 
     // For Webflow, get and apply field mappings
     let finalPublishMetadata = publish_metadata || {};
+    
+    // Store site_id and collection_id in publish_metadata if provided
+    if (site_id) {
+      finalPublishMetadata.site_id = site_id;
+    }
+    if (collection_id) {
+      finalPublishMetadata.collection_id = collection_id;
+    }
+    
     if (platform === 'webflow') {
       try {
         // Get the blog post data
