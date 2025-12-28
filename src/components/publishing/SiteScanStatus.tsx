@@ -49,22 +49,33 @@ export const SiteScanStatus: React.FC<SiteScanStatusProps> = ({
 
     setLoading(true);
     try {
-      const response = await fetch(
-        `/api/integrations/webflow/scan-structure?site_id=${siteId}`
-      );
+      const url = `/api/integrations/webflow/scan-structure?site_id=${encodeURIComponent(siteId)}`;
+      logger.debug('Fetching scan status', { url, siteId, orgId });
+      const response = await fetch(url);
 
       if (response.ok) {
         const data = await response.json();
+        logger.debug('Scan status response:', { data, siteId, orgId });
         
-        if (data.scan && data.scan.scan_id) {
+        // Handle both response formats (scan object or scans array)
+        let scan = null;
+        if (data.scan) {
+          scan = data.scan;
+        } else if (data.scans && Array.isArray(data.scans) && data.scans.length > 0) {
+          // Fallback: use first scan from array (latest)
+          scan = data.scans[0];
+          logger.warn('API returned scans array instead of scan object, using first item');
+        }
+        
+        if (scan && scan.scan_id) {
           const info: ScanInfo = {
-            hasScan: data.scan.status === 'completed',
-            scanId: data.scan.scan_id,
-            status: data.scan.status,
-            lastScanDate: data.scan.scan_completed_at || data.scan.created_at || data.scan.scan_started_at,
-            totalContentItems: data.scan.total_content_items || 0,
-            siteName: data.scan.site_name || siteName,
-            publishedDomain: data.scan.published_domain,
+            hasScan: scan.status === 'completed',
+            scanId: scan.scan_id,
+            status: scan.status,
+            lastScanDate: scan.scan_completed_at || scan.created_at || scan.scan_started_at,
+            totalContentItems: scan.total_content_items || 0,
+            siteName: scan.site_name || siteName,
+            publishedDomain: scan.published_domain,
           };
           setScanInfo(info);
           
@@ -76,11 +87,21 @@ export const SiteScanStatus: React.FC<SiteScanStatusProps> = ({
             setScanning(false);
           }
         } else {
+          logger.debug('No scan found', { data, siteId });
           setScanInfo({ hasScan: false, siteName });
           setScanning(false);
         }
       } else {
-        setScanInfo({ hasScan: false, error: 'Failed to fetch scan status' });
+        const errorData = await response.json().catch(() => ({}));
+        logger.error('Failed to fetch scan status', { 
+          status: response.status, 
+          statusText: response.statusText,
+          error: errorData 
+        });
+        setScanInfo({ 
+          hasScan: false, 
+          error: errorData.error || `Failed to fetch scan status: ${response.statusText}` 
+        });
       }
     } catch (error) {
       logger.error('Error fetching scan status:', error);
@@ -95,39 +116,57 @@ export const SiteScanStatus: React.FC<SiteScanStatusProps> = ({
   }, [fetchScanStatus]);
 
   const handleTriggerScan = async () => {
-    if (!siteId) return;
+    if (!siteId) {
+      logger.warn('Cannot trigger scan: siteId is missing');
+      setScanInfo(prev => ({
+        ...prev,
+        error: 'Site ID is required to start a scan',
+      }));
+      return;
+    }
 
     setScanning(true);
+    setScanInfo(prev => ({ ...prev, error: undefined }));
+    
     try {
+      logger.info('Triggering scan', { siteId, orgId });
       const response = await fetch('/api/integrations/webflow/scan-structure', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ site_id: siteId }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      const data = await response.json();
+      logger.debug('Scan trigger response', { response: { status: response.status, ok: response.ok }, data });
+
+      if (response.ok && data.success) {
         setScanInfo(prev => ({
           ...prev,
           status: 'scanning',
           scanId: data.scan_id,
+          error: undefined,
         }));
         
         // Start polling for completion
         setTimeout(() => fetchScanStatus(), 3000);
       } else {
-        const error = await response.json();
+        const errorMessage = data.error || data.hint || 'Failed to start scan';
+        logger.error('Scan trigger failed', { 
+          status: response.status, 
+          error: errorMessage,
+          data 
+        });
         setScanInfo(prev => ({
           ...prev,
-          error: error.error || 'Failed to start scan',
+          error: errorMessage,
         }));
         setScanning(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Error triggering scan:', error);
       setScanInfo(prev => ({
         ...prev,
-        error: 'Error starting scan',
+        error: error?.message || 'Error starting scan. Please check the browser console for details.',
       }));
       setScanning(false);
     }
