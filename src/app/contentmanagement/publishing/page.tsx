@@ -97,6 +97,7 @@ export default function PublishingPage() {
       setReadyPosts(posts);
       
       // Initialize platform selections from draft metadata
+      // Note: We'll set site_name after availableSites is loaded
       const selections: Record<string, SiteSelection> = {};
       posts.forEach((post: BlogPost) => {
         const metadata = (post.metadata as Record<string, unknown>) || {};
@@ -126,7 +127,27 @@ export default function PublishingPage() {
         return;
       }
       const data = await response.json();
-      setAvailableSites(data.sites || []);
+      const sites = data.sites || [];
+      setAvailableSites(sites);
+      
+      // Update platformSelections with site_name if missing
+      setPlatformSelections((prev) => {
+        const updated: Record<string, SiteSelection> = { ...prev };
+        Object.keys(updated).forEach((postId) => {
+          const selection = updated[postId];
+          if (selection && selection.site_id && !selection.site_name) {
+            // Look up site_name from availableSites
+            const site = sites.find((s: PublishingSite) => s.id === selection.site_id);
+            if (site) {
+              updated[postId] = {
+                ...selection,
+                site_name: site.name,
+              };
+            }
+          }
+        });
+        return updated;
+      });
       
       // Set default selection for posts that don't have one
       if (data.default) {
@@ -186,7 +207,15 @@ export default function PublishingPage() {
     const platform = selection?.platform || defaultSite?.provider || "webflow";
     const siteId = selection?.site_id || defaultSite?.id;
     const collectionId = selection?.collection_id || defaultSite?.collections?.[0];
-    const siteName = selection?.site_name || defaultSite?.name || platform;
+    
+    // Look up site_name from availableSites if not in selection
+    let siteName = selection?.site_name;
+    if (!siteName && siteId) {
+      const site = availableSites.find((s: PublishingSite) => s.id === siteId);
+      siteName = site?.name;
+    }
+    // Final fallback
+    siteName = siteName || defaultSite?.name || platform;
 
     try {
       setPublishingPostId(postId);
@@ -551,7 +580,15 @@ export default function PublishingPage() {
                           onClick={() => handleStartPublishing(post.post_id, false)}
                           disabled={publishingPostId === post.post_id || availableSites.length === 0}
                           className="px-4 py-2 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                          title={`Publish immediately to ${platformSelections[post.post_id]?.site_name || availableSites[0]?.name || 'selected site'} with enhanced SEO fields`}
+                          title={(() => {
+                            const selection = platformSelections[post.post_id];
+                            let siteName = selection?.site_name;
+                            if (!siteName && selection?.site_id) {
+                              const site = availableSites.find((s: PublishingSite) => s.id === selection.site_id);
+                              siteName = site?.name;
+                            }
+                            return `Publish immediately to ${siteName || availableSites[0]?.name || 'selected site'} with enhanced SEO fields`;
+                          })()}
                         >
                           {publishingPostId === post.post_id ? "Publishing..." : "Publish Now"}
                         </button>
@@ -559,7 +596,15 @@ export default function PublishingPage() {
                           onClick={() => handleStartPublishing(post.post_id, true)}
                           disabled={publishingPostId === post.post_id || availableSites.length === 0}
                           className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                          title={`Save as draft on ${platformSelections[post.post_id]?.site_name || availableSites[0]?.name || 'selected site'}`}
+                          title={(() => {
+                            const selection = platformSelections[post.post_id];
+                            let siteName = selection?.site_name;
+                            if (!siteName && selection?.site_id) {
+                              const site = availableSites.find((s: PublishingSite) => s.id === selection.site_id);
+                              siteName = site?.name;
+                            }
+                            return `Save as draft on ${siteName || availableSites[0]?.name || 'selected site'}`;
+                          })()}
                         >
                           Draft
                         </button>
