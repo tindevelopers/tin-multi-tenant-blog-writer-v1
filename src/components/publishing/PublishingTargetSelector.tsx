@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePublishingTargets } from "@/hooks/usePublishingTargets";
 import {
   CMSProvider,
@@ -29,19 +29,37 @@ export const PublishingTargetSelector: React.FC<PublishingTargetSelectorProps> =
   const [selectedProvider, setSelectedProvider] = useState<CMSProvider | "">("");
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("");
+  const lastEmittedValueRef = useRef<PublishingTarget | null>(null);
 
   // Initialize from value or default target
+  // Only update if the incoming value is different from current state or last emitted value
   useEffect(() => {
-    if (value) {
+    // Check if current state already matches the incoming value
+    const currentMatchesValue = value && 
+      selectedProvider === value.cms_provider &&
+      selectedSiteId === value.site_id &&
+      selectedCollectionId === (value.collection_id || "");
+    
+    // Check if incoming value matches what we last emitted (to avoid resetting after user selection)
+    const valueMatchesLastEmitted = value && lastEmittedValueRef.current &&
+      value.cms_provider === lastEmittedValueRef.current.cms_provider &&
+      value.site_id === lastEmittedValueRef.current.site_id &&
+      (value.collection_id || "") === (lastEmittedValueRef.current.collection_id || "");
+
+    // Only update if value is different and doesn't match what we just emitted
+    if (value && !currentMatchesValue && !valueMatchesLastEmitted) {
       setSelectedProvider(value.cms_provider);
       setSelectedSiteId(value.site_id);
       setSelectedCollectionId(value.collection_id || "");
-    } else if (targets?.default) {
-      setSelectedProvider(targets.default.cms_provider);
-      setSelectedSiteId(targets.default.site_id);
-      setSelectedCollectionId(targets.default.collection_id || "");
+    } else if (!value && targets?.default) {
+      // Only set default if we don't have a current selection
+      if (!selectedProvider || !selectedSiteId) {
+        setSelectedProvider(targets.default.cms_provider);
+        setSelectedSiteId(targets.default.site_id);
+        setSelectedCollectionId(targets.default.collection_id || "");
+      }
     }
-  }, [value, targets]);
+  }, [value, targets, selectedProvider, selectedSiteId, selectedCollectionId]);
 
   // Notify parent on change
   useEffect(() => {
@@ -49,12 +67,21 @@ export const PublishingTargetSelector: React.FC<PublishingTargetSelectorProps> =
       const site = targets?.sites.find(
         (s) => s.id === selectedSiteId && s.provider === selectedProvider
       );
-      onChange({
+      const newTarget: PublishingTarget = {
         cms_provider: selectedProvider as CMSProvider,
         site_id: selectedSiteId,
         collection_id: selectedCollectionId || undefined,
         site_name: site?.name,
-      });
+      };
+      
+      // Only emit if different from last emitted value
+      if (!lastEmittedValueRef.current ||
+          lastEmittedValueRef.current.cms_provider !== newTarget.cms_provider ||
+          lastEmittedValueRef.current.site_id !== newTarget.site_id ||
+          (lastEmittedValueRef.current.collection_id || "") !== (newTarget.collection_id || "")) {
+        lastEmittedValueRef.current = newTarget;
+        onChange(newTarget);
+      }
     }
   }, [selectedProvider, selectedSiteId, selectedCollectionId, targets, onChange]);
 
