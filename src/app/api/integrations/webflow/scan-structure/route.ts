@@ -547,25 +547,48 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         },
       });
     } else if (siteId) {
-      // Get latest scan for site
-      const { data: scans, error } = await supabase
+      // Get latest scan for site (prefer completed scans, but return latest if none completed)
+      const { data: completedScans, error: completedError } = await supabase
         .from('webflow_structure_scans')
         .select('*')
         .eq('org_id', orgId)
         .eq('site_id', siteId)
+        .eq('status', 'completed')
         .order('scan_completed_at', { ascending: false })
-        .limit(10);
+        .limit(1)
+        .maybeSingle();
 
-      if (error) {
-        return NextResponse.json(
-          { error: 'Failed to fetch scans' },
-          { status: 500 }
-        );
+      // If no completed scan, get the latest scan regardless of status
+      let scan = completedScans;
+      if (!scan) {
+        const { data: latestScans, error: latestError } = await supabase
+          .from('webflow_structure_scans')
+          .select('*')
+          .eq('org_id', orgId)
+          .eq('site_id', siteId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latestError && latestError.code !== 'PGRST116') {
+          return NextResponse.json(
+            { error: 'Failed to fetch scans' },
+            { status: 500 }
+          );
+        }
+        scan = latestScans;
+      }
+
+      if (!scan) {
+        return NextResponse.json({
+          success: true,
+          scan: null,
+        });
       }
 
       return NextResponse.json({
         success: true,
-        scans: scans?.map(scan => ({
+        scan: {
           scan_id: scan.scan_id,
           site_id: scan.site_id,
           status: scan.status,
@@ -576,8 +599,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           total_content_items: scan.total_content_items,
           scan_started_at: scan.scan_started_at,
           scan_completed_at: scan.scan_completed_at,
+          created_at: scan.created_at,
+          site_name: scan.site_name,
+          published_domain: scan.published_domain,
           error_message: scan.error_message,
-        })) || [],
+        },
       });
     } else {
       // Get all scans for organization

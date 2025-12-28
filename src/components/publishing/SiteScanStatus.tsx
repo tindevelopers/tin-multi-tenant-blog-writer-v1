@@ -56,19 +56,19 @@ export const SiteScanStatus: React.FC<SiteScanStatusProps> = ({
       if (response.ok) {
         const data = await response.json();
         
-        if (data.scan) {
+        if (data.scan && data.scan.scan_id) {
           const info: ScanInfo = {
             hasScan: data.scan.status === 'completed',
             scanId: data.scan.scan_id,
             status: data.scan.status,
-            lastScanDate: data.scan.scan_completed_at || data.scan.created_at,
+            lastScanDate: data.scan.scan_completed_at || data.scan.created_at || data.scan.scan_started_at,
             totalContentItems: data.scan.total_content_items || 0,
             siteName: data.scan.site_name || siteName,
             publishedDomain: data.scan.published_domain,
           };
           setScanInfo(info);
           
-          if (info.status === 'scanning') {
+          if (info.status === 'scanning' || info.status === 'pending') {
             setScanning(true);
             // Poll for completion
             setTimeout(() => fetchScanStatus(), 5000);
@@ -77,6 +77,7 @@ export const SiteScanStatus: React.FC<SiteScanStatusProps> = ({
           }
         } else {
           setScanInfo({ hasScan: false, siteName });
+          setScanning(false);
         }
       } else {
         setScanInfo({ hasScan: false, error: 'Failed to fetch scan status' });
