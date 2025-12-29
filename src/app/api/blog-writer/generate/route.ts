@@ -10,6 +10,9 @@ import { logger } from '@/utils/logger';
 import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
 import { LLMAnalysisService } from '@/lib/llm-analysis-service';
 import { validateBlogFields, type BlogFieldData } from '@/lib/blog-field-validator';
+// Workflow models for premium/enterprise quality levels
+import { workflowRegistry, executeWorkflow } from '@/lib/workflow-models';
+import { getSiteContext, formatSiteContextForPrompt } from '@/lib/site-context-service';
 
 // Image generation is now handled separately via /api/blog-writer/images/generate endpoint
 
@@ -565,6 +568,235 @@ export async function POST(request: NextRequest) {
     }
     
     logger.debug('✅ Cloud Run is healthy, proceeding with blog generation...');
+    
+    // Check if workflow model should be used (premium/enterprise quality levels)
+    // This enables structured multi-phase generation for higher quality output
+    const useWorkflowModel = (quality_level === 'premium' || quality_level === 'enterprise') && 
+                              !asyncMode; // Workflow models don't support async mode yet
+    
+    if (useWorkflowModel) {
+      try {
+        logger.debug('🔄 Using workflow model for premium/enterprise generation');
+        
+        // Initialize workflow registry
+        await workflowRegistry.initialize();
+        
+        // Detect content type for workflow selection
+        const detectedContentType = 
+          topicLower.includes('compare') || topicLower.includes('vs') || topicLower.includes('versus') 
+            ? 'comparison' 
+            : topicLower.includes('review') || topicLower.includes('best') || topicLower.includes('top')
+              ? 'product'
+              : undefined;
+        
+        // Select appropriate workflow model
+        const workflowModel = workflowRegistry.selectModel({
+          qualityLevel: quality_level,
+          contentType: detectedContentType || template_type,
+        });
+        
+        logger.debug('📋 Selected workflow model:', {
+          modelId: workflowModel.id,
+          modelName: workflowModel.name,
+          phases: workflowModel.phases.length,
+          contentType: detectedContentType,
+        });
+        
+        // Get site context for interlinking
+        let siteContext = '';
+        if (orgId) {
+          const context = await getSiteContext({
+            orgId,
+            topic,
+            keywords: keywordsArray,
+            maxLinkOpportunities: 10,
+          });
+          if (context) {
+            siteContext = formatSiteContextForPrompt(context, {
+              maxLinks: 8,
+              includeTopics: true,
+            });
+          }
+        }
+        
+        // Update queue with workflow info
+        if (queueId) {
+          await supabase
+            .from('blog_generation_queue')
+            .update({
+              status: 'generating',
+              metadata: {
+                workflow_model: workflowModel.id,
+                workflow_phases: workflowModel.phases.map(p => p.id),
+              }
+            })
+            .eq('queue_id', queueId);
+        }
+        
+        // Execute workflow with progress tracking
+        const workflowResult = await executeWorkflow(
+          workflowModel,
+          {
+            topic,
+            keywords: keywordsArray,
+            primaryKeyword: keywordsArray[0] || topic,
+            secondaryKeywords: keywordsArray.slice(1),
+            targetAudience: target_audience || 'general audience',
+            tone: tone || 'professional',
+            wordCount: word_count || 1500,
+            articleGoal: content_goal || 'inform and engage',
+            siteContext,
+            customInstructions: custom_instructions,
+            qualityLevel: quality_level,
+            contentType: detectedContentType,
+            orgId,
+            userId,
+          },
+          {
+            onProgress: async (phase, progress, message) => {
+              logger.debug(`Workflow progress: ${phase} - ${progress}%`, { message });
+              // Update queue with progress
+              if (queueId) {
+                try {
+                  await supabase
+                    .from('blog_generation_queue')
+                    .update({
+                      progress_percentage: progress,
+                      current_stage: phase,
+                    })
+                    .eq('queue_id', queueId);
+                } catch (e) {
+                  // Non-blocking
+                }
+              }
+            },
+          }
+        );
+        
+        if (!workflowResult.success) {
+          logger.error('❌ Workflow execution failed:', workflowResult.error);
+          throw new Error(workflowResult.error || 'Workflow execution failed');
+        }
+        
+        logger.debug('✅ Workflow execution completed:', {
+          contentLength: workflowResult.content?.length || 0,
+          phases: workflowResult.metadata?.phases,
+          duration: workflowResult.metadata?.duration,
+        });
+        
+        // Enhance workflow output with rich HTML
+        const enhancedContent = enhanceContentToRichHTML(workflowResult.content || '', {
+          featuredImage: null,
+          sectionImages: [],
+          includeImages: false,
+          enhanceFormatting: true,
+          addStructure: true,
+        });
+        
+        // Create image placeholders
+        const sections = extractSections(workflowResult.content || '');
+        const imagePlaceholders = {
+          featured_image: {
+            prompt: `Professional blog image for: ${topic}`,
+            style: 'photographic' as const,
+            aspect_ratio: '16:9' as const,
+            quality: 'high' as const,
+            type: 'featured' as const,
+            keywords: keywordsArray,
+          },
+          section_images: sections.slice(0, 4).map((section) => ({
+            position: section.wordPosition,
+            prompt: `Professional blog image: ${section.title}`,
+            style: 'photographic' as const,
+            aspect_ratio: '16:9' as const,
+            quality: 'high' as const,
+            type: 'section' as const,
+          })),
+        };
+        
+        // Build response
+        const workflowResponse: EnhancedBlogResponse = {
+          content: enhancedContent,
+          title: topic,
+          excerpt: workflowResult.excerpt || '',
+          progress_updates: [{
+            stage: 'finalization',
+            stage_number: workflowModel.phases.length,
+            total_stages: workflowModel.phases.length,
+            progress_percentage: 100,
+            status: 'Complete',
+            details: `Generated using ${workflowModel.name}`,
+            metadata: workflowResult.metadata || {},
+            timestamp: Date.now() / 1000,
+          }],
+          meta_title: topic,
+          meta_description: workflowResult.excerpt || '',
+          readability_score: 0,
+          seo_score: 0,
+          quality_score: null,
+          quality_dimensions: {},
+          stage_results: [],
+          total_tokens: 0,
+          total_cost: 0,
+          generation_time: (workflowResult.metadata?.duration as number) || 0,
+          citations: [],
+          semantic_keywords: keywordsArray,
+          structured_data: null,
+          knowledge_graph: null,
+          seo_metadata: {},
+          content_metadata: {},
+          warnings: [],
+          success: true,
+          word_count: (workflowResult.content?.split(/\s+/).length) || 0,
+          suggestions: [],
+          quality_scores: null,
+          internal_links: [],
+          generated_images: null,
+          image_placeholders: imagePlaceholders,
+          featured_image: null,
+          metadata: {
+            ...workflowResult.metadata,
+            workflow_model: workflowModel.id,
+            workflow_name: workflowModel.name,
+            used_workflow: true,
+          },
+          image_generation_status: {
+            featured_image: 'pending',
+            featured_image_url: null,
+            section_images_count: imagePlaceholders.section_images.length,
+            section_images: imagePlaceholders.section_images.map(img => ({
+              position: img.position,
+              url: null,
+              status: 'pending' as const,
+            })),
+          },
+        };
+        
+        // Update queue with final results
+        if (queueId) {
+          await supabase
+            .from('blog_generation_queue')
+            .update({
+              status: 'generated',
+              generated_content: enhancedContent,
+              generated_title: topic,
+              generation_metadata: workflowResponse.metadata,
+              progress_percentage: 100,
+              generation_completed_at: new Date().toISOString(),
+            })
+            .eq('queue_id', queueId);
+        }
+        
+        return NextResponse.json({
+          ...workflowResponse,
+          queue_id: queueId,
+        });
+        
+      } catch (workflowError) {
+        logger.error('❌ Workflow model failed, falling back to standard generation:', workflowError);
+        // Fall through to standard generation
+      }
+    }
     
     // Call the external blog writer API
     // Note: DataForSEO Content Generation is handled by the backend API service

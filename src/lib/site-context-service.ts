@@ -231,11 +231,26 @@ function findLinkOpportunities(
     }
 
     if (score > 10) {
-      // Fix URL domain if needed
+      // Fix URL domain if needed and ensure absolute
       let url = content.url;
+      
+      // Replace webflow.io staging URLs with published domain
       if (publishedDomain && url.includes('.webflow.io')) {
         const path = url.replace(/https?:\/\/[^\/]+/, '');
         url = `${publishedDomain.replace(/\/$/, '')}${path}`;
+      }
+      
+      // Ensure URL is absolute
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        if (publishedDomain) {
+          const base = publishedDomain.replace(/\/$/, '');
+          url = url.startsWith('/') ? `${base}${url}` : `${base}/${url}`;
+        }
+      }
+      
+      // Ensure HTTPS for security
+      if (url.startsWith('http://') && publishedDomain?.startsWith('https://')) {
+        url = url.replace('http://', 'https://');
       }
 
       opportunities.push({
@@ -361,5 +376,102 @@ export function formatLinkOpportunitiesForAPI(
     url: opp.url,
     keywords: opp.keywords,
   }));
+}
+
+/**
+ * Ensure a URL is absolute
+ * Converts relative URLs to absolute using the provided base domain
+ */
+export function ensureAbsoluteUrl(url: string, baseDomain?: string): string {
+  // Already absolute
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  
+  // No base domain - return as-is
+  if (!baseDomain) {
+    return url;
+  }
+  
+  // Normalize base domain
+  const normalizedBase = baseDomain.replace(/\/$/, '');
+  
+  // Handle protocol-relative URLs
+  if (url.startsWith('//')) {
+    return `https:${url}`;
+  }
+  
+  // Handle absolute paths
+  if (url.startsWith('/')) {
+    return `${normalizedBase}${url}`;
+  }
+  
+  // Handle relative paths
+  return `${normalizedBase}/${url}`;
+}
+
+/**
+ * Convert link opportunities to absolute URLs
+ * Used by workflow models to ensure all links are absolute
+ */
+export function normalizeLinksToAbsolute(
+  linkOpportunities: LinkOpportunity[],
+  baseDomain?: string
+): LinkOpportunity[] {
+  return linkOpportunities.map(opp => ({
+    ...opp,
+    url: ensureAbsoluteUrl(opp.url, baseDomain),
+  }));
+}
+
+/**
+ * Format site context as a string for workflow prompts
+ * Creates a summary that can be injected into LLM prompts
+ */
+export function formatSiteContextForPrompt(
+  siteContext: SiteContext | null,
+  options: {
+    maxLinks?: number;
+    includeTopics?: boolean;
+    includeGaps?: boolean;
+  } = {}
+): string {
+  if (!siteContext) {
+    return 'No site context available. Generate content independently.';
+  }
+  
+  const { maxLinks = 8, includeTopics = true, includeGaps = false } = options;
+  const sections: string[] = [];
+  
+  // Site metadata
+  if (siteContext.publishedDomain) {
+    sections.push(`**Website:** ${siteContext.publishedDomain}`);
+  }
+  sections.push(`**Total existing content:** ${siteContext.totalContentItems} items`);
+  
+  // Link opportunities (prioritize these)
+  if (siteContext.linkOpportunities.length > 0) {
+    const links = siteContext.linkOpportunities.slice(0, maxLinks);
+    const linkList = links.map((opp, i) => 
+      `${i + 1}. **${opp.title}**
+   URL: ${opp.url}
+   Keywords: ${opp.keywords.slice(0, 3).join(', ')}
+   Anchor suggestion: "${opp.suggestedAnchorText || opp.title}"`
+    ).join('\n');
+    
+    sections.push(`\n**Internal Linking Opportunities:**\n${linkList}`);
+  }
+  
+  // Existing topics for awareness
+  if (includeTopics && siteContext.existingTopics.length > 0) {
+    sections.push(`\n**Related topics on site:** ${siteContext.existingTopics.slice(0, 10).join(', ')}`);
+  }
+  
+  // Content gaps
+  if (includeGaps && siteContext.contentGaps && siteContext.contentGaps.length > 0) {
+    sections.push(`\n**Content gaps to address:** ${siteContext.contentGaps.join(', ')}`);
+  }
+  
+  return sections.join('\n');
 }
 
