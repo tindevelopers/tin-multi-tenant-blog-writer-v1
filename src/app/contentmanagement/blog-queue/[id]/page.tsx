@@ -375,7 +375,7 @@ export default function QueueItemDetailPage() {
                     postId, 
                     hasGeneratedContent,
                     itemStatus: item?.status,
-                    hasGeneratedContent: !!item?.generated_content,
+                    hasGeneratedContentFromItem: !!item?.generated_content,
                   });
                 }
               }}
