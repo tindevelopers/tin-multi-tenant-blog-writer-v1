@@ -57,7 +57,18 @@ export default function QueueItemDetailPage() {
       }
       const data = await response.json();
       // API returns { queue_item: ... } but we need the item directly
-      setItem(data.queue_item || data);
+      const queueItem = data.queue_item || data;
+      
+      // Debug: Log the full API response structure
+      console.log('API Response:', {
+        hasQueueItem: !!queueItem,
+        postId: queueItem?.post_id,
+        metadata: queueItem?.metadata,
+        postRelation: queueItem?.post,
+        fullItem: queueItem,
+      });
+      
+      setItem(queueItem);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load queue item");
@@ -101,19 +112,25 @@ export default function QueueItemDetailPage() {
   }, [status, progress, stage, item, fetchQueueItem]);
 
   // Get postId from item (needed for useEffect dependencies)
-  // Check both post_id field and the post relation
+  // Check multiple locations: direct post_id, metadata.post_id, metadata.draft_post_id, and post relation
   const postId = item?.post_id || 
                  (item?.metadata as Record<string, unknown>)?.post_id as string | undefined ||
+                 (item?.metadata as Record<string, unknown>)?.draft_post_id as string | undefined ||
                  (item?.post as any)?.post_id as string | undefined;
   
   // Debug: Log postId extraction
   useEffect(() => {
     if (item) {
+      const metadata = item.metadata as Record<string, unknown> | undefined;
       console.log('PostId extraction debug:', {
         itemPostId: item.post_id,
-        metadataPostId: (item.metadata as Record<string, unknown>)?.post_id,
+        metadataPostId: metadata?.post_id,
+        metadataDraftPostId: metadata?.draft_post_id,
         postRelationId: (item.post as any)?.post_id,
         finalPostId: postId,
+        itemStatus: item.status,
+        hasGeneratedContent: !!item.generated_content,
+        fullMetadata: metadata,
       });
     }
   }, [item, postId]);
@@ -266,12 +283,23 @@ export default function QueueItemDetailPage() {
     try {
       // If draft already exists, redirect to edit
       if (postId) {
-        router.push(`/contentmanagement/drafts/edit/${postId}`);
+        const url = `/contentmanagement/drafts/edit/${postId}`;
+        console.log('Draft exists, navigating to:', url);
+        logger.info('Draft exists, navigating', { url, postId });
+        window.location.href = url;
         return;
       }
       
+      console.log('Creating draft from queue item...', { queueId, hasContent: !!item.generated_content });
+      logger.info('Creating draft from queue item', { queueId, hasContent: !!item.generated_content });
+      
       // Use normalized content if available, otherwise fallback to raw
       const contentToSave = normalizedContent?.sanitizedContent || item.generated_content;
+      
+      if (!contentToSave) {
+        alert("No content available to create draft. Please wait for generation to complete.");
+        return;
+      }
       
       // Clean excerpt before saving
       let cleanedExcerpt = normalizedContent?.excerpt || item.generation_metadata?.excerpt || '';
@@ -301,15 +329,28 @@ export default function QueueItemDetailPage() {
       
       if (response.ok) {
         const result = await response.json();
+        console.log('Draft created successfully:', result);
+        logger.info('Draft created successfully', { postId: result.post_id, queueId });
+        
         if (result.post_id) {
-          router.push(`/contentmanagement/drafts/edit/${result.post_id}`);
+          const url = `/contentmanagement/drafts/edit/${result.post_id}`;
+          console.log('Navigating to draft editor:', url);
+          logger.info('Navigating to draft editor', { url, postId: result.post_id });
+          window.location.href = url;
+        } else {
+          console.error('Draft created but no post_id returned:', result);
+          logger.error('Draft created but no post_id returned', { result });
+          alert("Draft created but could not navigate. Please refresh the page.");
         }
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Failed to create draft' }));
+        console.error('Failed to create draft:', errorData);
+        logger.error('Failed to create draft', { error: errorData, queueId });
         alert(errorData.error || "Failed to create draft. Please try again.");
       }
     } catch (err) {
-      logger.error("Error creating draft:", err);
+      console.error("Error creating draft:", err);
+      logger.error("Error creating draft:", { error: err, queueId });
       alert("Failed to create draft. Please try again.");
     }
   };
@@ -401,7 +442,7 @@ export default function QueueItemDetailPage() {
                   console.warn('No postId or generated content', { postId, hasGeneratedContent });
                 }
               }}
-              disabled={!postId && !hasGeneratedContent}
+              disabled={!hasGeneratedContent}
               className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
             >
               Continue in Editor

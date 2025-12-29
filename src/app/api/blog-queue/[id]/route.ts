@@ -82,6 +82,17 @@ export async function GET(
       );
     }
 
+    // Debug: Log post_id for troubleshooting
+    if (queueItem) {
+      logger.debug('Queue item fetched', {
+        queue_id: id,
+        post_id: queueItem.post_id,
+        status: queueItem.status,
+        hasPostRelation: !!queueItem.post,
+        metadataDraftPostId: (queueItem.metadata as any)?.draft_post_id,
+      });
+    }
+
     return NextResponse.json({ queue_item: queueItem });
   } catch (error) {
     logger.error('Error in GET /api/blog-queue/[id]:', error);
