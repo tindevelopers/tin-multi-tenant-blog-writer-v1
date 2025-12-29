@@ -101,7 +101,22 @@ export default function QueueItemDetailPage() {
   }, [status, progress, stage, item, fetchQueueItem]);
 
   // Get postId from item (needed for useEffect dependencies)
-  const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
+  // Check both post_id field and the post relation
+  const postId = item?.post_id || 
+                 (item?.metadata as Record<string, unknown>)?.post_id as string | undefined ||
+                 (item?.post as any)?.post_id as string | undefined;
+  
+  // Debug: Log postId extraction
+  useEffect(() => {
+    if (item) {
+      console.log('PostId extraction debug:', {
+        itemPostId: item.post_id,
+        metadataPostId: (item.metadata as Record<string, unknown>)?.post_id,
+        postRelationId: (item.post as any)?.post_id,
+        finalPostId: postId,
+      });
+    }
+  }, [item, postId]);
 
   // Normalize content when item changes
   useEffect(() => {
@@ -358,17 +373,23 @@ export default function QueueItemDetailPage() {
                 e.preventDefault();
                 e.stopPropagation();
                 
+                console.log('Continue in Editor button clicked', { postId, hasGeneratedContent, queueId });
+                
                 // If we have a postId, navigate to it
                 if (postId) {
                   logger.info('Continue in Editor clicked - navigating to existing draft', { postId, queueId });
                   const url = `/contentmanagement/drafts/edit/${postId}`;
                   
                   // Use window.location for reliable navigation
+                  console.log('Navigating to:', url);
                   logger.info('Navigating to', { url, postId });
+                  
+                  // Force navigation
                   window.location.href = url;
                 } else if (hasGeneratedContent) {
                   // If no postId but we have content, create draft first
                   logger.info('Continue in Editor clicked - creating draft first', { queueId });
+                  console.log('Creating draft first...');
                   handleCreateDraft();
                 } else {
                   logger.warn('Continue in Editor clicked but no postId or generated content', { 
@@ -377,27 +398,11 @@ export default function QueueItemDetailPage() {
                     itemStatus: item?.status,
                     hasGeneratedContentFromItem: !!item?.generated_content,
                   });
+                  console.warn('No postId or generated content', { postId, hasGeneratedContent });
                 }
               }}
               disabled={!postId && !hasGeneratedContent}
               className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
-            >
-              Continue in Editor
-              <ArrowRightIcon className="w-5 h-5" />
-            </button>
-          )}
-          
-          {/* PRIMARY CTA: Create Draft & Continue - Large and prominent */}
-          {hasGeneratedContent && !postId && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleCreateDraft();
-              }}
-              disabled={!item?.generated_content && !normalizedContent?.content}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
             >
               Continue in Editor
               <ArrowRightIcon className="w-5 h-5" />
@@ -680,6 +685,7 @@ export default function QueueItemDetailPage() {
                 e.preventDefault();
                 e.stopPropagation();
                 const url = `/contentmanagement/drafts/edit/${postId}`;
+                console.log('Open Editor clicked', { url, postId });
                 logger.info('Open Editor clicked', { url, postId });
                 window.location.href = url;
               }}
