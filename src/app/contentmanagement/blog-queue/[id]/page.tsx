@@ -102,6 +102,21 @@ export default function QueueItemDetailPage() {
 
   // Get postId from item (needed for useEffect dependencies)
   const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
+  
+  // Debug logging
+  useEffect(() => {
+    if (item) {
+      logger.debug('Queue item state', {
+        queueId,
+        postId,
+        status: item.status,
+        hasGeneratedContent,
+        hasPostId: !!postId,
+        itemPostId: item.post_id,
+        metadataPostId: (item.metadata as Record<string, unknown>)?.post_id,
+      });
+    }
+  }, [item, postId, hasGeneratedContent, queueId]);
 
   // Normalize content when item changes
   useEffect(() => {
@@ -335,15 +350,37 @@ export default function QueueItemDetailPage() {
         {/* Action Buttons - Simplified: Monitor page focuses on status, Editor is for actions */}
         <div className="flex items-center gap-3 flex-wrap">
           {/* PRIMARY CTA: Continue in Editor - Large and prominent */}
-          {hasGeneratedContent && postId && (
+          {/* Show button if we have a postId (draft exists) OR if content is generated */}
+          {(postId || hasGeneratedContent) && (
             <button
               type="button"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                router.push(`/contentmanagement/drafts/edit/${postId}`);
+                
+                // If we have a postId, navigate to it
+                if (postId) {
+                  logger.info('Continue in Editor clicked - navigating to existing draft', { postId, queueId });
+                  const url = `/contentmanagement/drafts/edit/${postId}`;
+                  
+                  // Use window.location for reliable navigation
+                  logger.info('Navigating to', { url, postId });
+                  window.location.href = url;
+                } else if (hasGeneratedContent) {
+                  // If no postId but we have content, create draft first
+                  logger.info('Continue in Editor clicked - creating draft first', { queueId });
+                  handleCreateDraft();
+                } else {
+                  logger.warn('Continue in Editor clicked but no postId or generated content', { 
+                    postId, 
+                    hasGeneratedContent,
+                    itemStatus: item?.status,
+                    hasGeneratedContent: !!item?.generated_content,
+                  });
+                }
               }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl cursor-pointer"
+              disabled={!postId && !hasGeneratedContent}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed disabled:hover:bg-gray-400"
             >
               Continue in Editor
               <ArrowRightIcon className="w-5 h-5" />
@@ -642,7 +679,9 @@ export default function QueueItemDetailPage() {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                router.push(`/contentmanagement/drafts/edit/${postId}`);
+                const url = `/contentmanagement/drafts/edit/${postId}`;
+                logger.info('Open Editor clicked', { url, postId });
+                window.location.href = url;
               }}
               className="ml-4 inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium whitespace-nowrap"
             >
