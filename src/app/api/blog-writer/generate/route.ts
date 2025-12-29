@@ -582,10 +582,11 @@ export async function POST(request: NextRequest) {
         await workflowRegistry.initialize();
         
         // Detect content type for workflow selection
+        const topicLowerForWorkflow = topic.toLowerCase();
         const detectedContentType = 
-          topicLower.includes('compare') || topicLower.includes('vs') || topicLower.includes('versus') 
+          topicLowerForWorkflow.includes('compare') || topicLowerForWorkflow.includes('vs') || topicLowerForWorkflow.includes('versus') 
             ? 'comparison' 
-            : topicLower.includes('review') || topicLower.includes('best') || topicLower.includes('top')
+            : topicLowerForWorkflow.includes('review') || topicLowerForWorkflow.includes('best') || topicLowerForWorkflow.includes('top')
               ? 'product'
               : undefined;
         
