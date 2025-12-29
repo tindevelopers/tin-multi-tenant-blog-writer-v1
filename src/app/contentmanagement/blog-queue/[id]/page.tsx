@@ -336,13 +336,18 @@ export default function QueueItemDetailPage() {
         <div className="flex items-center gap-3 flex-wrap">
           {/* PRIMARY CTA: Continue in Editor - Large and prominent */}
           {hasGeneratedContent && postId && (
-            <a
-              href={`/contentmanagement/drafts/edit/${postId}`}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl no-underline cursor-pointer"
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                router.push(`/contentmanagement/drafts/edit/${postId}`);
+              }}
+              className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white rounded-lg hover:bg-brand-600 transition-colors font-semibold text-lg shadow-lg hover:shadow-xl cursor-pointer"
             >
               Continue in Editor
               <ArrowRightIcon className="w-5 h-5" />
-            </a>
+            </button>
           )}
           
           {/* PRIMARY CTA: Create Draft & Continue - Large and prominent */}
@@ -632,13 +637,18 @@ export default function QueueItemDetailPage() {
             <p className="text-sm text-green-800 dark:text-green-200">
               ✅ Content generated! Continue in the Editor to add images, enhance SEO, and prepare for publishing.
             </p>
-            <a
-              href={`/contentmanagement/drafts/edit/${postId}`}
-              className="ml-4 inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium no-underline whitespace-nowrap"
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                router.push(`/contentmanagement/drafts/edit/${postId}`);
+              }}
+              className="ml-4 inline-flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium whitespace-nowrap"
             >
               Open Editor
               <ArrowRightIcon className="w-4 h-4" />
-            </a>
+            </button>
           </div>
         </div>
       )}
