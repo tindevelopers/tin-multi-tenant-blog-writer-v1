@@ -102,21 +102,6 @@ export default function QueueItemDetailPage() {
 
   // Get postId from item (needed for useEffect dependencies)
   const postId = item?.post_id || (item?.metadata as Record<string, unknown>)?.post_id as string | undefined;
-  
-  // Debug logging
-  useEffect(() => {
-    if (item) {
-      logger.debug('Queue item state', {
-        queueId,
-        postId,
-        status: item.status,
-        hasGeneratedContent,
-        hasPostId: !!postId,
-        itemPostId: item.post_id,
-        metadataPostId: (item.metadata as Record<string, unknown>)?.post_id,
-      });
-    }
-  }, [item, postId, hasGeneratedContent, queueId]);
 
   // Normalize content when item changes
   useEffect(() => {
@@ -244,6 +229,21 @@ export default function QueueItemDetailPage() {
     postId ||
     normalizedContent?.content
   );
+
+  // Debug logging - placed after hasGeneratedContent declaration
+  useEffect(() => {
+    if (item) {
+      logger.debug('Queue item state', {
+        queueId,
+        postId,
+        status: item.status,
+        hasGeneratedContent,
+        hasPostId: !!postId,
+        itemPostId: item.post_id,
+        metadataPostId: (item.metadata as Record<string, unknown>)?.post_id,
+      });
+    }
+  }, [item, postId, hasGeneratedContent, queueId]);
 
   const handleCreateDraft = async () => {
     if (!item) return;
