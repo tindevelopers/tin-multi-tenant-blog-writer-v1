@@ -23,6 +23,7 @@ import {
   formatLinkOpportunitiesForAPI,
   type SiteContext 
 } from '@/lib/site-context-service';
+import { resolveEffectiveInstructions } from '@/lib/workflow-instructions/resolver';
 
 const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
 
@@ -259,11 +260,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       headers['Authorization'] = `Bearer ${API_KEY}`;
     }
 
+    // Dashboard instructions apply to all workflows (including multi-phase async).
+    // We merge org-level instructions with per-request instructions.
+    const topicLowerForInstructions = topic.toLowerCase();
+    const isComparisonLike =
+      topicLowerForInstructions.includes('compare') ||
+      topicLowerForInstructions.includes('vs') ||
+      topicLowerForInstructions.includes('versus') ||
+      topicLowerForInstructions.includes('best') ||
+      topicLowerForInstructions.includes('top') ||
+      topicLowerForInstructions.includes('review');
+
+    const effectiveInstructions = await resolveEffectiveInstructions({
+      orgId,
+      workflowModelId: (qualityLevel === 'premium' || qualityLevel === 'enterprise')
+        ? (isComparisonLike ? 'comparison' : 'premium')
+        : 'standard',
+      platform: targetPlatform,
+      contentType: 'multi_phase_workflow',
+      perRequestInstructions: customInstructions || null,
+      maxLength: MAX_CUSTOM_INSTRUCTIONS_LENGTH,
+    });
+
     // FIX: For multi-phase mode, the backend API handles quality features internally.
-    // Only pass user-provided custom instructions, NOT the default detailed instructions
-    // which were confusing the LLM (it thought they were content to edit).
-    // Pass site context as structured data in extraFields instead.
-    let finalCustomInstructions: string | undefined = customInstructions || undefined;
+    // Also keep instructions clean and bounded (we pass site context as structured data in extraFields).
+    const finalCustomInstructions: string | undefined =
+      effectiveInstructions.instructions?.trim().length
+        ? effectiveInstructions.instructions
+        : undefined;
     
     // Prepare extra fields with link opportunities if available
     const extraFields: Record<string, unknown> = {

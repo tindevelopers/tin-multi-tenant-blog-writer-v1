@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { logger } from '@/utils/logger';
 import type { Database } from '@/types/database';
 import { generateSlug, calculateReadTime } from '@/lib/blog-field-validator';
+import { sanitizeContent, sanitizeExcerpt, sanitizeTitle } from '@/lib/unified-content-sanitizer';
 
 type BlogPostInsert = Database['public']['Tables']['blog_posts']['Insert'];
 type BlogPostUpdate = Database['public']['Tables']['blog_posts']['Update'];
@@ -86,23 +87,15 @@ export async function POST(
 
     const orgId = queueItem.org_id || '00000000-0000-0000-0000-000000000001';
     const postId = queueItem.post_id;
-    const finalTitle = title || queueItem.generated_title || queueItem.topic || 'Untitled';
+    const rawTitle = title || queueItem.generated_title || queueItem.topic || 'Untitled';
+    const finalTitle = sanitizeTitle(rawTitle);
     const finalSlug = slug || generateSlug(finalTitle);
-    const finalWordCount = word_count || (content ? content.split(/\s+/).filter((w: string) => w.length > 0).length : 0);
+    const sanitizedContent = sanitizeContent(String(content), { aggressive: true, preserveImages: true }).content;
+    const finalWordCount = word_count || (sanitizedContent ? sanitizedContent.split(/\s+/).filter((w: string) => w.length > 0).length : 0);
     const readTime = finalWordCount ? calculateReadTime(finalWordCount) : null;
     
     // Clean excerpt of AI artifacts
-    let cleanedExcerpt = excerpt || '';
-    if (cleanedExcerpt) {
-      cleanedExcerpt = cleanedExcerpt
-        .replace(/\b(for example similar cases?\.\.?|such as similar cases?\.\.?|like similar cases?\.\.?|for instance similar cases?\.\.?)/gi, '')
-        .replace(/^!Modern\s+/gi, '')
-        .replace(/^!Content\s+/gi, '')
-        .replace(/^([a-z\s]+)\s+\1\s+/i, '$1 ')
-        .replace(/\s+\.\.\s*$/, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-    }
+    const cleanedExcerpt = sanitizeExcerpt(String(excerpt || ''), undefined).excerpt;
 
     // Build comprehensive metadata with all fields
     const finalMetadata: Record<string, unknown> = {
@@ -142,7 +135,7 @@ export async function POST(
       logger.debug('📝 Updating existing blog post', { postId });
 
       const updateData: BlogPostUpdate = {
-        content,
+        content: sanitizedContent,
         title: finalTitle,
         excerpt: cleanedExcerpt || null,
         updated_at: new Date().toISOString(),
@@ -176,7 +169,7 @@ export async function POST(
         org_id: orgId,
         created_by: userId,
         title: finalTitle,
-        content,
+        content: sanitizedContent,
         excerpt: cleanedExcerpt || null,
         status: 'draft',
         seo_data: finalSeoData as Database['public']['Tables']['blog_posts']['Row']['seo_data'],

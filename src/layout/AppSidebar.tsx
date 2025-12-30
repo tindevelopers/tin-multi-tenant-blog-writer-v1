@@ -143,6 +143,7 @@ const blogWriterItems: NavItem[] = [
         releaseDate: DEFAULT_RELEASE_DATE,
         subItems: [
           { name: "Content Prompts", path: "/admin/settings/content-prompts", icon: <Target className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
+          { name: "Workflow Instructions", path: "/contentmanagement/settings/workflow-instructions", icon: <Settings className="w-4 h-4" />, releaseDate: DEFAULT_RELEASE_DATE },
         ]
       },
       { 

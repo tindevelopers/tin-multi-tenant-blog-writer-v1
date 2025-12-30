@@ -13,6 +13,8 @@ import { validateBlogFields, type BlogFieldData } from '@/lib/blog-field-validat
 // Workflow models for premium/enterprise quality levels
 import { workflowRegistry, executeWorkflow } from '@/lib/workflow-models';
 import { getSiteContext, formatSiteContextForPrompt } from '@/lib/site-context-service';
+import { resolveEffectiveInstructions } from '@/lib/workflow-instructions/resolver';
+import { sanitizeContent, sanitizeExcerpt, sanitizeTitle } from '@/lib/unified-content-sanitizer';
 
 // Image generation is now handled separately via /api/blog-writer/images/generate endpoint
 
@@ -647,7 +649,7 @@ export async function POST(request: NextRequest) {
             wordCount: word_count || 1500,
             articleGoal: content_goal || 'inform and engage',
             siteContext,
-            customInstructions: custom_instructions,
+            customInstructions: resolvedCustomInstructions,
             qualityLevel: quality_level,
             contentType: detectedContentType,
             orgId,
@@ -685,14 +687,26 @@ export async function POST(request: NextRequest) {
           duration: workflowResult.metadata?.duration,
         });
         
+        // Sanitize workflow output before rich HTML conversion (avoid carrying artifacts forward)
+        const sanitizedWorkflow = sanitizeContent(workflowResult.content || '', {
+          aggressive: true,
+          preserveImages: true,
+        });
+
         // Enhance workflow output with rich HTML
-        const enhancedContent = enhanceContentToRichHTML(workflowResult.content || '', {
+        const enhancedContent = enhanceContentToRichHTML(sanitizedWorkflow.content || '', {
           featuredImage: null,
           sectionImages: [],
           includeImages: false,
           enhanceFormatting: true,
           addStructure: true,
         });
+
+        // Final sanitize after HTML conversion too (belt-and-suspenders)
+        const finalEnhanced = sanitizeContent(enhancedContent, {
+          aggressive: true,
+          preserveImages: true,
+        }).content;
         
         // Create image placeholders
         const sections = extractSections(workflowResult.content || '');
@@ -716,10 +730,13 @@ export async function POST(request: NextRequest) {
         };
         
         // Build response
+        const workflowTitle = sanitizeTitle(topic);
+        const workflowExcerpt = sanitizeExcerpt(workflowResult.excerpt || '', keywordsArray[0]).excerpt;
+
         const workflowResponse: EnhancedBlogResponse = {
-          content: enhancedContent,
-          title: topic,
-          excerpt: workflowResult.excerpt || '',
+          content: finalEnhanced,
+          title: workflowTitle,
+          excerpt: workflowExcerpt,
           progress_updates: [{
             stage: 'finalization',
             stage_number: workflowModel.phases.length,
@@ -730,8 +747,8 @@ export async function POST(request: NextRequest) {
             metadata: workflowResult.metadata || {},
             timestamp: Date.now() / 1000,
           }],
-          meta_title: topic,
-          meta_description: workflowResult.excerpt || '',
+          meta_title: workflowTitle,
+          meta_description: workflowExcerpt,
           readability_score: 0,
           seo_score: 0,
           quality_score: null,
@@ -779,8 +796,8 @@ export async function POST(request: NextRequest) {
             .from('blog_generation_queue')
             .update({
               status: 'generated',
-              generated_content: enhancedContent,
-              generated_title: topic,
+              generated_content: finalEnhanced,
+              generated_title: workflowTitle,
               generation_metadata: workflowResponse.metadata,
               progress_percentage: 100,
               generation_completed_at: new Date().toISOString(),
@@ -824,10 +841,40 @@ export async function POST(request: NextRequest) {
     const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise' || 
                              (contentPreset && (contentPreset.quality_level === 'premium' || contentPreset.quality_level === 'enterprise'));
     
-    // Get default custom instructions for premium quality (per CLIENT_SIDE_PROMPT_GUIDE.md)
-    const defaultCustomInstructions = isPremiumQuality 
+    // Resolve org-level dashboard instructions (apply to all workflows), then merge with per-request instructions.
+    // We treat these as "custom instructions" for the backend generator and workflow-models.
+    const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
+    const topicLowerForInstructions = topic.toLowerCase();
+    const isComparisonLike =
+      topicLowerForInstructions.includes('compare') ||
+      topicLowerForInstructions.includes('vs') ||
+      topicLowerForInstructions.includes('versus') ||
+      topicLowerForInstructions.includes('best') ||
+      topicLowerForInstructions.includes('top') ||
+      topicLowerForInstructions.includes('review') ||
+      keywordsArray.some((k: string) => String(k).toLowerCase().includes('best') || String(k).toLowerCase().includes('review'));
+
+    const instructionModelId = isPremiumQuality
+      ? (isComparisonLike ? 'comparison' : 'premium')
+      : 'standard';
+
+    const effectiveInstructions = await resolveEffectiveInstructions({
+      orgId,
+      workflowModelId: instructionModelId,
+      platform: 'webflow', // current primary platform; can be made dynamic later
+      contentType: template_type,
+      perRequestInstructions: custom_instructions || null,
+      maxLength: 5000,
+    });
+
+    // Keep premium defaults, but only if the org hasn't explicitly configured instructions.
+    const defaultCustomInstructions = isPremiumQuality
       ? getDefaultCustomInstructions(template_type as any, true)
       : null;
+    const mergedDashboardInstructions =
+      effectiveInstructions.instructions?.trim().length
+        ? effectiveInstructions.instructions
+        : (defaultCustomInstructions || undefined);
     
     // Detect if topic requires product research (best, top, review, recommendation keywords)
     // keywordsArray already declared above for queue entry
@@ -927,14 +974,15 @@ export async function POST(request: NextRequest) {
     }
     
     // Build request payload for enhanced endpoint (v1.3.6)
-    const resolvedCustomInstructions =
-      custom_instructions || defaultCustomInstructions || undefined;
+    const resolvedCustomInstructions = mergedDashboardInstructions;
 
-    if (custom_instructions) {
-      logger.debug('📝 Using provided custom instructions');
-    } else if (defaultCustomInstructions) {
-      logger.debug('📝 Using default premium custom instructions');
-    }
+    logger.debug('📝 Instructions resolution:', {
+      hasOrgDashboardInstructions: !!effectiveInstructions.instructions?.trim(),
+      hasPerRequestInstructions: !!custom_instructions?.trim(),
+      usingPremiumDefaultsFallback: !effectiveInstructions.instructions?.trim() && !!defaultCustomInstructions,
+      instructionSources: effectiveInstructions.sources,
+      resolvedLength: resolvedCustomInstructions?.length || 0,
+    });
 
     const requestPayload: Record<string, unknown> = buildEnhancedBlogRequestPayload({
       topic,
@@ -955,7 +1003,6 @@ export async function POST(request: NextRequest) {
     });
 
     // Add quality features (enable automatically for premium, or use provided values)
-    const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
     const recommendedQualityFeatures = getQualityFeaturesForLevel(effectiveQualityLevel);
     
     if (isPremiumQuality) {
@@ -1463,6 +1510,30 @@ export async function POST(request: NextRequest) {
       sectionImageCount: sectionImages.length,
       isHTML: enhancedContent.includes('<')
     });
+
+    // Final sanitization (remove AI artifacts) before persisting/returning content.
+    // This is the authoritative “no artifacts ship” boundary for standard generation.
+    const sanitizedContentResult = sanitizeContent(enhancedContent, {
+      aggressive: true,
+      preserveImages: true,
+    });
+    enhancedContent = sanitizedContentResult.content;
+
+    // Sanitize title + excerpt/meta (prevent “enhanced version...” etc.)
+    const sanitizedTitle = sanitizeTitle(blogTitle);
+    const excerptSource =
+      (result.blog_post?.excerpt || result.excerpt || result.blog_post?.summary || result.meta_description || '') as string;
+    const sanitizedExcerptResult = sanitizeExcerpt(excerptSource, keywordsArray[0]);
+
+    // Apply sanitized fields back onto the result so downstream response building uses clean data.
+    if (result.blog_post) {
+      result.blog_post.title = sanitizedTitle;
+      result.blog_post.excerpt = sanitizedExcerptResult.excerpt;
+      result.blog_post.meta_description = sanitizedExcerptResult.excerpt;
+    }
+    result.title = sanitizedTitle;
+    result.excerpt = sanitizedExcerptResult.excerpt;
+    result.meta_description = sanitizedExcerptResult.excerpt;
     
     // Transform the response to match our expected format
     // Use helper function to build response (avoids duplication)

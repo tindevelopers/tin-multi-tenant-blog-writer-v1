@@ -13,6 +13,7 @@ import { LinkValidationService } from '@/lib/interlinking/link-validation-servic
 import { enhanceForWebflowSEO } from '@/lib/integrations/webflow-seo-enhancer';
 import { logger } from '@/utils/logger';
 import { PlatformStatus } from '@/lib/blog-queue-state-machine';
+import { sanitizeContent, sanitizeExcerpt, sanitizeTitle } from '@/lib/unified-content-sanitizer';
 
 export async function POST(
   request: NextRequest,
@@ -225,6 +226,14 @@ export async function POST(
           }
         }
 
+        // Final sanitization before publishing (no artifacts ship to CMS)
+        const finalTitle = sanitizeTitle(post.title || '');
+        const finalExcerpt = sanitizeExcerpt(post.excerpt || '', undefined).excerpt;
+        processedContent = sanitizeContent(processedContent || '', {
+          aggressive: true,
+          preserveImages: true,
+        }).content;
+
         // Prepare initial blog post data (using processed content and SEO-enhanced fields)
         const initialBlogPostData: {
           title: string;
@@ -240,9 +249,9 @@ export async function POST(
           categories?: string[];
           schema_markup?: string;
         } = {
-          title: post.title,
+          title: finalTitle,
           content: processedContent, // Use AI-cleaned content
-          excerpt: post.excerpt || '',
+          excerpt: finalExcerpt || '',
           slug: (post.metadata as Record<string, unknown>)?.slug as string | undefined,
           featured_image: (post.metadata as Record<string, unknown>)?.featured_image as string | undefined,
           featured_image_alt: (post.metadata as Record<string, unknown>)?.featured_image_alt as string | undefined,
