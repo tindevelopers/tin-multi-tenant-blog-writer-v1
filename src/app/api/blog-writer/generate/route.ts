@@ -571,6 +571,56 @@ export async function POST(request: NextRequest) {
     
     logger.debug('✅ Cloud Run is healthy, proceeding with blog generation...');
     
+    // Resolve custom instructions early (needed by both workflow and standard generation paths)
+    // Auto-enable quality features for premium/enterprise quality levels
+    const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise' || 
+                             (contentPreset && (contentPreset.quality_level === 'premium' || contentPreset.quality_level === 'enterprise'));
+    
+    // Resolve org-level dashboard instructions (apply to all workflows), then merge with per-request instructions.
+    // We treat these as "custom instructions" for the backend generator and workflow-models.
+    const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
+    const topicLowerForInstructions = topic.toLowerCase();
+    const isComparisonLike =
+      topicLowerForInstructions.includes('compare') ||
+      topicLowerForInstructions.includes('vs') ||
+      topicLowerForInstructions.includes('versus') ||
+      topicLowerForInstructions.includes('best') ||
+      topicLowerForInstructions.includes('top') ||
+      topicLowerForInstructions.includes('review') ||
+      keywordsArray.some((k: string) => String(k).toLowerCase().includes('best') || String(k).toLowerCase().includes('review'));
+
+    const instructionModelId = isPremiumQuality
+      ? (isComparisonLike ? 'comparison' : 'premium')
+      : 'standard';
+
+    const effectiveInstructions = await resolveEffectiveInstructions({
+      orgId,
+      workflowModelId: instructionModelId,
+      platform: 'webflow', // current primary platform; can be made dynamic later
+      contentType: template_type,
+      perRequestInstructions: custom_instructions || null,
+      maxLength: 5000,
+    });
+
+    // Keep premium defaults, but only if the org hasn't explicitly configured instructions.
+    const defaultCustomInstructions = isPremiumQuality
+      ? getDefaultCustomInstructions(template_type as any, true)
+      : null;
+    const mergedDashboardInstructions =
+      effectiveInstructions.instructions?.trim().length
+        ? effectiveInstructions.instructions
+        : (defaultCustomInstructions || undefined);
+    
+    const resolvedCustomInstructions = mergedDashboardInstructions;
+
+    logger.debug('📝 Instructions resolution:', {
+      hasOrgDashboardInstructions: !!effectiveInstructions.instructions?.trim(),
+      hasPerRequestInstructions: !!custom_instructions?.trim(),
+      usingPremiumDefaultsFallback: !effectiveInstructions.instructions?.trim() && !!defaultCustomInstructions,
+      instructionSources: effectiveInstructions.sources,
+      resolvedLength: resolvedCustomInstructions?.length || 0,
+    });
+    
     // Check if workflow model should be used (premium/enterprise quality levels)
     // This enables structured multi-phase generation for higher quality output
     const useWorkflowModel = (quality_level === 'premium' || quality_level === 'enterprise') && 
@@ -837,45 +887,6 @@ export async function POST(request: NextRequest) {
     
     logger.debug('🌐 Using endpoint (Enhanced - Always Enabled)', { endpoint });
     
-    // Auto-enable quality features for premium/enterprise quality levels
-    const isPremiumQuality = quality_level === 'premium' || quality_level === 'enterprise' || 
-                             (contentPreset && (contentPreset.quality_level === 'premium' || contentPreset.quality_level === 'enterprise'));
-    
-    // Resolve org-level dashboard instructions (apply to all workflows), then merge with per-request instructions.
-    // We treat these as "custom instructions" for the backend generator and workflow-models.
-    const effectiveQualityLevel = quality_level || contentPreset?.quality_level || 'medium';
-    const topicLowerForInstructions = topic.toLowerCase();
-    const isComparisonLike =
-      topicLowerForInstructions.includes('compare') ||
-      topicLowerForInstructions.includes('vs') ||
-      topicLowerForInstructions.includes('versus') ||
-      topicLowerForInstructions.includes('best') ||
-      topicLowerForInstructions.includes('top') ||
-      topicLowerForInstructions.includes('review') ||
-      keywordsArray.some((k: string) => String(k).toLowerCase().includes('best') || String(k).toLowerCase().includes('review'));
-
-    const instructionModelId = isPremiumQuality
-      ? (isComparisonLike ? 'comparison' : 'premium')
-      : 'standard';
-
-    const effectiveInstructions = await resolveEffectiveInstructions({
-      orgId,
-      workflowModelId: instructionModelId,
-      platform: 'webflow', // current primary platform; can be made dynamic later
-      contentType: template_type,
-      perRequestInstructions: custom_instructions || null,
-      maxLength: 5000,
-    });
-
-    // Keep premium defaults, but only if the org hasn't explicitly configured instructions.
-    const defaultCustomInstructions = isPremiumQuality
-      ? getDefaultCustomInstructions(template_type as any, true)
-      : null;
-    const mergedDashboardInstructions =
-      effectiveInstructions.instructions?.trim().length
-        ? effectiveInstructions.instructions
-        : (defaultCustomInstructions || undefined);
-    
     // Detect if topic requires product research (best, top, review, recommendation keywords)
     // keywordsArray already declared above for queue entry
     const topicLower = topic.toLowerCase();
@@ -974,16 +985,6 @@ export async function POST(request: NextRequest) {
     }
     
     // Build request payload for enhanced endpoint (v1.3.6)
-    const resolvedCustomInstructions = mergedDashboardInstructions;
-
-    logger.debug('📝 Instructions resolution:', {
-      hasOrgDashboardInstructions: !!effectiveInstructions.instructions?.trim(),
-      hasPerRequestInstructions: !!custom_instructions?.trim(),
-      usingPremiumDefaultsFallback: !effectiveInstructions.instructions?.trim() && !!defaultCustomInstructions,
-      instructionSources: effectiveInstructions.sources,
-      resolvedLength: resolvedCustomInstructions?.length || 0,
-    });
-
     const requestPayload: Record<string, unknown> = buildEnhancedBlogRequestPayload({
       topic,
       keywords: keywordsArray,
