@@ -23,6 +23,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import type { WritingStyleOverrides } from '@/types/blog-generation';
 
 /**
  * Blog generation request interface (v1.4)
@@ -60,6 +61,9 @@ export interface BlogGenerationRequest {
   
   // v1.4: Research depth
   research_depth?: 'basic' | 'standard' | 'comprehensive';
+  
+  // v1.5: Per-blog writing style overrides
+  writing_style_overrides?: WritingStyleOverrides;
   
   [key: string]: any;
 }

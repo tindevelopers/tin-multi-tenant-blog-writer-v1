@@ -9,6 +9,12 @@ import {
   formatLinkOpportunitiesForAPI,
   type SiteContext 
 } from '@/lib/site-context-service';
+import type {
+  WritingStyleOverrides,
+  ConclusionStyle,
+  EngagementStyle,
+  PersonalityStyle,
+} from '@/types/blog-generation';
 
 /**
  * POST /api/workflow/generate-content
@@ -37,6 +43,7 @@ export async function POST(request: NextRequest) {
       template_type,
       org_id, // Organization ID for site context lookup
       use_site_context = true, // Enable site-aware generation by default
+      writing_style_overrides,
     } = body;
 
     if (!topic) {
@@ -159,10 +166,79 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const sanitizeOverrides = (
+      raw?: WritingStyleOverrides
+    ): WritingStyleOverrides | null => {
+      if (!raw) return null;
+      const sanitized: WritingStyleOverrides = {};
+      if (typeof raw.formality_level === 'number') {
+        const clamped = Math.min(10, Math.max(1, raw.formality_level));
+        sanitized.formality_level = clamped;
+      }
+      if (typeof raw.use_contractions === 'boolean') {
+        sanitized.use_contractions = raw.use_contractions;
+      }
+
+      const conclusionSet: Set<ConclusionStyle> = new Set([
+        'natural_wrap_up',
+        'summary',
+        'call_to_action',
+        'open_ended',
+      ]);
+      if (raw.conclusion_style && conclusionSet.has(raw.conclusion_style)) {
+        sanitized.conclusion_style = raw.conclusion_style;
+      }
+
+      const engagementSet: Set<EngagementStyle> = new Set([
+        'conversational',
+        'professional',
+        'authoritative',
+        'analytical',
+      ]);
+      if (raw.engagement_style && engagementSet.has(raw.engagement_style)) {
+        sanitized.engagement_style = raw.engagement_style;
+      }
+
+      const personalitySet: Set<PersonalityStyle> = new Set([
+        'friendly',
+        'authoritative',
+        'analytical',
+        'conversational',
+      ]);
+      if (raw.personality && personalitySet.has(raw.personality)) {
+        sanitized.personality = raw.personality;
+      }
+
+      if (raw.custom_instructions && typeof raw.custom_instructions === 'string') {
+        const trimmed = raw.custom_instructions.trim().slice(0, 2000);
+        if (trimmed.length > 0) {
+          sanitized.custom_instructions = trimmed;
+        }
+      }
+
+      return Object.keys(sanitized).length > 0 ? sanitized : null;
+    };
+
+    const sanitizedOverrides = sanitizeOverrides(writing_style_overrides);
+
     // Prepare extra fields with link opportunities if available
+    const keywordsArray: string[] = Array.isArray(keywords)
+      ? keywords
+      : typeof keywords === 'string'
+        ? keywords.split(',').map((k: string) => k.trim()).filter(Boolean)
+        : [];
+    const primaryKeyword = keywordsArray[0] || topic;
+    const targetWordCount = word_count || 1500;
+
     const extraFields: Record<string, unknown> = {
       fallback_to_openai: true,
+      primary_keyword: primaryKeyword,
+      target_word_count: targetWordCount,
     };
+
+    if (sanitizedOverrides) {
+      extraFields.writing_style_overrides = sanitizedOverrides;
+    }
     
     if (siteContext?.linkOpportunities.length) {
       // Pass link opportunities to the API for embedded linking

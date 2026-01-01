@@ -40,6 +40,46 @@ export type ContentLength = 'short' | 'medium' | 'long' | 'extended';
 export type ResearchDepth = 'basic' | 'standard' | 'comprehensive';
 
 /**
+ * Conclusion styles for writing style overrides
+ */
+export type ConclusionStyle =
+  | 'natural_wrap_up'
+  | 'summary'
+  | 'call_to_action'
+  | 'open_ended';
+
+/**
+ * Engagement styles for writing style overrides
+ */
+export type EngagementStyle =
+  | 'conversational'
+  | 'professional'
+  | 'authoritative'
+  | 'analytical';
+
+/**
+ * Personality presets for writing style overrides
+ */
+export type PersonalityStyle =
+  | 'friendly'
+  | 'authoritative'
+  | 'analytical'
+  | 'conversational';
+
+/**
+ * Per-blog writing style overrides
+ * (See FRONTEND_PER_BLOG_CUSTOMIZATION.md)
+ */
+export interface WritingStyleOverrides {
+  formality_level?: number; // 1-10
+  use_contractions?: boolean;
+  conclusion_style?: ConclusionStyle;
+  engagement_style?: EngagementStyle;
+  personality?: PersonalityStyle;
+  custom_instructions?: string; // Max 2000 characters (frontend enforced)
+}
+
+/**
  * All 28 supported blog content types
  */
 export type BlogContentType =
@@ -142,6 +182,9 @@ export interface EnhancedBlogGenerationRequest {
   // DataForSEO options
   use_dataforseo_content_generation?: boolean;  // Default: true
   use_openai_fallback?: boolean;  // Default: true
+
+  // Per-blog writing style overrides (v1.5)
+  writing_style_overrides?: WritingStyleOverrides;
 }
 
 // ============ Response Types ============

@@ -23,11 +23,13 @@ import QuickActionsMenu from "@/components/blog-writer/QuickActionsMenu";
 import PlatformSelector from "@/components/blog-writer/PlatformSelector";
 import { createClient } from "@/lib/supabase/client";
 import type { BlogResearchResults, TitleSuggestion } from "@/lib/keyword-research";
+import type { WritingStyleOverrides } from "@/types/blog-generation";
 import { useQueueStatusSSE } from "@/hooks/useQueueStatusSSE";
 import { logger } from "@/utils/logger";
 import BlogFieldConfiguration from "@/components/blog-writer/BlogFieldConfiguration";
 import { extractBlogFields, type BlogFieldData } from "@/lib/blog-field-validator";
 import MultiPhaseWorkflowPanel from "@/components/workflow/MultiPhaseWorkflowPanel";
+import WritingStyleOverridesPanel from "@/components/blog-writer/WritingStyleOverridesPanel";
 // import Alert from "@/components/ui/alert/Alert"; // Unused import
 
 function NewDraftContent() {
@@ -145,6 +147,7 @@ function NewDraftContent() {
 
   const [showFieldConfig, setShowFieldConfig] = useState(false);
   const [blogFieldData, setBlogFieldData] = useState<BlogFieldData>({});
+  const [writingStyleOverrides, setWritingStyleOverrides] = useState<WritingStyleOverrides | null>(null);
 
   const [generatedContent, setGeneratedContent] = useState<Record<string, unknown> | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -524,6 +527,7 @@ function NewDraftContent() {
         use_knowledge_graph: isPremiumQuality ? true : formData.use_knowledge_graph,
         use_semantic_keywords: isPremiumQuality ? true : formData.use_semantic_keywords,
         use_quality_scoring: isPremiumQuality ? true : formData.use_quality_scoring,
+        writing_style_overrides: writingStyleOverrides || undefined,
       });
 
       console.log('🔍 Generated result:', result);
@@ -1366,6 +1370,12 @@ function NewDraftContent() {
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Leave empty to use default instructions. Premium quality uses default instructions automatically.
                 </p>
+              </div>
+
+              <div className="mt-4">
+                <WritingStyleOverridesPanel
+                  onChange={setWritingStyleOverrides}
+                />
               </div>
             </div>
           </div>
