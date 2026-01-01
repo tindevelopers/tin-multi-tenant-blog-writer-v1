@@ -5,6 +5,7 @@
 
 import cloudRunHealth from './cloud-run-health';
 import { logger } from '@/utils/logger';
+import { WritingStyleOverrides } from '@/types/blog-generation';
 
 import { BLOG_WRITER_API_URL } from './blog-writer-api-url';
 
@@ -502,6 +503,8 @@ class BlogWriterAPI {
     mode?: 'quick_generate' | 'multi_phase'; // Default: 'quick_generate'
     // v1.4: Google Search Console multi-site support
     gsc_site_url?: string | null; // Site-specific GSC URL for multi-site setups
+    // v1.5: Per-blog writing style overrides
+    writing_style_overrides?: WritingStyleOverrides;
   }): Promise<Record<string, unknown> | null> {
     try {
       logger.debug('Starting blog generation via local API route (async mode)', { params });
