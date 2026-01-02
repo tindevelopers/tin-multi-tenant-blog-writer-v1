@@ -114,24 +114,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Attempt backend polish via Blog Writer API first; fall back to local polish on failure.
+    // Backend expects query parameters
     try {
-      const backendResponse = await fetch(`${BLOG_WRITER_API_URL}/api/v1/blog/polish`, {
+      const polishUrl = new URL(`${BLOG_WRITER_API_URL}/api/v1/blog/polish`);
+      polishUrl.searchParams.set('content', content.substring(0, 10000)); // Limit for URL length
+      if (operations && operations.length > 0) {
+        polishUrl.searchParams.set('instructions', operations.join(', '));
+      }
+      if (orgId) {
+        polishUrl.searchParams.set('org_id', orgId);
+      }
+
+      const backendResponse = await fetch(polishUrl.toString(), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           ...(BLOG_WRITER_API_KEY && { Authorization: `Bearer ${BLOG_WRITER_API_KEY}` }),
         },
-        body: JSON.stringify({
-          content,
-          title,
-          keywords,
-          operations,
-          org_id: orgId,
-          target_tone,
-          brand_voice,
-          max_internal_links,
-          site_id: (body as any)?.site_id,
-        }),
         signal: AbortSignal.timeout(60000),
       });
 

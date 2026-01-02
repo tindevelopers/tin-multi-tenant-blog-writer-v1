@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       featured_image?: string;
     }>(request);
 
-    validateRequiredFields(body, ['content']);
+    validateRequiredFields(body, ['content', 'title']);
 
     const healthStatus = await cloudRunHealthManager.checkHealth();
     if (!healthStatus.isHealthy) {
@@ -43,13 +43,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${BLOG_WRITER_API_URL}/api/v1/blog/meta-tags`, {
+    // Backend expects query parameters, not JSON body
+    const url = new URL(`${BLOG_WRITER_API_URL}/api/v1/blog/meta-tags`);
+    url.searchParams.set('content', body.content);
+    url.searchParams.set('title', body.title || '');
+    if (body.keywords && body.keywords.length > 0) {
+      url.searchParams.set('keywords', body.keywords.join(','));
+    }
+
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         ...(BLOG_WRITER_API_KEY && { Authorization: `Bearer ${BLOG_WRITER_API_KEY}` }),
       },
-      body: JSON.stringify(body),
       signal: AbortSignal.timeout(60000),
     });
 

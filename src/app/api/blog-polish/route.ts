@@ -49,13 +49,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${BLOG_WRITER_API_URL}/api/v1/blog/polish`, {
+    // Backend expects query parameters, not JSON body
+    const url = new URL(`${BLOG_WRITER_API_URL}/api/v1/blog/polish`);
+    url.searchParams.set('content', body.content);
+    if (body.operations && body.operations.length > 0) {
+      // Convert operations array to instructions string
+      url.searchParams.set('instructions', body.operations.join(', '));
+    }
+    if (body.org_id) {
+      url.searchParams.set('org_id', body.org_id);
+    }
+
+    const response = await fetch(url.toString(), {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         ...(BLOG_WRITER_API_KEY && { Authorization: `Bearer ${BLOG_WRITER_API_KEY}` }),
       },
-      body: JSON.stringify(body),
       signal: AbortSignal.timeout(60000),
     });
 

@@ -485,14 +485,19 @@ export async function POST(request: NextRequest) {
       }
 
       // Fetch backend meta tags (Open Graph, Twitter, canonical)
-      const metaResponse = await fetch(`${apiUrl}/api/v1/blog/meta-tags`, {
+      // Backend expects query parameters
+      const metaUrl = new URL(`${apiUrl}/api/v1/blog/meta-tags`);
+      metaUrl.searchParams.set('content', enhancedContent.substring(0, 5000)); // Limit content length for URL
+      metaUrl.searchParams.set('title', finalTitle);
+      if (keywords && keywords.length > 0) {
+        metaUrl.searchParams.set('keywords', keywords.join(','));
+      }
+
+      const metaResponse = await fetch(metaUrl.toString(), {
         method: 'POST',
-        headers,
-        body: JSON.stringify({
-          content: enhancedContent,
-          title: finalTitle,
-          keywords,
-        }),
+        headers: {
+          ...(BLOG_WRITER_API_KEY && { Authorization: `Bearer ${BLOG_WRITER_API_KEY}` }),
+        },
       });
 
       if (metaResponse.ok) {

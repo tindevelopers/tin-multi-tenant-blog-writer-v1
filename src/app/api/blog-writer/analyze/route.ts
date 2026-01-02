@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const body = await parseJsonBody<{
       content: string;
+      title?: string;
       topic?: string;
       keywords?: string[];
       target_audience?: string;
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     
     validateRequiredFields(body, ['content']);
     
-    const { content, topic, keywords, target_audience } = body;
+    const { content, title, topic, keywords, target_audience } = body;
 
     // Check Cloud Run health
     const healthStatus = await cloudRunHealthManager.checkHealth();
@@ -49,14 +50,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build request payload
+    // Build request payload (backend expects: content, title, keywords)
     const requestPayload: Record<string, unknown> = {
       content,
     };
 
-    if (topic) requestPayload.topic = topic;
+    // Backend expects 'title', use provided title or fall back to topic
+    if (title) {
+      requestPayload.title = title;
+    } else if (topic) {
+      requestPayload.title = topic;
+    }
     if (keywords && Array.isArray(keywords)) requestPayload.keywords = keywords;
-    if (target_audience) requestPayload.target_audience = target_audience;
 
     // Call the external blog writer API
     const response = await fetch(`${BLOG_WRITER_API_URL}/api/v1/analyze`, {
