@@ -117,6 +117,34 @@
 
 ---
 
+## 🔌 Backend Proxy Smoke Tests
+
+Run these quick curls from the repo root (server running) to verify the new proxies:
+
+```bash
+# Analyze
+curl -X POST http://localhost:3000/api/blog-writer/analyze \
+  -H "Content-Type: application/json" \
+  -d '{ "content": "Short test content for analysis." }'
+
+# Polish
+curl -X POST http://localhost:3000/api/blog-polish \
+  -H "Content-Type: application/json" \
+  -d '{ "content": "Polish this paragraph.", "title": "Test Title", "operations": ["full_polish"] }'
+
+# Meta tags
+curl -X POST http://localhost:3000/api/blog-meta-tags \
+  -H "Content-Type: application/json" \
+  -d '{ "content": "Content for meta tags", "title": "Meta Test", "keywords": ["test"] }'
+
+# Interlinking recommend v2 proxy
+curl -X POST http://localhost:3000/api/interlinking/recommend \
+  -H "Content-Type: application/json" \
+  -d '{ "provider": "webflow", "connection": { "structure": [] }, "keywords": ["test"] }'
+```
+
+---
+
 ### 5. SEO Metadata Editor
 
 **Test Steps**:

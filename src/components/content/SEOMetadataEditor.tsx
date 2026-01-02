@@ -7,6 +7,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { metadataGenerationAPI } from '@/lib/metadata-generation-api';
+import { logger } from '@/utils/logger';
 import { 
   GlobeAltIcon,
   DocumentTextIcon,
@@ -39,17 +41,25 @@ interface SEOMetadataEditorProps {
   initialStructuredData?: StructuredData;
   onSave?: (metadata: SEOMetadata, structuredData: StructuredData) => void;
   className?: string;
+  content?: string;
+  title?: string;
+  keywords?: string[];
 }
 
 export function SEOMetadataEditor({
   initialMetadata = {},
   initialStructuredData = {},
   onSave,
-  className = ''
+  className = '',
+  content = '',
+  title = '',
+  keywords = [],
 }: SEOMetadataEditorProps) {
   const [metadata, setMetadata] = useState<SEOMetadata>(initialMetadata);
   const [structuredData, setStructuredData] = useState<StructuredData>(initialStructuredData);
   const [saved, setSaved] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   useEffect(() => {
     setMetadata(initialMetadata);
@@ -68,6 +78,37 @@ export function SEOMetadataEditor({
     setMetadata(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleGenerateFromBackend = async () => {
+    if (!content || content.trim().length === 0) {
+      setGenerateError('Content is required to generate metadata from backend.');
+      return;
+    }
+    setGenerateError(null);
+    setGenerating(true);
+    try {
+      const result = await metadataGenerationAPI.generateMetaTags({
+        content,
+        title: title || metadata.meta_title,
+        keywords,
+        canonical_url: metadata.canonical_url,
+        featured_image: metadata.og_image || metadata.twitter_image,
+      });
+
+      logger.debug('Metadata generated from backend', { hasOg: !!result.og_title, hasTwitter: !!result.twitter_title });
+
+      setMetadata(prev => ({
+        ...prev,
+        ...result,
+      }));
+    } catch (error: any) {
+      const message = error?.message || 'Failed to generate metadata from backend';
+      setGenerateError(message);
+      logger.error('Metadata generation failed', { error: message });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 ${className}`}>
       <div className="flex items-center justify-between mb-4">
@@ -77,22 +118,37 @@ export function SEOMetadataEditor({
             SEO Metadata
           </h3>
         </div>
-        {onSave && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            onClick={handleGenerateFromBackend}
+            disabled={generating}
+            className="px-3 py-2 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:bg-gray-100 disabled:text-gray-500 rounded-lg text-sm font-medium transition-colors dark:bg-gray-800 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-gray-700"
           >
-            {saved ? (
-              <>
-                <CheckCircleIcon className="w-4 h-4" />
-                Saved
-              </>
-            ) : (
-              'Save'
-            )}
+            {generating ? 'Generating…' : 'Generate from Backend'}
           </button>
-        )}
+          {onSave && (
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              {saved ? (
+                <>
+                  <CheckCircleIcon className="w-4 h-4" />
+                  Saved
+                </>
+              ) : (
+                'Save'
+              )}
+            </button>
+          )}
+        </div>
       </div>
+
+      {generateError && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+          {generateError}
+        </div>
+      )}
 
       <div className="space-y-4">
         {/* Open Graph Metadata */}

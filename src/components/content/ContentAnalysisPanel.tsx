@@ -71,7 +71,7 @@ export function ContentAnalysisPanel({
   targetKeyword,
   featuredImage,
   onAnalysisComplete,
-  useLocalAnalysis = true, // Default to local analysis for instant results
+  useLocalAnalysis = false, // Default to backend analysis
 }: ContentAnalysisPanelProps) {
   const { analyze: analyzeViaAPI, loading: apiLoading, error: apiError, result: apiResult } = useContentAnalysis();
   const [showDetails, setShowDetails] = useState(false);

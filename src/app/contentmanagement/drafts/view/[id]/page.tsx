@@ -551,7 +551,6 @@ export default function ViewDraftPage() {
                 metaDescription={metadata?.meta_description as string | undefined}
                 targetKeyword={seoData?.keywords?.[0] as string | undefined}
                 featuredImage={metadata?.featured_image as string | undefined}
-                useLocalAnalysis={true}
                 content={draft?.content || ''}
                 topic={topic}
                 keywords={keywords}
@@ -582,6 +581,9 @@ export default function ViewDraftPage() {
               <SEOMetadataEditor
                 initialMetadata={seoMetadata}
                 initialStructuredData={structuredData}
+                content={draft?.content || ''}
+                title={draft?.title || ''}
+                keywords={keywords}
                 onSave={(metadata, structuredData) => {
                   logger.debug('SEO metadata saved', { 
                     hasMetadata: !!metadata, 

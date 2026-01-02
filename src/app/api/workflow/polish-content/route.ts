@@ -20,6 +20,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '@/utils/logger';
 import { createServiceClient } from '@/lib/supabase/service';
 import { analyzeInterlinkingEnhanced } from '@/lib/interlinking/enhanced-interlinking-service';
+import { BLOG_WRITER_API_URL } from '@/lib/blog-writer-api-url';
+
+const BLOG_WRITER_API_KEY = process.env.BLOG_WRITER_API_KEY;
 
 /**
  * Polish operation types
@@ -43,6 +46,7 @@ interface PolishRequest {
   target_tone?: string;
   brand_voice?: string;
   max_internal_links?: number;
+  site_id?: string;
 }
 
 interface PolishResult {
@@ -107,6 +111,48 @@ export async function POST(request: NextRequest) {
           .single();
         orgId = userProfile?.org_id;
       }
+    }
+
+    // Attempt backend polish via Blog Writer API first; fall back to local polish on failure.
+    try {
+      const backendResponse = await fetch(`${BLOG_WRITER_API_URL}/api/v1/blog/polish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(BLOG_WRITER_API_KEY && { Authorization: `Bearer ${BLOG_WRITER_API_KEY}` }),
+        },
+        body: JSON.stringify({
+          content,
+          title,
+          keywords,
+          operations,
+          org_id: orgId,
+          target_tone,
+          brand_voice,
+          max_internal_links,
+          site_id: (body as any)?.site_id,
+        }),
+        signal: AbortSignal.timeout(60000),
+      });
+
+      if (backendResponse.ok) {
+        const backendData = await backendResponse.json();
+        const mapped = mapBackendPolishResponse(backendData, content);
+        logger.info('Content polish completed via backend API', {
+          changesMade: mapped.changes_made?.length || 0,
+          internalLinksAdded: mapped.improvements?.internal_links_added || 0,
+          suggestionsCount: mapped.suggestions?.length || 0,
+        });
+        return NextResponse.json(mapped);
+      } else {
+        const errorText = await backendResponse.text();
+        logger.warn('Backend polish failed, falling back to local polish', {
+          status: backendResponse.status,
+          error: errorText?.substring(0, 500),
+        });
+      }
+    } catch (backendError: any) {
+      logger.warn('Backend polish error, using local polish', { error: backendError?.message });
     }
 
     // Step 1: Add internal links (most valuable for SEO)
@@ -212,6 +258,63 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Map backend polish response to the local result shape
+ */
+function mapBackendPolishResponse(
+  data: any,
+  fallbackContent: string
+): {
+  polished_content: string;
+  changes_made: string[];
+  improvements: {
+    internal_links_added: number;
+    grammar_fixes: number;
+    style_improvements: number;
+  };
+  suggestions: string[];
+} {
+  const polishedContent =
+    data?.polished_content ||
+    data?.content ||
+    data?.polishedContent ||
+    fallbackContent;
+
+  const changes = Array.isArray(data?.changes_made)
+    ? data.changes_made
+    : Array.isArray(data?.changes)
+      ? data.changes
+      : [];
+
+  const suggestions = Array.isArray(data?.suggestions)
+    ? data.suggestions
+    : Array.isArray(data?.recommendations)
+      ? data.recommendations
+      : [];
+
+  const improvements = data?.improvements || {};
+
+  return {
+    polished_content: polishedContent,
+    changes_made: changes,
+    improvements: {
+      internal_links_added:
+        improvements.internal_links_added ??
+        data?.internal_links_added ??
+        0,
+      grammar_fixes:
+        improvements.grammar_fixes ??
+        data?.grammar_fixes ??
+        0,
+      style_improvements:
+        improvements.style_improvements ??
+        data?.style_improvements ??
+        0,
+    },
+    suggestions,
+  };
 }
 
 /**

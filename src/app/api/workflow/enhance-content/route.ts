@@ -13,6 +13,8 @@ import { discoverWebflowStructure } from '@/lib/integrations/webflow-structure-d
 import { createServiceClient } from '@/lib/supabase/service';
 import { analyzeInterlinkingEnhanced } from '@/lib/interlinking/enhanced-interlinking-service';
 
+const BLOG_WRITER_API_KEY = process.env.BLOG_WRITER_API_KEY || null;
+
 /**
  * Generate high-quality meta description and excerpt using LLM Service
  */
@@ -452,17 +454,17 @@ export async function POST(request: NextRequest) {
 
     // Step 4: Try backend enhancement for additional fields
     let backendFields: Record<string, any> = {};
+    let backendMetaTags: Record<string, any> = {};
     try {
       const apiUrl = BLOG_WRITER_API_URL;
-      const API_KEY = process.env.BLOG_WRITER_API_KEY || null;
       
       // Build headers - only include Authorization if API key is provided
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
       
-      if (API_KEY) {
-        headers['Authorization'] = `Bearer ${API_KEY}`;
+      if (BLOG_WRITER_API_KEY) {
+        headers['Authorization'] = `Bearer ${BLOG_WRITER_API_KEY}`;
       }
       
       const enhancementResponse = await fetch(`${apiUrl}/api/v1/content/enhance-fields`, {
@@ -481,6 +483,23 @@ export async function POST(request: NextRequest) {
         const enhancementData = await enhancementResponse.json();
         backendFields = enhancementData.enhanced_fields || {};
       }
+
+      // Fetch backend meta tags (Open Graph, Twitter, canonical)
+      const metaResponse = await fetch(`${apiUrl}/api/v1/blog/meta-tags`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          content: enhancedContent,
+          title: finalTitle,
+          keywords,
+        }),
+      });
+
+      if (metaResponse.ok) {
+        backendMetaTags = await metaResponse.json();
+      } else {
+        logger.debug('Meta-tags backend returned non-OK status', { status: metaResponse.status });
+      }
     } catch (err) {
       logger.warn('Backend enhancement failed, using local fallback');
     }
@@ -492,14 +511,36 @@ export async function POST(request: NextRequest) {
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(0, 60);
 
+    // Meta fields (prefer backend meta-tags when available)
+    const metaTitle = backendMetaTags.meta_title || enhancedMetadata.seo_title;
+    const metaDescription = backendMetaTags.meta_description || enhancedMetadata.meta_description;
+    const ogTitle = backendMetaTags.og_title || metaTitle;
+    const ogDescription = backendMetaTags.og_description || metaDescription;
+    const ogImage = backendMetaTags.og_image || backendFields.featured_image_url;
+    const ogType = backendMetaTags.og_type || 'article';
+    const twitterCard = backendMetaTags.twitter_card || 'summary_large_image';
+    const twitterTitle = backendMetaTags.twitter_title || ogTitle;
+    const twitterDescription = backendMetaTags.twitter_description || ogDescription;
+    const twitterImage = backendMetaTags.twitter_image || ogImage;
+    const canonicalUrl = backendMetaTags.canonical_url || backendFields.canonical_url;
+
     // Step 6: Compile enhanced fields
     const enhancedFields: Record<string, any> = {
       content: enhancedContent,
-      meta_title: enhancedMetadata.seo_title,
-      meta_description: enhancedMetadata.meta_description,
+      meta_title: metaTitle,
+      meta_description: metaDescription,
       excerpt: enhancedMetadata.excerpt,
       slug,
       featured_image_alt: backendFields.featured_image_alt || `${finalTitle} - Featured Image`,
+      og_title: ogTitle,
+      og_description: ogDescription,
+      og_image: ogImage,
+      og_type: ogType,
+      twitter_card: twitterCard,
+      twitter_title: twitterTitle,
+      twitter_description: twitterDescription,
+      twitter_image: twitterImage,
+      canonical_url: canonicalUrl,
     };
 
     // Step 7: Generate structured data if requested

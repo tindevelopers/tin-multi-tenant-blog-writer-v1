@@ -332,6 +332,9 @@ AI and ML will continue to shape our future.`);
                   name: 'Test Author'
                 }
               }}
+              content={testContent}
+              title="Test Blog Post"
+              keywords={topicKeywords}
               onSave={(metadata, structuredData) => {
                 console.log('Saved metadata:', metadata);
                 console.log('Saved structured data:', structuredData);
